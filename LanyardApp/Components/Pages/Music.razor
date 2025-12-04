@@ -1,0 +1,82 @@
+﻿@page "/music"
+
+@inject MusicPlayerService _player
+@inject ToastService ToastService
+
+<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3">
+    <button class="border-dark text-dark border-2 fas fa-backward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+            style="width:40px; height:40px;"
+            @onclick="RestartSong"
+            @ondblclick="PreviousSong">
+    </button>
+
+    <button class="border-dark text-dark border-2 fas fa-play bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+            style="width:40px; height:40px;"
+            @onclick="Play">
+    </button>
+
+    <button class="border-dark text-dark border-2 fas fa-forward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+            style="width:40px; height:40px;"
+            @onclick="NextSong">
+    </button>
+</div>
+
+@code {
+    private string buttonText = "Play";
+
+    private void Play()
+    {
+        try
+        {
+            _player.Play();
+        }
+        catch (Exception ex)
+        {
+            ToastService.SetErrorLevel(ToastErrorLevels.Error);
+            ToastService.Show(ex.Message);
+            buttonText = ex.Message;
+        }
+    }
+
+    private void RestartSong()
+    {
+        try
+        {
+            _player.Restart();
+        }
+        catch (Exception ex)
+        {
+            ToastService.SetErrorLevel(ToastErrorLevels.Error);
+            ToastService.Show(ex.Message);
+            buttonText = ex.Message;
+        }
+    }
+
+    private void PreviousSong()
+    {
+        try
+        {
+            _player.Previous();
+        }
+        catch (Exception ex)
+        {
+            ToastService.SetErrorLevel(ToastErrorLevels.Error);
+            ToastService.Show(ex.Message);
+            buttonText = ex.Message;
+        }
+    }
+
+    private void NextSong()
+    {
+        try
+        {
+            _player.Next();
+        }
+        catch (Exception ex)
+        {
+            ToastService.SetErrorLevel(ToastErrorLevels.Error);
+            ToastService.Show(ex.Message);
+            buttonText = ex.Message;
+        }
+    }
+}

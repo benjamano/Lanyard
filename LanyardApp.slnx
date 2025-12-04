@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="LanyardAPI/LanyardAPI.csproj" />
+  <Project Path="LanyardApp/LanyardApp.csproj" Id="f0bbe607-969f-48bc-9199-54ac5da0a9bc" />
+  <Project Path="LanyardData/LanyardData.csproj" />
+</Solution>

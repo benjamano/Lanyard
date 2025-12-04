@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>aspnet-LanyardApp-6199dc12-9350-4b7d-8101-2206aa039842</UserSecretsId>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LanyardAPI\LanyardAPI.csproj" />
+    <ProjectReference Include="..\LanyardData\LanyardData.csproj" />
+  </ItemGroup>
+
+</Project>
