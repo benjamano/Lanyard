@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LanyardData.DataAccess
 {
     public class ApplicationDbContext
-        : IdentityDbContext<ApplicationUserModels>
+        : IdentityDbContext<UserProfile>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
             : base(options)

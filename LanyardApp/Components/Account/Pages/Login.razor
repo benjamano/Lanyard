@@ -5,8 +5,8 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager

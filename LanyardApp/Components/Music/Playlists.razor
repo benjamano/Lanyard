@@ -1,0 +1,203 @@
+﻿@using LanyardData.Models
+@using LanyardData.DataAccess
+@using Microsoft.EntityFrameworkCore
+
+@inject ApplicationDbContext _context
+@inject MusicPlayerService _player
+
+@using LanyardApp.Components.Music;
+
+<div class="d-flex justify-content-start h-100 col-2">
+    <div class="px-2 py-2 h-100 border-end border-secondary">
+        @if (playlists == null)
+        {
+            <span class="text-muted"><em>Loading playlists...</em></span>
+        }
+        else
+        {
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
+                @foreach (var playlist in playlists)
+                {
+                    <div class="w-100">
+                        <div class="card hover-card border-0 text-white h-100 p-2 @(selectedPlaylistId == playlist.Id ? "active" : "")"
+                             role="button"
+                             @onclick="() => LoadPlaylist(playlist.Id)">
+                            <div class="card-body p-0 d-flex flex-row">
+                                <div class="ratio ratio-1x1 w-25 me-3 rounded"
+                                     style="background-color: @GetPlaylistColor(playlist.Name);">
+                                    <div class="d-flex align-items-center justify-content-center">
+                                        <span class="fs-3 fw-bold text-white">@GetInitials(playlist.Name)</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-column">
+                                    <h5 class="card-title text-truncate text-dark pb-1 mb-0">@playlist.Name</h5>
+                                    @if (!string.IsNullOrEmpty(playlist.Description))
+                                    {
+                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                            @playlist.Description
+                                        </p>
+                                    }
+                                    else if (playlist.CreateByUser is not null)
+                                    {
+                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                            @playlist.CreateByUser.UserName
+                                        </p>
+                                    }
+                                    else
+                                    {
+                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                            @playlist.CreateDate.ToString("g")
+                                        </p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="w-100">
+                    <div class="card hover-card border-0 text-white h-100 p-2 @(allSongsSelected ? "active" : "")"
+                         role="button"
+                         @onclick="() => ShowAllSongs()">
+                        <div class="card-body p-0 d-flex flex-row">
+                            <div class="ratio ratio-1x1 w-25 me-3 rounded"
+                                 style="background-color: @GetPlaylistColor("All Songs");">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <span class="fs-3 fw-bold text-white">@GetInitials("All")</span>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <h5 class="card-title text-truncate text-dark pb-1 mb-0">All Songs</h5>
+                                <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    All Songs inside Lanyard
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-100">
+                    <div class="card hover-card border-0 text-white h-100 p-2"
+                        role="button"
+                        @onclick="() => CreateNewPlaylist()">
+                        <div class="card-body p-0 d-flex flex-row">
+                            <div class="ratio ratio-1x1 w-25 me-3 rounded"
+                                 style="background-color: @GetPlaylistColor("New");">
+                                <div class="d-flex align-items-center justify-content-center">
+                                    <span class="fs-3 fw-bold text-white">@GetInitials("New")</span>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-column">
+                                <h5 class="card-title text-truncate text-dark pb-1 mb-0">New Playlist</h5>
+                                <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    Create a New Playlist
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<NewPlaylistModal IsVisible="showModal" OnSave="HandleSavePlaylist" OnClose="HandleCloseModal" />
+
+@code {
+    [Parameter] public EventCallback<IEnumerable<Song>> OnSongsSelected { get; set; }
+
+    private Guid? selectedPlaylistId;
+    private bool allSongsSelected;
+    private List<Playlist>? playlists;
+    private bool showModal = false;
+    private static readonly string[] colors = 
+    {
+        "#1DB954", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5",
+        "#2196F3", "#00BCD4", "#009688", "#4CAF50", "#FF9800",
+        "#FF5722", "#795548", "#607D8B", "#E040FB", "#536DFE"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        playlists = await _context.Playlists
+            .AsNoTracking()
+            .Where(p => p.DeleteDate == null)
+            .OrderByDescending(p => p.CreateDate)
+            .ToListAsync();
+    }
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "?";
+
+        var words = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (words.Length == 1)
+            return name.Substring(0, Math.Min(2, name.Length)).ToUpper();
+
+        return (words[0][0].ToString() + words[1][0].ToString()).ToUpper();
+    }
+
+    private string GetPlaylistColor(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return colors[0];
+
+        int hash = Math.Abs(name.GetHashCode());
+        return colors[hash % colors.Length];
+    }
+
+    private async Task LoadPlaylist(Guid playlistId)
+    {
+        selectedPlaylistId = playlistId;
+        allSongsSelected = false;
+
+        IEnumerable<Song> songs = await _context.PlaylistSongMembers
+            .Where(s => s.PlaylistId == playlistId && s.DeleteDate == null)
+            .OrderBy(s => s.Song!.Name)
+            .Select(x => x.Song!)
+            .ToListAsync();
+
+        await OnSongsSelected.InvokeAsync(songs);
+    }
+
+    private async Task ShowAllSongs()
+    {
+        selectedPlaylistId = null;
+        allSongsSelected = true;
+
+        List<Song> songs = await _context.Songs
+            .Where(s => s.IsActive == true)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
+        songs.AddRange(await _player.GetLocalSongs());
+
+        await OnSongsSelected.InvokeAsync(songs);
+    }
+
+    private void CreateNewPlaylist()
+    {
+        showModal = true;
+    }
+
+    private async Task HandleSavePlaylist(Playlist playlist)
+    {
+        _context.Playlists.Add(playlist);
+        await _context.SaveChangesAsync();
+        
+        playlists = await _context.Playlists
+            .AsNoTracking()
+            .Where(p => p.DeleteDate == null)
+            .OrderByDescending(p => p.CreateDate)
+            .ToListAsync();
+        
+        showModal = false;
+    }
+
+    private void HandleCloseModal()
+    {
+        showModal = false;
+    }
+}

@@ -5,8 +5,8 @@
 @using LanyardData.Models
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
 @inject IdentityRedirectManager RedirectManager
 
 <PageTitle>Manage your passkeys</PageTitle>
@@ -62,7 +62,7 @@ else
 @code {
     private const int MaxPasskeyCount = 100;
 
-    private ApplicationUserModels? user;
+    private UserProfile? user;
     private IList<UserPasskeyInfo>? currentPasskeys;
 
     [CascadingParameter]

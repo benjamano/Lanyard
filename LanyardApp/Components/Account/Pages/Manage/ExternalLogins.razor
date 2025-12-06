@@ -4,9 +4,9 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
-@inject IUserStore<ApplicationUserModels> UserStore
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
+@inject IUserStore<UserProfile> UserStore
 @inject IdentityRedirectManager RedirectManager
 
 <PageTitle>Manage your external logins</PageTitle>
@@ -65,7 +65,7 @@
 @code {
     public const string LinkLoginCallbackAction = "LinkLoginCallback";
 
-    private ApplicationUserModels? user;
+    private UserProfile? user;
     private IList<UserLoginInfo>? currentLogins;
     private IList<AuthenticationScheme>? otherLogins;
     private bool showRemoveButton;
@@ -97,7 +97,7 @@
             .ToList();
 
         string? passwordHash = null;
-        if (UserStore is IUserPasswordStore<ApplicationUserModels> userPasswordStore)
+        if (UserStore is IUserPasswordStore<UserProfile> userPasswordStore)
         {
             passwordHash = await userPasswordStore.GetPasswordHashAsync(user, HttpContext.RequestAborted);
         }

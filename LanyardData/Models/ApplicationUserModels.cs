@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 namespace LanyardData.Models
 {
     // Add profile data for application users by adding properties to the ApplicationUser class
-    public class ApplicationUserModels : IdentityUser
+    public class UserProfile : IdentityUser
     {
     }
 }

@@ -3,7 +3,7 @@
 @using LanyardData.Models
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
+@inject UserManager<UserProfile> UserManager
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<GenerateRecoveryCodes> Logger
 
@@ -39,7 +39,7 @@ else
 
 @code {
     private string? message;
-    private ApplicationUserModels? user;
+    private UserProfile? user;
     private IEnumerable<string>? recoveryCodes;
 
     [CascadingParameter]

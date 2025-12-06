@@ -1,0 +1,126 @@
+﻿@using LanyardData.Models;
+@using LanyardApp.Components.Music;
+@using System.Threading.Tasks
+@using LanyardData.DataAccess
+@using Microsoft.EntityFrameworkCore
+
+@inject ApplicationDbContext _context
+@inject MusicPlayerService _player
+
+@implements IDisposable
+
+<div class="col-12">
+    @if (Songs is not null)
+    {
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <td class="text-end col-1">#</td>
+                    <td class="col-5">Title</td>
+                    <td class="col-3">Album</td>
+                    <td class="col-2">Date Added</td>
+                    <td class="col-1">Length</td>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var (song, index) in Songs.Select((s, i) => (s, i + 1)))
+                {
+                    <tr role="button" 
+                        @onmouseover="() => OnHover(song.Id)" 
+                        @onmouseout="() => OnHoverOut()" 
+                        @onclick="() => _player.Play(song)"
+                        class="@(IsCurrentlyPlaying(song) ? "table-primary" : "")">
+                        <td class="text-end">
+                            <span role="button" @onclick="() => OpenAddSongToPlaylistModel(song)" @onclick:stopPropagation class="fas fa-plus-circle text-success @(HoveredSongId == song.Id ? "" : "d-none")"></span>
+                            @if (IsCurrentlyPlaying(song))
+                            {
+                                <i class="fas fa-volume-up text-primary me-2"></i>
+                            }
+                            @index
+                        </td>
+                        <td>@song.Name</td>
+                        <td>@song.AlbumName</td>
+                        <td>@song.CreateDate.ToString("d")</td>
+                        <td>@TimeSpan.FromSeconds(song.DurationSeconds).ToString(@"mm\:ss")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @* <button class="btn btn-outline-secondary rounded-pill pb-2 pt-2 mx-2" style="line-height: 1;">
+            <i class="fas fa-plus me-1"></i> Add Song
+        </button> *@
+    }
+</div>
+
+<AddSongToPlaylistModal IsVisible="IsAddSongToPlaylistModalVisible" Song="SelectedSong" OnAdd="HandleSongAddedToPlaylist" OnClose="CloseAddSongToPlaylistModal" />
+
+@code {
+    [Parameter] public IEnumerable<Song>? Songs { get; set; }
+
+    private bool IsAddSongToPlaylistModalVisible = false;
+    private Guid HoveredSongId = Guid.Empty;
+    private Song? SelectedSong;
+    private Guid? CurrentlyPlayingSongId;
+
+    protected override void OnInitialized()
+    {
+        _player.OnSongChanged += HandleSongChanged;
+        UpdateCurrentSong();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        HandleSongChanged();
+    }
+
+    private void HandleSongChanged()
+    {
+        UpdateCurrentSong();
+    }
+
+    private void UpdateCurrentSong()
+    {
+        CurrentlyPlayingSongId = _player.CurrentSong?.Id;
+    }
+
+    private bool IsCurrentlyPlaying(Song song)
+    {
+        return CurrentlyPlayingSongId.HasValue && CurrentlyPlayingSongId.Value == song.Id;
+    }
+
+    private void OpenAddSongToPlaylistModel(Song song)
+    {
+        SelectedSong = song;
+        IsAddSongToPlaylistModalVisible = true;
+    }
+
+    private void CloseAddSongToPlaylistModal()
+    {
+        IsAddSongToPlaylistModalVisible = false;
+    }
+
+    private async Task HandleSongAddedToPlaylist(PlaylistSongMember playlistSongMember)
+    {
+        IsAddSongToPlaylistModalVisible = false;
+
+        _context.Add(playlistSongMember);
+
+        await _context.SaveChangesAsync();
+    }
+
+    private void OnHover(Guid id)
+    {
+        HoveredSongId = id;
+    }
+
+    private void OnHoverOut()
+    {
+        HoveredSongId = Guid.Empty;
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandleSongChanged;
+    }
+}

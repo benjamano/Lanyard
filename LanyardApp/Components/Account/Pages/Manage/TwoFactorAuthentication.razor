@@ -4,8 +4,8 @@
 @using Microsoft.AspNetCore.Http.Features
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
 @inject IdentityRedirectManager RedirectManager
 
 <PageTitle>Two-factor authentication (2FA)</PageTitle>

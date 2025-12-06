@@ -2,6 +2,7 @@ using LanyardApp.Components;
 using LanyardApp.Components.Account;
 using LanyardData.DataAccess;
 using LanyardData.Models;
+using LanyardAPI.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,9 +16,10 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
-builder.Services.AddScoped<MusicPlayerService, MusicPlayerService>();
 
 builder.Services.AddSingleton<ToastService>();
+builder.Services.AddSingleton<MusicPlayerService>();
+builder.Services.AddScoped<MusicRepository>();
 
 builder.Services.AddAuthentication(options =>
     {
@@ -31,7 +33,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString, b=> b.MigrationsAssembly("LanyardData")));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
-builder.Services.AddIdentityCore<ApplicationUserModels>(options =>
+builder.Services.AddIdentityCore<UserProfile>(options =>
     {
         options.SignIn.RequireConfirmedAccount = true;
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
@@ -40,7 +42,7 @@ builder.Services.AddIdentityCore<ApplicationUserModels>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUserModels>, IdentityNoOpEmailSender>();
+builder.Services.AddSingleton<IEmailSender<UserProfile>, IdentityNoOpEmailSender>();
 
 var app = builder.Build();
 

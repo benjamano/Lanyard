@@ -3,8 +3,8 @@
 @using LanyardData.Models
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ResetAuthenticator> Logger
 

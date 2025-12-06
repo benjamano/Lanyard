@@ -4,6 +4,7 @@ using LanyardData.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LanyardApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251204231131_addingSongPlaylistModels")]
+    partial class addingSongPlaylistModels
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -29,6 +32,7 @@ namespace LanyardApp.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("CreateByUserId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("CreateDate")
@@ -65,6 +69,7 @@ namespace LanyardApp.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("CreateByUserId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("CreateDate")
@@ -92,13 +97,6 @@ namespace LanyardApp.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AlbumName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("datetime2");
 
                     b.Property<double>("DurationSeconds")
                         .HasColumnType("float");
@@ -346,7 +344,9 @@ namespace LanyardApp.Migrations
                 {
                     b.HasOne("LanyardData.Models.UserProfile", "CreateByUser")
                         .WithMany()
-                        .HasForeignKey("CreateByUserId");
+                        .HasForeignKey("CreateByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("LanyardData.Models.UserProfile", "DeleteByUser")
                         .WithMany()
@@ -361,7 +361,9 @@ namespace LanyardApp.Migrations
                 {
                     b.HasOne("LanyardData.Models.UserProfile", "CreateByUser")
                         .WithMany()
-                        .HasForeignKey("CreateByUserId");
+                        .HasForeignKey("CreateByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("LanyardData.Models.UserProfile", "DeleteByUser")
                         .WithMany()

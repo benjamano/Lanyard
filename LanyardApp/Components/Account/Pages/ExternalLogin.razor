@@ -8,10 +8,10 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 
-@inject SignInManager<ApplicationUserModels> SignInManager
-@inject UserManager<ApplicationUserModels> UserManager
-@inject IUserStore<ApplicationUserModels> UserStore
-@inject IEmailSender<ApplicationUserModels> EmailSender
+@inject SignInManager<UserProfile> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject IUserStore<UserProfile> UserStore
+@inject IEmailSender<UserProfile> EmailSender
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ExternalLogin> Logger
@@ -186,26 +186,26 @@
         }
     }
 
-    private ApplicationUserModels CreateUser()
+    private UserProfile CreateUser()
     {
         try
         {
-            return Activator.CreateInstance<ApplicationUserModels>();
+            return Activator.CreateInstance<UserProfile>();
         }
         catch
         {
-            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUserModels)}'. " +
-                $"Ensure that '{nameof(ApplicationUserModels)}' is not an abstract class and has a parameterless constructor");
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(UserProfile)}'. " +
+                $"Ensure that '{nameof(UserProfile)}' is not an abstract class and has a parameterless constructor");
         }
     }
 
-    private IUserEmailStore<ApplicationUserModels> GetEmailStore()
+    private IUserEmailStore<UserProfile> GetEmailStore()
     {
         if (!UserManager.SupportsUserEmail)
         {
             throw new NotSupportedException("The default UI requires a user store with email support.");
         }
-        return (IUserEmailStore<ApplicationUserModels>)UserStore;
+        return (IUserEmailStore<UserProfile>)UserStore;
     }
 
     private sealed class InputModel

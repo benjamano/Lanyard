@@ -1,0 +1,97 @@
+﻿@using LanyardData.Models
+
+@if (renderModal)
+{
+    <div class="modal-backdrop @(isFullyShown ? "backdrop-custom-fade-in" : "backdrop-custom-fade-out")"></div>
+
+    <div class="modal fade @(isFullyShown ? "modal-custom-fade-in" : "modal-custom-fade-out")"
+         tabindex="-1"
+         style="display:block">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Create New Playlist</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Playlist Name</label>
+                        <input type="text" class="form-control"
+                            @bind="playlistName" placeholder="My Awesome Playlist" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description (Optional)</label>
+                        <textarea class="form-control"
+                            @bind="playlistDescription" rows="3"
+                            placeholder="Add a description..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="Save"
+                        disabled="@string.IsNullOrWhiteSpace(playlistName)">
+                        Create
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback<Playlist> OnSave { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool renderModal;
+    private bool isFullyShown;
+
+    private string playlistName = "";
+    private string playlistDescription = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            renderModal = true;
+            await Task.Yield();
+            isFullyShown = true;
+        }
+        else
+        {
+            isFullyShown = false;
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(150);
+                renderModal = false;
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private async Task Save()
+    {
+        var playlist = new Playlist
+        {
+            Name = playlistName,
+            Description = playlistDescription,
+            CreateDate = DateTime.UtcNow
+        };
+
+        await OnSave.InvokeAsync(playlist);
+        ResetForm();
+    }
+
+    private async Task Close()
+    {
+        ResetForm();
+        await OnClose.InvokeAsync();
+    }
+
+    private void ResetForm()
+    {
+        playlistName = "";
+        playlistDescription = "";
+    }
+}

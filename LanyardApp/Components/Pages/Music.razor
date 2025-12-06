@@ -1,82 +1,137 @@
 ﻿@page "/music"
 
+@using LanyardApp.Components.Music
+@using LanyardData.Models
+@using NAudio.Wave;
+
 @inject MusicPlayerService _player
 @inject ToastService ToastService
 
-<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3">
-    <button class="border-dark text-dark border-2 fas fa-backward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-            style="width:40px; height:40px;"
-            @onclick="RestartSong"
-            @ondblclick="PreviousSong">
-    </button>
+<PageTitle>Music</PageTitle>
 
-    <button class="border-dark text-dark border-2 fas fa-play bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-            style="width:40px; height:40px;"
-            @onclick="Play">
-    </button>
+<div class="d-flex flex-row h-100">
+    <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
 
-    <button class="border-dark text-dark border-2 fas fa-forward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-            style="width:40px; height:40px;"
-            @onclick="NextSong">
-    </button>
+    <div class="d-flex flex-columm col-10">
+        <SongList Songs="currentSongs"></SongList>
+    </div>
+</div>
+
+<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3 border-top border-secondary w-100 pt-3 bg-white">
+    <div class="d-flex justify-content-center gap-2">
+        <button class="border-dark text-dark border-2 fas fa-backward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+                style="width:40px; height:40px;"
+                @onclick="RestartSong"
+                @ondblclick="PreviousSong">
+        </button>
+
+        <button class="border-dark text-dark border-2 fas @(isPlaying ? "fa-pause" : "fa-play") bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+                style="width:40px; height:40px;"
+                @onclick="TogglePlay">
+        </button>
+
+        <button class="border-dark text-dark border-2 fas fa-forward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
+                style="width:40px; height:40px;"
+                @onclick="NextSong">
+        </button>
+    </div>
 </div>
 
 @code {
-    private string buttonText = "Play";
+    private IEnumerable<Song>? currentSongs;
 
-    private void Play()
+    private bool isPlaying = false;
+
+    protected override void OnInitialized()
+    {
+        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
+        UpdatePlaybackStatus();
+    }
+
+    private void HandlePlaybackStatusChanged()
+    {
+        UpdatePlaybackStatus();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdatePlaybackStatus()
+    {
+        isPlaying = _player.CurrentPlaybackState == PlaybackState.Playing;
+    }
+
+    private async Task TogglePlay()
     {
         try
         {
-            _player.Play();
+            await _player.TogglePlay();
         }
         catch (Exception ex)
         {
             ToastService.SetErrorLevel(ToastErrorLevels.Error);
             ToastService.Show(ex.Message);
-            buttonText = ex.Message;
         }
     }
 
-    private void RestartSong()
+    private async Task Play()
     {
         try
         {
-            _player.Restart();
+            await _player.Play();
         }
         catch (Exception ex)
         {
             ToastService.SetErrorLevel(ToastErrorLevels.Error);
             ToastService.Show(ex.Message);
-            buttonText = ex.Message;
         }
     }
 
-    private void PreviousSong()
+    private async Task RestartSong()
     {
         try
         {
-            _player.Previous();
+            await _player.Restart();
         }
         catch (Exception ex)
         {
             ToastService.SetErrorLevel(ToastErrorLevels.Error);
             ToastService.Show(ex.Message);
-            buttonText = ex.Message;
         }
     }
 
-    private void NextSong()
+    private async Task PreviousSong()
     {
         try
         {
-            _player.Next();
+            await _player.Previous();
         }
         catch (Exception ex)
         {
             ToastService.SetErrorLevel(ToastErrorLevels.Error);
             ToastService.Show(ex.Message);
-            buttonText = ex.Message;
         }
+    }
+
+    private async Task NextSong()
+    {
+        try
+        {
+            await _player.Next();
+        }
+        catch (Exception ex)
+        {
+            ToastService.SetErrorLevel(ToastErrorLevels.Error);
+            ToastService.Show(ex.Message);
+        }
+    }
+
+    private void HandleSongsSelected(IEnumerable<Song> songs)
+    {
+        currentSongs = songs;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandlePlaybackStatusChanged;
     }
 }

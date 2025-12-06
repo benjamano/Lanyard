@@ -1,0 +1,128 @@
+﻿@using LanyardData.Models
+@using LanyardData.DataAccess
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext _context
+
+@if (renderModal)
+{
+    <div class="modal-backdrop @(isFullyShown ? "backdrop-custom-fade-in" : "backdrop-custom-fade-out")"></div>
+
+    <div class="modal fade @(isFullyShown ? "modal-custom-fade-in" : "modal-custom-fade-out")"
+         tabindex="-1"
+         style="display:block">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Add @Song.Name To Playlist</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <InputSelect @bind-Value="PlaylistId" class="form-select">
+                        <option value="">Select Playlist</option>
+                        @foreach (var playlist in Playlists)
+                        {
+                            <option value="@playlist.Id">@playlist.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="Add"
+                            disabled="@(!PlaylistId.HasValue)">
+                        Add
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public required Song Song { get; set; }
+
+    [Parameter] public EventCallback<PlaylistSongMember> OnAdd { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool renderModal;
+    private bool isFullyShown;
+
+    private Guid? PlaylistId;
+    private IEnumerable<Playlist> Playlists = Enumerable.Empty<Playlist>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            renderModal = true;
+            await Task.Yield();
+            isFullyShown = true;
+
+            Playlists = await _context.Playlists
+                .AsNoTracking()
+                .Where(p => p.DeleteDate == null)
+                .OrderByDescending(p => p.CreateDate)
+                .ToListAsync();
+        }
+        else
+        {
+            isFullyShown = false;
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(150);
+                renderModal = false;
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private async Task Add()
+    {
+        Song? existingSong = await _context.Songs
+            .Where(x => x.Id == Song.Id)
+            .FirstOrDefaultAsync();
+
+        if (existingSong is null)
+        {
+            existingSong = new Song
+            {
+                Id = Guid.NewGuid(),
+                Name = Song.Name,
+                AlbumName = "Imported Local Music",
+                FilePath = Song.FilePath,
+                DurationSeconds = Song.DurationSeconds,
+                CreateDate = DateTime.UtcNow,
+                IsDownloaded = true,
+                IsActive = true
+            };
+
+            _context.Add(existingSong);
+
+            await _context.SaveChangesAsync();
+        }
+
+        PlaylistSongMember song = new PlaylistSongMember
+        {
+            SongId = existingSong.Id,
+            PlaylistId = PlaylistId!.Value,
+            CreateDate = DateTime.UtcNow
+        };
+
+        await OnAdd.InvokeAsync(song);
+        ResetForm();
+    }
+
+    private async Task Close()
+    {
+        ResetForm();
+        await OnClose.InvokeAsync();
+    }
+
+    private void ResetForm()
+    {
+        PlaylistId = Guid.Empty;
+    }
+}

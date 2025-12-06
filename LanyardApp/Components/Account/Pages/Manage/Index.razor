@@ -4,8 +4,8 @@
 @using LanyardData.Models
 @using Microsoft.AspNetCore.Identity
 
-@inject UserManager<ApplicationUserModels> UserManager
-@inject SignInManager<ApplicationUserModels> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject SignInManager<UserProfile> SignInManager
 @inject IdentityRedirectManager RedirectManager
 
 <PageTitle>Profile</PageTitle>
@@ -33,7 +33,7 @@
 </div>
 
 @code {
-    private ApplicationUserModels? user;
+    private UserProfile? user;
     private string? username;
     private string? phoneNumber;
 
