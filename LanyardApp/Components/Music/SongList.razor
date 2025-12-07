@@ -2,6 +2,7 @@
 @using LanyardApp.Components.Music;
 @using System.Threading.Tasks
 @using LanyardData.DataAccess
+@using LanyardAPI.Services
 @using Microsoft.EntityFrameworkCore
 
 @inject ApplicationDbContext _context
@@ -26,22 +27,23 @@
                 @foreach (var (song, index) in Songs.Select((s, i) => (s, i + 1)))
                 {
                     <tr role="button" 
-                        @onmouseover="() => OnHover(song.Id)" 
+                        @onmouseover="() => OnHover(song.SongId)" 
                         @onmouseout="() => OnHoverOut()" 
-                        @onclick="() => _player.Play(song)"
-                        class="@(IsCurrentlyPlaying(song) ? "table-primary" : "")">
+                        @onclick="() => _player.Play(song.Song!, song.Playlist!)"
+                        class="@(IsCurrentlyPlaying(song.Song!) ? "table-primary" : "")">
                         <td class="text-end">
-                            <span role="button" @onclick="() => OpenAddSongToPlaylistModel(song)" @onclick:stopPropagation class="fas fa-plus-circle text-success @(HoveredSongId == song.Id ? "" : "d-none")"></span>
-                            @if (IsCurrentlyPlaying(song))
+                            <span role="button" @onclick="() => OpenAddSongToPlaylistModel(song.Song!)" @onclick:stopPropagation 
+                                class="fas fa-plus-circle text-success @(HoveredSongId == song.SongId ? "" : "d-none")"></span>
+                            @if (IsCurrentlyPlaying(song.Song!))
                             {
                                 <i class="fas fa-volume-up text-primary me-2"></i>
                             }
                             @index
                         </td>
-                        <td>@song.Name</td>
-                        <td>@song.AlbumName</td>
-                        <td>@song.CreateDate.ToString("d")</td>
-                        <td>@TimeSpan.FromSeconds(song.DurationSeconds).ToString(@"mm\:ss")</td>
+                        <td>@song.Song!.Name</td>
+                        <td>@song.Song!.AlbumName</td>
+                        <td>@song.Song!.CreateDate.ToString("d")</td>
+                        <td>@TimeSpan.FromSeconds(song.Song!.DurationSeconds).ToString(@"mm\:ss")</td>
                     </tr>
                 }
             </tbody>
@@ -56,25 +58,20 @@
 <AddSongToPlaylistModal IsVisible="IsAddSongToPlaylistModalVisible" Song="SelectedSong" OnAdd="HandleSongAddedToPlaylist" OnClose="CloseAddSongToPlaylistModal" />
 
 @code {
-    [Parameter] public IEnumerable<Song>? Songs { get; set; }
+    [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
 
     private bool IsAddSongToPlaylistModalVisible = false;
-    private Guid HoveredSongId = Guid.Empty;
+    private Guid? HoveredSongId = null;
     private Song? SelectedSong;
     private Guid? CurrentlyPlayingSongId;
 
     protected override void OnInitialized()
     {
-        _player.OnSongChanged += HandleSongChanged;
+        _player.OnSongChanged += UpdateCurrentSong;
         UpdateCurrentSong();
     }
 
     protected override async Task OnParametersSetAsync()
-    {
-        HandleSongChanged();
-    }
-
-    private void HandleSongChanged()
     {
         UpdateCurrentSong();
     }
@@ -121,6 +118,6 @@
 
     public void Dispose()
     {
-        _player.OnSongChanged -= HandleSongChanged;
+        _player.OnSongChanged -= UpdateCurrentSong;
     }
 }

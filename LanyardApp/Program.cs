@@ -18,7 +18,8 @@ builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
 builder.Services.AddSingleton<ToastService>();
-builder.Services.AddSingleton<MusicPlayerService>();
+builder.Services.AddSingleton<MusicPlayer>();
+builder.Services.AddScoped<MusicPlayerService>();
 builder.Services.AddScoped<MusicRepository>();
 
 builder.Services.AddAuthentication(options =>

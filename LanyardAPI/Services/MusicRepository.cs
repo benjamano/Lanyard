@@ -26,11 +26,11 @@ public class MusicRepository(ApplicationDbContext context)
 
     public async Task<List<Song>> GetPlaylistSongsRandomized(Guid playlistId)
     {
-        return await _context.PlaylistSongMembers
+        return [.. (await _context.PlaylistSongMembers
             .Where(x => x.PlaylistId == playlistId)
-            .OrderBy(_ => _rng.Next())
             .Select(x => x.Song!)
-            .ToListAsync();
+            .ToListAsync())
+        .OrderBy(_ => _rng.Next())];
     }
 
     public async Task<List<string>> GetExistingSongFilePaths()

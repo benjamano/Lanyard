@@ -6,203 +6,170 @@ using NAudio.Wave;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using TagLib;
+using System.Security.Policy;
 
-public class MusicPlayerService(IServiceProvider serviceProvider) : IDisposable
+namespace LanyardAPI.Services;
+
+public class MusicPlayerService(MusicPlayer player, MusicRepository repository)
 {
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly MusicPlayer _player = player;
+    private readonly MusicRepository _repository = repository;
 
-    private WaveOutEvent? player = new();
-    private AudioFileReader? audioFile;
+    public Song? CurrentSong => _player.CurrentSong;
+    public Playlist? CurrentPlaylist => _player.CurrentPlaylist;
+    public TimeSpan CurrentPosition => _player.CurrentPosition;
+    public TimeSpan CurrentDuration => _player.CurrentDuration;
+    public PlaybackState CurrentPlaybackState => _player.CurrentPlaybackState;
 
-    private bool _playerInitialized = false;
-    private List<Song> _songQueue = [];
-    private int _songIndex = 0;
+    public event Action? OnSongChanged
+    {
+        add => _player.OnSongChanged += value;
+        remove => _player.OnSongChanged -= value;
+    }
 
-    public Song? CurrentSong => _songQueue.Count > 0 && _songIndex < _songQueue.Count ? _songQueue[_songIndex] : null;
-    public TimeSpan CurrentPosition => audioFile?.CurrentTime ?? TimeSpan.Zero;
-    public TimeSpan CurrentDuration => audioFile?.TotalTime ?? TimeSpan.Zero;
-    public PlaybackState CurrentPlaybackState => player?.PlaybackState ?? PlaybackState.Stopped;
+    public event Action? OnPlaybackStatusChanged
+    {
+        add => _player.OnPlaybackStatusChanged += value;
+        remove => _player.OnPlaybackStatusChanged -= value;
+    }
 
-    public event Action? OnSongChanged;
-    public event Action? OnPlaybackStatusChanged;
+    public event Action? OnPlaylistChanged
+    {
+        add => _player.OnPlaylistChanged += value;
+        remove => _player.OnPlaylistChanged -= value;
+    }
 
-    public async Task VerifySongMetaData(Song song)
+    private async Task VerifySongMetaData(Song song)
     {
         if (song.DurationSeconds == 0)
         {
             TagLib.File tfile = TagLib.File.Create(song.FilePath);
-
             int durationSeconds = (int)tfile.Properties.Duration.TotalSeconds;
-
-            using var scope = _serviceProvider.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<MusicRepository>();
-            
-            await repository.UpdateSongDuration(song, durationSeconds);
+            await _repository.UpdateSongDuration(song, durationSeconds);
         }
-    }
-
-    public void LoadSong(string filePath)
-    {
-        if (player!.PlaybackState == PlaybackState.Playing || player.PlaybackState == PlaybackState.Paused)
-        {
-            player.Stop();
-        }
-
-        audioFile?.Dispose();
-        audioFile = new AudioFileReader(filePath);
-        player!.Init(audioFile);
-
-        _playerInitialized = true;
-        
-        OnSongChanged?.Invoke();
     }
 
     public async Task Play()
     {
-        if (!_playerInitialized)
-            throw new InvalidOperationException("Please load a song first!");
-
-        if (player == null) return;
-
-        await VerifySongMetaData(_songQueue[_songIndex]);
-
-        if (player.PlaybackState != PlaybackState.Playing)
+        if (_player.CurrentSong != null)
         {
-            player.Play();
-
-            OnPlaybackStatusChanged?.Invoke();
-        }
-    }
-
-    public async Task TogglePlay()
-    {
-        if (player == null) return;
-
-        if (player.PlaybackState == PlaybackState.Playing)
-        {
-            Pause();
-        }
-        else
-        {
-            await Play();
+            await VerifySongMetaData(_player.CurrentSong);
         }
 
+        _player.Play();
     }
 
     public async Task Play(Song song)
     {
-        if (song == CurrentSong)
+        if (song == _player.CurrentSong)
         {
             await Play();
             return;
         }
 
-        if (_songQueue.Count == 0)
+        _player.SetQueue([song], 0);
+        _player.LoadSong(song.FilePath);
+
+        _player.SetPlaylist(null);
+
+        await Play();
+    }
+
+    public async Task Play(Song song, Playlist playlist)
+    {
+        if (song == _player.CurrentSong)
         {
-            _songQueue.Add(song);
-        }
-        else
-        {
-            _songQueue[0] = song;
+            await Play();
+            return;
         }
 
-        _songIndex = 0;
+        if (playlist == null)
+        {
+            await Play(song);
+            return;
+        }
 
-        LoadSong(song.FilePath);
+        List<Song> songsInPlaylist = new() { song };
+        songsInPlaylist!.AddRange((await _repository.GetPlaylistSongsRandomized(playlist.Id)).Where(x => x.Id != song.Id).ToList());
+
+        _player.SetQueue(songsInPlaylist, 0);
+        _player.LoadSong(song.FilePath);
+
+        Playlist loadedPlaylist = await _repository.GetPlaylistById(playlist.Id);
+        _player.SetPlaylist(loadedPlaylist);
 
         await Play();
     }
 
     public void Pause()
     {
-        if (player == null) return;
+        _player.Pause();
+    }
 
-        if (player.PlaybackState == PlaybackState.Playing)
+    public async Task TogglePlay()
+    {
+        if (_player.CurrentPlaybackState == PlaybackState.Playing)
         {
-            player.Pause();
-
-            OnPlaybackStatusChanged?.Invoke();
+            _player.Pause();
+        }
+        else
+        {
+            await Play();
         }
     }
 
-    public async Task Stop()
+    public void Stop()
     {
-        if (player == null) return;
-
-        player.Stop();
-
-        OnPlaybackStatusChanged?.Invoke();
+        _player.Stop();
     }
 
     public async Task Next()
     {
-        if (player == null || CurrentSong == null) return;
+        if (_player.CurrentSong == null) return;
 
-        Pause();
+        _player.Pause();
 
-        if (_songIndex + 1 >= _songQueue.Count)
-            _songIndex = 0;
-        else
-            _songIndex++;
-
-        LoadSong(_songQueue[_songIndex].FilePath);
-
-        await Play();
+        if (_player.MoveToNextInQueue())
+        {
+            _player.LoadSong(_player.CurrentSong.FilePath);
+            await Play();
+        }
     }
 
     public async Task Previous()
     {
-        if (player == null) return;
+        _player.Pause();
 
-        Pause();
-
-        if (_songIndex - 1 < 0)
-            _songIndex = _songQueue.Count - 1;
-        else
-            _songIndex--;
-
-        LoadSong(_songQueue[_songIndex].FilePath);
-
-        await Play();
+        if (_player.MoveToPreviousInQueue())
+        {
+            _player.LoadSong(_player.CurrentSong!.FilePath);
+            await Play();
+        }
     }
 
     public async Task Restart()
     {
-        if (player == null || audioFile == null) return;
-
-        Pause();
-
-        audioFile!.CurrentTime = TimeSpan.Zero;
-
+        _player.Pause();
+        _player.Seek(TimeSpan.Zero);
         await Play();
     }
 
     public List<Song> GetQueue()
     {
-        return _songQueue;
+        return _player.GetQueue();
     }
 
-    public async Task LoadPlaylist(Guid PlayListId)
+    public async Task LoadPlaylist(Guid playlistId)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<MusicRepository>();
-        
-        await repository.GetPlaylistById(PlayListId);
-
-        _songQueue = await repository.GetPlaylistSongsRandomized(PlayListId);
-
-        _songIndex = 0;
+        await _repository.GetPlaylistById(playlistId);
+        var songs = await _repository.GetPlaylistSongsRandomized(playlistId);
+        _player.SetQueue(songs, 0);
     }
 
     public async Task<IEnumerable<Song>> GetLocalSongs()
     {
         List<Song> songs = new();
-
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<MusicRepository>();
-        
-        List<string> existingPaths = await repository.GetExistingSongFilePaths();
-
+        List<string> existingPaths = await _repository.GetExistingSongFilePaths();
         var existingFileNames = existingPaths.Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         string musicFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
@@ -229,11 +196,5 @@ public class MusicPlayerService(IServiceProvider serviceProvider) : IDisposable
         }
 
         return songs;
-    }
-
-    public void Dispose()
-    {
-        player?.Dispose();
-        audioFile?.Dispose();
     }
 }
