@@ -2,6 +2,7 @@
 
 @using LanyardApp.Components.Music
 @using LanyardData.Models
+@using LanyardAPI.Services
 @using NAudio.Wave;
 
 @inject MusicPlayerService _player
@@ -38,7 +39,7 @@
 </div>
 
 @code {
-    private IEnumerable<Song>? currentSongs;
+    private IEnumerable<PlaylistSongMember>? currentSongs;
 
     private bool isPlaying = false;
 
@@ -124,7 +125,7 @@
         }
     }
 
-    private void HandleSongsSelected(IEnumerable<Song> songs)
+    private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)
     {
         currentSongs = songs;
         StateHasChanged();

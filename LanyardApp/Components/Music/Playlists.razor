@@ -1,6 +1,8 @@
 ﻿@using LanyardData.Models
 @using LanyardData.DataAccess
 @using Microsoft.EntityFrameworkCore
+@using LanyardAPI.Services
+@using NAudio.Wave
 
 @inject ApplicationDbContext _context
 @inject MusicPlayerService _player
@@ -16,10 +18,10 @@
         else
         {
             <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
-                @foreach (var playlist in playlists)
+                @foreach (Playlist playlist in playlists)
                 {
                     <div class="w-100">
-                        <div class="card hover-card border-0 text-white h-100 p-2 @(selectedPlaylistId == playlist.Id ? "active" : "")"
+                        <div class="card hover-card h-100 p-2 @(selectedPlaylistId == playlist.Id ? "active" : "") @(currentlyPlayingPlaylistId == playlist.Id ? "border border-1 border-success" : "border-0")"
                              role="button"
                              @onclick="() => LoadPlaylist(playlist.Id)">
                             <div class="card-body p-0 d-flex flex-row">
@@ -30,7 +32,7 @@
                                     </div>
                                 </div>
                                 <div class="d-flex flex-column">
-                                    <h5 class="card-title text-truncate text-dark pb-1 mb-0">@playlist.Name</h5>
+                                    <h5 class="card-title text-truncate @(currentlyPlayingPlaylistId == playlist.Id ? "text-success" : "text-dark") pb-1 mb-0">@playlist.Name</h5>
                                     @if (!string.IsNullOrEmpty(playlist.Description))
                                     {
                                         <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
@@ -56,7 +58,7 @@
                 }
 
                 <div class="w-100">
-                    <div class="card hover-card border-0 text-white h-100 p-2 @(allSongsSelected ? "active" : "")"
+                    <div class="card hover-card text-white h-100 p-2 @(allSongsSelected ? "active" : "") @(currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing ? "border border-1 border-success" : "border-0")"
                          role="button"
                          @onclick="() => ShowAllSongs()">
                         <div class="card-body p-0 d-flex flex-row">
@@ -104,12 +106,17 @@
 <NewPlaylistModal IsVisible="showModal" OnSave="HandleSavePlaylist" OnClose="HandleCloseModal" />
 
 @code {
-    [Parameter] public EventCallback<IEnumerable<Song>> OnSongsSelected { get; set; }
+    [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
 
     private Guid? selectedPlaylistId;
+    private Guid? currentlyPlayingPlaylistId;
+
     private bool allSongsSelected;
+
     private List<Playlist>? playlists;
+
     private bool showModal = false;
+
     private static readonly string[] colors = 
     {
         "#1DB954", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5",
@@ -124,6 +131,10 @@
             .Where(p => p.DeleteDate == null)
             .OrderByDescending(p => p.CreateDate)
             .ToListAsync();
+
+        _player.OnPlaylistChanged += HandleCurrentPlaylist;
+
+        HandleCurrentPlaylist();
     }
 
     private string GetInitials(string name)
@@ -153,10 +164,12 @@
         selectedPlaylistId = playlistId;
         allSongsSelected = false;
 
-        IEnumerable<Song> songs = await _context.PlaylistSongMembers
+        IEnumerable<PlaylistSongMember> songs = await _context.PlaylistSongMembers
+            .AsNoTracking()
             .Where(s => s.PlaylistId == playlistId && s.DeleteDate == null)
+            .Include(x=> x.Song)
+            .Include(x=> x.Playlist)
             .OrderBy(s => s.Song!.Name)
-            .Select(x => x.Song!)
             .ToListAsync();
 
         await OnSongsSelected.InvokeAsync(songs);
@@ -168,13 +181,20 @@
         allSongsSelected = true;
 
         List<Song> songs = await _context.Songs
+            .AsNoTracking()
             .Where(s => s.IsActive == true)
             .OrderBy(s => s.Name)
             .ToListAsync();
 
         songs.AddRange(await _player.GetLocalSongs());
 
-        await OnSongsSelected.InvokeAsync(songs);
+        await OnSongsSelected.InvokeAsync(songs.Select(x=> new PlaylistSongMember
+        {
+            PlaylistId = Guid.Empty,
+            Playlist = null,
+            Song = x,
+            SongId = x.Id
+        }));
     }
 
     private void CreateNewPlaylist()
@@ -186,18 +206,23 @@
     {
         _context.Playlists.Add(playlist);
         await _context.SaveChangesAsync();
-        
+
         playlists = await _context.Playlists
             .AsNoTracking()
             .Where(p => p.DeleteDate == null)
             .OrderByDescending(p => p.CreateDate)
             .ToListAsync();
-        
+
         showModal = false;
     }
 
     private void HandleCloseModal()
     {
         showModal = false;
+    }
+
+    private void HandleCurrentPlaylist()
+    {
+        currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
     }
 }
