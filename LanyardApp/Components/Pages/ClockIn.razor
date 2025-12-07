@@ -1,0 +1,109 @@
+﻿@page "/clockin"
+
+@using LanyardData.Models
+@inject ToastService ToastService
+
+<PageTitle>Clock In</PageTitle>
+
+<div class="d-flex justify-content-center h-100 align-items-center flex-column">
+    <button @onclick="OnClockInButtonClicked"
+            class="btn btn-outline-primary rounded-circle border-3 fw-bold d-flex justify-content-center align-items-center mb-2 fs-3"
+            style="width: 200px; height: 200px;">
+        @ClockInButtonText
+    </button>
+
+    <span class="fs-3 fw-bold">
+        @CurrentTime.ToString("dddd") @CurrentTime.ToString("T")
+    </span>
+</div>
+
+@code {
+    private DateTime CurrentTime = DateTime.Now;
+    private System.Timers.Timer? ClockUiTimer;
+    private System.Timers.Timer? ShiftTimer;
+    private string ClockInButtonText = "Clock In";
+    private bool IsClockedIn = false;
+    private TimeSpan ShiftLength = TimeSpan.FromHours(8);
+    private TimeSpan TimeRemaining;
+    private DateTime? ClockInTime;
+
+    protected override void OnInitialized()
+    {
+        ClockUiTimer = new System.Timers.Timer(1000);
+        ClockUiTimer.Elapsed += (s, e) =>
+        {
+            CurrentTime = DateTime.Now;
+            InvokeAsync(StateHasChanged);
+        };
+        ClockUiTimer.Start();
+    }
+
+    private void OnClockInButtonClicked()
+    {
+        if (!IsClockedIn)
+        {
+            IsClockedIn = true;
+            ClockInTime = DateTime.Now;
+            TimeRemaining = ShiftLength;
+            StartShiftTimer();
+            UpdateButtonText();
+        }
+        else
+        {
+            IsClockedIn = false;
+            StopShiftTimer();
+            ClockInButtonText = "Clock In";
+        }
+    }
+
+    private void StartShiftTimer()
+    {
+        ShiftTimer = new System.Timers.Timer(1000);
+        ShiftTimer.Elapsed += UpdateShiftTime;
+        ShiftTimer.Start();
+    }
+
+    private void StopShiftTimer()
+    {
+        ShiftTimer?.Stop();
+        ShiftTimer?.Dispose();
+        ShiftTimer = null;
+    }
+
+    private void UpdateShiftTime(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        if (!ClockInTime.HasValue)
+            return;
+
+        var elapsed = DateTime.Now - ClockInTime.Value;
+        TimeRemaining = ShiftLength - elapsed;
+
+        if (TimeRemaining <= TimeSpan.Zero)
+        {
+            TimeRemaining = TimeSpan.Zero;
+            StopShiftTimer();
+        }
+
+        UpdateButtonText();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateButtonText()
+    {
+        if (!IsClockedIn)
+        {
+            ClockInButtonText = "Clock In";
+            return;
+        }
+
+        ClockInButtonText = $"Time Left:\n{TimeRemaining:hh\\:mm\\:ss}";
+    }
+
+    public void Dispose()
+    {
+        ClockUiTimer?.Stop();
+        ClockUiTimer?.Dispose();
+        ShiftTimer?.Stop();
+        ShiftTimer?.Dispose();
+    }
+}
