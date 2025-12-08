@@ -1,0 +1,38 @@
+﻿<div class="justify-content-center align-items-center d-inline-block" style="width:220px; height:215px;">
+    <svg width="@Size" height="@Size" class="d-block position-absolute top-0 start-0">
+        <circle cx="@Center" cy="@Center" r="@Radius"
+                stroke="#e6e6e6"
+                stroke-width="@StrokeWidth"
+                fill="none" />
+
+        <circle cx="@Center" cy="@Center" r="@Radius"
+                stroke="@Color"
+                stroke-width="@StrokeWidth"
+                fill="none"
+                stroke-linecap="round"
+                stroke-dasharray="@Circumference"
+                stroke-dashoffset="@DashOffset"
+                transform="rotate(-90 @Center @Center)" />
+    </svg>
+
+    <button class="btn btn-outline-primary rounded-circle position-absolute top-50 start-50 translate-middle fw-bold"
+            style="width:@(Size - StrokeWidth * 4)px; height:@(Size - StrokeWidth * 4)px;"
+            @onclick="OnClick">
+        @ChildContent
+    </button>
+</div>
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public double Max { get; set; } = 1;
+    [Parameter] public int Size { get; set; } = 220;
+    [Parameter] public int StrokeWidth { get; set; } = 12;
+    [Parameter] public string Color { get; set; } = "#0d6efd";
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    private double Radius => (Size - StrokeWidth) / 2;
+    private double Center => Size / 2;
+    private double Circumference => 2 * Math.PI * Radius;
+    private double DashOffset => Circumference - (Value / Max * Circumference);
+}
