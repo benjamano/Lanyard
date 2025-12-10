@@ -1,0 +1,35 @@
+﻿@page "/account/manage"
+
+@using LanyardApp.Components.Accounts
+
+<PageTitle>Account Managment</PageTitle>
+
+<div class="py-2 col-8 mx-auto">
+    <YourDetailsCard @ref="yourDetailsCard" />
+
+    <ContactDetailsCard @ref="contactDetailsCard" />
+
+    @* <ChangePasswordCard /> *@
+
+    <div class="d-flex justify-content-end mt-2">
+        <button @onclick="SaveDetails" class="btn btn-outline-secondary">Save Changes</button>
+    </div>
+</div>
+
+@code{
+    private YourDetailsCard? yourDetailsCard;
+    private ContactDetailsCard? contactDetailsCard;
+
+    private async Task SaveDetails()
+    {
+        if (yourDetailsCard is not null)
+        {
+            await yourDetailsCard.HandleSave();
+        }
+
+        if (contactDetailsCard is not null)
+        {
+            await contactDetailsCard.HandleSave();
+        }
+    }
+}

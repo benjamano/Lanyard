@@ -9,5 +9,6 @@ namespace LanyardData.DTO
         public const int Info = 1;
         public const int Warning = 2;
         public const int Error = 3;
+        public const int Success = 4;
     }
 }

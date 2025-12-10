@@ -10,8 +10,8 @@ public class ToastService
         OnShow?.Invoke(message);
     }
 
-    public void SetErrorLevel(int errorLevel)
+    public void SetLevel(int level)
     {
-        OnSetErrorLevel?.Invoke(errorLevel);
+        OnSetErrorLevel?.Invoke(level);
     }
 }

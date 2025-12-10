@@ -1,11 +1,11 @@
 ﻿@inject ToastService ToastService
 
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+<div class="position-fixed bottom-0 end-0 p-3">
     <div class="toast @(toastVisible ? "show" : "")" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="toast-header @toastHeaderClass">
             <strong class="me-auto">@toastHeaderMessage</strong>
             <small>Now</small>
-            <button type="button" class="btn-close" aria-label="Close" @onclick="HideToast"></button>
+            <button type="button" class="btn-close @toastCloseButtonClass" aria-label="Close" @onclick="HideToast"></button>
         </div>
         <div class="toast-body">
             @toastMessage
@@ -18,6 +18,7 @@
     string toastMessage = "";
     string toastHeaderMessage = "";
     string toastHeaderClass = "";
+    string toastCloseButtonClass = "";
 
     protected override void OnInitialized()
     {
@@ -56,6 +57,11 @@
             case ToastErrorLevels.Error:
                 toastHeaderClass = "bg-danger text-white";
                 toastHeaderMessage = "Error";
+                break;
+            case ToastErrorLevels.Success:
+                toastHeaderClass = "bg-success text-white";
+                toastHeaderMessage = "Success";
+                toastCloseButtonClass = "btn-close-white";
                 break;
         }
     }

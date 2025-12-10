@@ -1,0 +1,116 @@
+﻿@page "/login"
+
+@using LanyardData.DataAccess;
+@using LanyardData.Models;
+@using LanyardData.DTO;
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using LanyardApp.Services
+
+@inject HttpClient Http
+@inject ToastService _toast
+@inject ApplicationDbContext _context
+@inject NavigationManager Navigation
+@inject TokenStorageService TokenStorage
+@inject JwtAuthenticationStateProvider AuthStateProvider
+
+<div class="d-flex justify-content-center align-items-center col-12 pt-4">
+    <div class="col-4 p-3 px-3 bg-light rounded-2 bg-gradient border border-secondary-subtle shadow-sm">
+        <h2 class="mb-3 text-muted fw-bold">Please Login</h2>
+
+        <EditForm Model="LoginModel" class="" OnValidSubmit="CheckUserCredential" FormName="LoginModel">
+            <DataAnnotationsValidator />
+            <div class="form-group mb-2">
+                <div class="form-floating">
+                    @if (IsLoggingIn)
+                    {
+                        <InputText type="text" class="form-control" disabled @bind-Value="LoginModel.Username" />
+                    }
+                    else
+                    {
+                        <InputText type="text" class="form-control" @bind-Value="LoginModel.Username" />
+                    }
+                    <label for="floatingInput">Username</label>
+                </div>
+            </div>
+            <div class="form-group mb-2">
+                <div class="form-floating">
+                    @if (IsLoggingIn)
+                    {
+                        <InputText type="password" class="form-control" disabled @bind-Value="LoginModel.Password" />
+                    }
+                    else
+                    {
+                        <InputText type="password" class="form-control" @bind-Value="LoginModel.Password" />
+                    }
+                    <label for="floatingInput">Password</label>
+                </div>
+            </div>
+
+            <div class="form-group mb-2">
+                <div class="form-check">
+                    @if (IsLoggingIn)
+                    {
+                        <InputCheckbox class="form-check-input" disabled @bind-Value="LoginModel.RememberMe" id="rememberMe" />
+                    }
+                    else
+                    {
+                        <InputCheckbox class="form-check-input" @bind-Value="LoginModel.RememberMe" id="rememberMe" />
+                    }
+                    <label class="form-check-label" for="rememberMe">Remember Me</label>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end mt-2">
+                @if (IsLoggingIn)
+                {
+                    <button type="submit" class="btn btn-outline-secondary col-2" disabled>Login <i class="ms-2 fas fa-spinner fa-spin"></i></button>
+                }
+                else
+                {
+                    <button type="submit" class="btn btn-outline-primary col-2">Login</button>
+                }
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    public LoginDto LoginModel { get; set; } = new();
+
+    public bool IsLoggingIn = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoginModel ??= new();
+    }
+
+    private async Task CheckUserCredential()
+    {
+        IsLoggingIn = true;
+
+        await Task.Delay(5000);
+
+        HttpResponseMessage response = await Http.PostAsJsonAsync("api/auth/login", LoginModel);
+
+        if (response.IsSuccessStatusCode)
+        {
+            LoginResponseDto? result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
+            
+            if (result != null)
+            {
+                await TokenStorage.SetTokenAsync(result.Token);
+                AuthStateProvider.NotifyAuthenticationStateChanged();
+                Navigation.NavigateTo("/", forceLoad: true);
+            }
+        }
+        else
+        {
+            _toast.SetLevel(ToastErrorLevels.Error);
+            _toast.Show("Invalid username or password.");
+        }
+    }
+}}

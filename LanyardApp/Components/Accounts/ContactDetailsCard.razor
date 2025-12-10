@@ -1,0 +1,70 @@
+@using LanyardData.Models
+@using LanyardApp.Services
+@inject SecurityService _sec
+
+<div class="card rounded-top-0 border-top-0">
+    <div class="card-header">Other Details</div>
+    <div class="card-body">
+        <EditForm Model="@model">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label for="email" class="form-label">Email Address</label>
+                <InputText id="email" type="email" class="form-control" @bind-Value="model.Email" />
+                <ValidationMessage For="@(() => model.Email)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="phoneNumber" class="form-label">Phone Number</label>
+                <InputText id="phoneNumber" type="tel" class="form-control" @bind-Value="model.PhoneNumber" />
+                <ValidationMessage For="@(() => model.PhoneNumber)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="dateOfBirth" class="form-label">Date of Birth</label>
+                <InputDate id="dateOfBirth" class="form-control" @bind-Value="model.DateOfBirth" />
+                <ValidationMessage For="@(() => model.DateOfBirth)" />
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private ContactDetailsModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+
+        if (user is not null)
+        {
+            model.Email = user.Email;
+            model.PhoneNumber = user.PhoneNumber;
+            model.DateOfBirth = user.DateOfBirth;
+        }
+    }
+
+    public async Task HandleSave()
+    {
+        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+
+        if (user is not null)
+        {
+            user.Email = model.Email;
+            user.PhoneNumber = model.PhoneNumber;
+            user.DateOfBirth = model.DateOfBirth;
+
+            await _context.SaveChangesAsync();
+
+            _toast.SetLevel(ToastErrorLevels.Success);
+            _toast.Show("Details Saved");
+        }
+    }
+
+    private class ContactDetailsModel
+    {
+        public string? Email { get; set; } = string.Empty;
+        public string? PhoneNumber { get; set; } = string.Empty;
+        public DateTime? DateOfBirth { get; set; } = null;
+    }
+}

@@ -11,3 +11,11 @@
 @using LanyardApp.Components
 @using LanyardApp.Components.Layout
 @using LanyardData.DTO
+@using System.Security.Claims
+@using LanyardApp.Services
+@using LanyardData.Models
+@using LanyardData.DataAccess
+
+@inject SecurityService _sec
+@inject ApplicationDbContext _context
+@inject ToastService _toast

@@ -1,8 +1,9 @@
 using LanyardApp.Components;
-using LanyardApp.Components.Account;
+using LanyardApp.Services;
 using LanyardData.DataAccess;
 using LanyardData.Models;
 using LanyardAPI.Services;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,21 +14,30 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<IdentityRedirectManager>();
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
-
 builder.Services.AddSingleton<ToastService>();
 builder.Services.AddSingleton<MusicPlayer>();
 builder.Services.AddScoped<MusicPlayerService>();
 builder.Services.AddScoped<MusicRepository>();
+builder.Services.AddScoped<SecurityService>();
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
+// Add JWT services
+builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddScoped<TokenStorageService>();
+builder.Services.AddScoped<JwtAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(provider => 
+    provider.GetRequiredService<JwtAuthenticationStateProvider>());
+builder.Services.AddCascadingAuthenticationState();
+
+// Add controllers for API endpoints
+builder.Services.AddControllers();
+
+// Add HttpClient for Blazor components to call local API
+builder.Services.AddHttpClient();
+builder.Services.AddScoped(sp =>
+{
+    var navigationManager = sp.GetRequiredService<NavigationManager>();
+    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+});
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -40,10 +50,8 @@ builder.Services.AddIdentityCore<UserProfile>(options =>
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
+    .AddUserManager<UserManager<UserProfile>>()
     .AddDefaultTokenProviders();
-
-builder.Services.AddSingleton<IEmailSender<UserProfile>, IdentityNoOpEmailSender>();
 
 var app = builder.Build();
 
@@ -63,11 +71,11 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+// Map controllers before static assets and Razor components
+app.MapControllers();
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-
-// Add additional endpoints required by the Identity /Account Razor components.
-app.MapAdditionalIdentityEndpoints();
 
 app.Run();

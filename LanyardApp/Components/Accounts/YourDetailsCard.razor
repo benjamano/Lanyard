@@ -1,0 +1,67 @@
+@using LanyardApp.Services
+
+<div class="card rounded-bottom-0">
+    <div class="card-header">Your Details</div>
+    <div class="card-body">
+        <EditForm class="text-muted" Model="@model">
+            <DataAnnotationsValidator />
+        
+            <div class="mb-3">
+                <label for="userName" class="form-label">User Name</label>
+                <InputText id="userName" class="form-control" @bind-Value="model.UserName" readonly disabled />
+                <ValidationMessage For="@(() => model.UserName)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="displayName" class="form-label">First Name</label>
+                <InputText id="displayName" class="form-control" @bind-Value="model.FirstName" />
+                <ValidationMessage For="@(() => model.FirstName)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="displayName" class="form-label">Last Name</label>
+                <InputText id="displayName" class="form-control" @bind-Value="model.LastName" />
+                <ValidationMessage For="@(() => model.LastName)" />
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private UserDetailsModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+
+        if (user is not null)
+        {
+            model.UserName = user.UserName!;
+            model.FirstName = user.FirstName;
+            model.LastName = user.LastName;
+        }
+    }
+
+    public async Task HandleSave()
+    {
+        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+
+        if (user is not null)
+        {
+            user.FirstName = model.FirstName;
+            user.LastName = model.LastName;
+
+            await _context.SaveChangesAsync();
+
+            _toast.SetLevel(ToastErrorLevels.Success);
+            _toast.Show("Details Saved");
+        }
+    }
+
+    private class UserDetailsModel
+    {
+        public string UserName { get; set; } = string.Empty;
+        public string? FirstName { get; set; } = string.Empty;
+        public string? LastName { get; set; } = string.Empty;
+    }
+}

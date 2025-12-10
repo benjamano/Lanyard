@@ -1,0 +1,35 @@
+<div class="card @ClassName">
+    <div class="card-header user-select-none d-flex align-items-center justify-content-between" role="button" @onclick="ToggleExpanded">
+        <span>@Title</span>
+        <i class="fas fa-chevron-up @(IsExpanded ? "" : "rotate-180") float-end"></i>
+    </div>
+    <div class="card-body collapse @(IsExpanded ? "show" : "")">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool InitiallyExpanded { get; set; } = false;
+
+    [Parameter]
+    public string ClassName { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool IsExpanded { get; set; }
+
+    protected override void OnInitialized()
+    {
+        IsExpanded = InitiallyExpanded;
+    }
+
+    private void ToggleExpanded()
+    {
+        IsExpanded = !IsExpanded;
+    }
+}

@@ -1,4 +1,11 @@
 /* Visual Studio Settings File */
 {
-  "languages.defaults.scrollbars.verticalScrollBarMode": "map"
+  "languages.defaults.scrollbars.verticalScrollBarMode": "map",
+  "copilot.general.chat.enablePlanning": true,
+  "copilot.general.chat.enableViewPlanExecution": true,
+  "copilot.general.chat.autoSelectRefinementMode": true,
+  "copilot.general.chat.enableCopilotCodingAgent": true,
+  "copilot.general.chat.enableDotNetProjectSpecificInstructions": true,
+  "copilot.general.chat.enableCustomInstructionsFiles": true,
+  "copilot.general.chat.defaultAgent": "Agent"
 }
