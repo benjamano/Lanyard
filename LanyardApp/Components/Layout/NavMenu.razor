@@ -8,64 +8,121 @@
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<div class="nav-scrollable">
+    <div class="h-100 p-3 d-flex flex-column">
+        <ul class="list-unstyled ps-0 text-muted">
+            <li class="mb-2">
+                <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#home-collapse" aria-expanded="true">
+                    Home
+                </li>
+                <div class="collapse show" id="home-collapse">
+                    <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                        <li>
+                            <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="" Match="NavLinkMatch.All">
+                                Home
+                            </NavLink>
+                        </li>
+                        <AuthorizeView Roles="CanControlMusic">
+                            <Authorized>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
+                                        Music
+                                    </NavLink>
+                                </li>
+                            </Authorized>
+                        </AuthorizeView>
+                    </ul>
+                </div>
+            </li>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column h-100">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+            <AuthorizeView Roles="CanClockIn">
+                <Authorized>
+                    <li>
+                        <NavLink class="btn btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none" href="clockin">
+                            <span class="fas fa-clock me-2" aria-hidden="true"></span> Clock In
+                        </NavLink>
+                    </li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="music">
-                <span class="fas fa-music" aria-hidden="true"></span> Music
-            </NavLink>
-        </div>
+                    <li>
+                        <NavLink class="btn btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none" href="rota">
+                            <span class="fas fa-calendar me-2" aria-hidden="true"></span> Rota
+                        </NavLink>
+                    </li>
+                </Authorized>
+            </AuthorizeView>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="clockin">
-                <span class="fas fa-clock" aria-hidden="true"></span> Clock In
-            </NavLink>
-        </div>
+            <AuthorizeView Roles="Admin,Manager">
+                <Authorized>
+                    <li>
+                        <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0 collapsed" data-bs-toggle="collapse" data-bs-target="#manage-collapse" aria-expanded="false">
+                            <span class="fas fa-cog me-2" aria-hidden="true"></span> Manage
+                        </li>
+                        <div class="collapse" id="manage-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/roles">
+                                        Roles
+                                    </NavLink>
+                                </li>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
+                                        Users
+                                    </NavLink>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                </Authorized>
+                <NotAuthorized>
+                    <li>
+                    <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#manage-collapse" aria-expanded="false">
+                            Manage
+                        </li>
+                        <div class="collapse" id="manage-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/roles">
+                                        Roles
+                                    </NavLink>
+                                </li>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
+                                        Users
+                                    </NavLink>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                </NotAuthorized>
+            </AuthorizeView>
+        </ul>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="rota">
-                <span class="fas fa-calendar" aria-hidden="true"></span> Rota
-            </NavLink>
-        </div>
+        <ul class="list-unstyled ps-0 mt-auto">
+            <li class="border-top my-3"></li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="auth">
-                <span class="fas fa-cog" aria-hidden="true"></span> Settings
-            </NavLink>
-        </div>
-
-        <div class="nav-item mb-0 mt-auto">
             <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="account/manage">
-                            <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="logout">
-                        <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                    </NavLink>
-                </div>
-            </Authorized>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="login">
-                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
-        </div>
-    </nav>
+                <Authorized>
+                    <li class="mb-1">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark fw-semibold" href="account/manage">
+                            <span class="bi bi-person-fill-nav-menu me-2" aria-hidden="true"></span> @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
+                        </NavLink>
+                    </li>
+                    <li class="mb-1">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="logout">
+                            <span class="bi bi-arrow-bar-left-nav-menu me-2" aria-hidden="true"></span> Logout
+                        </NavLink>
+                    </li>
+                </Authorized>
+                <NotAuthorized>
+                    <li class="mb-1">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="login">
+                            <span class="bi bi-person-badge-nav-menu me-2" aria-hidden="true"></span> Login
+                        </NavLink>
+                    </li>
+                </NotAuthorized>
+            </AuthorizeView>
+        </ul>
+    </div>
 </div>
 
 @code {

@@ -4,6 +4,7 @@ using LanyardData.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LanyardApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251211230604_addingUpdatesToUserRoleModels")]
+    partial class addingUpdatesToUserRoleModels
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -69,19 +72,7 @@ namespace LanyardApp.Migrations
                     b.Property<string>("RoleId")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("CreateByUserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
                     b.HasKey("UserId", "RoleId");
-
-                    b.HasIndex("CreateByUserId");
 
                     b.HasIndex("RoleId");
 
@@ -388,12 +379,6 @@ namespace LanyardApp.Migrations
 
             modelBuilder.Entity("LanyardData.Models.ApplicationUserRole", b =>
                 {
-                    b.HasOne("LanyardData.Models.UserProfile", "CreateByUser")
-                        .WithMany()
-                        .HasForeignKey("CreateByUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("LanyardData.Models.ApplicationRole", "Role")
                         .WithMany()
                         .HasForeignKey("RoleId")
@@ -405,8 +390,6 @@ namespace LanyardApp.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("CreateByUser");
 
                     b.Navigation("Role");
 

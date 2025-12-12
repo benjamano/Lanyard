@@ -1,9 +1,5 @@
-@using LanyardData.Models
-@using LanyardApp.Services
-@inject SecurityService _sec
-
 <div class="card rounded-top-0 border-top-0">
-    <div class="card-header">Other Details</div>
+    <div class="card-header rounded-top-0">Other Details</div>
     <div class="card-body">
         <EditForm Model="@model">
             <DataAnnotationsValidator />
@@ -54,10 +50,15 @@
             user.PhoneNumber = model.PhoneNumber;
             user.DateOfBirth = model.DateOfBirth;
 
-            await _context.SaveChangesAsync();
+            // await _sec.SaveChanges();
 
-            _toast.SetLevel(ToastErrorLevels.Success);
-            _toast.Show("Details Saved");
+            await _sec.UpdateUserProfile(user);
+
+            _tApi.SetLevel(ToastErrorLevels.Success);
+
+            _tApi.SetMessage("Details Saved!");
+
+            _tApi.Show();
         }
     }
 

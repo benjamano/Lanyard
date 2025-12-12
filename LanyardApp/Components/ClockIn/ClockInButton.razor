@@ -107,6 +107,5 @@
         ShiftTimer?.Dispose();
     }
 
-    private double ProgressValue =>
-    1 - (TimeRemaining.TotalSeconds / ShiftLength.TotalSeconds);
+    private double ProgressValue => ClockInTime is null ? 0 : 1 - (TimeRemaining.TotalSeconds / ShiftLength.TotalSeconds);
 }

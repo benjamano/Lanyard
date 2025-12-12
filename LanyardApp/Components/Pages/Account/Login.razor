@@ -6,7 +6,6 @@
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
-@using System.ComponentModel.DataAnnotations
 @using LanyardApp.Services
 
 @inject HttpClient Http
@@ -63,14 +62,14 @@
                 </div>
             </div>
 
-            <div class="d-flex justify-content-end mt-2">
+            <div class="d-flex flex-row justify-content-end mt-2">
                 @if (IsLoggingIn)
                 {
-                    <button type="submit" class="btn btn-outline-secondary col-2" disabled>Login <i class="ms-2 fas fa-spinner fa-spin"></i></button>
+                    <button type="submit" class="btn btn-outline-secondary col-3" disabled>Login <i class="ms-2 fas fa-spinner fa-spin"></i></button>
                 }
                 else
                 {
-                    <button type="submit" class="btn btn-outline-primary col-2">Login</button>
+                    <button type="submit" class="btn btn-outline-primary col-3">Login</button>
                 }
             </div>
         </EditForm>
@@ -109,8 +108,12 @@
         }
         else
         {
-            _toast.SetLevel(ToastErrorLevels.Error);
-            _toast.Show("Invalid username or password.");
+            _tApi.SetLevel(ToastErrorLevels.Error);
+
+            _tApi.SetTitle("Login Failed!");
+            _tApi.SetMessage("Invalid username or password.");
+
+            _tApi.Show();
         }
     }
-}}
+}

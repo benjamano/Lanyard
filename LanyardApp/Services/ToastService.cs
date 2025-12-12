@@ -1,17 +1,27 @@
-﻿using System;
-
-public class ToastService
+﻿public class ToastService
 {
-    public event Action<string>? OnShow;
+    public event Action? OnShow;
     public event Action<int>? OnSetErrorLevel;
+    public event Action<string>? OnSetTitle;
+    public event Action<string>? OnSetMessage;
 
-    public void Show(string message)
+    public void Show()
     {
-        OnShow?.Invoke(message);
+        OnShow?.Invoke();
     }
 
     public void SetLevel(int level)
     {
         OnSetErrorLevel?.Invoke(level);
+    }
+
+    public void SetTitle(string Title)
+    {
+        OnSetTitle?.Invoke(Title);
+    }
+
+    public void SetMessage(string Message)
+    {
+        OnSetMessage?.Invoke(Message);
     }
 }

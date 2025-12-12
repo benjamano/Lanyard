@@ -5,15 +5,12 @@ using LanyardData.DataAccess;
 using System.Security.Claims;
 using System.Threading;
 
-namespace LanyardApp.Services
+namespace LanyardAPI.Services
 {
-    public class SecurityService(AuthenticationStateProvider AuthStateProvider, ApplicationDbContext context)
+    public class SecurityService(AuthenticationStateProvider AuthStateProvider, IDbContextFactory<ApplicationDbContext> factory)
     {
         private readonly AuthenticationStateProvider AuthStateProvider = AuthStateProvider;
-        private readonly ApplicationDbContext _context = context;
-        private readonly SemaphoreSlim _lock = new(1, 1);
-        private UserProfile? _user;
-        private bool _isLoaded;
+        private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
         public async Task<string?> GetCurrentUserIdAsync()
         {
@@ -32,35 +29,19 @@ namespace LanyardApp.Services
 
         public async Task<UserProfile?> GetCurrentUserProfileAsync()
         {
-            if (_isLoaded)
+            string? userId = await GetCurrentUserIdAsync();
+
+            if (userId is not null)
             {
-                return _user;
+                using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+                return await ctx.Users
+                    .AsNoTracking()
+                    .Where(x => x.Id == userId)
+                    .FirstOrDefaultAsync();
             }
 
-            await _lock.WaitAsync();
-            try
-            {
-                if (_isLoaded)
-                {
-                    return _user;
-                }
-
-                string? userId = await GetCurrentUserIdAsync();
-
-                if (userId is not null)
-                {
-                    _user = await _context.Users
-                        .Where(x=> x.Id == userId)
-                        .FirstOrDefaultAsync();
-                }
-
-                _isLoaded = true;
-                return _user;
-            }
-            finally
-            {
-                _lock.Release();
-            }
+            return null;
         }
 
         public async Task<string?> GetCurrentUserName()
@@ -80,6 +61,25 @@ namespace LanyardApp.Services
             {
                 return user?.FirstName + " " + user?.LastName;
             }
+        }
+
+        public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
+        {
+            using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+            return await ctx.Users.ToListAsync();
+        }
+
+        public async Task UpdateUserProfile(UserProfile updatedUserProfile)
+        {
+            using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+            UserProfile? userProfile = await ctx.Users.FirstOrDefaultAsync(x => x.Id == updatedUserProfile.Id);
+            if (userProfile is null) return;
+
+            ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
+            await ctx.SaveChangesAsync();
+
         }
     }
 }

@@ -51,10 +51,15 @@
             user.FirstName = model.FirstName;
             user.LastName = model.LastName;
 
-            await _context.SaveChangesAsync();
+            // await _sec.SaveChanges();
 
-            _toast.SetLevel(ToastErrorLevels.Success);
-            _toast.Show("Details Saved");
+            await _sec.UpdateUserProfile(user);
+
+            _tApi.SetLevel(ToastErrorLevels.Success);
+
+            _tApi.SetMessage("Details Saved!");
+
+            _tApi.Show();
         }
     }
 

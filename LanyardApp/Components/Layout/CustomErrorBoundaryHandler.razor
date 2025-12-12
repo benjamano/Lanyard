@@ -1,0 +1,22 @@
+﻿@inherits ErrorBoundary
+@inject ILogger<CustomErrorBoundaryHandler> Logger
+
+@ChildContent
+
+@code {
+    private ErrorBoundary? errorBoundary;
+
+    protected override Task OnErrorAsync(Exception ex)
+    {
+        _tApi.SetLevel(ToastErrorLevels.Error);
+
+        _tApi.SetTitle("An unexpected error occurred. Please try again later.");
+        _tApi.SetMessage($"Exception Message: {ex}");
+        
+        _tApi.Show();
+
+        errorBoundary?.Recover();
+
+        return Task.CompletedTask;
+    }
+}
