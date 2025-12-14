@@ -1,5 +1,6 @@
 ﻿@inherits ErrorBoundary
 @inject ILogger<CustomErrorBoundaryHandler> Logger
+@inject IWebHostEnvironment _eApi
 
 @ChildContent
 
@@ -10,9 +11,17 @@
     {
         _tApi.SetLevel(ToastErrorLevels.Error);
 
-        _tApi.SetTitle("An unexpected error occurred. Please try again later.");
-        _tApi.SetMessage($"Exception Message: {ex}");
-        
+        _tApi.SetTitle(ex.GetType().ToString());
+
+        string Message = $"{ex.Message.ToString()}";
+
+        if (_eApi.IsDevelopment())
+        {
+            Message = Message + $" {ex.StackTrace}";
+        }
+
+        _tApi.SetMessage(Message);
+
         _tApi.Show();
 
         errorBoundary?.Recover();

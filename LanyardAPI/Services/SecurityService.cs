@@ -27,6 +27,11 @@ namespace LanyardAPI.Services
             return null;
         }
 
+        public async Task<bool> IsUserLoggedIn()
+        {
+            return await GetCurrentUserIdAsync() != null;
+        }
+
         public async Task<UserProfile?> GetCurrentUserProfileAsync()
         {
             string? userId = await GetCurrentUserIdAsync();

@@ -1,4 +1,6 @@
-﻿public class ToastService
+﻿using LanyardData.DTO;
+
+public class ToastService
 {
     public event Action? OnShow;
     public event Action<int>? OnSetErrorLevel;
@@ -23,5 +25,33 @@
     public void SetMessage(string Message)
     {
         OnSetMessage?.Invoke(Message);
+    }
+
+    public void ShowError(string? title, string message)
+    {
+        SetLevel(ToastErrorLevels.Error);
+
+        if (title is not null)
+        {
+            SetTitle(title);
+        }
+        
+        SetMessage(message);
+        
+        Show();
+    }
+
+    public void ShowSuccess(string? title, string message)
+    {
+        SetLevel(ToastErrorLevels.Success);
+
+        if (title is not null)
+        {
+            SetTitle(title);
+        }
+        
+        SetMessage(message);
+        
+        Show();
     }
 }

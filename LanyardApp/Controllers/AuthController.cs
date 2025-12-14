@@ -28,7 +28,7 @@ namespace LanyardApp.Controllers
             }
 
             UserProfile? user = await _userManager.FindByNameAsync(dto.Username);
-            if (user == null)
+            if (user is null)
             {
                 return Unauthorized(new { message = "Invalid username or password." });
             }
@@ -39,7 +39,7 @@ namespace LanyardApp.Controllers
                 return Unauthorized(new { message = "Invalid username or password." });
             }
 
-            string token = _jwtTokenService.GenerateToken(user);
+            string token = await _jwtTokenService.GenerateTokenAsync(user);
 
             return Ok(new LoginResponseDto
             {

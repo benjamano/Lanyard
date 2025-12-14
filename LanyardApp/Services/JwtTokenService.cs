@@ -1,4 +1,5 @@
 using LanyardData.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -9,18 +10,25 @@ namespace LanyardApp.Services
     public class JwtTokenService
     {
         private readonly IConfiguration _configuration;
+        private readonly UserManager<UserProfile> _userManager;
+        private readonly TokenStorageService _tokenStorage;
 
-        public JwtTokenService(IConfiguration configuration)
+        public JwtTokenService(
+            IConfiguration configuration,
+            UserManager<UserProfile> userManager,
+            TokenStorageService tokenStorage)
         {
             _configuration = configuration;
+            _userManager = userManager;
+            _tokenStorage = tokenStorage;
         }
 
-        public string GenerateToken(UserProfile user)
+        public async Task<string> GenerateTokenAsync(UserProfile user)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
-            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+            SigningCredentials credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
+            List<Claim> claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(ClaimTypes.Name, user.UserName!),
@@ -29,7 +37,13 @@ namespace LanyardApp.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
-            var token = new JwtSecurityToken(
+            IList<string> roles = await _userManager.GetRolesAsync(user);
+            foreach (string role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            JwtSecurityToken token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
@@ -40,14 +54,20 @@ namespace LanyardApp.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        public async Task RegenerateTokenAsync(UserProfile user)
+        {
+            string newToken = await GenerateTokenAsync(user);
+            await _tokenStorage.SetTokenAsync(newToken);
+        }
+
         public ClaimsPrincipal? ValidateToken(string token)
         {
             try
             {
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!);
+                JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();
+                byte[] key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!);
 
-                var validationParameters = new TokenValidationParameters
+                TokenValidationParameters validationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(key),
@@ -59,7 +79,7 @@ namespace LanyardApp.Services
                     ClockSkew = TimeSpan.Zero
                 };
 
-                var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
+                ClaimsPrincipal principal = tokenHandler.ValidateToken(token, validationParameters, out _);
                 return principal;
             }
             catch
