@@ -128,25 +128,29 @@ span.fas{
     }
 }
 
+.hover-card {
+    transition: all 0.05s ease;
+}
+
 .hover-card:hover {
-    background-color: var(--bs-secondary-bg);
+    background-color: var(--bs-secondary-bg) !important;
 }
 
 .hover-card.active {
-    background-color: var(--bs-secondary-bg-subtle);
+    background-color: var(--bs-secondary-bg-subtle) !important;
 }
 
     .hover-card.active:hover {
-        background-color: var(--bs-dark-bg-subtle);
+        background-color: var(--bs-dark-bg-subtle) !important;
     }
 
 .hover-card .hover-icon {
-    transition: opacity 0.2s;
-    opacity: 0;
+    transition: opacity 0.2s !important;
+    opacity: 0 !important;
 }
 
     .hover-card .hover-icon.show {
-        opacity: 1;
+        opacity: 1 !important;
     }
 
 .card-body.collapse {
@@ -244,7 +248,7 @@ i.fas {
     }
 
 .card .card-body {
-    background-color: #f9f9f9;
+    --bs-bg-opacity: 0.75;
 }
 
 .card .card .card-body {
@@ -253,10 +257,26 @@ i.fas {
 
 .table {
     margin-bottom: 0 !important;
+    border-radius: 0.75rem !important;
+    --bs-bg-opacity: 0.75 !important;
+    background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
+    overflow: hidden !important;
+    border: none !important;
+    backdrop-filter: blur(16px);
 }
+
+    .table tbody{
+        border: none !important;
+    }
 
     .table td {
         padding: 1rem !important;
+    }
+
+    .table td, .table tr {
+        background-color: transparent !important;
+        overflow: hidden !important;
+        border-bottom: none !important;
     }
 
 .validation-message {
@@ -276,4 +296,10 @@ i.fas {
 main {
     background: #560c69;
     background: linear-gradient(180deg,rgba(86, 12, 105, 1) 0%, rgba(104, 19, 183, 1) 39%, rgba(192, 23, 234, 1) 100%);
+}
+
+.bg-blur {
+    --bs-bg-opacity: 0.75 !important;
+    background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
+    backdrop-filter: blur(16px);
 }

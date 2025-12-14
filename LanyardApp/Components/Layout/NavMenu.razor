@@ -22,10 +22,10 @@
                                 Home
                             </NavLink>
                         </li>
-                        <AuthorizeView Roles="CanControlMusic">
+                        <AuthorizeView Roles="Admin, CanControlMusic">
                             <Authorized>
                                 <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="music">
                                         Music
                                     </NavLink>
                                 </li>
@@ -35,18 +35,26 @@
                 </div>
             </li>
 
-            <AuthorizeView Roles="CanClockIn">
+            <AuthorizeView Roles="Admin,CanClockIn">
                 <Authorized>
-                    <li>
-                        <NavLink class="btn btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none" href="clockin">
-                            <span class="fas fa-clock me-2" aria-hidden="true"></span> Clock In
-                        </NavLink>
-                    </li>
-
-                    <li>
-                        <NavLink class="btn btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none" href="rota">
-                            <span class="fas fa-calendar me-2" aria-hidden="true"></span> Rota
-                        </NavLink>
+                    <li class="mb-2">
+                    <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#rota-collapse" aria-expanded="@(rotaOpen ? "true" : "false")" @onclick="() => rotaOpen = !rotaOpen">
+                            Rota
+                        </li>
+                        <div class="collapse @(rotaOpen ? "show" : "")" id="rota-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="clockin" Match="NavLinkMatch.All">
+                                        Clock In
+                                    </NavLink>
+                                </li>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="rota" Match="NavLinkMatch.All">
+                                        Rota
+                                    </NavLink>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
                 </Authorized>
             </AuthorizeView>
@@ -114,6 +122,7 @@
 
     private bool homeOpen = true;
     private bool manageOpen = false;
+    private bool rotaOpen = false;
 
     protected override async Task OnInitializedAsync()
     {

@@ -21,7 +21,7 @@
                 @foreach (Playlist playlist in playlists)
                 {
                     <div class="w-100">
-                        <div class="card hover-card h-100 p-2 @(selectedPlaylistId == playlist.Id ? "active" : "") @(currentlyPlayingPlaylistId == playlist.Id ? "border border-1 border-success" : "border-0")"
+                        <div class="card hover-card h-100 p-2 bg-light bg-blur @(selectedPlaylistId == playlist.Id ? "active" : "") @(currentlyPlayingPlaylistId == playlist.Id ? "border border-1 border-success" : "border-0")"
                              role="button"
                              @onclick="() => LoadPlaylist(playlist.Id)">
                             <div class="card-body p-0 d-flex flex-row">
@@ -58,7 +58,7 @@
                 }
 
                 <div class="w-100">
-                    <div class="card hover-card text-white h-100 p-2 @(allSongsSelected ? "active" : "") @(currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing ? "border border-1 border-success" : "border-0")"
+                    <div class="card hover-card text-white bg-light bg-blur h-100 p-2 @(allSongsSelected ? "active" : "") @(currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing ? "border border-1 border-success" : "border-0")"
                          role="button"
                          @onclick="() => ShowAllSongs()">
                         <div class="card-body p-0 d-flex flex-row">
@@ -79,7 +79,7 @@
                 </div>
 
                 <div class="w-100">
-                    <div class="card hover-card border-0 text-white h-100 p-2"
+                    <div class="card hover-card border-0 bg-light bg-blur text-white h-100 p-2"
                         role="button"
                         @onclick="() => CreateNewPlaylist()">
                         <div class="card-body p-0 d-flex flex-row">
