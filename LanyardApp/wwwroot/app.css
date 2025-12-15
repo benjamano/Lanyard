@@ -1,3 +1,15 @@
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    font-family: var(--body-font);
+    font-size: var(--type-ramp-base-font-size);
+    line-height: var(--type-ramp-base-line-height);
+    font-weight: var(--font-weight);
+    color: var(--neutral-foreground-rest);
+    background: var(--neutral-fill-layer-rest);
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
@@ -257,7 +269,7 @@ i.fas {
 
 .table {
     margin-bottom: 0 !important;
-    border-radius: 0.75rem !important;
+    border-radius: 0.5rem !important;
     --bs-bg-opacity: 0.75 !important;
     background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
     overflow: hidden !important;

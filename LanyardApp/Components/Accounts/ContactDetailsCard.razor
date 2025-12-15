@@ -1,3 +1,5 @@
+@inject IToastService ToastService
+
 <div class="card rounded-top-0 border-top-0">
     <div class="card-header rounded-top-0">Other Details</div>
     <div class="card-body">
@@ -50,15 +52,9 @@
             user.PhoneNumber = model.PhoneNumber;
             user.DateOfBirth = model.DateOfBirth;
 
-            // await _sec.SaveChanges();
-
             await _sec.UpdateUserProfile(user);
 
-            _tApi.SetLevel(ToastErrorLevels.Success);
-
-            _tApi.SetMessage("Details Saved!");
-
-            _tApi.Show();
+            ToastService.ShowSuccess("Details Saved!");
         }
     }
 

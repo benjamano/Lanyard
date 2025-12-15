@@ -9,7 +9,7 @@
 @using LanyardApp.Services
 
 @inject HttpClient Http
-@inject ToastService _toast
+@inject IToastService ToastService
 @inject ApplicationDbContext _context
 @inject NavigationManager Navigation
 @inject TokenStorageService TokenStorage
@@ -108,12 +108,7 @@
         }
         else
         {
-            _tApi.SetLevel(ToastErrorLevels.Error);
-
-            _tApi.SetTitle("Login Failed!");
-            _tApi.SetMessage("Invalid username or password.");
-
-            _tApi.Show();
+            ToastService.ShowError("Login Failed! Invalid username or password.");
         }
     }
 }

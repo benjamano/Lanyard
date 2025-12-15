@@ -1,4 +1,5 @@
 @using LanyardApp.Services
+@inject IToastService ToastService
 
 <div class="card rounded-bottom-0">
     <div class="card-header">Your Details</div>
@@ -51,15 +52,9 @@
             user.FirstName = model.FirstName;
             user.LastName = model.LastName;
 
-            // await _sec.SaveChanges();
-
             await _sec.UpdateUserProfile(user);
 
-            _tApi.SetLevel(ToastErrorLevels.Success);
-
-            _tApi.SetMessage("Details Saved!");
-
-            _tApi.Show();
+            ToastService.ShowSuccess("Details Saved!");
         }
     }
 

@@ -91,25 +91,71 @@
 
             <AuthorizeView>
                 <Authorized>
-                    <li class="mb-1">
+                    <li class="mb-1 ms-4">
                         <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark fw-semibold" href="account/manage">
-                            <span class="bi bi-person-fill-nav-menu me-2" aria-hidden="true"></span> @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
+                            @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
                         </NavLink>
                     </li>
-                    <li class="mb-1">
+                    <li class="mb-1 ms-4">
                         <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="logout">
-                            <span class="bi bi-arrow-bar-left-nav-menu me-2" aria-hidden="true"></span> Logout
+                            Logout
                         </NavLink>
                     </li>
                 </Authorized>
                 <NotAuthorized>
-                    <li class="mb-1">
+                    <li class="mb-1 ms-4 me-4">
                         <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="login">
-                            <span class="bi bi-person-badge-nav-menu me-2" aria-hidden="true"></span> Login
+                            Login
                         </NavLink>
                     </li>
                 </NotAuthorized>
             </AuthorizeView>
+
+            @* <li class="border-top my-3"></li>
+
+            <li class="ms-4 me-4">
+                <FluentDesignTheme @bind-Mode="@Mode"
+                                   @bind-OfficeColor="@OfficeColor"
+                                   OnLoaded="@OnLoaded"
+                                   OnLuminanceChanged="@OnLuminanceChanged"
+                                   StorageName="theme" />
+
+                <div style="min-height: 250px;">
+                    <FluentGrid>
+                        <FluentGridItem>
+                            <FluentSelect Label="Theme"
+                                          Width="250px"
+                                          Items="@(Enum.GetValues<DesignThemeModes>())"
+                                          @bind-SelectedOption="@Mode" />
+                        </FluentGridItem>
+
+                        <FluentGridItem>
+                            <FluentSelect Label="Color"
+                                          Items="@(Enum.GetValues<OfficeColor>().Select(i => (OfficeColor?)i))"
+                                          Height="200px"
+                                          Width="250px"
+                                          @bind-SelectedOption="@OfficeColor">
+                                <OptionTemplate>
+                                    <FluentStack>
+                                        <FluentIcon Value="@(new Icons.Filled.Size20.RectangleLandscape())"
+                                                    Color="Color.Custom"
+                                                    CustomColor="@(@context.ToString() != "default" ? context.ToString() : "#036ac4")" />
+                                        <FluentLabel>@context</FluentLabel>
+                                    </FluentStack>
+                                </OptionTemplate>
+                            </FluentSelect>
+                            <FluentButton Appearance="Appearance.Accent" OnClick="PickRandomColor">Feeling lucky?</FluentButton>
+                        </FluentGridItem>
+                    </FluentGrid>
+
+                    <FluentStack Style="margin: 30px 0px; padding: 30px; border: 1px solid var(--accent-fill-rest);">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.Airplane())" />
+                        <FluentLabel>Example of content</FluentLabel>
+                        <FluentButton Appearance="Appearance.Outline">Outline button</FluentButton>
+                        <FluentButton Appearance="Appearance.Accent">Accent button</FluentButton>
+                    </FluentStack>
+                </div>
+            </li> *@
         </ul>
     </div>
 </div>

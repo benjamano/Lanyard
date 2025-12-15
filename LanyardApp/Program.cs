@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,7 +16,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
     .AddInteractiveServerComponents();
 
-builder.Services.AddSingleton<ToastService>();
 builder.Services.AddSingleton<MusicPlayer>();
 
 builder.Services.AddScoped<MusicPlayerService>();
@@ -40,6 +40,13 @@ builder.Services.AddScoped(sp =>
 {
     var navigationManager = sp.GetRequiredService<NavigationManager>();
     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+});
+
+builder.Services.AddFluentUIComponents(options =>
+{
+    options.ValidateClassNames = true;
+    options.UseTooltipServiceProvider = true;
+    options.HideTooltipOnCursorLeave = true;
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");

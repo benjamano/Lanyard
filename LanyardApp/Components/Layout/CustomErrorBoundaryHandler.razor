@@ -1,6 +1,7 @@
 ﻿@inherits ErrorBoundary
 @inject ILogger<CustomErrorBoundaryHandler> Logger
 @inject IWebHostEnvironment _eApi
+@inject IToastService ToastService
 
 @ChildContent
 
@@ -9,20 +10,15 @@
 
     protected override Task OnErrorAsync(Exception ex)
     {
-        _tApi.SetLevel(ToastErrorLevels.Error);
-
-        _tApi.SetTitle(ex.GetType().ToString());
-
-        string Message = $"{ex.Message.ToString()}";
+        string title = ex.GetType().ToString();
+        string message = $"{ex.Message}";
 
         if (_eApi.IsDevelopment())
         {
-            Message = Message + $" {ex.StackTrace}";
+            message = message + $" {ex.StackTrace}";
         }
 
-        _tApi.SetMessage(Message);
-
-        _tApi.Show();
+        ToastService.ShowError($"{title}: {message}");
 
         errorBoundary?.Recover();
 
