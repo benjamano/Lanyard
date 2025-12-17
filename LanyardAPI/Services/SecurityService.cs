@@ -127,7 +127,7 @@ namespace LanyardAPI.Services
                 string surname = user.LastName?.ToLowerInvariant() ?? "";
                 user.UserName = initial + surname;
 
-                string generatedPassword = "changeME1234"; //GenerateSecurePassword();
+                string generatedPassword = "changeME1234!"; //GenerateSecurePassword();
 
                 user.EmailConfirmed = true;
 
@@ -169,6 +169,39 @@ namespace LanyardAPI.Services
                 {
                     string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                     return Result<bool>.Fail($"Failed to delete user: {errors}");
+                }
+
+                return Result<bool>.Ok(true);
+            }
+            catch (Exception ex)
+            {
+                return Result<bool>.Fail(ex.Message);
+            }
+        }
+
+        public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
+        {
+            try
+            {
+                if (!await IsUserLoggedIn())
+                {
+                    return Result<bool>.Fail("You must be logged in to perform this action!");
+                }
+
+                UserProfile? user = await _userManager.FindByIdAsync(userId);
+
+                if (user is null)
+                {
+                    return Result<bool>.Fail("User not found!");
+                }
+
+                string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+                IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+
+                if (!result.Succeeded)
+                {
+                    string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return Result<bool>.Fail($"Failed to change password: {errors}");
                 }
 
                 return Result<bool>.Ok(true);
