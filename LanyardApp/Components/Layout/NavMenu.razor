@@ -172,7 +172,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        userName = await _sec.GetCurrentUserName();
+        userName = await _sApi.GetCurrentUserName();
 
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;

@@ -5,20 +5,22 @@
 @inject UserManager<UserProfile> _umApi
 @inject IToastService ToastService
 
-<FluentCard Height="30vh">
+<PageTitle>User Managment</PageTitle>
+
+<FluentCard Height="auto" Style="min-height:30vh;">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentLabel Typo="Typography.H4">User Roles</FluentLabel>
 
         <FluentGrid Class="w-100">
             <FluentGridItem xs="12" sm="2">
                 <FluentSelect TOption="UserProfile"
-                              Items="@userProfiles"
+                              Items="@userProfiles.OrderBy(x=> x.GetName())"
                               OptionText="@(i => i.GetName())"
                               OptionValue="@(i => i.Id)"
                               Placeholder="Select a User..."
                               Label="Select User"
                               SelectedOptionChanged="SetUserAndLoadRoles"
-                              Style="width: 100%;">
+                              Width="100%">
                 </FluentSelect>
             </FluentGridItem>
 
@@ -27,17 +29,21 @@
                 {
                     <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentLabel Typo="Typography.H6">Assigned Roles</FluentLabel>
+                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
+                                <FluentLabel Typo="Typography.H6">Assigned Roles</FluentLabel>
+
+                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRolesAlreadyAssignedValue" @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
+                            </FluentToolbar>
                             
-                            @if (!userRoles.Any())
+                            @if (!filteredUserRoles.Any())
                             {
                                 <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
-                                    No Roles Exist for this User
+                                    No Roles Exist for this User with those filters!
                                 </FluentLabel>
                             }
                             else
                             {
-                                <FluentDataGrid Items="@userRoles.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
                                     <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Role" />
                                     <PropertyColumn Property="@(r => r.CreateDate)" Title="Date Added" Format="g" />
                                     <TemplateColumn Title="Created By">
@@ -63,13 +69,17 @@
                 {
                     <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentLabel Typo="Typography.H6">Assign New Roles</FluentLabel>
+                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
+                                <FluentLabel Typo="Typography.H6">Assign New Roles</FluentLabel>
+
+                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRoleToAddValue" @bind-Value:after=HandleSearchForRoleToAddInput />
+                            </FluentToolbar>
                             
                             @if (roles is not null)
                             {
-                                @if (availableRoles.Any())
+                                @if (filteredRoles.Any())
                                 {
-                                    <FluentDataGrid Items="@availableRoles.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
                                         <TemplateColumn Title="Name">
                                             @{
                                                 var roleName = context.Name ?? string.Empty;
@@ -111,13 +121,15 @@
 
     private IEnumerable<ApplicationRole> roles = Array.Empty<ApplicationRole>();
     private IEnumerable<ApplicationRole> userRoles = Array.Empty<ApplicationRole>();
+    private IEnumerable<ApplicationRole> filteredUserRoles = Array.Empty<ApplicationRole>();
+    private IEnumerable<ApplicationRole> filteredRoles = Array.Empty<ApplicationRole>();
 
-    private IEnumerable<ApplicationRole> availableRoles =>
-        roles.Where(r => !userRoles.Any(ur => ur.Id == r.Id)).OrderBy(r => r.Name);
+    private string? searchForRolesAlreadyAssignedValue = string.Empty;
+    private string? searchForRoleToAddValue = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        userProfiles = await _sec.GetAllUsersAsync();
+        userProfiles = await _sApi.GetAllUsersAsync();
         await LoadRoles();
     }
 
@@ -159,6 +171,9 @@
     public async Task SetRoles(IEnumerable<ApplicationRole> _roles)
     {
         roles = _roles;
+
+        GetAvailableRolesToAdd();
+
         StateHasChanged();
     }
 
@@ -171,6 +186,11 @@
         if (result.IsSuccess)
         {
             userRoles = result.Data!;
+            filteredUserRoles = userRoles;
+
+            GetAvailableRolesToAdd();
+
+            await HandleSearchForRoleToAddInput();
         }
         else
         {
@@ -192,7 +212,7 @@
             return;
         }
 
-        string? currentUserId = await _sec.GetCurrentUserIdAsync();
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
 
         if (result.Data == currentUserId)
         {
@@ -222,7 +242,7 @@
             return;
         }
 
-        string? currentUserId = await _sec.GetCurrentUserIdAsync();
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
 
         if (result.Data == currentUserId)
         {
@@ -239,5 +259,78 @@
         ToastService.ShowSuccess("Role Removed - The role has been successfully removed from the user.");
 
         await LoadUsersRoles();
+    }
+
+    private void GetAvailableRolesToAdd()
+    {
+        filteredRoles = roles.Where(r => !userRoles.Any(ur => ur.Id == r.Id)).OrderBy(r => r.Name);
+    }
+
+    private async Task HandleSearchForRoleAlreadyAssignedInput()
+    {
+        if (string.IsNullOrWhiteSpace(searchForRolesAlreadyAssignedValue))
+        {
+            GetAvailableRolesToAdd();
+
+            searchForRolesAlreadyAssignedValue = string.Empty;
+        }
+        else
+        {
+            string searchTerm = searchForRolesAlreadyAssignedValue.ToLower();
+
+            if (searchTerm.Length > 0)
+            {
+                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
+
+                List<ApplicationRole> temp = userRoles
+                    .Where(u =>
+                        string.Join(" ",
+                            u.Name,
+                            u.Id,
+                            u.CreateDate.ToString("d"),
+                            u.CreatedByUser?.GetName()
+                        ).ToLower().Contains(term)
+                    )
+                    .ToList();
+
+                filteredUserRoles = temp;
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task HandleSearchForRoleToAddInput()
+    {
+        if (string.IsNullOrWhiteSpace(searchForRoleToAddValue))
+        {
+            GetAvailableRolesToAdd();
+
+            searchForRoleToAddValue = string.Empty;
+        }
+        else
+        {
+            string searchTerm = searchForRoleToAddValue.ToLower();
+
+            if (searchTerm.Length > 0)
+            {
+                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
+
+                List<ApplicationRole> temp = filteredRoles
+                    .Where(u =>
+                        string.Join(" ",
+                            u.Name,
+                            u.Id,
+                            u.CreateDate.ToString("d"),
+                            u.CreatedByUser?.GetName()
+                        ).ToLower().Contains(term)
+                    )
+                    .ToList();
+
+                filteredRoles = temp;
+
+                StateHasChanged();
+            }
+        }
     }
 }

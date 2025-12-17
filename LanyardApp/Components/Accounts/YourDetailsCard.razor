@@ -33,7 +33,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
@@ -45,14 +45,14 @@
 
     public async Task HandleSave()
     {
-        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
             user.FirstName = model.FirstName;
             user.LastName = model.LastName;
 
-            await _sec.UpdateUserProfile(user);
+            await _sApi.UpdateUserProfileAsync(user);
 
             ToastService.ShowSuccess("Details Saved!");
         }

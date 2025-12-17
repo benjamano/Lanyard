@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
-using LanyardData.Models;
 using LanyardData.DataAccess;
+using LanyardData.DTO;
+using LanyardData.Models;
 using System.Security.Claims;
-using System.Threading;
 
 namespace LanyardAPI.Services
 {
@@ -75,7 +75,7 @@ namespace LanyardAPI.Services
             return await ctx.Users.ToListAsync();
         }
 
-        public async Task UpdateUserProfile(UserProfile updatedUserProfile)
+        public async Task UpdateUserProfileAsync(UserProfile updatedUserProfile)
         {
             using ApplicationDbContext ctx = _factory.CreateDbContext();
 
@@ -85,6 +85,77 @@ namespace LanyardAPI.Services
             ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
             await ctx.SaveChangesAsync();
 
+        }
+
+        public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
+        {
+            using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+            return await ctx.Users
+                .ToListAsync();
+        }
+
+        public async Task<Result<UserProfile>> CreateUserAsync(UserProfile user)
+        {
+            try
+            {
+                if (!await IsUserLoggedIn())
+                {
+                    return Result<UserProfile>.Fail("You must be logged in to perform this action!");
+                }
+
+                if (string.IsNullOrWhiteSpace(user.FirstName) == true || string.IsNullOrWhiteSpace(user.LastName) == true)
+                {
+                    return Result<UserProfile>.Fail("The new user's first and last names are required!");
+                }
+
+                using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+                string initial = user.FirstName?.ToLowerInvariant()[..1] ?? "";
+                string surname = user.LastName?.ToLowerInvariant() ?? "";
+
+                user.UserName = initial + surname;
+
+                ctx.Add(user);
+
+                await ctx.SaveChangesAsync();
+
+                return Result<UserProfile>.Ok(user);
+            }
+            catch (Exception ex)
+            {
+                return Result<UserProfile>.Fail(ex.Message);
+            }
+        }
+
+        public async Task<Result<bool>> DeleteUserAsync(string userId)
+        {
+            try
+            {
+                if (!await IsUserLoggedIn())
+                {
+                    return Result<bool>.Fail("You must be logged in to perform this action!");
+                }
+
+                using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+                UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+                if (user is null)
+                {
+                    return Result<bool>.Fail("User not found!");
+                }
+
+                ctx.Users.Remove(user);
+
+                await ctx.SaveChangesAsync();
+
+                return Result<bool>.Ok(true);
+            }
+            catch (Exception ex)
+            {
+                return Result<bool>.Fail(ex.Message);
+            }
         }
     }
 }

@@ -171,7 +171,7 @@
             return;
         }
 
-        string? currentUserId = await _sec.GetCurrentUserIdAsync();
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
         if (result.Data is not null && result.Data.Contains(currentUserId!))
         {
             UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);

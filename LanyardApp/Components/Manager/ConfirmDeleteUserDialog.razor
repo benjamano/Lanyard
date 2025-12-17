@@ -1,0 +1,18 @@
+﻿@implements IDialogContentComponent<UserProfile>
+
+<FluentDialogBody>
+    <p>Are you sure you want to delete the user '@Content.GetName()'?</p>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public UserProfile Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    private void ToggleDialogPrimaryActionButton(bool enable)
+    {
+        Dialog!.TogglePrimaryActionButton(enable);
+    }
+}
