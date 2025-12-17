@@ -105,7 +105,7 @@
 
             if (result.IsSuccess)
             {
-                ToastService.ShowSuccess($"User '{result.Data!.UserName}' created successfully!");
+                ToastService.ShowSuccess($"User '{result.Data!.UserName}' created successfully with a generated password!");
                 await Dialog!.CloseAsync(true);
             }
             else

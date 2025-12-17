@@ -1,32 +1,41 @@
 @using LanyardApp.Services
 @inject IToastService ToastService
 
-<div class="card rounded-bottom-0">
-    <div class="card-header">Your Details</div>
-    <div class="card-body">
-        <EditForm class="text-muted" Model="@model">
-            <DataAnnotationsValidator />
+<FluentCard Class="mb-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H5">Your Details</FluentLabel>
         
-            <div class="mb-3">
-                <label for="userName" class="form-label">User Name</label>
-                <InputText id="userName" class="form-control" @bind-Value="model.UserName" readonly disabled />
-                <ValidationMessage For="@(() => model.UserName)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="displayName" class="form-label">First Name</label>
-                <InputText id="displayName" class="form-control" @bind-Value="model.FirstName" />
-                <ValidationMessage For="@(() => model.FirstName)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="displayName" class="form-label">Last Name</label>
-                <InputText id="displayName" class="form-control" @bind-Value="model.LastName" />
-                <ValidationMessage For="@(() => model.LastName)" />
-            </div>
+        <EditForm Model="@model" class="w-50">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentTextField @bind-Value="model.UserName"
+                                 Label="User Name"
+                                 ReadOnly="true"
+                                 Disabled="true"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextField>
+                <FluentValidationMessage For="@(() => model.UserName)" />
+                <FluentTextField @bind-Value="model.FirstName"
+                                 Label="First Name"
+                                 Required
+                                 Placeholder="Enter your first name"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextField>
+                <FluentValidationMessage For="@(() => model.FirstName)" />
+                <FluentTextField @bind-Value="model.LastName"
+                                 Label="Last Name"
+                                 Required
+                                 Placeholder="Enter your last name"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextField>
+                <FluentValidationMessage For="@(() => model.LastName)" />
+            </FluentStack>
         </EditForm>
-    </div>
-</div>
+    </FluentStack>
+</FluentCard>
 
 @code {
     private UserDetailsModel model = new();
@@ -61,7 +70,11 @@
     private class UserDetailsModel
     {
         public string UserName { get; set; } = string.Empty;
-        public string? FirstName { get; set; } = string.Empty;
-        public string? LastName { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "First name is required.")]
+        public string? FirstName { get; set; }
+        
+        [Required(ErrorMessage = "Last name is required.")]
+        public string? LastName { get; set; }
     }
 }
