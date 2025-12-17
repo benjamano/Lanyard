@@ -127,7 +127,7 @@ namespace LanyardAPI.Services
                 string surname = user.LastName?.ToLowerInvariant() ?? "";
                 user.UserName = initial + surname;
 
-                string generatedPassword = "changeME1234"; //GenerateSecurePassword();
+                string generatedPassword = "changeME1234!"; //GenerateSecurePassword();
 
                 user.EmailConfirmed = true;
 
