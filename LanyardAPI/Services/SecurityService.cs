@@ -4,13 +4,26 @@ using LanyardData.DataAccess;
 using LanyardData.DTO;
 using LanyardData.Models;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
+using System.Security.Cryptography;
 
 namespace LanyardAPI.Services
 {
-    public class SecurityService(AuthenticationStateProvider AuthStateProvider, IDbContextFactory<ApplicationDbContext> factory)
+    public class SecurityService
     {
-        private readonly AuthenticationStateProvider AuthStateProvider = AuthStateProvider;
-        private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+        private readonly AuthenticationStateProvider AuthStateProvider;
+        private readonly IDbContextFactory<ApplicationDbContext> _factory;
+        private readonly UserManager<UserProfile> _userManager;
+
+        public SecurityService(
+            AuthenticationStateProvider authStateProvider, 
+            IDbContextFactory<ApplicationDbContext> factory,
+            UserManager<UserProfile> userManager)
+        {
+            AuthStateProvider = authStateProvider;
+            _factory = factory;
+            _userManager = userManager;
+        }
 
         public async Task<string?> GetCurrentUserIdAsync()
         {
@@ -84,41 +97,47 @@ namespace LanyardAPI.Services
 
             ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
             await ctx.SaveChangesAsync();
-
         }
 
         public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
         {
             using ApplicationDbContext ctx = _factory.CreateDbContext();
 
-            return await ctx.Users
-                .ToListAsync();
+            return await ctx.Users.ToListAsync();
         }
 
         public async Task<Result<UserProfile>> CreateUserAsync(UserProfile user)
         {
             try
             {
-                if (!await IsUserLoggedIn())
+                if ((await GetActiveUsersAsync()).Any())
                 {
-                    return Result<UserProfile>.Fail("You must be logged in to perform this action!");
+                    if (!await IsUserLoggedIn())
+                    {
+                        return Result<UserProfile>.Fail("You must be logged in to perform this action!");
+                    }
                 }
 
-                if (string.IsNullOrWhiteSpace(user.FirstName) == true || string.IsNullOrWhiteSpace(user.LastName) == true)
+                if (string.IsNullOrWhiteSpace(user.FirstName) || string.IsNullOrWhiteSpace(user.LastName))
                 {
                     return Result<UserProfile>.Fail("The new user's first and last names are required!");
                 }
 
-                using ApplicationDbContext ctx = _factory.CreateDbContext();
-
                 string initial = user.FirstName?.ToLowerInvariant()[..1] ?? "";
                 string surname = user.LastName?.ToLowerInvariant() ?? "";
-
                 user.UserName = initial + surname;
 
-                ctx.Add(user);
+                string generatedPassword = "changeme1234"; //GenerateSecurePassword();
 
-                await ctx.SaveChangesAsync();
+                user.EmailConfirmed = true;
+
+                IdentityResult result = await _userManager.CreateAsync(user, generatedPassword);
+
+                if (!result.Succeeded)
+                {
+                    string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return Result<UserProfile>.Fail($"Failed to create user: {errors}");
+                }
 
                 return Result<UserProfile>.Ok(user);
             }
@@ -137,18 +156,20 @@ namespace LanyardAPI.Services
                     return Result<bool>.Fail("You must be logged in to perform this action!");
                 }
 
-                using ApplicationDbContext ctx = _factory.CreateDbContext();
-
-                UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+                UserProfile? user = await _userManager.FindByIdAsync(userId);
 
                 if (user is null)
                 {
                     return Result<bool>.Fail("User not found!");
                 }
 
-                ctx.Users.Remove(user);
+                IdentityResult result = await _userManager.DeleteAsync(user);
 
-                await ctx.SaveChangesAsync();
+                if (!result.Succeeded)
+                {
+                    string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return Result<bool>.Fail($"Failed to delete user: {errors}");
+                }
 
                 return Result<bool>.Ok(true);
             }
@@ -156,6 +177,35 @@ namespace LanyardAPI.Services
             {
                 return Result<bool>.Fail(ex.Message);
             }
+        }
+
+        private static string GenerateSecurePassword(int length = 16)
+        {
+            const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string lowercase = "abcdefghijklmnopqrstuvwxyz";
+            const string digits = "0123456789";
+            const string special = "!@#$%^&*()_+-=[]{}|;:,.<>?";
+            const string allChars = uppercase + lowercase + digits + special;
+
+            char[] password = new char[length];
+
+            password[0] = uppercase[RandomNumberGenerator.GetInt32(uppercase.Length)];
+            password[1] = lowercase[RandomNumberGenerator.GetInt32(lowercase.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (int i = 4; i < length; i++)
+            {
+                password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
+            }
+
+            for (int i = password.Length - 1; i > 0; i--)
+            {
+                int j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
     }
 }

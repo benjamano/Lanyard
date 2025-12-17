@@ -7,6 +7,8 @@
 
 @inject ApplicationDbContext _context
 @inject MusicPlayerService _player
+@inject IDialogService DialogService
+@inject IToastService ToastService
 
 @implements IDisposable
 
@@ -28,12 +30,14 @@
                 {
                     <tr role="button" 
                         @onmouseover="() => OnHover(song.SongId)" 
-                        @onmouseout="() => OnHoverOut()" 
+                        @onmouseout="OnHoverOut" 
                         @onclick="() => _player.Play(song.Song!, song.Playlist!)"
                         class="@(IsCurrentlyPlaying(song.Song!) ? "table-primary" : "")">
                         <td class="text-end">
-                            <span role="button" @onclick="() => OpenAddSongToPlaylistModel(song.Song!)" @onclick:stopPropagation 
-                                class="fas fa-plus-circle text-success @(HoveredSongId == song.SongId ? "" : "d-none")"></span>
+                            <span role="button" 
+                                  @onclick="() => OpenAddSongToPlaylistDialog(song.Song!)" 
+                                  @onclick:stopPropagation 
+                                  class="fas fa-plus-circle text-success @(HoveredSongId == song.SongId ? "" : "d-none")"></span>
                             @if (IsCurrentlyPlaying(song.Song!))
                             {
                                 <i class="fas fa-volume-up text-primary me-3"></i>
@@ -48,22 +52,15 @@
                 }
             </tbody>
         </table>
-
-        @* <button class="btn btn-outline-secondary rounded-pill pb-2 pt-2 mx-2" style="line-height: 1;">
-            <i class="fas fa-plus me-1"></i> Add Song
-        </button> *@
     }
 </div>
-
-<AddSongToPlaylistModal IsVisible="IsAddSongToPlaylistModalVisible" Song="SelectedSong" OnAdd="HandleSongAddedToPlaylist" OnClose="CloseAddSongToPlaylistModal" />
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
 
-    private bool IsAddSongToPlaylistModalVisible = false;
     private Guid? HoveredSongId = null;
-    private Song? SelectedSong;
     private Guid? CurrentlyPlayingSongId;
+    private IDialogReference? currentDialogReference;
 
     protected override void OnInitialized()
     {
@@ -86,24 +83,97 @@
         return CurrentlyPlayingSongId.HasValue && CurrentlyPlayingSongId.Value == song.Id;
     }
 
-    private void OpenAddSongToPlaylistModel(Song song)
+    private async Task OpenAddSongToPlaylistDialog(Song song)
     {
-        SelectedSong = song;
-        IsAddSongToPlaylistModalVisible = true;
+        SongPlaylistSelection selection = new SongPlaylistSelection 
+        { 
+            Song = song,
+            Playlist = null! // Will be set by the dialog
+        };
+
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = $"Add {song.Name} To Playlist",
+            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddSongToPlaylist),
+            PrimaryAction = "Add",
+            PrimaryActionEnabled = false,
+            SecondaryAction = "Cancel",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        await DialogService.ShowDialogAsync<AddSongToPlaylistModal>(selection, parameters);
     }
 
-    private void CloseAddSongToPlaylistModal()
+    private async Task HandleAddSongToPlaylist(DialogResult result)
     {
-        IsAddSongToPlaylistModalVisible = false;
-    }
+        if (result.Cancelled || result.Data is not SongPlaylistSelection selection)
+        {
+            return;
+        }
 
-    private async Task HandleSongAddedToPlaylist(PlaylistSongMember playlistSongMember)
-    {
-        IsAddSongToPlaylistModalVisible = false;
+        Song song = selection.Song;
+        Playlist selectedPlaylist = selection.Playlist;
+        
+        if (selectedPlaylist is null)
+        {
+            ToastService.ShowWarning("Please select a playlist");
+            return;
+        }
 
-        _context.Add(playlistSongMember);
+        try
+        {
+            Song? existingSong = await _context.Songs
+                .Where(x => x.Id == song.Id)
+                .FirstOrDefaultAsync();
 
-        await _context.SaveChangesAsync();
+            if (existingSong is null)
+            {
+                existingSong = new Song
+                {
+                    Id = Guid.NewGuid(),
+                    Name = song.Name,
+                    AlbumName = song.AlbumName,
+                    FilePath = song.FilePath,
+                    DurationSeconds = song.DurationSeconds,
+                    CreateDate = DateTime.UtcNow,
+                    IsDownloaded = true,
+                    IsActive = true
+                };
+
+                _context.Add(existingSong);
+                await _context.SaveChangesAsync();
+            }
+
+            bool alreadyInPlaylist = await _context.PlaylistSongMembers
+                .AnyAsync(psm => psm.SongId == existingSong.Id 
+                              && psm.PlaylistId == selectedPlaylist.Id 
+                              && psm.DeleteDate == null);
+
+            if (alreadyInPlaylist)
+            {
+                ToastService.ShowWarning($"'{song.Name}' is already in '{selectedPlaylist.Name}'");
+                return;
+            }
+
+            PlaylistSongMember playlistSongMember = new PlaylistSongMember
+            {
+                SongId = existingSong.Id,
+                PlaylistId = selectedPlaylist.Id,
+                CreateDate = DateTime.UtcNow
+            };
+
+            _context.Add(playlistSongMember);
+            await _context.SaveChangesAsync();
+
+            ToastService.ShowSuccess($"Added '{song.Name}' to '{selectedPlaylist.Name}'");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add song: {ex.Message}");
+        }
     }
 
     private void OnHover(Guid id)
@@ -113,7 +183,7 @@
 
     private void OnHoverOut()
     {
-        HoveredSongId = Guid.Empty;
+        HoveredSongId = null;
     }
 
     public void Dispose()

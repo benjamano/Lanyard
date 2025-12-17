@@ -9,33 +9,52 @@
 
 <PageTitle>Music</PageTitle>
 
-<div class="d-flex flex-row h-100">
+<FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
     <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
 
-    <div class="d-flex flex-columm col-10 ps-2">
+    <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
         <SongList Songs="currentSongs"></SongList>
-    </div>
-</div>
+    </FluentStack>
+</FluentStack>
 
-<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3 border-top border-secondary w-100 pt-3 bg-light border-start-0">
-    <div class="d-flex justify-content-center gap-2">
-        <button class="border-dark text-dark border-2 fas fa-backward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-                style="width:40px; height:40px;"
-                @onclick="RestartSong"
-                @ondblclick="PreviousSong">
-        </button>
+<FluentStack Orientation="Orientation.Horizontal"
+             HorizontalAlignment="HorizontalAlignment.Center"
+             VerticalAlignment="VerticalAlignment.Center"
+             Style="position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; padding: 1rem; background-color: var(--neutral-layer-1); border-top: 1px solid var(--neutral-stroke-divider-rest); z-index: 1000;">
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
+        <FluentButton Appearance="Appearance.Outline"
+                      IconOnly="true"
+                      Title="Previous (Double-click) / Restart (Single-click)"
+                      OnClick="RestartSong"
+                      @ondblclick="PreviousSong"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+        </FluentButton>
 
-        <button class="border-dark text-dark border-2 fas @(isPlaying ? "fa-pause" : "fa-play") bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-                style="width:40px; height:40px;"
-                @onclick="TogglePlay">
-        </button>
+        <FluentButton Appearance="Appearance.Accent"
+                      IconOnly="true"
+                      Title="@(isPlaying ? "Pause" : "Play")"
+                      OnClick="TogglePlay"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            @if (isPlaying)
+            {
+                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+            }
+            else
+            {
+                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+            }
+        </FluentButton>
 
-        <button class="border-dark text-dark border-2 fas fa-forward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
-                style="width:40px; height:40px;"
-                @onclick="NextSong">
-        </button>
-    </div>
-</div>
+        <FluentButton Appearance="Appearance.Outline"
+                      IconOnly="true"
+                      Title="Next"
+                      OnClick="NextSong"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+        </FluentButton>
+    </FluentStack>
+</FluentStack>
 
 @code {
     private IEnumerable<PlaylistSongMember>? currentSongs;

@@ -1,31 +1,36 @@
 @inject IToastService ToastService
 
-<div class="card rounded-top-0 border-top-0">
-    <div class="card-header rounded-top-0">Other Details</div>
-    <div class="card-body">
-        <EditForm Model="@model">
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H5">Other Details</FluentLabel>
+        
+        <EditForm class="w-50" Model="@model">
             <DataAnnotationsValidator />
-
-            <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
-                <InputText id="email" type="email" class="form-control" @bind-Value="model.Email" />
-                <ValidationMessage For="@(() => model.Email)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="phoneNumber" class="form-label">Phone Number</label>
-                <InputText id="phoneNumber" type="tel" class="form-control" @bind-Value="model.PhoneNumber" />
-                <ValidationMessage For="@(() => model.PhoneNumber)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="dateOfBirth" class="form-label">Date of Birth</label>
-                <InputDate id="dateOfBirth" class="form-control" @bind-Value="model.DateOfBirth" />
-                <ValidationMessage For="@(() => model.DateOfBirth)" />
-            </div>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentTextField @bind-Value="model.Email"
+                                 Label="Email Address"
+                                 TextFieldType="TextFieldType.Email"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
+                </FluentTextField>
+                <FluentValidationMessage For="@(() => model.Email)" />
+                <FluentTextField @bind-Value="model.PhoneNumber"
+                                 Label="Phone Number"
+                                 TextFieldType="TextFieldType.Tel"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                </FluentTextField>
+                <FluentValidationMessage For="@(() => model.PhoneNumber)" />
+                <FluentDatePicker @bind-Value="model.DateOfBirth"
+                                  Label="Date of Birth"
+                                  Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
+                </FluentDatePicker>
+                <FluentValidationMessage For="@(() => model.DateOfBirth)" />
+            </FluentStack>
         </EditForm>
-    </div>
-</div>
+    </FluentStack>
+</FluentCard>
 
 @code {
     private ContactDetailsModel model = new();
@@ -60,8 +65,12 @@
 
     private class ContactDetailsModel
     {
-        public string? Email { get; set; } = string.Empty;
-        public string? PhoneNumber { get; set; } = string.Empty;
-        public DateTime? DateOfBirth { get; set; } = null;
+        [EmailAddress(ErrorMessage = "Invalid email address.")]
+        public string? Email { get; set; }
+
+        [Phone(ErrorMessage = "Invalid phone number.")]
+        public string? PhoneNumber { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
     }
 }
