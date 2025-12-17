@@ -6,19 +6,18 @@
 @using NAudio.Wave;
 
 @inject MusicPlayerService _player
-@inject ToastService ToastService
 
 <PageTitle>Music</PageTitle>
 
 <div class="d-flex flex-row h-100">
     <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
 
-    <div class="d-flex flex-columm col-10">
+    <div class="d-flex flex-columm col-10 ps-2">
         <SongList Songs="currentSongs"></SongList>
     </div>
 </div>
 
-<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3 border-top border-secondary w-100 pt-3 bg-white">
+<div class="position-absolute bottom-0 start-50 translate-middle-x pb-3 border-top border-secondary w-100 pt-3 bg-light border-start-0">
     <div class="d-flex justify-content-center gap-2">
         <button class="border-dark text-dark border-2 fas fa-backward bg-white p-1 rounded-circle d-flex justify-content-center align-items-center"
                 style="width:40px; height:40px;"
@@ -62,67 +61,27 @@
 
     private async Task TogglePlay()
     {
-        try
-        {
-            await _player.TogglePlay();
-        }
-        catch (Exception ex)
-        {
-            ToastService.SetLevel(ToastErrorLevels.Error);
-            ToastService.Show(ex.Message);
-        }
+        await _player.TogglePlay();
     }
 
     private async Task Play()
     {
-        try
-        {
-            await _player.Play();
-        }
-        catch (Exception ex)
-        {
-            ToastService.SetLevel(ToastErrorLevels.Error);
-            ToastService.Show(ex.Message);
-        }
+        await _player.Play();
     }
 
     private async Task RestartSong()
     {
-        try
-        {
-            await _player.Restart();
-        }
-        catch (Exception ex)
-        {
-            ToastService.SetLevel(ToastErrorLevels.Error);
-            ToastService.Show(ex.Message);
-        }
+        await _player.Restart();
     }
 
     private async Task PreviousSong()
     {
-        try
-        {
-            await _player.Previous();
-        }
-        catch (Exception ex)
-        {
-            ToastService.SetLevel(ToastErrorLevels.Error);
-            ToastService.Show(ex.Message);
-        }
+        await _player.Previous();
     }
 
     private async Task NextSong()
     {
-        try
-        {
-            await _player.Next();
-        }
-        catch (Exception ex)
-        {
-            ToastService.SetLevel(ToastErrorLevels.Error);
-            ToastService.Show(ex.Message);
-        }
+        await _player.Next();
     }
 
     private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)

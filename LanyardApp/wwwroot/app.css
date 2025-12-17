@@ -1,3 +1,15 @@
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    font-family: var(--body-font);
+    font-size: var(--type-ramp-base-font-size);
+    line-height: var(--type-ramp-base-line-height);
+    font-weight: var(--font-weight);
+    color: var(--neutral-foreground-rest);
+    background: var(--neutral-fill-layer-rest);
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
@@ -128,25 +140,29 @@ span.fas{
     }
 }
 
+.hover-card {
+    transition: all 0.05s ease;
+}
+
 .hover-card:hover {
-    background-color: var(--bs-secondary-bg);
+    background-color: var(--bs-secondary-bg) !important;
 }
 
 .hover-card.active {
-    background-color: var(--bs-secondary-bg-subtle);
+    background-color: var(--bs-secondary-bg-subtle) !important;
 }
 
     .hover-card.active:hover {
-        background-color: var(--bs-dark-bg-subtle);
+        background-color: var(--bs-dark-bg-subtle) !important;
     }
 
 .hover-card .hover-icon {
-    transition: opacity 0.2s;
-    opacity: 0;
+    transition: opacity 0.2s !important;
+    opacity: 0 !important;
 }
 
     .hover-card .hover-icon.show {
-        opacity: 1;
+        opacity: 1 !important;
     }
 
 .card-body.collapse {
@@ -198,6 +214,9 @@ i.fas {
 
 .toast {
     transition: 0.3s opacity ease !important;
+    width: fit-content !important;
+    max-width: 70vw !important;
+    min-width: 15vw !important;
 }
 
     .toast:not(.show) {
@@ -211,3 +230,88 @@ i.fas {
             opacity: 100;
             z-index: 999999;
         }
+
+.card .card-header {
+    background-color: #c017ea;
+    color: white;
+    font-weight: 600;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+
+    .card .card-header .btn-primary {
+        background-color: var(--bs-purple) !important;
+        border: solid 1px #9257ff! important;
+        transition: 0.2s ease all;
+    }
+
+    .card .card-header .btn-outline-primary {
+        background-color: transparent;
+        border: solid 1px var(--bs-purple) !important;
+        color: white !important;
+        transition: 0.15s ease all;
+    }
+
+    .card .card-header .btn:hover {
+        filter: brightness(1.1);
+        background-color: var(--bs-purple) !important;
+    }
+
+.card .card-body {
+    --bs-bg-opacity: 0.75;
+}
+
+.card .card .card-body {
+    background-color: white;
+}
+
+.table {
+    margin-bottom: 0 !important;
+    border-radius: 0.5rem !important;
+    --bs-bg-opacity: 0.75 !important;
+    background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
+    overflow: hidden !important;
+    border: none !important;
+    backdrop-filter: blur(16px);
+}
+
+    .table tbody{
+        border: none !important;
+    }
+
+    .table td {
+        padding: 1rem !important;
+    }
+
+    .table td, .table tr {
+        background-color: transparent !important;
+        overflow: hidden !important;
+        border-bottom: none !important;
+    }
+
+.validation-message {
+    font-size: 0.9rem;
+}
+
+.form-label {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+}
+
+    .form-label .validation-message{
+        margin-left: 1rem;
+    }
+
+main {
+    background: #560c69;
+    background: linear-gradient(180deg,rgba(86, 12, 105, 1) 0%, rgba(104, 19, 183, 1) 39%, rgba(192, 23, 234, 1) 100%);
+}
+
+.bg-blur {
+    --bs-bg-opacity: 0.75 !important;
+    background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
+    backdrop-filter: blur(16px);
+}

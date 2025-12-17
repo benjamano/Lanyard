@@ -14,8 +14,15 @@
 @using System.Security.Claims
 @using LanyardApp.Services
 @using LanyardData.Models
-@using LanyardData.DataAccess
+@using System.Web
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using LanyardAPI.Services
+@using static System.Net.WebUtility
+@using Microsoft.FluentUI.AspNetCore.Components
 
-@inject SecurityService _sec
-@inject ApplicationDbContext _context
-@inject ToastService _toast
+@using Icons = Microsoft.FluentUI.AspNetCore.Components.Icons
+
+@inject SecurityService _sApi
+@inject IDialogService DialogService

@@ -1,0 +1,200 @@
+﻿@using LanyardData.Models
+
+@inject ApplicationRolesService _rApi
+@inject JwtTokenService _jwtTokenService
+@inject JwtAuthenticationStateProvider _authStateProvider
+@inject UserManager<UserProfile> _umApi
+@inject IToastService ToastService
+
+<FluentCard Height="auto" Class="mt-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+            <FluentLabel Typo="Typography.H4">Role Manager</FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" OnClick="HandleCreateNewRoleButtonClicked" IconEnd="@(new Icons.Regular.Size20.QuizNew().WithColor(Color.Fill))">
+                Create a new Role
+            </FluentButton>
+        </FluentStack>
+
+        <FluentGrid Class="w-100">
+            <FluentGridItem xs="12" sm="@(isCreatingARole ? 9 : 12)">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    @if (roles is not null)
+                    {
+                        if (roles.Count() == 0)
+                        {
+                            <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                No Roles Exist Yet
+                            </FluentLabel>
+                        }
+                        else
+                        {
+                            <FluentDataGrid Items="@roles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Style="width: 100%;">
+                                <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Name" />
+                                <TemplateColumn Title="Created By">
+                                    @{
+                                        var createdBy = context.CreatedByUser?.GetName() ?? "N/A";
+                                    }
+                                    @createdBy
+                                </TemplateColumn>
+                                <PropertyColumn Property="@(r => r.CreateDate)" Title="Created Date" Format="g" />
+                                <TemplateColumn Title="Actions">
+                                    <div class="d-flex align-items-center">
+                                        <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => DeleteRole(context.Id))" />
+                                    </div>
+                                </TemplateColumn>
+                            </FluentDataGrid>
+                        }
+                    }
+                    else
+                    {
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                            <FluentProgressRing />
+                            <FluentLabel>Loading...</FluentLabel>
+                        </FluentStack>
+                    }
+                </FluentStack>
+            </FluentGridItem>
+
+            @if (isCreatingARole)
+            {
+                <FluentGridItem xs="12" sm="3">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                        <FluentCard MinimalStyle="true">
+                            <FluentLabel Typo="Typography.H6" Class="mb-2">Create a New Role</FluentLabel>
+
+                            <EditForm Model="@model" OnValidSubmit="HandleCreateNewRole">
+                                <DataAnnotationsValidator />
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                                    <FluentTextField @bind-Value="model.RoleName"
+                                                     Label="Role Name"
+                                                     Required
+                                                     Style="width: 100%;" />
+                                    <FluentValidationMessage For="@(() => model.RoleName)" />
+
+                                    <FluentButton Type="ButtonType.Submit"
+                                                  Appearance="Appearance.Accent"
+                                                  Style="align-self: flex-end;">
+                                        Create
+                                    </FluentButton>
+                                </FluentStack>
+                            </EditForm>
+                        </FluentCard>
+                    </FluentStack>
+                </FluentGridItem>
+            }
+        </FluentGrid>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public EventCallback<IEnumerable<ApplicationRole>> OnRolesChanged { get; set; }
+
+    private IEnumerable<ApplicationRole>? roles = null;
+    private string selectedRoleId = string.Empty;
+    private bool isCreatingARole = false;
+
+    private CreateNewRolesModel model = new CreateNewRolesModel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoles();
+        model.RoleName = "";
+    }
+
+    private async Task LoadRoles()
+    {
+        Result<List<ApplicationRole>> result = await _rApi.GetAllApplicationRolesAsync();
+
+        if (result.IsSuccess)
+        {
+            roles = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load roles: {result.Error!}");
+        }
+
+        StateHasChanged();
+    }
+
+    public async Task SetRoles(IEnumerable<ApplicationRole> _roles)
+    {
+        roles = _roles;
+        StateHasChanged();
+    }
+
+    private string GetSelectedRoleName()
+    {
+        ApplicationRole? selectedRole = roles?
+            .Where(r => r.Id == selectedRoleId)
+            .FirstOrDefault();
+
+        return selectedRole?.Name ?? string.Empty;
+    }
+
+    private void HandleCreateNewRoleButtonClicked()
+    {
+        isCreatingARole = !isCreatingARole;
+    }
+
+    private async Task HandleCreateNewRole()
+    {
+        Result<bool> result = await _rApi.CreateNewRoleAsync(model.RoleName);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Error while Creating Role: {result.Error!}");
+            return;
+        }
+
+        await LoadRoles();
+
+        ToastService.ShowSuccess("Role Created - Role Created Successfully!");
+
+        model.RoleName = "";
+        isCreatingARole = false;
+
+        if (roles is not null)
+        {
+            await OnRolesChanged.InvokeAsync(roles);
+        }
+    }
+
+    private async Task DeleteRole(string roleId)
+    {
+        Result<List<string>> result = await _rApi.DeleteRoleAsync(roleId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Error deleting Role: {result.Error!}");
+            return;
+        }
+
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+        if (result.Data is not null && result.Data.Contains(currentUserId!))
+        {
+            UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
+            if (currentUser is not null)
+            {
+                await _jwtTokenService.RegenerateTokenAsync(currentUser);
+                _authStateProvider.NotifyAuthenticationStateChanged();
+            }
+        }
+
+        await LoadRoles();
+
+        ToastService.ShowSuccess("Role Deleted - Role Deleted Successfully!");
+
+        if (roles is not null)
+        {
+            await OnRolesChanged.InvokeAsync(roles);
+        }
+    }
+
+    private class CreateNewRolesModel
+    {
+        [Required(ErrorMessage = "The Role Name field is required.")]
+        public string RoleName { get; set; } = string.Empty;
+    }
+}

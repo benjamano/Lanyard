@@ -8,73 +8,171 @@
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<div class="nav-scrollable">
+    <div class="h-100 p-3 d-flex flex-column">
+        <ul class="list-unstyled ps-0 text-muted">
+            <li class="mb-2">
+                <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#home-collapse" aria-expanded="@(homeOpen ? "true" : "false")" @onclick="() => homeOpen = !homeOpen">
+                    Home
+                </li>
+                <div class="collapse @(homeOpen ? "show" : "")" id="home-collapse">
+                    <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                        <li>
+                            <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="" Match="NavLinkMatch.All">
+                                Home
+                            </NavLink>
+                        </li>
+                        <AuthorizeView Roles="Admin, CanControlMusic">
+                            <Authorized>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="music">
+                                        Music
+                                    </NavLink>
+                                </li>
+                            </Authorized>
+                        </AuthorizeView>
+                    </ul>
+                </div>
+            </li>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column h-100">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+            <AuthorizeView Roles="Admin,CanClockIn">
+                <Authorized>
+                    <li class="mb-2">
+                    <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#rota-collapse" aria-expanded="@(rotaOpen ? "true" : "false")" @onclick="() => rotaOpen = !rotaOpen">
+                            Rota
+                        </li>
+                        <div class="collapse @(rotaOpen ? "show" : "")" id="rota-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="clockin" Match="NavLinkMatch.All">
+                                        Clock In
+                                    </NavLink>
+                                </li>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="rota" Match="NavLinkMatch.All">
+                                        Rota
+                                    </NavLink>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                </Authorized>
+            </AuthorizeView>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="music">
-                <span class="fas fa-music" aria-hidden="true"></span> Music
-            </NavLink>
-        </div>
+            <AuthorizeView Roles="Admin,Manager">
+                <Authorized>
+                    <li>
+                        <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0 collapsed" data-bs-toggle="collapse" data-bs-target="#manage-collapse" aria-expanded="@(manageOpen ? "true" : "false")" @onclick="() => manageOpen = !manageOpen">
+                            Manage
+                        </li>
+                        <div class="collapse @(manageOpen ? "show" : "")" id="manage-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/roles">
+                                        Roles
+                                    </NavLink>
+                                </li>
+                                <li>
+                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
+                                        Users
+                                    </NavLink>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+                </Authorized>
+                <NotAuthorized>
+                </NotAuthorized>
+            </AuthorizeView>
+        </ul>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="clockin">
-                <span class="fas fa-clock" aria-hidden="true"></span> Clock In
-            </NavLink>
-        </div>
+        <ul class="list-unstyled ps-0 mt-auto">
+            <li class="border-top my-3"></li>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="rota">
-                <span class="fas fa-calendar" aria-hidden="true"></span> Rota
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="auth">
-                <span class="fas fa-cog" aria-hidden="true"></span> Settings
-            </NavLink>
-        </div>
-
-        <div class="nav-item mb-0 mt-auto">
             <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="account/manage">
-                            <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
-                    </NavLink>
+                <Authorized>
+                    <li class="mb-1 ms-4">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark fw-semibold" href="account/manage">
+                            @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
+                        </NavLink>
+                    </li>
+                    <li class="mb-1 ms-4">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="logout">
+                            Logout
+                        </NavLink>
+                    </li>
+                </Authorized>
+                <NotAuthorized>
+                    <li class="mb-1 ms-4 me-4">
+                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="login">
+                            Login
+                        </NavLink>
+                    </li>
+                </NotAuthorized>
+            </AuthorizeView>
+
+            @* <li class="border-top my-3"></li>
+
+            <li class="ms-4 me-4">
+                <FluentDesignTheme @bind-Mode="@Mode"
+                                   @bind-OfficeColor="@OfficeColor"
+                                   OnLoaded="@OnLoaded"
+                                   OnLuminanceChanged="@OnLuminanceChanged"
+                                   StorageName="theme" />
+
+                <div style="min-height: 250px;">
+                    <FluentGrid>
+                        <FluentGridItem>
+                            <FluentSelect Label="Theme"
+                                          Width="250px"
+                                          Items="@(Enum.GetValues<DesignThemeModes>())"
+                                          @bind-SelectedOption="@Mode" />
+                        </FluentGridItem>
+
+                        <FluentGridItem>
+                            <FluentSelect Label="Color"
+                                          Items="@(Enum.GetValues<OfficeColor>().Select(i => (OfficeColor?)i))"
+                                          Height="200px"
+                                          Width="250px"
+                                          @bind-SelectedOption="@OfficeColor">
+                                <OptionTemplate>
+                                    <FluentStack>
+                                        <FluentIcon Value="@(new Icons.Filled.Size20.RectangleLandscape())"
+                                                    Color="Color.Custom"
+                                                    CustomColor="@(@context.ToString() != "default" ? context.ToString() : "#036ac4")" />
+                                        <FluentLabel>@context</FluentLabel>
+                                    </FluentStack>
+                                </OptionTemplate>
+                            </FluentSelect>
+                            <FluentButton Appearance="Appearance.Accent" OnClick="PickRandomColor">Feeling lucky?</FluentButton>
+                        </FluentGridItem>
+                    </FluentGrid>
+
+                    <FluentStack Style="margin: 30px 0px; padding: 30px; border: 1px solid var(--accent-fill-rest);">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.Airplane())" />
+                        <FluentLabel>Example of content</FluentLabel>
+                        <FluentButton Appearance="Appearance.Outline">Outline button</FluentButton>
+                        <FluentButton Appearance="Appearance.Accent">Accent button</FluentButton>
+                    </FluentStack>
                 </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="logout">
-                        <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                    </NavLink>
-                </div>
-            </Authorized>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="login">
-                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
-        </div>
-    </nav>
+            </li> *@
+        </ul>
+    </div>
 </div>
+
+@inject AuthenticationStateProvider Auth
 
 @code {
     private string? currentUrl;
     private string? userName;
 
+    private bool homeOpen = true;
+    private bool manageOpen = false;
+    private bool rotaOpen = false;
+
     protected override async Task OnInitializedAsync()
     {
-        userName = await _sec.GetCurrentUserName();
+        userName = await _sApi.GetCurrentUserName();
 
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;

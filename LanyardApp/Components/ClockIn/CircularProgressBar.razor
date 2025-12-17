@@ -23,13 +23,13 @@
 </div>
 
 @code {
-    [Parameter] public double Value { get; set; }
+    [Parameter] public double Value { get; set; } = 0;
     [Parameter] public double Max { get; set; } = 1;
     [Parameter] public int Size { get; set; } = 220;
     [Parameter] public int StrokeWidth { get; set; } = 12;
     [Parameter] public string Color { get; set; } = "#0d6efd";
     [Parameter] public EventCallback OnClick { get; set; }
-    [Parameter] public RenderFragment ChildContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private double Radius => (Size - StrokeWidth) / 2;
     private double Center => Size / 2;

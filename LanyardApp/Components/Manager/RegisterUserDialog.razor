@@ -1,0 +1,144 @@
+@using LanyardData.Models
+@implements IDialogContentComponent
+
+@inject IToastService ToastService
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            Register a New User
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <EditForm Model="@model" OnValidSubmit="HandleRegisterUser">
+        <DataAnnotationsValidator />
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentTextField @bind-Value="model.FirstName"
+                                Label="First Name"
+                                Required
+                                Placeholder="Ben"
+                                Style="width: 100%;">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+            </FluentTextField>
+            <FluentValidationMessage For="@(() => model.FirstName)" />
+
+            <FluentTextField @bind-Value="model.LastName"
+                                Label="Last Name"
+                                Required
+                                Placeholder="Mercer"
+                                Style="width: 100%;">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+            </FluentTextField>
+            <FluentValidationMessage For="@(() => model.LastName)" />
+
+            <FluentTextField @bind-Value="model.Email"
+                                Label="Email"
+                                Placeholder="ben.mercer@lanyard.com"
+                                Style="width: 100%;">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
+            </FluentTextField>
+            <FluentValidationMessage For="@(() => model.Email)" />
+
+            <FluentTextField @bind-Value="model.PhoneNumber"
+                                Label="Phone Number"
+                                Placeholder="07860603962"
+                                TextFieldType="TextFieldType.Tel"
+                                Style="width: 100%;">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+            </FluentTextField>
+            <FluentValidationMessage For="@(() => model.PhoneNumber)" />
+
+            <FluentDialogFooter>
+                <FluentButton Appearance="Appearance.Accent"
+                              Type="ButtonType.Submit"
+                              Disabled="@isSubmitting"
+                              IconStart="@(new Icons.Regular.Size20.PersonAdd())">
+                    @if (isSubmitting)
+                    {
+                        <FluentProgressRing Style="width: 16px; height: 16px;" />
+                        <span class="ms-2">Creating...</span>
+                    }
+                    else
+                    {
+                        <span>Create User</span>
+                    }
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral"
+                              OnClick="@CancelDialog"
+                              Disabled="@isSubmitting">
+                    Cancel
+                </FluentButton>
+            </FluentDialogFooter>
+        </FluentStack>
+    </EditForm>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    private bool isSubmitting;
+    private RegisterUserModel model = new();
+
+    private async Task HandleRegisterUser()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            UserProfile newUser = new UserProfile
+            {
+                Email = model.Email,
+                FirstName = model.FirstName,
+                LastName = model.LastName,
+                PhoneNumber = model.PhoneNumber
+            };
+
+            Result<UserProfile> result = await _sApi.CreateUserAsync(newUser);
+
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess($"User '{result.Data!.UserName}' created successfully!");
+                await Dialog!.CloseAsync(true);
+            }
+            else
+            {
+                ToastService.ShowError($"Failed to create user: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error creating user: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog!.CancelAsync();
+    }
+
+    private class RegisterUserModel
+    {
+        [Required(ErrorMessage = "First Name is required.")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Last Name is required.")]
+        public string LastName { get; set; } = string.Empty;
+
+        public string? Email { get; set; }
+
+        public string? PhoneNumber { get; set; }
+    }
+}

@@ -1,9 +1,7 @@
-@using LanyardData.Models
-@using LanyardApp.Services
-@inject SecurityService _sec
+@inject IToastService ToastService
 
 <div class="card rounded-top-0 border-top-0">
-    <div class="card-header">Other Details</div>
+    <div class="card-header rounded-top-0">Other Details</div>
     <div class="card-body">
         <EditForm Model="@model">
             <DataAnnotationsValidator />
@@ -34,7 +32,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
@@ -46,7 +44,7 @@
 
     public async Task HandleSave()
     {
-        UserProfile? user = await _sec.GetCurrentUserProfileAsync();
+        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
@@ -54,10 +52,9 @@
             user.PhoneNumber = model.PhoneNumber;
             user.DateOfBirth = model.DateOfBirth;
 
-            await _context.SaveChangesAsync();
+            await _sApi.UpdateUserProfileAsync(user);
 
-            _toast.SetLevel(ToastErrorLevels.Success);
-            _toast.Show("Details Saved");
+            ToastService.ShowSuccess("Details Saved!");
         }
     }
 

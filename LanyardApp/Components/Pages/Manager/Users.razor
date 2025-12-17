@@ -1,0 +1,135 @@
+﻿@page "/manage/users"
+@using LanyardApp.Components.Manager
+
+<PageTitle>User Management</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentToolbar class="w-100" id="toolbar-fluent-components">
+        <FluentLabel slot="start" Typo="Typography.PaneHeader">Users</FluentLabel>
+
+        <FluentButton Appearance="Appearance.Outline" class="me-2" slot="end" IconEnd="new Icons.Regular.Size20.PersonAdd()" OnClick="OpenRegisterUserDialog">Register a New User</FluentButton>
+
+        <FluentSearch Placeholder="Search..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
+    </FluentToolbar>
+
+    <FluentDataGrid Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+        <EmptyContent>
+            No Users Found
+        </EmptyContent>
+        <ChildContent>
+            <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" />
+            <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" />
+            <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" />
+            <PropertyColumn Property="@(r => r.PhoneNumber ?? "Not Set")" Title="Phone Number" />
+            <PropertyColumn Property="@(r => r.DateOfBirth != null ? r.DateOfBirth.Value.ToString("d") : "Not Set")" Title="DOB" />
+            <TemplateColumn Title="Actions">
+                <div class="d-flex align-items-center">
+                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
+                </div>
+            </TemplateColumn>
+        </ChildContent>
+    </FluentDataGrid>
+</FluentCard>
+
+@code{
+    private IEnumerable<UserProfile> users = Enumerable.Empty<UserProfile>();
+    private IEnumerable<UserProfile> filteredUsers = Enumerable.Empty<UserProfile>();
+    private string? searchValue = string.Empty;
+
+    protected async override Task OnInitializedAsync()
+    {
+        await GetUsers();
+    }
+
+    private async Task GetUsers()
+    {
+        users = await _sApi.GetActiveUsersAsync();
+        filteredUsers = users;
+
+        await HandleSearchInput();
+    }
+
+    private async Task HandleSearchInput()
+    {
+        if (string.IsNullOrWhiteSpace(searchValue))
+        {
+            users = await _sApi.GetActiveUsersAsync();
+            filteredUsers = users;
+
+            searchValue = string.Empty;
+
+            StateHasChanged();
+        }
+        else
+        {
+            string searchTerm = searchValue.ToLower();
+
+            if (searchTerm.Length > 0)
+            {
+                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
+
+                List<UserProfile> temp = users
+                    .Where(u =>
+                        string.Join(" ",
+                            u.GetName(),
+                            u.Email,
+                            u.PhoneNumber,
+                            u.DateOfBirth != null ? u.DateOfBirth?.ToString("d") : ""
+                        ).ToLower().Contains(term)
+                    )
+                    .ToList();
+
+                filteredUsers = temp;
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task OpenRegisterUserDialog()
+    {
+        IDialogReference dialog = await DialogService.ShowDialogAsync<RegisterUserDialog>(new DialogParameters()
+        {
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true
+        });
+
+        DialogResult? result = await dialog.Result;
+
+        if (result?.Data is true)
+        {
+            await GetUsers();
+        }
+    }
+
+    private async Task ConfirmDeleteUser(UserProfile user)
+    {
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = "Are you sure?",
+            OnDialogResult = DialogService.CreateDialogCallback(this, async result => await HandleDeleteUser(result)),
+            PrimaryAction = "Yes",
+            PrimaryActionEnabled = true,
+            SecondaryAction = "No",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        parameters.Add("Message", $"Are you sure you want to delete the user '{user.GetName()}'?");
+
+        await DialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(user, parameters);
+    }
+
+    private async Task HandleDeleteUser(DialogResult result)
+    {
+        if (result.Cancelled == false)
+        {
+            await _sApi.DeleteUserAsync(((UserProfile)result.Data!).Id);
+            await GetUsers();
+        }
+    }
+}

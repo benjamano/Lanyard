@@ -1,0 +1,336 @@
+﻿@using System.Threading.Tasks
+@inject ApplicationRolesService _rApi
+@inject JwtTokenService _jwtTokenService
+@inject JwtAuthenticationStateProvider _authStateProvider
+@inject UserManager<UserProfile> _umApi
+@inject IToastService ToastService
+
+<PageTitle>User Managment</PageTitle>
+
+<FluentCard Height="auto" Style="min-height:30vh;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentLabel Typo="Typography.H4">User Roles</FluentLabel>
+
+        <FluentGrid Class="w-100">
+            <FluentGridItem xs="12" sm="2">
+                <FluentSelect TOption="UserProfile"
+                              Items="@userProfiles.OrderBy(x=> x.GetName())"
+                              OptionText="@(i => i.GetName())"
+                              OptionValue="@(i => i.Id)"
+                              Placeholder="Select a User..."
+                              Label="Select User"
+                              SelectedOptionChanged="SetUserAndLoadRoles"
+                              Width="100%">
+                </FluentSelect>
+            </FluentGridItem>
+
+            <FluentGridItem xs="12" sm="6">
+                @if (selectedUser != null)
+                {
+                    <FluentCard Height="auto">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
+                                <FluentLabel Typo="Typography.H6">Assigned Roles</FluentLabel>
+
+                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRolesAlreadyAssignedValue" @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
+                            </FluentToolbar>
+                            
+                            @if (!filteredUserRoles.Any())
+                            {
+                                <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                    No Roles Exist for this User with those filters!
+                                </FluentLabel>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
+                                    <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Role" />
+                                    <PropertyColumn Property="@(r => r.CreateDate)" Title="Date Added" Format="g" />
+                                    <TemplateColumn Title="Created By">
+                                        @{
+                                            var createdBy = context.CreatedByUser?.GetName() ?? "N/A";
+                                        }
+                                        @createdBy
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <div class="d-flex align-items-center">
+                                            <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => RemoveRoleFromUser(context.Id))" />
+                                        </div>
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+
+            <FluentGridItem xs="12" sm="4">
+                @if (selectedUser != null)
+                {
+                    <FluentCard Height="auto">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
+                                <FluentLabel Typo="Typography.H6">Assign New Roles</FluentLabel>
+
+                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRoleToAddValue" @bind-Value:after=HandleSearchForRoleToAddInput />
+                            </FluentToolbar>
+                            
+                            @if (roles is not null)
+                            {
+                                @if (filteredRoles.Any())
+                                {
+                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                        <TemplateColumn Title="Name">
+                                            @{
+                                                var roleName = context.Name ?? string.Empty;
+                                            }
+                                            @roleName
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="Actions">
+                                            <div class="d-flex align-items-center">
+                                                <FluentIcon Icon="Icons.Regular.Size20.AddCircle" Color="Color.Success" OnClick="@(() => AddRoleToUser(context.Id))" />
+                                            </div>
+                                        </TemplateColumn>
+                                    </FluentDataGrid>
+                                }
+                                else
+                                {
+                                    <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                        No Roles left to Assign!
+                                    </FluentLabel>
+                                }
+                            }
+                            else
+                            {
+                                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                                    <FluentProgressRing />
+                                    <FluentLabel>Loading...</FluentLabel>
+                                </FluentStack>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    private IEnumerable<UserProfile> userProfiles = Array.Empty<UserProfile>();
+    private string? selectedUser = null;
+
+    private IEnumerable<ApplicationRole> roles = Array.Empty<ApplicationRole>();
+    private IEnumerable<ApplicationRole> userRoles = Array.Empty<ApplicationRole>();
+    private IEnumerable<ApplicationRole> filteredUserRoles = Array.Empty<ApplicationRole>();
+    private IEnumerable<ApplicationRole> filteredRoles = Array.Empty<ApplicationRole>();
+
+    private string? searchForRolesAlreadyAssignedValue = string.Empty;
+    private string? searchForRoleToAddValue = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userProfiles = await _sApi.GetAllUsersAsync();
+        await LoadRoles();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (selectedUser != null)
+        {
+            await LoadUsersRoles();
+        }
+        else
+        {
+            userRoles = Array.Empty<ApplicationRole>();
+        }
+    }
+
+    private async Task SetUserAndLoadRoles(UserProfile user)
+    {
+        selectedUser = user.Id;
+
+        await LoadUsersRoles();
+    }
+
+    private async Task LoadRoles()
+    {
+        Result<List<ApplicationRole>> result = await _rApi.GetAllApplicationRolesAsync();
+
+        if (result.IsSuccess)
+        {
+            roles = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load roles: {result.Error!}");
+        }
+
+        StateHasChanged();
+    }
+
+    public async Task SetRoles(IEnumerable<ApplicationRole> _roles)
+    {
+        roles = _roles;
+
+        GetAvailableRolesToAdd();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadUsersRoles()
+    {
+        if (selectedUser == null) return;
+
+        Result<List<ApplicationRole>> result = await _rApi.GetUserRolesAsync(selectedUser);
+
+        if (result.IsSuccess)
+        {
+            userRoles = result.Data!;
+            filteredUserRoles = userRoles;
+
+            GetAvailableRolesToAdd();
+
+            await HandleSearchForRoleToAddInput();
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load user roles: {result.Error!}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task AddRoleToUser(string roleId)
+    {
+        if (selectedUser == null) return;
+
+        Result<string> result = await _rApi.AssignRoleToUserAsync(selectedUser, roleId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Assign Role Failed: {result.Error!}");
+            return;
+        }
+
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+
+        if (result.Data == currentUserId)
+        {
+            ToastService.ShowWarning($"For these changes to propogate, please log out then back in again.");
+
+            // UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
+            // if (currentUser is not null)
+            // {
+            //     await _jwtTokenService.RegenerateTokenAsync(currentUser);
+            //     _authStateProvider.NotifyAuthenticationStateChanged();
+            // }
+        }
+
+        ToastService.ShowSuccess("Role Assigned - The role has been successfully assigned to the user.");
+        await LoadUsersRoles();
+    }
+
+    private async Task RemoveRoleFromUser(string roleId)
+    {
+        if (selectedUser == null) return;
+
+        Result<string> result = await _rApi.RemoveRoleFromUserAsync(selectedUser, roleId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Remove Role Failed: {result.Error!}");
+            return;
+        }
+
+        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+
+        if (result.Data == currentUserId)
+        {
+            ToastService.ShowWarning($"For these changes to propogate, please log out then back in again.");
+
+            // UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
+            // if (currentUser is not null)
+            // {
+            //     await _jwtTokenService.RegenerateTokenAsync(currentUser);
+            //     _authStateProvider.NotifyAuthenticationStateChanged();
+            // }
+        }
+
+        ToastService.ShowSuccess("Role Removed - The role has been successfully removed from the user.");
+
+        await LoadUsersRoles();
+    }
+
+    private void GetAvailableRolesToAdd()
+    {
+        filteredRoles = roles.Where(r => !userRoles.Any(ur => ur.Id == r.Id)).OrderBy(r => r.Name);
+    }
+
+    private async Task HandleSearchForRoleAlreadyAssignedInput()
+    {
+        if (string.IsNullOrWhiteSpace(searchForRolesAlreadyAssignedValue))
+        {
+            GetAvailableRolesToAdd();
+
+            searchForRolesAlreadyAssignedValue = string.Empty;
+        }
+        else
+        {
+            string searchTerm = searchForRolesAlreadyAssignedValue.ToLower();
+
+            if (searchTerm.Length > 0)
+            {
+                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
+
+                List<ApplicationRole> temp = userRoles
+                    .Where(u =>
+                        string.Join(" ",
+                            u.Name,
+                            u.Id,
+                            u.CreateDate.ToString("d"),
+                            u.CreatedByUser?.GetName()
+                        ).ToLower().Contains(term)
+                    )
+                    .ToList();
+
+                filteredUserRoles = temp;
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task HandleSearchForRoleToAddInput()
+    {
+        if (string.IsNullOrWhiteSpace(searchForRoleToAddValue))
+        {
+            GetAvailableRolesToAdd();
+
+            searchForRoleToAddValue = string.Empty;
+        }
+        else
+        {
+            string searchTerm = searchForRoleToAddValue.ToLower();
+
+            if (searchTerm.Length > 0)
+            {
+                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
+
+                List<ApplicationRole> temp = filteredRoles
+                    .Where(u =>
+                        string.Join(" ",
+                            u.Name,
+                            u.Id,
+                            u.CreateDate.ToString("d"),
+                            u.CreatedByUser?.GetName()
+                        ).ToLower().Contains(term)
+                    )
+                    .ToList();
+
+                filteredRoles = temp;
+
+                StateHasChanged();
+            }
+        }
+    }
+}
