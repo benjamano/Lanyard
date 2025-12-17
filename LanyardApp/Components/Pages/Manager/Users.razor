@@ -1,5 +1,8 @@
 ﻿@page "/manage/users"
 @using LanyardApp.Components.Manager
+@using LanyardApp.Components.Accounts
+
+@inject IToastService ToastService
 
 <PageTitle>User Management</PageTitle>
 
@@ -25,6 +28,7 @@
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Accent" OnClick="@(() => OpenChangePasswordDialog(context))" />
                 </div>
             </TemplateColumn>
         </ChildContent>
@@ -131,5 +135,28 @@
             await _sApi.DeleteUserAsync(((UserProfile)result.Data!).Id);
             await GetUsers();
         }
+    }
+
+    private async Task OpenChangePasswordDialog(UserProfile user)
+    {
+        if (user is null)
+        {
+            ToastService.ShowError("Unable to load user profile.");
+            return;
+        }
+
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = "Change Password",
+            PrimaryAction = "Change Password",
+            PrimaryActionEnabled = true,
+            SecondaryAction = "Cancel",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        await DialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
     }
 }

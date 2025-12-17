@@ -179,6 +179,39 @@ namespace LanyardAPI.Services
             }
         }
 
+        public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
+        {
+            try
+            {
+                if (!await IsUserLoggedIn())
+                {
+                    return Result<bool>.Fail("You must be logged in to perform this action!");
+                }
+
+                UserProfile? user = await _userManager.FindByIdAsync(userId);
+
+                if (user is null)
+                {
+                    return Result<bool>.Fail("User not found!");
+                }
+
+                string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+                IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+
+                if (!result.Succeeded)
+                {
+                    string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return Result<bool>.Fail($"Failed to change password: {errors}");
+                }
+
+                return Result<bool>.Ok(true);
+            }
+            catch (Exception ex)
+            {
+                return Result<bool>.Fail(ex.Message);
+            }
+        }
+
         private static string GenerateSecurePassword(int length = 16)
         {
             const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
