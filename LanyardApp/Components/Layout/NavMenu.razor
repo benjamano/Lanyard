@@ -2,162 +2,83 @@
 
 @inject NavigationManager NavigationManager
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Lanyard</a>
+<div style="height: 100vh; display: flex; flex-direction: column;">
+    <div style="background-color: #700f88; padding: 16px 24px; min-height: 3.5rem; display: flex; align-items: center;">
+        <a href="" style="color: white; text-decoration: none; font-size: 1.1rem; font-weight: 600;">Lanyard</a>
     </div>
-</div>
 
-<div class="nav-scrollable">
-    <div class="h-100 p-3 d-flex flex-column">
-        <ul class="list-unstyled ps-0 text-muted">
-            <li class="mb-2">
-                <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#home-collapse" aria-expanded="@(homeOpen ? "true" : "false")" @onclick="() => homeOpen = !homeOpen">
-                    Home
-                </li>
-                <div class="collapse @(homeOpen ? "show" : "")" id="home-collapse">
-                    <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                        <li>
-                            <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="" Match="NavLinkMatch.All">
-                                Home
-                            </NavLink>
-                        </li>
-                        <AuthorizeView Roles="Admin, CanControlMusic">
-                            <Authorized>
-                                <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="music">
-                                        Music
-                                    </NavLink>
-                                </li>
-                            </Authorized>
-                        </AuthorizeView>
-                    </ul>
-                </div>
-            </li>
+    <FluentNavMenu Style="flex: 1; display: flex; flex-direction: column;">
+        
+        <FluentNavLink Href="" 
+                       Icon="@(new Icons.Regular.Size20.Home())"
+                       Match="NavLinkMatch.All">
+            Home
+        </FluentNavLink>
 
-            <AuthorizeView Roles="Admin,CanClockIn">
-                <Authorized>
-                    <li class="mb-2">
-                    <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0" data-bs-toggle="collapse" data-bs-target="#rota-collapse" aria-expanded="@(rotaOpen ? "true" : "false")" @onclick="() => rotaOpen = !rotaOpen">
-                            Rota
-                        </li>
-                        <div class="collapse @(rotaOpen ? "show" : "")" id="rota-collapse">
-                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                                <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="clockin" Match="NavLinkMatch.All">
-                                        Clock In
-                                    </NavLink>
-                                </li>
-                                <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="rota" Match="NavLinkMatch.All">
-                                        Rota
-                                    </NavLink>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-                </Authorized>
-            </AuthorizeView>
+        <AuthorizeView Roles="Admin, CanControlMusic">
+            <Authorized>
+                <FluentNavLink Href="music" 
+                              Icon="@(new Icons.Regular.Size20.MusicNote2())">
+                    Music
+                </FluentNavLink>
+            </Authorized>
+        </AuthorizeView>
 
-            <AuthorizeView Roles="Admin,Manager">
-                <Authorized>
-                    <li>
-                        <li class="btn btn-toggle d-inline-flex align-items-center rounded border-0 collapsed" data-bs-toggle="collapse" data-bs-target="#manage-collapse" aria-expanded="@(manageOpen ? "true" : "false")" @onclick="() => manageOpen = !manageOpen">
-                            Manage
-                        </li>
-                        <div class="collapse @(manageOpen ? "show" : "")" id="manage-collapse">
-                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                                <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/roles">
-                                        Roles
-                                    </NavLink>
-                                </li>
-                                <li>
-                                    <NavLink class="link-body-emphasis d-inline-flex text-decoration-none rounded" href="manage/users">
-                                        Users
-                                    </NavLink>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
-                </Authorized>
-                <NotAuthorized>
-                </NotAuthorized>
-            </AuthorizeView>
-        </ul>
+        <AuthorizeView Roles="Admin,CanClockIn">
+            <Authorized>
+                <FluentNavGroup Title="Rota" 
+                               Icon="@(new Icons.Regular.Size20.CalendarLtr())"
+                               Expanded="@rotaOpen">
+                    <FluentNavLink Href="rota/clockin" 
+                                  Icon="@(new Icons.Regular.Size20.Clock())">
+                        Clock In
+                    </FluentNavLink>
+                    <FluentNavLink Href="rota/rota" 
+                                  Icon="@(new Icons.Regular.Size20.CalendarLtr())">
+                        Rota
+                    </FluentNavLink>
+                </FluentNavGroup>
+            </Authorized>
+        </AuthorizeView>
 
-        <ul class="list-unstyled ps-0 mt-auto">
-            <li class="border-top my-3"></li>
+        <AuthorizeView Roles="Admin,Manager">
+            <Authorized>
+                <FluentNavGroup Title="Manage" 
+                               Icon="@(new Icons.Regular.Size20.Settings())"
+                               Expanded="@manageOpen">
+                    <FluentNavLink Href="manage/roles" 
+                                  Icon="@(new Icons.Regular.Size20.ShieldTask())">
+                        Roles
+                    </FluentNavLink>
+                    <FluentNavLink Href="manage/users" 
+                                  Icon="@(new Icons.Regular.Size20.People())">
+                        Users
+                    </FluentNavLink>
+                </FluentNavGroup>
+            </Authorized>
+        </AuthorizeView>
 
-            <AuthorizeView>
-                <Authorized>
-                    <li class="mb-1 ms-4">
-                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark fw-semibold" href="account/manage">
-                            @(userName?.Length > 15 ? userName.Substring(0, 15) + "..." : userName)
-                        </NavLink>
-                    </li>
-                    <li class="mb-1 ms-4">
-                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="logout">
-                            Logout
-                        </NavLink>
-                    </li>
-                </Authorized>
-                <NotAuthorized>
-                    <li class="mb-1 ms-4 me-4">
-                        <NavLink class="btn-toggle d-inline-flex align-items-center rounded border-0 text-decoration-none text-dark" href="login">
-                            Login
-                        </NavLink>
-                    </li>
-                </NotAuthorized>
-            </AuthorizeView>
+        <FluentSpacer />
 
-            @* <li class="border-top my-3"></li>
-
-            <li class="ms-4 me-4">
-                <FluentDesignTheme @bind-Mode="@Mode"
-                                   @bind-OfficeColor="@OfficeColor"
-                                   OnLoaded="@OnLoaded"
-                                   OnLuminanceChanged="@OnLuminanceChanged"
-                                   StorageName="theme" />
-
-                <div style="min-height: 250px;">
-                    <FluentGrid>
-                        <FluentGridItem>
-                            <FluentSelect Label="Theme"
-                                          Width="250px"
-                                          Items="@(Enum.GetValues<DesignThemeModes>())"
-                                          @bind-SelectedOption="@Mode" />
-                        </FluentGridItem>
-
-                        <FluentGridItem>
-                            <FluentSelect Label="Color"
-                                          Items="@(Enum.GetValues<OfficeColor>().Select(i => (OfficeColor?)i))"
-                                          Height="200px"
-                                          Width="250px"
-                                          @bind-SelectedOption="@OfficeColor">
-                                <OptionTemplate>
-                                    <FluentStack>
-                                        <FluentIcon Value="@(new Icons.Filled.Size20.RectangleLandscape())"
-                                                    Color="Color.Custom"
-                                                    CustomColor="@(@context.ToString() != "default" ? context.ToString() : "#036ac4")" />
-                                        <FluentLabel>@context</FluentLabel>
-                                    </FluentStack>
-                                </OptionTemplate>
-                            </FluentSelect>
-                            <FluentButton Appearance="Appearance.Accent" OnClick="PickRandomColor">Feeling lucky?</FluentButton>
-                        </FluentGridItem>
-                    </FluentGrid>
-
-                    <FluentStack Style="margin: 30px 0px; padding: 30px; border: 1px solid var(--accent-fill-rest);">
-                        <FluentIcon Value="@(new Icons.Regular.Size24.Airplane())" />
-                        <FluentLabel>Example of content</FluentLabel>
-                        <FluentButton Appearance="Appearance.Outline">Outline button</FluentButton>
-                        <FluentButton Appearance="Appearance.Accent">Accent button</FluentButton>
-                    </FluentStack>
-                </div>
-            </li> *@
-        </ul>
-    </div>
+        <AuthorizeView>
+            <Authorized>
+                <FluentNavLink Href="account/manage" 
+                              Icon="@(new Icons.Regular.Size20.Person())">
+                    @(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)
+                </FluentNavLink>
+                <FluentNavLink Href="logout" 
+                              Icon="@(new Icons.Regular.Size20.SignOut())">
+                    Logout
+                </FluentNavLink>
+            </Authorized>
+            <NotAuthorized>
+                <FluentNavLink Href="login" 
+                              Icon="@(new Icons.Regular.Size20.ArrowEnter())">
+                    Login
+                </FluentNavLink>
+            </NotAuthorized>
+        </AuthorizeView>
+    </FluentNavMenu>
 </div>
 
 @inject AuthenticationStateProvider Auth
@@ -175,13 +96,25 @@
         userName = await _sApi.GetCurrentUserName();
 
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        UpdateExpandedStates();
+
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        UpdateExpandedStates();
         StateHasChanged();
+    }
+
+    private void UpdateExpandedStates()
+    {
+        if (currentUrl is not null)
+        {
+            manageOpen = currentUrl.StartsWith("manage/", StringComparison.OrdinalIgnoreCase);
+            rotaOpen = currentUrl.StartsWith("rota/", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public void Dispose()
