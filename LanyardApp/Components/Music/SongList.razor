@@ -12,55 +12,93 @@
 
 @implements IDisposable
 
-<div class="col-12">
-    @if (Songs is not null)
-    {
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <td class="text-end col-1">#</td>
-                    <td class="col-5">Title</td>
-                    <td class="col-3">Album</td>
-                    <td class="col-2">Date Added</td>
-                    <td class="col-1">Length</td>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var (song, index) in Songs.Select((s, i) => (s, i + 1)))
-                {
-                    <tr role="button" 
-                        @onmouseover="() => OnHover(song.SongId)" 
-                        @onmouseout="OnHoverOut" 
-                        @onclick="() => _player.Play(song.Song!, song.Playlist!)"
-                        class="@(IsCurrentlyPlaying(song.Song!) ? "table-primary" : "")">
-                        <td class="text-end">
-                            <span role="button" 
-                                  @onclick="() => OpenAddSongToPlaylistDialog(song.Song!)" 
-                                  @onclick:stopPropagation 
-                                  class="fas fa-plus-circle text-success @(HoveredSongId == song.SongId ? "" : "d-none")"></span>
-                            @if (IsCurrentlyPlaying(song.Song!))
+<FluentCard Height="auto" Style="width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" Style="width: 100%;">
+        @if (Songs is not null && Songs.Any())
+        {
+            <FluentDataGrid Items="@Songs.AsQueryable()" 
+                            GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
+                            Style="width: 100%;">
+                <ChildContent>
+                    <TemplateColumn Title="#" Align="Align.End">
+                        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                            @if (IsCurrentlyPlaying(context.Song!))
                             {
-                                <i class="fas fa-volume-up text-primary me-3"></i>
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" 
+                                           Color="Color.Accent" 
+                                           Style="cursor: pointer;"
+                                           @onclick="() => _player.Play(context.Song!, context.Playlist!)" />
                             }
-                            @index
-                        </td>
-                        <td>@song.Song!.Name</td>
-                        <td>@song.Song!.AlbumName</td>
-                        <td>@song.Song!.CreateDate.ToString("d")</td>
-                        <td>@TimeSpan.FromSeconds(song.Song!.DurationSeconds).ToString(@"mm\:ss")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" 
+                                       Color="Color.Accent" 
+                                       Style="cursor: pointer;"
+                                       @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
+
+                            <span style="text-align: right;">@(Songs.ToList().IndexOf(context) + 1 != 0 ? Songs.ToList().IndexOf(context) + 1 : "")</span>
+                        </div>
+                    </TemplateColumn>
+
+                    <TemplateColumn Title="Title">
+                        <div style="cursor: pointer; display: flex; align-items: center;"
+                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                            <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
+                                         Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
+                                @context.Song!.Name
+                            </FluentLabel>
+                        </div>
+                    </TemplateColumn>
+
+                    <TemplateColumn Title="Album">
+                        <div style="cursor: pointer;"
+                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                            <FluentLabel>@context.Song!.AlbumName</FluentLabel>
+                        </div>
+                    </TemplateColumn>
+
+                    <TemplateColumn Title="Date Added">
+                        <div style="cursor: pointer;"
+                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                            <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
+                        </div>
+                    </TemplateColumn>
+
+                    <TemplateColumn Title="Length" Align="Align.Start">
+                        <div style="cursor: pointer;"
+                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                            <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")</FluentLabel>
+                        </div>
+                    </TemplateColumn>
+                </ChildContent>
+            </FluentDataGrid>
+        }
+        else
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" 
+                         VerticalAlignment="VerticalAlignment.Center" 
+                         Style="height: 200px;">
+                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
+                    No songs available
+                </FluentLabel>
+            </FluentStack>
+        }
+    </FluentStack>
+</FluentCard>
+
+<style>
+    fluent-data-grid-row {
+        cursor: pointer;
     }
-</div>
+
+    fluent-data-grid-row:hover {
+        background-color: var(--neutral-fill-stealth-hover);
+    }
+</style>
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
 
-    private Guid? HoveredSongId = null;
     private Guid? CurrentlyPlayingSongId;
-    private IDialogReference? currentDialogReference;
 
     protected override void OnInitialized()
     {
@@ -176,14 +214,9 @@
         }
     }
 
-    private void OnHover(Guid id)
+    private async Task HandleAddSongClick(MouseEventArgs e, Song song)
     {
-        HoveredSongId = id;
-    }
-
-    private void OnHoverOut()
-    {
-        HoveredSongId = null;
+        await OpenAddSongToPlaylistDialog(song);
     }
 
     public void Dispose()

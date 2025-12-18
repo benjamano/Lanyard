@@ -266,7 +266,7 @@ i.fas {
 .card .card .card-body {
     background-color: white;
 }
-
+/*
 .table {
     margin-bottom: 0 !important;
     border-radius: 0.5rem !important;
@@ -289,7 +289,7 @@ i.fas {
         background-color: transparent !important;
         overflow: hidden !important;
         border-bottom: none !important;
-    }
+    }*/
 
 .validation-message {
     font-size: 0.9rem;
@@ -315,3 +315,13 @@ main {
     background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
     backdrop-filter: blur(16px);
 }
+
+.playlist-card {
+    transition: all 0.2s ease;
+}
+
+    .playlist-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        background-color: var(--neutral-fill-stealth-hover) !important;
+    }

@@ -9,18 +9,20 @@
 
 <PageTitle>Music</PageTitle>
 
-<FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
-    <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
+<div style="height: calc(100vh - 120px); overflow-y: auto;">
+    <FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
+        <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
 
-    <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
-        <SongList Songs="currentSongs"></SongList>
+        <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
+            <SongList Songs="currentSongs"></SongList>
+        </FluentStack>
     </FluentStack>
-</FluentStack>
+</div>
 
 <FluentStack Orientation="Orientation.Horizontal"
              HorizontalAlignment="HorizontalAlignment.Center"
              VerticalAlignment="VerticalAlignment.Center"
-             Style="position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; padding: 1rem; background-color: var(--neutral-layer-1); border-top: 1px solid var(--neutral-stroke-divider-rest); z-index: 1000;">
+             Style="position: fixed; bottom: 0; left: 0; right: 0; width: 100%; padding: 1rem; background-color: var(--neutral-layer-1); border-top: 1px solid var(--neutral-stroke-divider-rest); z-index: 1000; box-shadow: 0 -2px 8px rgba(0,0,0,0.1);">
     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
         <FluentButton Appearance="Appearance.Outline"
                       IconOnly="true"
