@@ -12,7 +12,6 @@ using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
     .AddInteractiveServerComponents();
 
@@ -22,17 +21,34 @@ builder.Services.AddScoped<MusicPlayerService>();
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 
-// Add JWT services
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<TokenStorageService>();
 builder.Services.AddScoped<JwtAuthenticationStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(provider => provider.GetRequiredService<JwtAuthenticationStateProvider>());
 builder.Services.AddCascadingAuthenticationState();
 
-// Add controllers for API endpoints
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = "Cookies";
+    options.DefaultChallengeScheme = "Cookies";
+})
+.AddCookie("Cookies", options =>
+{
+    options.LoginPath = "/login";
+    options.LogoutPath = "/logout";
+    options.AccessDeniedPath = "/login";
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = 401;
+        return Task.CompletedTask;
+    };
+});
+
+// Add authorization
+builder.Services.AddAuthorization();
+
 builder.Services.AddControllers();
 
-// Add HttpClient for Blazor components to call local API
 builder.Services.AddHttpClient();
 builder.Services.AddScoped(sp =>
 {
@@ -54,11 +70,12 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
-builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
+builder.Services.AddIdentityCore<UserProfile>(options =>
 {
     options.SignIn.RequireConfirmedAccount = true;
     options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
 })
+.AddRoles<ApplicationRole>()
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 

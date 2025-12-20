@@ -34,4 +34,8 @@
     <ProjectReference Include="..\LanyardServices\Lanyard.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Middleware\" />
+  </ItemGroup>
+
 </Project>

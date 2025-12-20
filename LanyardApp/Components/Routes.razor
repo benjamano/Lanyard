@@ -8,12 +8,23 @@
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="@routeData"
                                 DefaultLayout="@GetLayout(routeData)">
+                <Authorizing>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px;">
+                        <FluentProgressRing />
+                        <p>Checking authentication...</p>
+                    </div>
+                </Authorizing>
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
             </AuthorizeRouteView>
 
             <FocusOnNavigate RouteData="@routeData" Selector="h1" />
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@inject NavigationManager NavigationManager
 
 @code {
     private Type GetLayout(RouteData routeData)
@@ -24,5 +35,16 @@
             return typeof(MainLayout);
 
         return typeof(CustomerMainLayout);
+    }
+
+    private class RedirectToLogin : ComponentBase
+    {
+        [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+        protected override void OnInitialized()
+        {
+            var returnUrl = Uri.EscapeDataString(Navigation.Uri);
+            Navigation.NavigateTo($"/login?returnUrl={returnUrl}");
+        }
     }
 }

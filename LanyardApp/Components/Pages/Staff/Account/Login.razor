@@ -8,6 +8,9 @@
 @using Lanyard.Infrastructure.Models;
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Lanyard.App.Components.Layout.Staff
+
+@layout AuthLayout
 
 @inject HttpClient Http
 @inject IToastService ToastService
@@ -88,6 +91,9 @@
     [SupplyParameterFromForm]
     public LoginDto LoginModel { get; set; } = new();
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     public bool IsLoggingIn = false;
 
     protected override async Task OnInitializedAsync()
@@ -107,8 +113,6 @@
 
         try
         {
-            await Task.Delay(5000);
-
             HttpResponseMessage response = await Http.PostAsJsonAsync("api/auth/login", LoginModel);
 
             if (response.IsSuccessStatusCode)
@@ -119,7 +123,13 @@
                 {
                     await TokenStorage.SetTokenAsync(result.Token);
                     AuthStateProvider.NotifyAuthenticationStateChanged();
-                    Navigation.NavigateTo("/staff", forceLoad: true);
+                    
+                    // Small delay to ensure cookie is set
+                    await Task.Delay(100);
+                    
+                    // Redirect to return URL or default to staff home
+                    var redirectUrl = !string.IsNullOrEmpty(ReturnUrl) ? ReturnUrl : "/staff";
+                    Navigation.NavigateTo(redirectUrl);
                 }
             }
             else

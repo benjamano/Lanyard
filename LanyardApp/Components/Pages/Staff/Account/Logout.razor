@@ -2,6 +2,9 @@
 
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
+@using Lanyard.App.Components.Layout.Staff
+
+@layout AuthLayout
 
 @inject TokenStorageService TokenStorage
 @inject JwtAuthenticationStateProvider AuthStateProvider
@@ -12,6 +15,10 @@
     {
         await TokenStorage.RemoveTokenAsync();
         AuthStateProvider.NotifyAuthenticationStateChanged();
-        Navigation.NavigateTo("/login", forceLoad: true);
+        
+        // Small delay to ensure cookie is removed
+        await Task.Delay(100);
+        
+        Navigation.NavigateTo("/login");
     }
 }

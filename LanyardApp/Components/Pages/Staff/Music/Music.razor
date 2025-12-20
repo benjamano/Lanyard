@@ -1,9 +1,12 @@
 ﻿@page "/music"
 
+@attribute [Authorize]
+
 @using Lanyard.App.Components.Music
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
+@using Microsoft.AspNetCore.Authorization
 @using NAudio.Wave;
 
 @inject MusicPlayerService _player

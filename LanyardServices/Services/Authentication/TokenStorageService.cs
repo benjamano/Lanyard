@@ -13,7 +13,12 @@ public class TokenStorageService
 
     public async Task SetTokenAsync(string token)
     {
+        // Store in localStorage for client-side access
         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "authToken", token);
+        
+        // Store in cookie for server-side middleware access
+        await _jsRuntime.InvokeVoidAsync("eval", 
+            $"document.cookie = 'authToken={token}; path=/; max-age=86400; SameSite=Strict'");
     }
 
     public async Task<string?> GetTokenAsync()
@@ -32,7 +37,12 @@ public class TokenStorageService
     {
         try
         {
+            // Remove from localStorage
             await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "authToken");
+            
+            // Remove cookie
+            await _jsRuntime.InvokeVoidAsync("eval", 
+                "document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'");
         }
         catch (TaskCanceledException)
         {
