@@ -8,8 +8,10 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.nav{
+.nav {
     gap: 10px !important;
+    display: flex;
+    justify-content: space-between !important;
 }
 
 .nav-logo-container {
@@ -29,6 +31,12 @@
 
 .nav-logo:hover {
     color: #ffffff !important;
+}
+
+.nav-logo img {
+    height: 82px;
+    width: auto;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
 }
 
 .nav, .nav-center {
