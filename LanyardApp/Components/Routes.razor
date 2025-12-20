@@ -1,15 +1,28 @@
-﻿@using Lanyard.App.Components.Accounts
-@using Lanyard.Application.Services.Authentication
-
-@using Lanyard.App.Components.Layout.Staff
-@layout MainLayout
+﻿@using Lanyard.App.Components.Layout.Staff
+@using Lanyard.App.Components.Layout.Customer
+@using Microsoft.AspNetCore.Components.Routing
 
 <CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.Staff.NotFound)">
+    <Router AppAssembly="@typeof(Program).Assembly"
+            NotFoundPage="typeof(Pages.Staff.NotFound)">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.Staff.MainLayout)">
+            <AuthorizeRouteView RouteData="@routeData"
+                                DefaultLayout="@GetLayout(routeData)">
             </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    private Type GetLayout(RouteData routeData)
+    {
+        Type? pageType = routeData.PageType;
+
+        if (pageType.Namespace?.Contains(".Staff") == true)
+            return typeof(MainLayout);
+
+        return typeof(CustomerMainLayout);
+    }
+}

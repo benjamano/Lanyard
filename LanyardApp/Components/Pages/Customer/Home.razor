@@ -1,7 +1,212 @@
 ﻿@page "/"
 
-@using Lanyard.App.Components.Layout.Customer
-@layout MainLayout
+<PageTitle>Play2Day - Family Fun & Laser Tag</PageTitle>
 
-<PageTitle>Play2Day</PageTitle>
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="hero-content">
+        <h1 class="hero-title">Welcome to Play2Day</h1>
+        <p class="hero-subtitle">The Ultimate Laser Tag & Family Entertainment Experience</p>
+        <div class="hero-buttons">
+            <a href="/book" class="btn-primary">Book Now</a>
+            <a href="/about" class="btn-secondary">Learn More</a>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="features-section">
+    <div class="container">
+        <h2 class="section-title">Why Choose Play2Day?</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    @* <FluentIcon Value="@(new Icons.Regular.Size48.Games())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                </div>
+                <h3 class="feature-title">Laser Tag Arena</h3>
+                <p class="feature-description">State-of-the-art laser tag equipment in our multi-level arena designed for maximum fun and excitement.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    @* <FluentIcon Value="@(new Icons.Regular.Size48.People())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                </div>
+                <h3 class="feature-title">Party Packages</h3>
+                <p class="feature-description">Perfect for birthdays, team building, and group events. Customizable packages to suit your needs.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    @* <FluentIcon Value="@(new Icons.Regular.Size48.Food())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                </div>
+                <h3 class="feature-title">Café & Refreshments</h3>
+                <p class="feature-description">Enjoy delicious snacks, meals, and beverages in our comfortable café area.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    @* <FluentIcon Value="@(new Icons.Regular.Size48.Trophy())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                </div>
+                <h3 class="feature-title">Tournaments & Events</h3>
+                <p class="feature-description">Join our regular tournaments and special events for a chance to win prizes and glory!</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pricing Section -->
+<section class="pricing-section">
+    <div class="container">
+        <h2 class="section-title">Our Packages</h2>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <h3 class="pricing-title">Individual</h3>
+                    <div class="pricing-price">
+                        <span class="price-amount">£12</span>
+                        <span class="price-period">per person</span>
+                    </div>
+                </div>
+                <ul class="pricing-features">
+                    <li>2 Laser Tag Games</li>
+                    <li>Free Locker</li>
+                    <li>Soft Drink Included</li>
+                    <li>Score Tracking</li>
+                </ul>
+                <a href="/book" class="pricing-button">Book Now</a>
+            </div>
+
+            <div class="pricing-card featured">
+                <div class="pricing-badge">Most Popular</div>
+                <div class="pricing-header">
+                    <h3 class="pricing-title">Birthday Party</h3>
+                    <div class="pricing-price">
+                        <span class="price-amount">£180</span>
+                        <span class="price-period">up to 10 kids</span>
+                    </div>
+                </div>
+                <ul class="pricing-features">
+                    <li>3 Laser Tag Games</li>
+                    <li>Private Party Room (2 hours)</li>
+                    <li>Food & Drinks Included</li>
+                    <li>Dedicated Party Host</li>
+                    <li>Birthday Cake Setup</li>
+                    <li>Party Invitations</li>
+                </ul>
+                <a href="/book" class="pricing-button">Book Now</a>
+            </div>
+
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <h3 class="pricing-title">Group Package</h3>
+                    <div class="pricing-price">
+                        <span class="price-amount">£10</span>
+                        <span class="price-period">per person</span>
+                    </div>
+                </div>
+                <ul class="pricing-features">
+                    <li>3 Laser Tag Games</li>
+                    <li>Minimum 15 People</li>
+                    <li>Reserved Area</li>
+                    <li>Team Building Options</li>
+                    <li>Group Photos</li>
+                </ul>
+                <a href="/book" class="pricing-button">Book Now</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Locations Section -->
+<section class="locations-section">
+    <div class="container">
+        <h2 class="section-title">Visit Us</h2>
+        <div class="locations-grid">
+            <div class="location-card">
+                <h3 class="location-name">Ipswich</h3>
+                <div class="location-details">
+                    <p class="location-address">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        123 Main Street, Ipswich, IP1 1AA
+                    </p>
+                    <p class="location-phone">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Phone())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        01473 123456
+                    </p>
+                    <p class="location-hours">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        Open Daily: 10:00 AM - 10:00 PM
+                    </p>
+                </div>
+                <a href="/locations/ipswich" class="location-button">View Details</a>
+            </div>
+
+            <div class="location-card">
+                <h3 class="location-name">Wisbech</h3>
+                <div class="location-details">
+                    <p class="location-address">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Location())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        456 High Street, Wisbech, PE13 1BB
+                    </p>
+                    <p class="location-phone">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Phone())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        01945 654321
+                    </p>
+                    <p class="location-hours">
+                        @* <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Custom" CustomColor="#f91836" /> *@
+                        Open Daily: 9:00 AM - 11:00 PM
+                    </p>
+                </div>
+                <a href="/locations/wisbech" class="location-button">View Details</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Testimonials Section -->
+<section class="testimonials-section">
+    <div class="container">
+        <h2 class="section-title">What Our Customers Say</h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <div class="testimonial-rating">
+                    ⭐⭐⭐⭐⭐
+                </div>
+                <p class="testimonial-text">
+                    "Amazing experience! My son's birthday party was a huge success. The staff were fantastic and the kids had an absolute blast!"
+                </p>
+                <p class="testimonial-author">- Sarah Thompson</p>
+            </div>
+
+            <div class="testimonial-card">
+                <div class="testimonial-rating">
+                    ⭐⭐⭐⭐⭐
+                </div>
+                <p class="testimonial-text">
+                    "Best laser tag venue in the area! Great facilities, friendly staff, and so much fun for all ages. Highly recommend!"
+                </p>
+                <p class="testimonial-author">- Mark Johnson</p>
+            </div>
+
+            <div class="testimonial-card">
+                <div class="testimonial-rating">
+                    ⭐⭐⭐⭐⭐
+                </div>
+                <p class="testimonial-text">
+                    "We organized a team building event here and it exceeded all expectations. Professional service and a great time for everyone!"
+                </p>
+                <p class="testimonial-author">- Emma Williams</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Call to Action Section -->
+<section class="cta-section">
+    <div class="container">
+        <h2 class="cta-title">Ready for an Adventure?</h2>
+        <p class="cta-text">Book your laser tag experience today and create unforgettable memories!</p>
+        <a href="/book" class="cta-button">Book Your Session Now</a>
+    </div>
+</section>
 
