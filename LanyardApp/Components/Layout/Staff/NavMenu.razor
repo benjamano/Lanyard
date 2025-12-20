@@ -2,131 +2,143 @@
 @implements IDisposable
 
 @inject NavigationManager NavigationManager
+@inject SecurityService SecurityService
 
-<div style="height: 100vh; display: flex; flex-direction: column;">
-    <div style="background-color: #700f88; padding: 16px 24px; min-height: 3.5rem; display: flex; align-items: center;">
-        <a href="" style="color: white; text-decoration: none; font-size: 1.1rem; font-weight: 600;">Lanyard</a>
-    </div>
-
-    <FluentNavMenu Style="flex: 1; display: flex; flex-direction: column;">
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
+    <div class="container-fluid px-4">
         
-        <FluentNavLink Href="staff" 
-                       Icon="@(new Icons.Regular.Size20.Home())"
-                       Match="NavLinkMatch.All">
-            Home
-        </FluentNavLink>
+        <!-- Logo/Brand -->
+        <a class="navbar-brand d-flex align-items-center" href="/staff">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Apps())" Color="Color.Custom" CustomColor="#700f88" class="me-2" />
+            <span style="font-size: 1.5rem; font-weight: 700; color: #700f88;">Lanyard</span>
+        </a>
 
-        <AuthorizeView Roles="Admin, CanControlMusic">
-            <Authorized>
-                <FluentNavLink Href="music" 
-                              Icon="@(new Icons.Regular.Size20.MusicNote2())">
-                    Music
-                </FluentNavLink>
-            </Authorized>
-        </AuthorizeView>
+        <!-- Navbar toggler for mobile -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
 
-        <AuthorizeView Roles="Admin,CanClockIn">
-            <Authorized>
-                <FluentNavGroup Title="Rota" 
-                               Icon="@(new Icons.Regular.Size20.CalendarLtr())"
-                               Expanded="@rotaOpen">
-                    <FluentNavLink Href="rota/clockin" 
-                                  Icon="@(new Icons.Regular.Size20.Clock())">
-                        Clock In
-                    </FluentNavLink>
-                    <FluentNavLink Href="rota/rota" 
-                                  Icon="@(new Icons.Regular.Size20.CalendarLtr())">
-                        Rota
-                    </FluentNavLink>
-                </FluentNavGroup>
-            </Authorized>
-        </AuthorizeView>
+        <!-- Center and Right Navigation -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            
+            <!-- Center Navigation Links -->
+            <ul class="navbar-nav mx-auto">
+                
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center px-3" href="/staff">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                        <span>Home</span>
+                    </a>
+                </li>
 
-        <AuthorizeView Roles="Admin,Manager">
-            <Authorized>
-                <FluentNavGroup Title="Manage" 
-                               Icon="@(new Icons.Regular.Size20.Settings())"
-                               Expanded="@manageOpen">
-                    <FluentNavLink Href="manage/roles" 
-                                  Icon="@(new Icons.Regular.Size20.ShieldTask())">
-                        Roles
-                    </FluentNavLink>
-                    <FluentNavLink Href="manage/users" 
-                                  Icon="@(new Icons.Regular.Size20.People())">
-                        Users
-                    </FluentNavLink>
-                </FluentNavGroup>
-            </Authorized>
-        </AuthorizeView>
+                <AuthorizeView Roles="Admin, CanControlMusic">
+                    <Authorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/music">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.MusicNote2())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Music</span>
+                            </a>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
 
-        <FluentNavLink Href="/"
-                       Icon="@(new Icons.Regular.Size20.WebAsset())"
-                       Match="NavLinkMatch.All">
-            Play2Day Website
-        </FluentNavLink>
+                <AuthorizeView Roles="Admin,CanClockIn">
+                    <Authorized>
+                        <li class="nav-item">
+                            <div class="nav-dropdown">
+                                <span class="nav-link nav-dropdown-toggle d-flex align-items-center px-3">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                    <span>Rota</span>
+                                </span>
+                                <div class="nav-dropdown-menu">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/rota/clockin">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Clock In</span>
+                                    </a>
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/rota/rota">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Rota</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
 
-        <FluentSpacer />
+                <AuthorizeView Roles="Admin,Manager">
+                    <Authorized>
+                        <li class="nav-item">
+                            <div class="nav-dropdown">
+                                <span class="nav-link nav-dropdown-toggle d-flex align-items-center px-3">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.Settings())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                    <span>Manage</span>
+                                </span>
+                                <div class="nav-dropdown-menu">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/manage/roles">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.ShieldTask())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Roles</span>
+                                    </a>
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/manage/users">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Users</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
 
-        <AuthorizeView>
-            <Authorized>
-                <FluentNavLink Href="account/manage" 
-                              Icon="@(new Icons.Regular.Size20.Person())">
-                    @(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)
-                </FluentNavLink>
-                <FluentNavLink Href="logout" 
-                              Icon="@(new Icons.Regular.Size20.SignOut())">
-                    Logout
-                </FluentNavLink>
-            </Authorized>
-            <NotAuthorized>
-                <FluentNavLink Href="login" 
-                              Icon="@(new Icons.Regular.Size20.ArrowEnter())">
-                    Login
-                </FluentNavLink>
-            </NotAuthorized>
-        </AuthorizeView>
-    </FluentNavMenu>
-</div>
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center px-3" href="/">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.WebAsset())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                        <span>Customer Site</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Right Side User Menu -->
+            <ul class="navbar-nav ms-auto">
+                <AuthorizeView>
+                    <Authorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/account/manage">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>@(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/logout">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.SignOut())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Logout</span>
+                            </a>
+                        </li>
+                    </Authorized>
+                    <NotAuthorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/login">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowEnter())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Login</span>
+                            </a>
+                        </li>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </ul>
+        </div>
+    </div>
+</nav>
 
 @inject AuthenticationStateProvider Auth
 
 @code {
-    private string? currentUrl;
     private string? userName;
-
-    private bool homeOpen = true;
-    private bool manageOpen = false;
-    private bool rotaOpen = false;
 
     protected override async Task OnInitializedAsync()
     {
-        userName = await _sApi.GetCurrentUserName();
-
-        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        UpdateExpandedStates();
-
-        NavigationManager.LocationChanged += OnLocationChanged;
-    }
-
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        UpdateExpandedStates();
-        StateHasChanged();
-    }
-
-    private void UpdateExpandedStates()
-    {
-        if (currentUrl is not null)
-        {
-            manageOpen = currentUrl.StartsWith("manage/", StringComparison.OrdinalIgnoreCase);
-            rotaOpen = currentUrl.StartsWith("rota/", StringComparison.OrdinalIgnoreCase);
-        }
+        userName = await SecurityService.GetCurrentUserName();
     }
 
     public void Dispose()
     {
-        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }
 

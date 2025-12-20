@@ -1,1 +1,38 @@
 /*Avoid adding styles into this file as this will affec tboth customer & staff sides pages*/
+
+/* Shared styles between customer & staff sides */
+
+/* Custom Scrollbar Styles */
+/* Uses CSS variables for color customization */
+
+/* Scrollbar for Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track-color, #f1f1f1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb-color, #888);
+    border-radius: 10px;
+    border: 2px solid var(--scrollbar-track-color, #f1f1f1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover-color, #555);
+}
+
+/* Scrollbar for Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-color, #888) var(--scrollbar-track-color, #f1f1f1);
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}

@@ -13,49 +13,66 @@ using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add Razor Components with Interactive Server
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
     .AddInteractiveServerComponents();
 
-builder.Services.AddSingleton<MusicPlayer>();
+// Add HttpContextAccessor for accessing the current user
+builder.Services.AddHttpContextAccessor();
 
+// Business Services
+builder.Services.AddSingleton<MusicPlayer>();
 builder.Services.AddScoped<MusicPlayerService>();
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 
-builder.Services.AddScoped<JwtTokenService>();
-builder.Services.AddScoped<TokenStorageService>();
-builder.Services.AddScoped<JwtAuthenticationStateProvider>();
-builder.Services.AddScoped<AuthenticationStateProvider>(provider => provider.GetRequiredService<JwtAuthenticationStateProvider>());
-builder.Services.AddCascadingAuthenticationState();
+// Configure Database
+string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-builder.Services.AddAuthentication(options =>
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
+
+builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+// Configure Identity with minimal settings
+builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
 {
-    options.DefaultScheme = "Cookies";
-    options.DefaultChallengeScheme = "Cookies";
+    options.SignIn.RequireConfirmedAccount = false; // Allow login without email confirmation
+    options.Password.RequireNonAlphanumeric = false;
 })
-.AddCookie("Cookies", options =>
-{
-    options.LoginPath = "/login";
-    options.LogoutPath = "/logout";
-    options.AccessDeniedPath = "/login";
-    options.Events.OnRedirectToLogin = context =>
-    {
-        context.Response.StatusCode = 401;
-        return Task.CompletedTask;
-    };
-});
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddSignInManager()
+.AddDefaultTokenProviders();
 
 builder.Services.AddAuthorization();
 
+// Configure cookie to persist login across sessions
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.SlidingExpiration = true;
+    options.LoginPath = "/login";
+    options.LogoutPath = "/logout";
+    options.AccessDeniedPath = "/login";
+});
+
+// Add custom authentication state provider
+builder.Services.AddScoped<AuthenticationStateProvider, IdentityAuthenticationStateProvider>();
+builder.Services.AddCascadingAuthenticationState();
+
+// Add Controllers for API endpoints
 builder.Services.AddControllers();
 
+// Add HttpClient
 builder.Services.AddHttpClient();
 builder.Services.AddScoped(sp =>
 {
-    var navigationManager = sp.GetRequiredService<NavigationManager>();
+    NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
 });
 
+// Add FluentUI Components
 builder.Services.AddFluentUIComponents(options =>
 {
     options.ValidateClassNames = true;
@@ -63,30 +80,12 @@ builder.Services.AddFluentUIComponents(options =>
     options.HideTooltipOnCursorLeave = true;
 });
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString, b=> b.MigrationsAssembly("Lanyard.Infrastructure")));
-
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-
-builder.Services.AddIdentityCore<UserProfile>(options =>
-{
-    options.SignIn.RequireConfirmedAccount = true;
-    options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-})
-.AddRoles<ApplicationRole>()
-.AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders()
-.AddUserManager<UserManager<UserProfile>>()
-.AddRoleManager<RoleManager<ApplicationRole>>();
-
 var app = builder.Build();
 
 // Seed development data (only runs in Development environment)
 await DevelopmentDataSeeder.SeedDevelopmentDataAsync(app.Services, app.Environment);
 
-// Configure the HTTP request pipeline.
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseMigrationsEndPoint();
@@ -94,15 +93,18 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Map controllers before static assets and Razor components
 app.MapControllers();
 
 app.MapStaticAssets();

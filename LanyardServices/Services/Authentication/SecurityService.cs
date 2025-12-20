@@ -11,7 +11,7 @@ namespace Lanyard.Application.Services.Authentication;
 
 public class SecurityService
 {
-    private readonly AuthenticationStateProvider AuthStateProvider;
+    private readonly AuthenticationStateProvider _authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
 
@@ -20,21 +20,21 @@ public class SecurityService
         IDbContextFactory<ApplicationDbContext> factory,
         UserManager<UserProfile> userManager)
     {
-        AuthStateProvider = authStateProvider;
+        _authStateProvider = authStateProvider;
         _factory = factory;
         _userManager = userManager;
     }
 
     public async Task<string?> GetCurrentUserIdAsync()
     {
-        AuthenticationState authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
         ClaimsPrincipal user = authState.User;
 
-        if (user.Identity is not null && user.Identity.IsAuthenticated)
+        if (user?.Identity?.IsAuthenticated == true)
         {
-            return user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value
-                ?? user.FindFirst("oid")?.Value
-                ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value
+                ?? user.FindFirst("sub")?.Value;
         }
 
         return null;
@@ -42,7 +42,8 @@ public class SecurityService
 
     public async Task<bool> IsUserLoggedIn()
     {
-        return await GetCurrentUserIdAsync() != null;
+        AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
+        return authState.User?.Identity?.IsAuthenticated == true;
     }
 
     public async Task<UserProfile?> GetCurrentUserProfileAsync()
@@ -51,12 +52,7 @@ public class SecurityService
 
         if (userId is not null)
         {
-            using ApplicationDbContext ctx = _factory.CreateDbContext();
-
-            return await ctx.Users
-                .AsNoTracking()
-                .Where(x => x.Id == userId)
-                .FirstOrDefaultAsync();
+            return await _userManager.FindByIdAsync(userId);
         }
 
         return null;
@@ -71,20 +67,17 @@ public class SecurityService
             return null;
         }
 
-        if (string.IsNullOrEmpty(user?.FirstName) || string.IsNullOrEmpty(user?.LastName))
+        if (!string.IsNullOrEmpty(user.FirstName) && !string.IsNullOrEmpty(user.LastName))
         {
-            return user?.Email;
+            return $"{user.FirstName} {user.LastName}";
         }
-        else
-        {
-            return user?.FirstName + " " + user?.LastName;
-        }
+
+        return user.Email ?? user.UserName;
     }
 
     public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
     {
         using ApplicationDbContext ctx = _factory.CreateDbContext();
-
         return await ctx.Users.ToListAsync();
     }
 
@@ -102,7 +95,6 @@ public class SecurityService
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
         using ApplicationDbContext ctx = _factory.CreateDbContext();
-
         return await ctx.Users.ToListAsync();
     }
 
@@ -123,11 +115,11 @@ public class SecurityService
                 return Result<UserProfile>.Fail("The new user's first and last names are required!");
             }
 
-            string initial = user.FirstName?.ToLowerInvariant()[..1] ?? "";
-            string surname = user.LastName?.ToLowerInvariant() ?? "";
+            string initial = user.FirstName.ToLowerInvariant()[..1];
+            string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
 
-            string generatedPassword = "changeME1234!"; //GenerateSecurePassword();
+            string generatedPassword = "changeME1234!";
 
             user.EmailConfirmed = true;
 
@@ -210,34 +202,5 @@ public class SecurityService
         {
             return Result<bool>.Fail(ex.Message);
         }
-    }
-
-    private static string GenerateSecurePassword(int length = 16)
-    {
-        const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        const string lowercase = "abcdefghijklmnopqrstuvwxyz";
-        const string digits = "0123456789";
-        const string special = "!@#$%^&*()_+-=[]{}|;:,.<>?";
-        const string allChars = uppercase + lowercase + digits + special;
-
-        char[] password = new char[length];
-
-        password[0] = uppercase[RandomNumberGenerator.GetInt32(uppercase.Length)];
-        password[1] = lowercase[RandomNumberGenerator.GetInt32(lowercase.Length)];
-        password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
-        password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
-
-        for (int i = 4; i < length; i++)
-        {
-            password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
-        }
-
-        for (int i = password.Length - 1; i > 0; i--)
-        {
-            int j = RandomNumberGenerator.GetInt32(i + 1);
-            (password[i], password[j]) = (password[j], password[i]);
-        }
-
-        return new string(password);
     }
 }

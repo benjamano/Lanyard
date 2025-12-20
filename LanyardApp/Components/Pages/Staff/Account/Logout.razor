@@ -1,24 +1,41 @@
 @page "/logout"
+@rendermode InteractiveServer
 
 @using Lanyard.Application.Services
-@using Lanyard.Application.Services.Authentication
 @using Lanyard.App.Components.Layout.Staff
 
 @layout AuthLayout
 
-@inject TokenStorageService TokenStorage
-@inject JwtAuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
+@inject HttpClient Http
+
+<FluentStack Orientation="Orientation.Vertical" 
+              VerticalAlignment="VerticalAlignment.Center"
+              HorizontalAlignment="HorizontalAlignment.Center"
+              Style="min-height: 70vh; padding: 16px;">
+    
+    <FluentCard Style="width: 400px; max-width: 90vw; padding: 32px; text-align: center;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24">
+            <FluentProgressRing />
+            <FluentLabel Typo="Typography.Body">Logging you out...</FluentLabel>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
 
 @code {
     protected override async Task OnInitializedAsync()
     {
-        await TokenStorage.RemoveTokenAsync();
-        AuthStateProvider.NotifyAuthenticationStateChanged();
+        try
+        {
+            // Call logout API
+            await Http.PostAsync("api/auth/logout", null);
+        }
+        catch
+        {
+            // Ignore errors during logout
+        }
         
-        // Small delay to ensure cookie is removed
-        await Task.Delay(100);
-        
-        Navigation.NavigateTo("/login");
+        // Force full page reload to clear Blazor Server circuit
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }

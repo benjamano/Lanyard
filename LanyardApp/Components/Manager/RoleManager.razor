@@ -3,8 +3,8 @@
 @using Lanyard.Infrastructure.Models
 
 @inject ApplicationRolesService _rApi
-@inject JwtTokenService _jwtTokenService
-@inject JwtAuthenticationStateProvider _authStateProvider
+@inject SecurityService _sApi
+@inject SignInManager<UserProfile> SignInManager
 @inject UserManager<UserProfile> _umApi
 @inject IToastService ToastService
 
@@ -176,12 +176,7 @@
         string? currentUserId = await _sApi.GetCurrentUserIdAsync();
         if (result.Data is not null && result.Data.Contains(currentUserId!))
         {
-            UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
-            if (currentUser is not null)
-            {
-                await _jwtTokenService.RegenerateTokenAsync(currentUser);
-                _authStateProvider.NotifyAuthenticationStateChanged();
-            }
+            ToastService.ShowWarning("Your roles have changed. Please log out and log back in for changes to take effect.");
         }
 
         await LoadRoles();

@@ -3,12 +3,12 @@
 @using Lanyard.App.Components.Layout
 @using Lanyard.Application.Services.Authentication
 
-<div class="page">
-    <div class="sidebar">
+<div class="page staff-layout" style="display: flex; flex-direction: column; height: 100vh;">
+    <div class="top-bar">
         <NavMenu />
     </div>
 
-    <main>
+    <main style="flex: 1; overflow-y: auto;">
         <article class="content position-relative h-100 p-0 px-2 py-2 m-0">
             <CustomErrorBoundaryHandler>
                 <ChildContent>

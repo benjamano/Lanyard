@@ -1,23 +1,11 @@
 ﻿@page "/login"
 
-@using System.Threading.Tasks
-@using Lanyard.Application.Services
-@using Lanyard.Application.Services.Authentication
-@using Lanyard.Infrastructure.DTO;
-@using Lanyard.Infrastructure.DataAccess;
-@using Lanyard.Infrastructure.Models;
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Identity
+@using Lanyard.Infrastructure.DTO
 @using Lanyard.App.Components.Layout.Staff
 
 @layout AuthLayout
 
-@inject HttpClient Http
-@inject IToastService ToastService
-@inject ApplicationDbContext _context
 @inject NavigationManager Navigation
-@inject TokenStorageService TokenStorage
-@inject JwtAuthenticationStateProvider AuthStateProvider
 
 <FluentStack Orientation="Orientation.Vertical" 
               VerticalAlignment="VerticalAlignment.Center"
@@ -30,117 +18,56 @@
                 Please Login
             </FluentLabel>
 
-            <EditForm Model="LoginModel" OnValidSubmit="HandleValidSubmit" FormName="LoginModel" class="w-100">
-                <DataAnnotationsValidator />
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <FluentMessageBar Intent="MessageIntent.Error">
+                    @ErrorMessage
+                </FluentMessageBar>
+            }
+
+            <form method="post" action="/api/auth/login-form">
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                    <FluentTextField @bind-Value="LoginModel.Username"
+                    <FluentTextField Name="username"
                                      Label="Username"
                                      Required
-                                     Disabled="@IsLoggingIn"
                                      Placeholder="Enter your username"
                                      Style="width: 100%;">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextField>
-                    <FluentValidationMessage For="@(() => LoginModel.Username)" />
 
-                    <FluentTextField @bind-Value="LoginModel.Password"
+                    <FluentTextField Name="password"
                                      Label="Password"
                                      TextFieldType="TextFieldType.Password"
                                      Required
-                                     Disabled="@IsLoggingIn"
                                      Placeholder="Enter your password"
                                      Style="width: 100%;">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                     </FluentTextField>
-                    <FluentValidationMessage For="@(() => LoginModel.Password)" />
 
-                    <FluentCheckbox @bind-Value="LoginModel.RememberMe"
-                                    Disabled="@IsLoggingIn"
+                    <FluentCheckbox Name="rememberMe"
                                     Label="Remember Me" />
 
                     <FluentStack Orientation="Orientation.Horizontal"
                                  HorizontalAlignment="HorizontalAlignment.End"
                                  Style="margin-top: 8px;">
-                        @if (IsLoggingIn)
-                        {
-                            <FluentButton Appearance="Appearance.Accent"
-                                          Type="ButtonType.Submit"
-                                          Disabled="@IsLoggingIn">
-                                <FluentProgressRing Color="white" Style="width: 16px; height: 16px;" slot="start" />
-                                <span>Logging you in...</span>
-                            </FluentButton>
-                        }
-                        else
-                        {
-                            <FluentButton Appearance="Appearance.Accent"
-                                          Type="ButtonType.Submit"
-                                          Disabled="@IsLoggingIn">
-                                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.ArrowEnter" Slot="start" />
-                                <span>Login</span>
-                            </FluentButton>
-                            
-                        }
+                        <FluentButton Appearance="Appearance.Accent"
+                                      Type="ButtonType.Submit">
+                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.ArrowEnter" Slot="start" />
+                            <span>Login</span>
+                        </FluentButton>
                     </FluentStack>
                 </FluentStack>
-            </EditForm>
+            </form>
         </FluentStack>
     </FluentCard>
 </FluentStack>
 
 @code {
-    [SupplyParameterFromForm]
-    public LoginDto LoginModel { get; set; } = new();
-
     [SupplyParameterFromQuery(Name = "returnUrl")]
     public string? ReturnUrl { get; set; }
 
-    public bool IsLoggingIn = false;
-
-    protected override async Task OnInitializedAsync()
-    {
-        LoginModel ??= new();
-    }
-
-    private void HandleValidSubmit()
-    {
-        _ = CheckUserCredential();
-    }
-
-    private async Task CheckUserCredential()
-    {
-        IsLoggingIn = true;
-        StateHasChanged();
-
-        try
-        {
-            HttpResponseMessage response = await Http.PostAsJsonAsync("api/auth/login", LoginModel);
-
-            if (response.IsSuccessStatusCode)
-            {
-                LoginResponseDto? result = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
-                
-                if (result != null)
-                {
-                    await TokenStorage.SetTokenAsync(result.Token);
-                    AuthStateProvider.NotifyAuthenticationStateChanged();
-                    
-                    // Small delay to ensure cookie is set
-                    await Task.Delay(100);
-                    
-                    // Redirect to return URL or default to staff home
-                    var redirectUrl = !string.IsNullOrEmpty(ReturnUrl) ? ReturnUrl : "/staff";
-                    Navigation.NavigateTo(redirectUrl);
-                }
-            }
-            else
-            {
-                ToastService.ShowError("Login Failed! Invalid username or password.");
-            }
-        }
-        finally
-        {
-            IsLoggingIn = false;
-            StateHasChanged();
-        }
-    }
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorMessage { get; set; }
 }
