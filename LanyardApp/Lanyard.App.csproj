@@ -35,7 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Components\Pages\Staff\Utilities\" />
     <Folder Include="Middleware\" />
+    <Folder Include="Scripts\" />
+    <Folder Include="Utilities\" />
   </ItemGroup>
 
 </Project>

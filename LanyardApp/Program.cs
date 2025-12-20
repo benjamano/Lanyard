@@ -1,4 +1,5 @@
 using Lanyard.App.Components;
+using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
@@ -44,7 +45,6 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Add authorization
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
@@ -77,9 +77,14 @@ builder.Services.AddIdentityCore<UserProfile>(options =>
 })
 .AddRoles<ApplicationRole>()
 .AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
+.AddDefaultTokenProviders()
+.AddUserManager<UserManager<UserProfile>>()
+.AddRoleManager<RoleManager<ApplicationRole>>();
 
 var app = builder.Build();
+
+// Seed development data (only runs in Development environment)
+await DevelopmentDataSeeder.SeedDevelopmentDataAsync(app.Services, app.Environment);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
