@@ -1,7 +1,8 @@
-﻿@using LanyardData.Models
-@using LanyardData.DataAccess
+﻿@using Lanyard.Application.Services
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DataAccess
+@using Lanyard.Infrastructure.Models
 @using Microsoft.EntityFrameworkCore
-@using LanyardAPI.Services
 @using NAudio.Wave
 
 @inject ApplicationDbContext _context
@@ -9,7 +10,7 @@
 @inject IDialogService DialogService
 @inject IToastService ToastService
 
-@using LanyardApp.Components.Music;
+@using Lanyard.App.Components.Music;
 
 <FluentStack Width="auto" class="ps-1 h-100" Orientation="Orientation.Vertical">
     @if (playlists == null)

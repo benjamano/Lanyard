@@ -1,11 +1,13 @@
-﻿@using LanyardApp.Components.Accounts
+﻿@using Lanyard.App.Components.Accounts
+@using Lanyard.Application.Services.Authentication
+
+@using Lanyard.App.Components.Layout.Staff
+@layout MainLayout
+
 <CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.Staff.NotFound)">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
-                <NotAuthorized>
-                    <RedirectToLogin />
-                </NotAuthorized>
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.Staff.MainLayout)">
             </AuthorizeRouteView>
             <FocusOnNavigate RouteData="routeData" Selector="h1" />
         </Found>

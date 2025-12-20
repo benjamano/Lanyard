@@ -1,11 +1,11 @@
-using LanyardAPI.Services;
-using LanyardApp.Components;
-using LanyardApp.Services;
-using LanyardData.DataAccess;
-using LanyardData.Models;
+using Lanyard.App.Components;
+using Lanyard.Application.Services;
+using Lanyard.Application.Services.ApplicationRoles;
+using Lanyard.Application.Services.Authentication;
+using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -19,7 +19,6 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 builder.Services.AddSingleton<MusicPlayer>();
 
 builder.Services.AddScoped<MusicPlayerService>();
-builder.Services.AddScoped<MusicRepository>();
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 
@@ -27,8 +26,7 @@ builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<TokenStorageService>();
 builder.Services.AddScoped<JwtAuthenticationStateProvider>();
-builder.Services.AddScoped<AuthenticationStateProvider>(provider => 
-    provider.GetRequiredService<JwtAuthenticationStateProvider>());
+builder.Services.AddScoped<AuthenticationStateProvider>(provider => provider.GetRequiredService<JwtAuthenticationStateProvider>());
 builder.Services.AddCascadingAuthenticationState();
 
 // Add controllers for API endpoints
@@ -52,7 +50,7 @@ builder.Services.AddFluentUIComponents(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString, b=> b.MigrationsAssembly("LanyardData")));
+    options.UseSqlServer(connectionString, b=> b.MigrationsAssembly("Lanyard.Infrastructure")));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 

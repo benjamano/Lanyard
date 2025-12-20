@@ -1,0 +1,18 @@
+﻿@page "/manage/roles"
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.Application.Services.Authentication
+
+<UserRolesManager @ref="_userRoleManager" />
+
+<RoleManager OnRolesChanged="HandleRolesChanged" />
+
+@code {
+    private IEnumerable<ApplicationRole> roles = Array.Empty<ApplicationRole>();
+    private UserRolesManager? _userRoleManager;
+
+    public async Task HandleRolesChanged(IEnumerable<ApplicationRole> roles)
+    {
+        _userRoleManager?.SetRoles(roles);
+    }
+}

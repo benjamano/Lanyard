@@ -1,6 +1,8 @@
 <Solution>
-  <Project Path="LanyardAPI/LanyardAPI.csproj" />
-  <Project Path="LanyardApp/LanyardApp.csproj" Id="f0bbe607-969f-48bc-9199-54ac5da0a9bc" />
-  <Project Path="LanyardData/LanyardData.csproj" />
-  <Project Path="LanyardTests/LanyardTests.csproj" Id="d6ad412a-ae34-45f8-8520-6f6af42a0c63" />
+  <Project Path="LanyardAPI/Lanyard.API.csproj" />
+  <Project Path="LanyardApp/Lanyard.App.csproj" Id="f0bbe607-969f-48bc-9199-54ac5da0a9bc" />
+  <Project Path="LanyardClient/Lanyard.Client.csproj" Id="6e693910-aa7e-414f-9615-563bdbecf3ff" />
+  <Project Path="LanyardData/Lanyard.Infrastructure.csproj" />
+  <Project Path="LanyardServices/Lanyard.Application.csproj" Id="30acb939-29c4-4b18-bbe9-b0925f869139" />
+  <Project Path="LanyardTests/Lanyard.Tests.csproj" Id="d6ad412a-ae34-45f8-8520-6f6af42a0c63" />
 </Solution>

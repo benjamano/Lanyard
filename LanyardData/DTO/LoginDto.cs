@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace LanyardData.DTO
+namespace Lanyard.Infrastructure.DTO
 {
     public class LoginDto
     {

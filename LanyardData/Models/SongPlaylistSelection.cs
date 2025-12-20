@@ -1,4 +1,4 @@
-namespace LanyardData.Models
+namespace Lanyard.Infrastructure.Models
 {
     public class SongPlaylistSelection
     {

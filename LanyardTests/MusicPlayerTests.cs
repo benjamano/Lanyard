@@ -1,26 +1,26 @@
-﻿using LanyardAPI.Services;
-using LanyardData.Models;
-using LanyardData.DataAccess;
+﻿using Lanyard.Application.Services;
+using Lanyard.Infrastructure.Models;
+using Lanyard.Infrastructure.DataAccess;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NAudio.Wave;
-using System.Threading;
+using Microsoft.EntityFrameworkCore;
 
 namespace LanyardTests
 {
     [TestClass]
     public sealed class MusicPlayerTests
     {
-        private MusicPlayer _musicPlayer;
-        private Mock<MusicRepository> _mockRepository;
-        private MusicPlayerService _musicPlayerService;
+        private MusicPlayer _musicPlayer = null!;
+        private Mock<IDbContextFactory<ApplicationDbContext>> _mockContextFactory = null!;
+        private MusicPlayerService _musicPlayerService = null!;
 
         [TestInitialize]
         public void Setup()
         {
             _musicPlayer = new MusicPlayer();
-            _mockRepository = new Mock<MusicRepository>(MockBehavior.Loose, null!);
-            _musicPlayerService = new MusicPlayerService(_musicPlayer, _mockRepository.Object);
+            _mockContextFactory = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            _musicPlayerService = new MusicPlayerService(_musicPlayer, _mockContextFactory.Object);
         }
 
         [TestMethod]

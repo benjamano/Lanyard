@@ -1,0 +1,132 @@
+﻿@using Lanyard.Application.Services.Authentication
+@implements IDisposable
+
+@inject NavigationManager NavigationManager
+
+<div style="height: 100vh; display: flex; flex-direction: column;">
+    <div style="background-color: #700f88; padding: 16px 24px; min-height: 3.5rem; display: flex; align-items: center;">
+        <a href="" style="color: white; text-decoration: none; font-size: 1.1rem; font-weight: 600;">Lanyard</a>
+    </div>
+
+    <FluentNavMenu Style="flex: 1; display: flex; flex-direction: column;">
+        
+        <FluentNavLink Href="staff" 
+                       Icon="@(new Icons.Regular.Size20.Home())"
+                       Match="NavLinkMatch.All">
+            Home
+        </FluentNavLink>
+
+        <AuthorizeView Roles="Admin, CanControlMusic">
+            <Authorized>
+                <FluentNavLink Href="music" 
+                              Icon="@(new Icons.Regular.Size20.MusicNote2())">
+                    Music
+                </FluentNavLink>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Admin,CanClockIn">
+            <Authorized>
+                <FluentNavGroup Title="Rota" 
+                               Icon="@(new Icons.Regular.Size20.CalendarLtr())"
+                               Expanded="@rotaOpen">
+                    <FluentNavLink Href="rota/clockin" 
+                                  Icon="@(new Icons.Regular.Size20.Clock())">
+                        Clock In
+                    </FluentNavLink>
+                    <FluentNavLink Href="rota/rota" 
+                                  Icon="@(new Icons.Regular.Size20.CalendarLtr())">
+                        Rota
+                    </FluentNavLink>
+                </FluentNavGroup>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Admin,Manager">
+            <Authorized>
+                <FluentNavGroup Title="Manage" 
+                               Icon="@(new Icons.Regular.Size20.Settings())"
+                               Expanded="@manageOpen">
+                    <FluentNavLink Href="manage/roles" 
+                                  Icon="@(new Icons.Regular.Size20.ShieldTask())">
+                        Roles
+                    </FluentNavLink>
+                    <FluentNavLink Href="manage/users" 
+                                  Icon="@(new Icons.Regular.Size20.People())">
+                        Users
+                    </FluentNavLink>
+                </FluentNavGroup>
+            </Authorized>
+        </AuthorizeView>
+
+        <FluentNavLink Href="/"
+                       Icon="@(new Icons.Regular.Size20.WebAsset())"
+                       Match="NavLinkMatch.All">
+            Play2Day Website
+        </FluentNavLink>
+
+        <FluentSpacer />
+
+        <AuthorizeView>
+            <Authorized>
+                <FluentNavLink Href="account/manage" 
+                              Icon="@(new Icons.Regular.Size20.Person())">
+                    @(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)
+                </FluentNavLink>
+                <FluentNavLink Href="logout" 
+                              Icon="@(new Icons.Regular.Size20.SignOut())">
+                    Logout
+                </FluentNavLink>
+            </Authorized>
+            <NotAuthorized>
+                <FluentNavLink Href="login" 
+                              Icon="@(new Icons.Regular.Size20.ArrowEnter())">
+                    Login
+                </FluentNavLink>
+            </NotAuthorized>
+        </AuthorizeView>
+    </FluentNavMenu>
+</div>
+
+@inject AuthenticationStateProvider Auth
+
+@code {
+    private string? currentUrl;
+    private string? userName;
+
+    private bool homeOpen = true;
+    private bool manageOpen = false;
+    private bool rotaOpen = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userName = await _sApi.GetCurrentUserName();
+
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        UpdateExpandedStates();
+
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        UpdateExpandedStates();
+        StateHasChanged();
+    }
+
+    private void UpdateExpandedStates()
+    {
+        if (currentUrl is not null)
+        {
+            manageOpen = currentUrl.StartsWith("manage/", StringComparison.OrdinalIgnoreCase);
+            rotaOpen = currentUrl.StartsWith("rota/", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}
+
