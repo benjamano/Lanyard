@@ -1,4 +1,4 @@
-@page "/logout"
+@page "/staff/logout"
 @rendermode InteractiveServer
 
 @using Lanyard.Application.Services
@@ -36,6 +36,6 @@
         }
         
         // Force full page reload to clear Blazor Server circuit
-        Navigation.NavigateTo("/login", forceLoad: true);
+        Navigation.NavigateTo("/staff/login", forceLoad: true);
     }
 }

@@ -55,7 +55,7 @@ namespace Lanyard.App.Controllers
             UserProfile? user = await _userManager.FindByNameAsync(username);
             if (user is null)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
+                return Redirect($"/staff/login?error={Uri.EscapeDataString("Invalid username or password")}");
             }
 
             Microsoft.AspNetCore.Identity.SignInResult result = await _signInManager.PasswordSignInAsync(
@@ -66,7 +66,7 @@ namespace Lanyard.App.Controllers
 
             if (!result.Succeeded)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
+                return Redirect($"/staff/login?error={Uri.EscapeDataString("Invalid username or password")}");
             }
 
             // Redirect to return URL or default to /staff

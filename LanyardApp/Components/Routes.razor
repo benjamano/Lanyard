@@ -4,7 +4,7 @@
 
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(Program).Assembly"
-            NotFoundPage="typeof(Pages.Staff.NotFound)">
+            NotFoundPage="@GetNotFoundPage()">
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="@routeData"
                                 DefaultLayout="@GetLayout(routeData)">
@@ -37,6 +37,16 @@
         return typeof(CustomerMainLayout);
     }
 
+    private Type GetNotFoundPage()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        
+        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase))
+            return typeof(StaffNotFound);
+        
+        return typeof(CustomerNotFound);
+    }
+
     private class RedirectToLogin : ComponentBase
     {
         [Inject] private NavigationManager Navigation { get; set; } = default!;
@@ -44,7 +54,7 @@
         protected override void OnInitialized()
         {
             var returnUrl = Uri.EscapeDataString(Navigation.Uri);
-            Navigation.NavigateTo($"/login?returnUrl={returnUrl}");
+            Navigation.NavigateTo($"/staff/login?returnUrl={returnUrl}");
         }
     }
 }

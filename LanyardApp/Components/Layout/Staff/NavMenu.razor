@@ -25,7 +25,7 @@
             <ul class="navbar-nav mx-auto">
                 
                 <li class="nav-item">
-                    <a class="nav-link d-flex align-items-center px-3" href="/staff">
+                    <a class="nav-link d-flex align-items-center px-3" href="/staff/">
                         <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                         <span>Home</span>
                     </a>
@@ -34,7 +34,7 @@
                 <AuthorizeView Roles="Admin, CanControlMusic">
                     <Authorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/music">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/music">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.MusicNote2())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                 <span>Music</span>
                             </a>
@@ -51,11 +51,11 @@
                                     <span>Rota</span>
                                 </span>
                                 <div class="nav-dropdown-menu">
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/rota/clockin">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota/clockin">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                         <span>Clock In</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/rota/rota">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota/rota">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                         <span>Rota</span>
                                     </a>
@@ -74,11 +74,11 @@
                                     <span>Manage</span>
                                 </span>
                                 <div class="nav-dropdown-menu">
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/manage/roles">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/roles">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.ShieldTask())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                         <span>Roles</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/manage/users">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/users">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                         <span>Users</span>
                                     </a>
@@ -101,13 +101,13 @@
                 <AuthorizeView>
                     <Authorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/account/manage">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/account/manage">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                 <span>@(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)</span>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/logout">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/logout">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.SignOut())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                 <span>Logout</span>
                             </a>
@@ -115,7 +115,7 @@
                     </Authorized>
                     <NotAuthorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/login">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/login">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.ArrowEnter())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                 <span>Login</span>
                             </a>
