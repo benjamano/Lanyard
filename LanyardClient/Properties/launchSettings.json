@@ -1,10 +1,14 @@
 {
   "profiles": {
     "LanyardClient": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "environmentVariables": {
+        "SIGNALR_SERVER_URL": "https://localhost:7175/websocket",
+        "API_SERVER_URL": "https://localhost:7175/api"
+      }
     },
     "Container (Dockerfile)": {
       "commandName": "Docker"
-    }
+    },
   }
 }

@@ -1,38 +1,206 @@
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
+using Microsoft.AspNetCore.SignalR;
+using Lanyard.Infrastructure.DTO;
 using Microsoft.EntityFrameworkCore;
 using NAudio.Wave;
 
 namespace Lanyard.Application.Services;
 
-public class MusicPlayerService(MusicPlayer player, IDbContextFactory<ApplicationDbContext> contextFactory)
+/// <summary>
+/// Service for controlling music playback via SignalR.
+/// Sends commands to remote music players and maintains playback state.
+/// </summary>
+public class MusicPlayerService
 {
-    private readonly MusicPlayer _player = player;
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory = contextFactory;
+    private readonly IHubContext<MusicControlHub> _hubContext;
+    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+    private readonly object _lock = new();
     private static readonly Random _rng = new();
 
-    public Song? CurrentSong => _player.CurrentSong;
-    public Playlist? CurrentPlaylist => _player.CurrentPlaylist;
-    public TimeSpan CurrentPosition => _player.CurrentPosition;
-    public TimeSpan CurrentDuration => _player.CurrentDuration;
-    public PlaybackState CurrentPlaybackState => _player.CurrentPlaybackState;
+    private PlaybackState _currentState = PlaybackState.Stopped;
+    private Song? _currentSong;
+    private Playlist? _currentPlaylist;
+    private List<Song> _queue = [];
+    private int _queueIndex = 0;
 
-    public event Action? OnSongChanged
+    public MusicPlayerService(
+        IHubContext<MusicControlHub> hubContext,
+        IDbContextFactory<ApplicationDbContext> contextFactory)
     {
-        add => _player.OnSongChanged += value;
-        remove => _player.OnSongChanged -= value;
+        _hubContext = hubContext;
+        _contextFactory = contextFactory;
     }
 
-    public event Action? OnPlaybackStatusChanged
+    public event Action<PlaybackState>? OnPlaybackStatusChanged;
+    public event Action<Guid?>? OnSongChanged;
+    public event Action<Playlist?>? OnPlaylistChanged;
+    public event Action<List<Song>>? QueueChanged;
+
+    public PlaybackState CurrentPlaybackState
     {
-        add => _player.OnPlaybackStatusChanged += value;
-        remove => _player.OnPlaybackStatusChanged -= value;
+        get
+        {
+            lock (_lock)
+            {
+                return _currentState;
+            }
+        }
     }
 
-    public event Action? OnPlaylistChanged
+    public Song? CurrentSong
     {
-        add => _player.OnPlaylistChanged += value;
-        remove => _player.OnPlaylistChanged -= value;
+        get
+        {
+            lock (_lock)
+            {
+                return _currentSong;
+            }
+        }
+    }
+
+    public Playlist? CurrentPlaylist
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _currentPlaylist;
+            }
+        }
+    }
+
+    public List<Song> Queue
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _queue];
+            }
+        }
+    }
+
+    public int QueueIndex
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _queueIndex;
+            }
+        }
+    }
+
+    public void UpdatePlaybackState(PlaybackState state)
+    {
+        bool changed = false;
+
+        lock (_lock)
+        {
+            if (_currentState != state)
+            {
+                _currentState = state;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            OnPlaybackStatusChanged?.Invoke(state);
+        }
+    }
+
+    private void UpdateCurrentSong(Song? song)
+    {
+        bool changed = false;
+
+        lock (_lock)
+        {
+            if (_currentSong?.Id != song?.Id)
+            {
+                _currentSong = song;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            OnSongChanged?.Invoke(song?.Id);
+        }
+    }
+
+    private void UpdateCurrentPlaylist(Playlist? playlist)
+    {
+        bool changed = false;
+
+        lock (_lock)
+        {
+            if (_currentPlaylist?.Id != playlist?.Id)
+            {
+                _currentPlaylist = playlist;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            OnPlaylistChanged?.Invoke(playlist);
+        }
+    }
+
+    private void SetQueue(List<Song> songs, int startIndex = 0)
+    {
+        lock (_lock)
+        {
+            _queue = songs;
+            _queueIndex = startIndex;
+
+            if (songs.Count > 0 && startIndex < songs.Count)
+            {
+                _currentSong = songs[startIndex];
+            }
+        }
+
+        QueueChanged?.Invoke(songs);
+        OnSongChanged?.Invoke(_currentSong?.Id);
+    }
+
+    private bool MoveToNextInQueue()
+    {
+        lock (_lock)
+        {
+            if (_queue.Count == 0) return false;
+
+            if (_queueIndex + 1 >= _queue.Count)
+                _queueIndex = 0;
+            else
+                _queueIndex++;
+
+            _currentSong = _queue[_queueIndex];
+        }
+
+        OnSongChanged?.Invoke(_currentSong?.Id);
+        return true;
+    }
+
+    private bool MoveToPreviousInQueue()
+    {
+        lock (_lock)
+        {
+            if (_queue.Count == 0) return false;
+
+            if (_queueIndex - 1 < 0)
+                _queueIndex = _queue.Count - 1;
+            else
+                _queueIndex--;
+
+            _currentSong = _queue[_queueIndex];
+        }
+
+        OnSongChanged?.Invoke(_currentSong?.Id);
+        return true;
     }
 
     private async Task VerifySongMetaData(Song song)
@@ -51,78 +219,75 @@ public class MusicPlayerService(MusicPlayer player, IDbContextFactory<Applicatio
 
     public async Task Play()
     {
-        if (_player.CurrentSong != null)
+        if (_currentSong != null)
         {
-            await VerifySongMetaData(_player.CurrentSong);
+            await VerifySongMetaData(_currentSong);
         }
 
-        _player.Play();
+        await _hubContext.Clients.Group("Music").SendAsync("Play");
     }
 
     public async Task Play(Song song)
     {
-        if (song == _player.CurrentSong)
+        if (song == _currentSong)
         {
             await Play();
             return;
         }
 
-        _player.SetQueue([song], 0);
-        _player.LoadSong(song.FilePath);
+        SetQueue([song], 0);
 
-        _player.SetPlaylist(null);
-
-        await Play();
+        await _hubContext.Clients.Group("Music").SendAsync("Load", song.Id);
+        await _hubContext.Clients.Group("Music").SendAsync("Play");
     }
 
     public async Task Play(Song song, Playlist playlist)
     {
-        if (song == _player.CurrentSong)
+        if (song == _currentSong)
         {
             await Play();
             return;
         }
 
-        if (playlist == null)
-        {
-            await Play(song);
-            return;
-        }
-
         await using var context = await _contextFactory.CreateDbContextAsync();
-        
-        List<Song> playlistSongs = [.. (await context.PlaylistSongMembers
+
+        if (playlist is not null)
+        {
+            List<Song> playlistSongs = [.. (await context.PlaylistSongMembers
             .Where(x => x.PlaylistId == playlist.Id)
             .Select(x => x.Song!)
             .ToListAsync())
-        .OrderBy(_ => _rng.Next())];
+            .OrderBy(_ => _rng.Next())];
 
-        List<Song> songsInPlaylist = [song];
-        songsInPlaylist.AddRange(playlistSongs.Where(x => x.Id != song.Id).ToList());
+            List<Song> songsInPlaylist = [song];
+            songsInPlaylist.AddRange(playlistSongs.Where(x => x.Id != song.Id).ToList());
 
-        _player.SetQueue(songsInPlaylist, 0);
-        _player.LoadSong(song.FilePath);
+            SetQueue(songsInPlaylist, 0);
 
-        Playlist loadedPlaylist = await context.Playlists
-            .Where(x => x.Id == playlist.Id)
-            .FirstOrDefaultAsync() 
-            ?? throw new InvalidOperationException("Playlist not found!");
-        
-        _player.SetPlaylist(loadedPlaylist);
+            Playlist loadedPlaylist = await context.Playlists
+                .Where(x => x.Id == playlist.Id)
+                .FirstOrDefaultAsync()
+                ?? throw new InvalidOperationException("Playlist not found!");
 
-        await Play();
+            UpdateCurrentPlaylist(loadedPlaylist);
+
+            await _hubContext.Clients.Group("Music").SendAsync("LoadPlaylist", playlistSongs.Select(x=> x.Id));
+        }
+
+        await _hubContext.Clients.Group("Music").SendAsync("Load", song.Id);
+        await _hubContext.Clients.Group("Music").SendAsync("Play");
     }
 
-    public void Pause()
+    public async Task Pause()
     {
-        _player.Pause();
+        await _hubContext.Clients.Group("Music").SendAsync("Pause");
     }
 
     public async Task TogglePlay()
     {
-        if (_player.CurrentPlaybackState == PlaybackState.Playing)
+        if (_currentState == PlaybackState.Playing)
         {
-            _player.Pause();
+            await Pause();
         }
         else
         {
@@ -130,45 +295,48 @@ public class MusicPlayerService(MusicPlayer player, IDbContextFactory<Applicatio
         }
     }
 
-    public void Stop()
+    public async Task Stop()
     {
-        _player.Stop();
+        await _hubContext.Clients.Group("Music").SendAsync("Stop");
     }
 
     public async Task Next()
     {
-        if (_player.CurrentSong == null) return;
+        if (_currentSong == null) return;
 
-        _player.Pause();
-
-        if (_player.MoveToNextInQueue())
+        if (MoveToNextInQueue())
         {
-            _player.LoadSong(_player.CurrentSong.FilePath);
-            await Play();
+            await _hubContext.Clients.Group("Music").SendAsync("PlayNext");
         }
     }
 
     public async Task Previous()
     {
-        _player.Pause();
-
-        if (_player.MoveToPreviousInQueue())
+        if (MoveToPreviousInQueue())
         {
-            _player.LoadSong(_player.CurrentSong!.FilePath);
-            await Play();
+            Song? previousSong = _currentSong;
+            if (previousSong != null)
+            {
+                await _hubContext.Clients.Group("Music").SendAsync("PlayPrevious");
+            }
         }
     }
 
     public async Task Restart()
     {
-        _player.Pause();
-        _player.Seek(TimeSpan.Zero);
-        await Play();
+        await Pause();
+        
+        Song? currentSong = _currentSong;
+        if (currentSong != null)
+        {
+            await _hubContext.Clients.Group("Music").SendAsync("Load", currentSong.Id);
+            await _hubContext.Clients.Group("Music").SendAsync("Play");
+        }
     }
 
     public List<Song> GetQueue()
     {
-        return _player.GetQueue();
+        return Queue;
     }
 
     public async Task LoadPlaylist(Guid playlistId)
@@ -181,7 +349,7 @@ public class MusicPlayerService(MusicPlayer player, IDbContextFactory<Applicatio
             .ToListAsync())
         .OrderBy(_ => _rng.Next())];
         
-        _player.SetQueue(songs, 0);
+        SetQueue(songs, 0);
     }
 
     public async Task<IEnumerable<Song>> GetLocalSongs()

@@ -124,7 +124,7 @@
 
         _player.OnPlaylistChanged += HandleCurrentPlaylist;
 
-        HandleCurrentPlaylist();
+        HandleCurrentPlaylist(null);
     }
 
     private string GetPlaylistCardStyle(Guid playlistId)
@@ -277,8 +277,9 @@
         StateHasChanged();
     }
 
-    private void HandleCurrentPlaylist()
+    private void HandleCurrentPlaylist(Playlist? playlist)
     {
         currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
+        InvokeAsync(StateHasChanged);
     }
 }

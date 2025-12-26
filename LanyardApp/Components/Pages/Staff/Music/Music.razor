@@ -11,6 +11,8 @@
 
 @inject MusicPlayerService _player
 
+@implements IDisposable
+
 <PageTitle>Music</PageTitle>
 
 <div style="height: calc(100vh - 120px); overflow-y: auto;">
@@ -64,24 +66,17 @@
 
 @code {
     private IEnumerable<PlaylistSongMember>? currentSongs;
-
     private bool isPlaying = false;
 
     protected override void OnInitialized()
     {
-        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
-        UpdatePlaybackStatus();
+        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
     }
 
-    private void HandlePlaybackStatusChanged()
+    private void HandlePlaybackStateChanged(PlaybackState state)
     {
-        UpdatePlaybackStatus();
+        isPlaying = state == PlaybackState.Playing;
         InvokeAsync(StateHasChanged);
-    }
-
-    private void UpdatePlaybackStatus()
-    {
-        isPlaying = _player.CurrentPlaybackState == PlaybackState.Playing;
     }
 
     private async Task TogglePlay()
@@ -117,6 +112,6 @@
 
     public void Dispose()
     {
-        _player.OnSongChanged -= HandlePlaybackStatusChanged;
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
     }
 }

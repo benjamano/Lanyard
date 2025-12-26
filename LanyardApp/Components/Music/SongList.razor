@@ -7,9 +7,9 @@
 @using Microsoft.EntityFrameworkCore
 
 @inject ApplicationDbContext _context
-@inject MusicPlayerService _player
 @inject IDialogService DialogService
 @inject IToastService ToastService
+@inject MusicPlayerService _player
 
 @implements IDisposable
 
@@ -28,7 +28,7 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" 
                                            Color="Color.Accent" 
                                            Style="cursor: pointer;"
-                                           @onclick="() => _player.Play(context.Song!, context.Playlist!)" />
+                                            @onclick="() => _player.Play(context.Song!, context.Playlist!)" />
                             }
 
                             <FluentIcon Value="@(new Icons.Regular.Size16.Add())" 
@@ -104,17 +104,12 @@
     protected override void OnInitialized()
     {
         _player.OnSongChanged += UpdateCurrentSong;
-        UpdateCurrentSong();
     }
 
-    protected override async Task OnParametersSetAsync()
+    private void UpdateCurrentSong(Guid? songid)
     {
-        UpdateCurrentSong();
-    }
-
-    private void UpdateCurrentSong()
-    {
-        CurrentlyPlayingSongId = _player.CurrentSong?.Id;
+        CurrentlyPlayingSongId = songid;
+        InvokeAsync(StateHasChanged);
     }
 
     private bool IsCurrentlyPlaying(Song song)
@@ -224,4 +219,4 @@
     {
         _player.OnSongChanged -= UpdateCurrentSong;
     }
-}
+}}

@@ -3,12 +3,14 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyModel;
 using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,9 +22,10 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
 
-// Business Services
-builder.Services.AddSingleton<MusicPlayer>();
-builder.Services.AddScoped<MusicPlayerService>();
+// Music Services
+builder.Services.AddSingleton<MusicPlayerService>();
+
+// Other Business Services
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 
@@ -38,7 +41,7 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 // Configure Identity with minimal settings
 builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
 {
-    options.SignIn.RequireConfirmedAccount = false; // Allow login without email confirmation
+    options.SignIn.RequireConfirmedAccount = false;
     options.Password.RequireNonAlphanumeric = false;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -80,6 +83,9 @@ builder.Services.AddFluentUIComponents(options =>
     options.HideTooltipOnCursorLeave = true;
 });
 
+// Add SignalR for real-time music control
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
 // Seed development data (only runs in Development environment)
@@ -104,6 +110,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
+
+// Map SignalR hub for music control
+app.MapHub<MusicControlHub>("/websocket");
 
 app.MapControllers();
 
