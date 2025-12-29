@@ -1,109 +1,101 @@
-﻿@using LanyardData.Models
-@using LanyardData.DataAccess
+﻿@using Lanyard.Application.Services
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DataAccess
+@using Lanyard.Infrastructure.Models
 @using Microsoft.EntityFrameworkCore
-@using LanyardAPI.Services
 @using NAudio.Wave
 
 @inject ApplicationDbContext _context
 @inject MusicPlayerService _player
+@inject IDialogService DialogService
+@inject IToastService ToastService
 
-@using LanyardApp.Components.Music;
+@using Lanyard.App.Components.Music;
 
-<div class="d-flex justify-content-start h-100 col-2">
-    <div class="px-2 py-2 h-100 border-end border-secondary">
-        @if (playlists == null)
-        {
-            <span class="text-muted"><em>Loading playlists...</em></span>
-        }
-        else
-        {
-            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3">
-                @foreach (Playlist playlist in playlists)
-                {
-                    <div class="w-100">
-                        <div class="card hover-card h-100 p-2 bg-light bg-blur @(selectedPlaylistId == playlist.Id ? "active" : "") @(currentlyPlayingPlaylistId == playlist.Id ? "border border-1 border-success" : "border-0")"
-                             role="button"
-                             @onclick="() => LoadPlaylist(playlist.Id)">
-                            <div class="card-body p-0 d-flex flex-row">
-                                <div class="ratio ratio-1x1 w-25 me-3 rounded"
-                                     style="background-color: @GetPlaylistColor(playlist.Name);">
-                                    <div class="d-flex align-items-center justify-content-center">
-                                        <span class="fs-3 fw-bold text-white">@GetInitials(playlist.Name)</span>
-                                    </div>
-                                </div>
-                                <div class="d-flex flex-column">
-                                    <h5 class="card-title text-truncate @(currentlyPlayingPlaylistId == playlist.Id ? "text-success" : "text-dark") pb-1 mb-0">@playlist.Name</h5>
-                                    @if (!string.IsNullOrEmpty(playlist.Description))
-                                    {
-                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                            @playlist.Description
-                                        </p>
-                                    }
-                                    else if (playlist.CreateByUser is not null)
-                                    {
-                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                            @playlist.CreateByUser.UserName
-                                        </p>
-                                    }
-                                    else
-                                    {
-                                        <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                            @playlist.CreateDate.ToString("g")
-                                        </p>
-                                    }
-                                </div>
-                            </div>
+<FluentStack Width="auto" class="ps-1 h-100" Orientation="Orientation.Vertical">
+    @if (playlists == null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+            <FluentProgressRing />
+            <FluentLabel>Loading playlists...</FluentLabel>
+        </FluentStack>
+    }
+    else
+    {
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 280px)); gap: 16px;">
+            @foreach (Playlist playlist in playlists)
+            {
+                <FluentCard class="playlist-card p-2" Style="@GetPlaylistCardStyle(playlist.Id)"
+                            @onclick="() => LoadPlaylist(playlist.Id)">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
+                        <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor(playlist.Name); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <FluentLabel Style="color: white; font-size: 24px; font-weight: bold;">
+                                @GetInitials(playlist.Name)
+                            </FluentLabel>
                         </div>
-                    </div>
-                }
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
+                            <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="@GetPlaylistNameStyle(playlist.Id)">
+                                @playlist.Name
+                            </FluentLabel>
+                            @if (!string.IsNullOrEmpty(playlist.Description))
+                            {
+                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                    @playlist.Description
+                                </FluentLabel>
+                            }
+                            else if (playlist.CreateByUser is not null)
+                            {
+                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    @playlist.CreateByUser.UserName
+                                </FluentLabel>
+                            }
+                            else
+                            {
+                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    @playlist.CreateDate.ToString("g")
+                                </FluentLabel>
+                            }
+                        </FluentStack>
+                    </FluentStack>
+                </FluentCard>
+            }
 
-                <div class="w-100">
-                    <div class="card hover-card text-white bg-light bg-blur h-100 p-2 @(allSongsSelected ? "active" : "") @(currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing ? "border border-1 border-success" : "border-0")"
-                         role="button"
-                         @onclick="() => ShowAllSongs()">
-                        <div class="card-body p-0 d-flex flex-row">
-                            <div class="ratio ratio-1x1 w-25 me-3 rounded"
-                                 style="background-color: @GetPlaylistColor("All Songs");">
-                                <div class="d-flex align-items-center justify-content-center">
-                                    <span class="fs-3 fw-bold text-white">@GetInitials("All")</span>
-                                </div>
-                            </div>
-                            <div class="d-flex flex-column">
-                                <h5 class="card-title text-truncate text-dark pb-1 mb-0">All Songs</h5>
-                                <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                    All Songs inside Lanyard
-                                </p>
-                            </div>
-                        </div>
+            <FluentCard Class="playlist-card p-2" Style="@GetAllSongsCardStyle()"
+                        @onclick="ShowAllSongs">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
+                    <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("All Songs"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Custom" CustomColor="white" />
                     </div>
-                </div>
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
+                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            All Songs
+                        </FluentLabel>
+                        <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            All Songs inside Lanyard
+                        </FluentLabel>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
 
-                <div class="w-100">
-                    <div class="card hover-card border-0 bg-light bg-blur text-white h-100 p-2"
-                        role="button"
-                        @onclick="() => CreateNewPlaylist()">
-                        <div class="card-body p-0 d-flex flex-row">
-                            <div class="ratio ratio-1x1 w-25 me-3 rounded"
-                                 style="background-color: @GetPlaylistColor("New");">
-                                <div class="d-flex align-items-center justify-content-center">
-                                    <span class="fs-3 fw-bold text-white">@GetInitials("New")</span>
-                                </div>
-                            </div>
-                            <div class="d-flex flex-column">
-                                <h5 class="card-title text-truncate text-dark pb-1 mb-0">New Playlist</h5>
-                                <p class="card-text text-muted small mb-0" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                    Create a New Playlist
-                                </p>
-                            </div>
-                        </div>
+            <FluentCard Class="playlist-card p-2" Style="cursor: pointer;"
+                        @onclick="CreateNewPlaylist">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
+                    <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("New"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.Add())" Color="Color.Custom" CustomColor="white" />
                     </div>
-                </div>
-            </div>
-        }
-    </div>
-</div>
-
-<NewPlaylistModal IsVisible="showModal" OnSave="HandleSavePlaylist" OnClose="HandleCloseModal" />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
+                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            New Playlist
+                        </FluentLabel>
+                        <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            Create a New Playlist
+                        </FluentLabel>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        </div>
+    }
+</FluentStack>
 
 @code {
     [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
@@ -114,8 +106,6 @@
     private bool allSongsSelected;
 
     private List<Playlist>? playlists;
-
-    private bool showModal = false;
 
     private static readonly string[] colors = 
     {
@@ -132,9 +122,58 @@
             .OrderByDescending(p => p.CreateDate)
             .ToListAsync();
 
-        _player.OnPlaylistChanged += HandleCurrentPlaylist;
+        UpdateCurrentPlaylist();
+    }
 
-        HandleCurrentPlaylist();
+    private string GetPlaylistCardStyle(Guid playlistId)
+    {
+        var styles = new List<string> { "cursor: pointer" };
+        
+        if (selectedPlaylistId == playlistId)
+        {
+            styles.Add("background-color: var(--neutral-fill-stealth-active)");
+        }
+        
+        if (currentlyPlayingPlaylistId == playlistId)
+        {
+            styles.Add("border: 2px solid var(--accent-fill-rest)");
+        }
+        
+        return string.Join("; ", styles) + ";";
+    }
+
+    private string GetPlaylistNameStyle(Guid playlistId)
+    {
+        var styles = new List<string> 
+        { 
+            "overflow: hidden", 
+            "text-overflow: ellipsis", 
+            "white-space: nowrap" 
+        };
+        
+        if (currentlyPlayingPlaylistId == playlistId)
+        {
+            styles.Add("color: var(--accent-fill-rest)");
+        }
+        
+        return string.Join("; ", styles) + ";";
+    }
+
+    private string GetAllSongsCardStyle()
+    {
+        var styles = new List<string> { "cursor: pointer" };
+        
+        if (allSongsSelected)
+        {
+            styles.Add("background-color: var(--neutral-fill-stealth-active)");
+        }
+        
+        if (currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing)
+        {
+            styles.Add("border: 2px solid var(--accent-fill-rest)");
+        }
+        
+        return string.Join("; ", styles) + ";";
     }
 
     private string GetInitials(string name)
@@ -186,8 +225,6 @@
             .OrderBy(s => s.Name)
             .ToListAsync();
 
-        songs.AddRange(await _player.GetLocalSongs());
-
         await OnSongsSelected.InvokeAsync(songs.Select(x=> new PlaylistSongMember
         {
             PlaylistId = Guid.Empty,
@@ -197,15 +234,35 @@
         }));
     }
 
-    private void CreateNewPlaylist()
+    private async Task CreateNewPlaylist()
     {
-        showModal = true;
+        Playlist playlist = new Playlist
+        {
+            Name = string.Empty
+        };
+
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = "Create New Playlist",
+            OnDialogResult = DialogService.CreateDialogCallback(this, HandleSavePlaylist),
+            PrimaryAction = "Create",
+            PrimaryActionEnabled = false,
+            SecondaryAction = "Cancel",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        await DialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
     }
 
-    private async Task HandleSavePlaylist(Playlist playlist)
+    private async Task HandleSavePlaylist(DialogResult result)
     {
-        _context.Playlists.Add(playlist);
-        await _context.SaveChangesAsync();
+        if (result.Cancelled || result.Data is not Playlist playlist)
+        {
+            return;
+        }
 
         playlists = await _context.Playlists
             .AsNoTracking()
@@ -213,16 +270,12 @@
             .OrderByDescending(p => p.CreateDate)
             .ToListAsync();
 
-        showModal = false;
+        StateHasChanged();
     }
 
-    private void HandleCloseModal()
-    {
-        showModal = false;
-    }
-
-    private void HandleCurrentPlaylist()
+    private void UpdateCurrentPlaylist()
     {
         currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
+        StateHasChanged();
     }
 }

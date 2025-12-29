@@ -1,4 +1,4 @@
-namespace LanyardData.DTO;
+namespace Lanyard.Infrastructure.DTO;
 
 public record Result<T>
 {

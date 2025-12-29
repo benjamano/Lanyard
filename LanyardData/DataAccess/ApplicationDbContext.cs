@@ -1,9 +1,9 @@
-using LanyardData.Models;
+using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace LanyardData.DataAccess
+namespace Lanyard.Infrastructure.DataAccess
 {
     public class ApplicationDbContext
         : IdentityDbContext<UserProfile, ApplicationRole, string>

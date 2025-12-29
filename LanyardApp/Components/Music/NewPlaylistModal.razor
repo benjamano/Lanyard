@@ -1,97 +1,136 @@
-﻿@using LanyardData.Models
+﻿@using System.ComponentModel.DataAnnotations
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DataAccess
+@using Lanyard.Infrastructure.Models
+@implements IDialogContentComponent<Playlist>
 
-@if (renderModal)
-{
-    <div class="modal-backdrop @(isFullyShown ? "backdrop-custom-fade-in" : "backdrop-custom-fade-out")"></div>
+@inject IToastService ToastService
+@inject ApplicationDbContext _context
 
-    <div class="modal fade @(isFullyShown ? "modal-custom-fade-in" : "modal-custom-fade-out")"
-         tabindex="-1"
-         style="display:block">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5>Create New Playlist</h5>
-                    <button type="button" class="btn-close" @onclick="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Playlist Name</label>
-                        <input type="text" class="form-control"
-                            @bind="playlistName" placeholder="My Awesome Playlist" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Description (Optional)</label>
-                        <textarea class="form-control"
-                            @bind="playlistDescription" rows="3"
-                            placeholder="Add a description..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="Close">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="Save"
-                        disabled="@string.IsNullOrWhiteSpace(playlistName)">
-                        Create
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            Create New Playlist
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <EditForm Model="@model" OnValidSubmit="HandleSavePlaylist">
+        <DataAnnotationsValidator />
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentTextField @bind-Value="model.Name"
+                             Label="Playlist Name"
+                             Required
+                             Placeholder="My Awesome Playlist"
+                             Style="width: 100%;"
+                             @oninput="@OnNameChanged">
+                <FluentIcon Value="@(new Icons.Regular.Size16.MusicNote2())" Slot="start" />
+            </FluentTextField>
+            <FluentValidationMessage For="@(() => model.Name)" />
+            <FluentTextArea @bind-Value="model.Description"
+                            Label="Description (Optional)"
+                            Placeholder="Add a description..."
+                            Rows="3"
+                            Style="width: 100%;">
+            </FluentTextArea>
+            <FluentValidationMessage For="@(() => model.Description)" />
+            <FluentDialogFooter>
+                <FluentButton Appearance="Appearance.Accent"
+                              Type="ButtonType.Submit"
+                              Disabled="@isSubmitting"
+                              IconStart="@(new Icons.Regular.Size20.Add())">
+                    @if (isSubmitting)
+                    {
+                        <FluentProgressRing Style="width: 16px; height: 16px;" />
+                        <span class="ms-2">Creating...</span>
+                    }
+                    else
+                    {
+                        <span>Create</span>
+                    }
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral"
+                              OnClick="@CancelDialog"
+                              Disabled="@isSubmitting">
+                    Cancel
+                </FluentButton>
+            </FluentDialogFooter>
+        </FluentStack>
+    </EditForm>
+</FluentDialogBody>
 
 @code {
-    [Parameter] public bool IsVisible { get; set; }
-    [Parameter] public EventCallback<Playlist> OnSave { get; set; }
-    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter]
+    public Playlist Content { get; set; } = default!;
 
-    private bool renderModal;
-    private bool isFullyShown;
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
 
-    private string playlistName = "";
-    private string playlistDescription = "";
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
 
-    protected override async Task OnParametersSetAsync()
+    private bool isSubmitting;
+    private NewPlaylistModel model = new();
+
+    protected override void OnInitialized()
     {
-        if (IsVisible)
-        {
-            renderModal = true;
-            await Task.Yield();
-            isFullyShown = true;
-        }
-        else
-        {
-            isFullyShown = false;
+        TogglePrimaryActionButton(false);
+    }
 
-            _ = Task.Run(async () =>
+    private void OnNameChanged(ChangeEventArgs e)
+    {
+        bool hasName = !string.IsNullOrWhiteSpace(e.Value?.ToString());
+        TogglePrimaryActionButton(hasName);
+    }
+
+    private async Task HandleSavePlaylist()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            Playlist playlist = new Playlist
             {
-                await Task.Delay(150);
-                renderModal = false;
-                await InvokeAsync(StateHasChanged);
-            });
+                Name = model.Name,
+                Description = model.Description,
+                CreateDate = DateTime.UtcNow
+            };
+
+            _context.Playlists.Add(playlist);
+            await _context.SaveChangesAsync();
+
+            ToastService.ShowSuccess($"Playlist '{playlist.Name}' created successfully!");
+            await Dialog!.CloseAsync(playlist);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error creating playlist: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
         }
     }
 
-    private async Task Save()
+    private async Task CancelDialog()
     {
-        var playlist = new Playlist
-        {
-            Name = playlistName,
-            Description = playlistDescription,
-            CreateDate = DateTime.UtcNow
-        };
-
-        await OnSave.InvokeAsync(playlist);
-        ResetForm();
+        await Dialog!.CancelAsync();
     }
 
-    private async Task Close()
+    private void TogglePrimaryActionButton(bool enable)
     {
-        ResetForm();
-        await OnClose.InvokeAsync();
+        Dialog?.TogglePrimaryActionButton(enable);
     }
 
-    private void ResetForm()
+    private class NewPlaylistModel
     {
-        playlistName = "";
-        playlistDescription = "";
+        [Required(ErrorMessage = "Playlist name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
     }
 }

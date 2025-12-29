@@ -1,0 +1,144 @@
+﻿@using Lanyard.Application.Services.Authentication
+@implements IDisposable
+
+@inject NavigationManager NavigationManager
+@inject SecurityService SecurityService
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
+    <div class="container-fluid px-4">
+        
+        <!-- Logo/Brand -->
+        <a class="navbar-brand d-flex align-items-center" href="/staff">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Apps())" Color="Color.Custom" CustomColor="#700f88" class="me-2" />
+            <span style="font-size: 1.5rem; font-weight: 700; color: #700f88;">Lanyard</span>
+        </a>
+
+        <!-- Navbar toggler for mobile -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Center and Right Navigation -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            
+            <!-- Center Navigation Links -->
+            <ul class="navbar-nav mx-auto">
+                
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center px-3" href="/staff">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                        <span>Home</span>
+                    </a>
+                </li>
+
+                <AuthorizeView Roles="Admin, CanControlMusic">
+                    <Authorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/music">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.MusicNote2())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Music</span>
+                            </a>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="Admin,CanClockIn">
+                    <Authorized>
+                        <li class="nav-item">
+                            <div class="nav-dropdown">
+                                <span class="nav-link nav-dropdown-toggle d-flex align-items-center px-3">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                    <span>Rota</span>
+                                </span>
+                                <div class="nav-dropdown-menu">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota/clockin">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Clock In</span>
+                                    </a>
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota/rota">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Rota</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="Admin,Manager">
+                    <Authorized>
+                        <li class="nav-item">
+                            <div class="nav-dropdown">
+                                <span class="nav-link nav-dropdown-toggle d-flex align-items-center px-3">
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.Settings())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                    <span>Manage</span>
+                                </span>
+                                <div class="nav-dropdown-menu">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/roles">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.ShieldTask())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Roles</span>
+                                    </a>
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/users">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                        <span>Users</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
+                    </Authorized>
+                </AuthorizeView>
+
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center px-3" href="/">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.WebAsset())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                        <span>Customer Site</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Right Side User Menu -->
+            <ul class="navbar-nav ms-auto">
+                <AuthorizeView>
+                    <Authorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/account/manage">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>@(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/logout">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.SignOut())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Logout</span>
+                            </a>
+                        </li>
+                    </Authorized>
+                    <NotAuthorized>
+                        <li class="nav-item">
+                            <a class="nav-link d-flex align-items-center px-3" href="/staff/login">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.ArrowEnter())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                <span>Login</span>
+                            </a>
+                        </li>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+@inject AuthenticationStateProvider Auth
+
+@code {
+    private string? userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userName = await SecurityService.GetCurrentUserName();
+    }
+
+    public void Dispose()
+    {
+    }
+}
+

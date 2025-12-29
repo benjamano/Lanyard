@@ -7,7 +7,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 
 
-namespace LanyardData.Models
+namespace Lanyard.Infrastructure.Models
 {
     public class Song
     {

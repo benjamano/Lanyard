@@ -1,0 +1,72 @@
+﻿@page "/staff/account/manage"
+
+@using Lanyard.App.Components.Accounts
+@using Lanyard.Application.Services.Authentication
+
+@inject IToastService ToastService
+
+<PageTitle>Account Management</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Style="max-width: 800px; margin: 16px auto;">
+    @* <FluentLabel Typo="Typography.PageTitle">Account Management</FluentLabel> *@
+
+    <YourDetailsCard @ref="yourDetailsCard" />
+
+    <ContactDetailsCard @ref="contactDetailsCard" />
+
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8">
+        <FluentButton Appearance="Appearance.Neutral" 
+                      IconStart="@(new Icons.Regular.Size20.Key())"
+                      OnClick="OpenChangePasswordDialog">
+            Change Password
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Accent" 
+                      IconStart="@(new Icons.Regular.Size20.Save())"
+                      OnClick="SaveDetails">
+            Save Changes
+        </FluentButton>
+    </FluentStack>
+</FluentStack>
+
+@code{
+    private YourDetailsCard? yourDetailsCard;
+    private ContactDetailsCard? contactDetailsCard;
+
+    private async Task SaveDetails()
+    {
+        if (yourDetailsCard is not null)
+        {
+            await yourDetailsCard.HandleSave();
+        }
+
+        if (contactDetailsCard is not null)
+        {
+            await contactDetailsCard.HandleSave();
+        }
+    }
+
+    private async Task OpenChangePasswordDialog()
+    {
+        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+
+        if (user is null)
+        {
+            ToastService.ShowError("Unable to load user profile.");
+            return;
+        }
+
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = "Change Password",
+            PrimaryAction = "Change Password",
+            PrimaryActionEnabled = true,
+            SecondaryAction = "Cancel",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        await DialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
+    }
+}

@@ -1,0 +1,117 @@
+﻿@page "/staff/music"
+
+@attribute [Authorize]
+
+@using Lanyard.App.Components.Music
+@using Lanyard.Application.Services
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.Models
+@using Microsoft.AspNetCore.Authorization
+@using NAudio.Wave;
+
+@inject MusicPlayerService _player
+
+@implements IDisposable
+
+<PageTitle>Music</PageTitle>
+
+<div style="height: calc(100vh - 120px); overflow-y: auto;">
+    <FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
+        <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
+
+        <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
+            <SongList Songs="currentSongs"></SongList>
+        </FluentStack>
+    </FluentStack>
+</div>
+
+<FluentStack Orientation="Orientation.Horizontal"
+             HorizontalAlignment="HorizontalAlignment.Center"
+             VerticalAlignment="VerticalAlignment.Center"
+             Style="position: fixed; bottom: 0; left: 0; right: 0; width: 100%; padding: 1rem; background-color: var(--neutral-layer-1); border-top: 1px solid var(--neutral-stroke-divider-rest); z-index: 1000; box-shadow: 0 -2px 8px rgba(0,0,0,0.1);">
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
+        <FluentButton Appearance="Appearance.Outline"
+                      IconOnly="true"
+                      Title="Previous (Double-click) / Restart (Single-click)"
+                      OnClick="RestartSong"
+                      @ondblclick="PreviousSong"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+        </FluentButton>
+
+        <FluentButton Appearance="Appearance.Accent"
+                      IconOnly="true"
+                      Title="@(isPlaying ? "Pause" : "Play")"
+                      OnClick="TogglePlay"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            @if (isPlaying)
+            {
+                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+            }
+            else
+            {
+                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+            }
+        </FluentButton>
+
+        <FluentButton Appearance="Appearance.Outline"
+                      IconOnly="true"
+                      Title="Next"
+                      OnClick="NextSong"
+                      Style="border-radius: 50%; width: 40px; height: 40px;">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+        </FluentButton>
+    </FluentStack>
+</FluentStack>
+
+@code {
+    private IEnumerable<PlaylistSongMember>? currentSongs;
+    private bool isPlaying = false;
+
+    protected override void OnInitialized()
+    {
+        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+    }
+
+    private void HandlePlaybackStateChanged(PlaybackState state)
+    {
+        isPlaying = state == PlaybackState.Playing;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task TogglePlay()
+    {
+        await _player.TogglePlay();
+    }
+
+    private async Task Play()
+    {
+        await _player.Play();
+    }
+
+    private async Task RestartSong()
+    {
+        await _player.Restart();
+    }
+
+    private async Task PreviousSong()
+    {
+        await _player.Previous();
+    }
+
+    private async Task NextSong()
+    {
+        await _player.Next();
+    }
+
+    private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)
+    {
+        currentSongs = songs;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
+    }
+}

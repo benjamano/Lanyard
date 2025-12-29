@@ -3,7 +3,7 @@ using System;
 
 #nullable disable
 
-namespace LanyardApp.Migrations
+namespace Lanyard.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class CreateIdentitySchema : Migration

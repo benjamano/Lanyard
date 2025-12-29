@@ -1,0 +1,73 @@
+﻿@page "/staff/login"
+
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.App.Components.Layout.Staff
+
+@layout AuthLayout
+
+@inject NavigationManager Navigation
+
+<FluentStack Orientation="Orientation.Vertical" 
+              VerticalAlignment="VerticalAlignment.Center"
+              HorizontalAlignment="HorizontalAlignment.Center"
+              Style="min-height: 70vh; padding: 16px;">
+    
+    <FluentCard Style="width: 400px; max-width: 90vw; padding: 32px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24">
+            <FluentLabel Typo="Typography.H4" Style="text-align: center; margin-bottom: 8px;">
+                Please Login
+            </FluentLabel>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <FluentMessageBar Intent="MessageIntent.Error">
+                    @ErrorMessage
+                </FluentMessageBar>
+            }
+
+            <form method="post" action="/api/auth/login-form">
+                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                    <FluentTextField Name="username"
+                                     Label="Username"
+                                     Required
+                                     Placeholder="Enter your username"
+                                     Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextField>
+
+                    <FluentTextField Name="password"
+                                     Label="Password"
+                                     TextFieldType="TextFieldType.Password"
+                                     Required
+                                     Placeholder="Enter your password"
+                                     Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                    </FluentTextField>
+
+                    <FluentCheckbox Name="rememberMe"
+                                    Label="Remember Me" />
+
+                    <FluentStack Orientation="Orientation.Horizontal"
+                                 HorizontalAlignment="HorizontalAlignment.End"
+                                 Style="margin-top: 8px;">
+                        <FluentButton Appearance="Appearance.Accent"
+                                      Type="ButtonType.Submit">
+                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.ArrowEnter" Slot="start" />
+                            <span>Login</span>
+                        </FluentButton>
+                    </FluentStack>
+                </FluentStack>
+            </form>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorMessage { get; set; }
+}

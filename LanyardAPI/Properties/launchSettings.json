@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "LanyardAPI": {
+    "Lanyard.Application": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {

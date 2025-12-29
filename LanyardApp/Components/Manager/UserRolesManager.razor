@@ -1,7 +1,8 @@
 ﻿@using System.Threading.Tasks
+@using Lanyard.Application.Services.ApplicationRoles
+@using Lanyard.Application.Services.Authentication
 @inject ApplicationRolesService _rApi
-@inject JwtTokenService _jwtTokenService
-@inject JwtAuthenticationStateProvider _authStateProvider
+@inject SecurityService _sApi
 @inject UserManager<UserProfile> _umApi
 @inject IToastService ToastService
 
@@ -333,4 +334,4 @@
             }
         }
     }
-}
+}}

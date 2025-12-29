@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using System.Data;
 
-namespace LanyardData.Models
+namespace Lanyard.Infrastructure.Models
 {
     public class UserProfile : IdentityUser
     {

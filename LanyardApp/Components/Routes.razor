@@ -1,13 +1,60 @@
-﻿@using LanyardApp.Components.Accounts
+﻿@using Lanyard.App.Components.Layout.Staff
+@using Lanyard.App.Components.Layout.Customer
+@using Microsoft.AspNetCore.Components.Routing
+
 <CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Router AppAssembly="@typeof(Program).Assembly"
+            NotFoundPage="@GetNotFoundPage()">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <AuthorizeRouteView RouteData="@routeData"
+                                DefaultLayout="@GetLayout(routeData)">
+                <Authorizing>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px;">
+                        <FluentProgressRing />
+                        <p>Checking authentication...</p>
+                    </div>
+                </Authorizing>
                 <NotAuthorized>
                     <RedirectToLogin />
                 </NotAuthorized>
             </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@inject NavigationManager NavigationManager
+
+@code {
+    private Type GetLayout(RouteData routeData)
+    {
+        Type? pageType = routeData.PageType;
+
+        if (pageType.Namespace?.Contains(".Staff") == true)
+            return typeof(MainLayout);
+
+        return typeof(CustomerMainLayout);
+    }
+
+    private Type GetNotFoundPage()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        
+        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase))
+            return typeof(StaffNotFound);
+        
+        return typeof(CustomerNotFound);
+    }
+
+    private class RedirectToLogin : ComponentBase
+    {
+        [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+        protected override void OnInitialized()
+        {
+            var returnUrl = Uri.EscapeDataString(Navigation.Uri);
+            Navigation.NavigateTo($"/staff/login?returnUrl={returnUrl}");
+        }
+    }
+}

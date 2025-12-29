@@ -1,0 +1,41 @@
+﻿@inject NavigationManager NavigationManager
+
+<div class="nav-bar">
+    <nav class="nav">
+        <div class="nav-logo-container">
+            <NavLink href="/" class="nav-logo">
+                <img src="@Assets["RedLogo.png"]" alt="Play2Day Logo" />
+            </NavLink>
+        </div>
+
+        <div class="d-flex flex-row">
+            <div class="nav-dropdown">
+                <span class="nav-link nav-dropdown-toggle">
+                    Locations
+                </span>
+                <div class="nav-dropdown-menu rounded-top-0">
+                    <NavLink href="/locations/ipswich" class="nav-dropdown-item">
+                        Ipswich
+                    </NavLink>
+                    <NavLink href="/locations/wisbech" class="nav-dropdown-item">
+                        Wisbech
+                    </NavLink>
+                </div>
+            </div>
+
+            <NavLink href="/book" class="nav-link">
+                Make a Booking
+            </NavLink>
+        
+            <NavLink href="/about" class="nav-link">
+                About
+            </NavLink>
+        </div>
+
+        <div>
+            <NavLink href="/staff" class="nav-link">
+                Staff Portal
+            </NavLink>
+        </div>
+    </nav>
+</div>
