@@ -60,7 +60,7 @@ public sealed class MusicPlayerTests
             Assert.IsNotNull(_musicPlayerService.CurrentSong, "Current song should be set");
             Assert.AreEqual(testSong.Id, _musicPlayerService.CurrentSong.Id, "Current song ID should match");
 
-            var queue = _musicPlayerService.GetQueue();
+            var queue = _musicPlayerService.Queue;
             Assert.HasCount(1, queue, "Queue should contain one song");
             Assert.AreEqual(testSong.Id, queue[0].Id, "Queue should contain the test song");
 

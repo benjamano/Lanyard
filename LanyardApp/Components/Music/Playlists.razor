@@ -122,9 +122,7 @@
             .OrderByDescending(p => p.CreateDate)
             .ToListAsync();
 
-        _player.OnPlaylistChanged += HandleCurrentPlaylist;
-
-        HandleCurrentPlaylist(null);
+        UpdateCurrentPlaylist();
     }
 
     private string GetPlaylistCardStyle(Guid playlistId)
@@ -227,8 +225,6 @@
             .OrderBy(s => s.Name)
             .ToListAsync();
 
-        songs.AddRange(await _player.GetLocalSongs());
-
         await OnSongsSelected.InvokeAsync(songs.Select(x=> new PlaylistSongMember
         {
             PlaylistId = Guid.Empty,
@@ -277,9 +273,9 @@
         StateHasChanged();
     }
 
-    private void HandleCurrentPlaylist(Playlist? playlist)
+    private void UpdateCurrentPlaylist()
     {
         currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
-        InvokeAsync(StateHasChanged);
+        StateHasChanged();
     }
 }
