@@ -1,0 +1,17 @@
+﻿@page "/staff/rota"
+
+@using Lanyard.App.Components.RotaCalendar
+
+<PageTitle>Rota</PageTitle>
+
+<FluentGrid>
+    <FluentGridItem xs="3">
+        <RotaStaffSelector SelectedUser="@selectedUser"></RotaStaffSelector>
+        <RotaCalendar SelectedUser="@selectedUser"></RotaCalendar>
+        <RotaAddShiftButton></RotaAddShiftButton>
+    </FluentGridItem>
+</FluentGrid>
+
+@code{
+    public UserProfile? selectedUser = null;
+}

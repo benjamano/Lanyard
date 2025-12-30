@@ -1,0 +1,37 @@
+﻿@using Lanyard.Application.Services.Authentication
+
+<FluentCard Height="auto">
+    <FluentDataGrid ShowHover="true"
+                    Items="@users.OrderBy(x => x.GetName()).AsQueryable()"
+                    Style="width: 100%;">
+        <EmptyContent>
+            No Users Found
+        </EmptyContent>
+        <ChildContent>
+            <SelectColumn SelectMode="DataGridSelectMode.Single"
+                          @bind-SelectedItems="@selectedUsers" />
+            <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" />
+        </ChildContent>
+    </FluentDataGrid>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public UserProfile? selectedUser { get; set; }
+
+    public IEnumerable<UserProfile> users = Array.Empty<UserProfile>();
+    private IEnumerable<UserProfile> selectedUsers = Enumerable.Empty<UserProfile>();
+
+    protected async override Task OnInitializedAsync()
+    {
+        users = await _sApi.GetActiveUsersAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (selectedUsers?.Any() == true)
+        {
+            selectedUser = selectedUsers.First();
+        }
+    }
+}
