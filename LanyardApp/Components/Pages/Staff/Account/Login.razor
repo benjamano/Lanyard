@@ -1,9 +1,6 @@
 ﻿@page "/staff/login"
 
 @using Lanyard.Infrastructure.DTO
-@using Lanyard.App.Components.Layout.Staff
-
-@layout AuthLayout
 
 @inject NavigationManager Navigation
 
@@ -25,7 +22,7 @@
                 </FluentMessageBar>
             }
 
-            <form method="post" action="/api/auth/login-form">
+            <form method="post" class="col-12" action="/api/auth/login-form">
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                 
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
