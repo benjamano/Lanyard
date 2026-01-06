@@ -1,13 +1,6 @@
-﻿public interface IGameStateService
+﻿public interface IActionFunctions
 {
-    event Action? GameStarted;
-    event Action? GameEnded;
-
-    event Action<int>? TimeRemainingUpdated;
-
-    void HandleGameStarted();
-    void HandleGameEnded();
-    void UpdateTimeRemaining(int secondsRemaining);
-
-    bool IsGameInProgress();
+    Task HandleTimingPacketAsync(string[] packetData);
+    Task HandlePlayerScorePacketAsync(string[] packetData);
+    Task HandleGameStatusPacketAsync(string[] packetData);
 }

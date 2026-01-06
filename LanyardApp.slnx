@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Lanyard.Shared/Lanyard.Shared.csproj" Id="de8a945b-6d4a-451a-a792-91da0b127b0d" />
   <Project Path="LanyardAPI/Lanyard.API.csproj" />
   <Project Path="LanyardApp/Lanyard.App.csproj" Id="f0bbe607-969f-48bc-9199-54ac5da0a9bc" />
   <Project Path="LanyardClient/Lanyard.Client.csproj" Id="6e693910-aa7e-414f-9615-563bdbecf3ff" />

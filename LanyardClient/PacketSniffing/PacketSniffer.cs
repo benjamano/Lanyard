@@ -112,15 +112,15 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPa
                     break;
                 case 2:
                     // Team Score Packet
-
+                    // DON'T CARE ABOUT THIS AS THE TEAM SCORE CAN ALREADY BE WORKED OUT WITH PLAYER SCORES
                     break;
                 case 3:
-                    // Final Score Packet
-
+                    // Player Score Packet
+                    Task.Run(() => _actions.HandlePlayerScorePacketAsync(decodedData));
                     break;
                 case 4:
                     // Game Status Packet
-
+                    Task.Run(() => _actions.HandleGameStatusPacketAsync(decodedData));
                     break;
                 case 5:
                     // Shot Confirmed Packet
