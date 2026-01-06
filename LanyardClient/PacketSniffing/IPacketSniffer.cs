@@ -1,5 +1,5 @@
 ﻿public interface IPacketSniffer
 {
     void StartSniffing();
-    void HandlePacket(string[] decodedData);
+    Task HandlePacket(string[] decodedData);
 }

@@ -7,17 +7,18 @@ using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using System.Text;
 using Lanyard.Client.PacketSniffing;
+using System.Threading.Tasks;
 
 namespace Lanyard.Client.PacketSniffing;
 
-public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPacketSniffer
+public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
 {
     private readonly List<string> IPFilter = ["192.168.0.10", "192.168.0.11"];
     private readonly string BroadcastIP = "192.168.0.255";
     private readonly PhysicalAddress PreferedInterfaceMacAddress = PhysicalAddress.None;
 
     private readonly ILogger<PacketSniffer> _logger = logger;
-    private readonly Actions _actions = actions;
+    private readonly IActionFunctions _actions = actions;
 
     public void StartSniffing()
     {
@@ -90,7 +91,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPa
 
                 string[] decodedData = HexToAscii(hex).Split(",");
 
-                HandlePacket(decodedData);
+                Task.Run(() => HandlePacket(decodedData));
             }
         }
         catch (Exception ex)
@@ -100,7 +101,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPa
         }
     }
 
-    public void HandlePacket(string[] decodedData)
+    public async Task HandlePacket(string[] decodedData)
     {
         if (int.TryParse(decodedData[0].ToString(), out int packetType))
         {
@@ -108,7 +109,9 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPa
             {
                 case 1:
                     // Timing Packet
-                    Task.Run(() => _actions.HandleTimingPacketAsync(decodedData));
+                    //Task.Run(() => _actions.HandleTimingPacketAsync(decodedData));
+
+                    await _actions.HandleTimingPacketAsync(decodedData);
                     break;
                 case 2:
                     // Team Score Packet
@@ -116,11 +119,15 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, Actions actions) : IPa
                     break;
                 case 3:
                     // Player Score Packet
-                    Task.Run(() => _actions.HandlePlayerScorePacketAsync(decodedData));
+                    //Task.Run(() => _actions.HandlePlayerScorePacketAsync(decodedData));
+
+                    await _actions.HandlePlayerScorePacketAsync(decodedData);
                     break;
                 case 4:
                     // Game Status Packet
-                    Task.Run(() => _actions.HandleGameStatusPacketAsync(decodedData));
+                    //Task.Run(() => _actions.HandleGameStatusPacketAsync(decodedData));
+
+                    await _actions.HandleGameStatusPacketAsync(decodedData);
                     break;
                 case 5:
                     // Shot Confirmed Packet

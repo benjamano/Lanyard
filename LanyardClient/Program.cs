@@ -56,10 +56,25 @@ while (stop == false)
         switch (actionType)
         {
             case 1:
-                IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
-
                 // SEND A TEST PACKET WITH 10 MINUTES REMAINING
-                sniffer.HandlePacket(["0", "0", "0", "600"]);
+                IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
+                Random random = new();
+
+                sniffer.HandlePacket(["4", "@015", "0"]);
+
+                sniffer.HandlePacket(["1", "0", "0", "600"]);
+
+                sniffer.HandlePacket(["3", "1", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+
+                sniffer.HandlePacket(["2", "0", random.Next(1, 101).ToString()]);
+
+                sniffer.HandlePacket(["2", "2", random.Next(1, 101).ToString()]);
+
+                sniffer.HandlePacket(["3", "3", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+
+                sniffer.HandlePacket(["3", "7", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+
+                sniffer.HandlePacket(["4", "@014", "0"]);
 
                 break;
             default:

@@ -19,7 +19,16 @@ public class SignalRClient : ISignalRClient
 
     public async Task StartAsync()
     {
-        await _connection.StartAsync();
-        Console.WriteLine("SignalR connected.");
+        await Task.Delay(3000);
+
+        try
+        {
+            await _connection.StartAsync();
+            Console.WriteLine("SignalR connected.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
+        }
     }
 }

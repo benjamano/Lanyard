@@ -76,7 +76,7 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     public async Task HandleGameStatusPacketAsync(string[] packetData)
     {
-        if (int.TryParse(packetData[0].ToString().Replace("@", ""), out int gameStatusValue))
+        if (int.TryParse(packetData[1].ToString().Replace("@", ""), out int gameStatusValue))
         {
             if (gameStatusValue == 4)
             {
