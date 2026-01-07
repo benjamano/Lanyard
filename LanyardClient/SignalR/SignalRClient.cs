@@ -19,7 +19,7 @@ public class SignalRClient : ISignalRClient
 
     public async Task StartAsync()
     {
-        await Task.Delay(3000);
+        await Task.Delay(4000);
 
         try
         {

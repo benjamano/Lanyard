@@ -43,6 +43,10 @@ SignalRClient? signalRClient = new(serverUrl, registrations);
 
 await signalRClient.StartAsync();
 
+IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
+
+await sniffer.StartSniffingAsync();
+
 Console.WriteLine("Client running. Press Enter to exit.");
 
 bool stop = false;
@@ -57,24 +61,24 @@ while (stop == false)
         {
             case 1:
                 // SEND A TEST PACKET WITH 10 MINUTES REMAINING
-                IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
+                
                 Random random = new();
 
-                sniffer.HandlePacket(["4", "@015", "0"]);
+                sniffer.HandlePacketAsync(["4", "@015", "0"]);
 
-                sniffer.HandlePacket(["1", "0", "0", "600"]);
+                sniffer.HandlePacketAsync(["1", "0", "0", "600"]);
 
-                sniffer.HandlePacket(["3", "1", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                sniffer.HandlePacketAsync(["3", "1", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacket(["2", "0", random.Next(1, 101).ToString()]);
+                sniffer.HandlePacketAsync(["2", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacket(["2", "2", random.Next(1, 101).ToString()]);
+                sniffer.HandlePacketAsync(["2", "2", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacket(["3", "3", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                sniffer.HandlePacketAsync(["3", "3", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacket(["3", "7", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                sniffer.HandlePacketAsync(["3", "7", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacket(["4", "@014", "0"]);
+                sniffer.HandlePacketAsync(["4", "@014", "0"]);
 
                 break;
             default:

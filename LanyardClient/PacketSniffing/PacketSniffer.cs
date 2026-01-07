@@ -20,7 +20,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
 
-    public void StartSniffing()
+    public async Task StartSniffingAsync()
     {
         CaptureDeviceList devices = CaptureDeviceList.Instance;
 
@@ -37,7 +37,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         {
             _logger.LogWarning("Could not find the Prefered Interface with the MAC Address: {PreferedInterfaceMacAddress}, defaulting to first entry.", PreferedInterfaceMacAddress);
 
-            device = devices.FirstOrDefault()!;
+            device = devices.Where(x=> string.IsNullOrWhiteSpace(x.MacAddress?.ToString()) == false).FirstOrDefault()!;
         }
         else if (device == null)
         {
@@ -91,7 +91,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
 
                 string[] decodedData = HexToAscii(hex).Split(",");
 
-                Task.Run(() => HandlePacket(decodedData));
+                Task.Run(() => HandlePacketAsync(decodedData));
             }
         }
         catch (Exception ex)
@@ -101,7 +101,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         }
     }
 
-    public async Task HandlePacket(string[] decodedData)
+    public async Task HandlePacketAsync(string[] decodedData)
     {
         if (int.TryParse(decodedData[0].ToString(), out int packetType))
         {

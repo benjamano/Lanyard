@@ -41,7 +41,7 @@ public class GameStateService : IGameStateService
 
     public void HandlePlayerHit(int shotGunId, int shotByGunId)
     {
-        PlayerHit?.Invoke(new PlayerHitDTO{ ShotByGunId = shotByGunId, ShotGunId = shotGunId });
+        PlayerHit?.Invoke(new PlayerHitDTO { ShotByGunId = shotByGunId, ShotGunId = shotGunId });
     }
 
     public void UpdateTimeRemaining(TimeSpan timeRemaining)
