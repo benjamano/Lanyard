@@ -1,6 +1,7 @@
 ﻿using Lanyard.Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
+using System.Net.Http;
 
 public class MusicPlayer : IMusicPlayer, IDisposable
 {

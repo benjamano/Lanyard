@@ -1,8 +1,13 @@
 ﻿using Lanyard.Client.Controllers;
 using Lanyard.Client.PacketSniffing;
+using Lanyard.Client.UI;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Threading;
+using System.Windows;
+using static System.Net.Mime.MediaTypeNames;
+using Application = System.Windows.Application;
 
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");
@@ -32,6 +37,8 @@ services.AddSingleton<IGameStateService, GameStateService>();
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
 
+services.AddSingleton<WindowManager>();
+
 ServiceProvider provider = services.BuildServiceProvider();
 
 List<Action<HubConnection>> registrations =
@@ -47,7 +54,7 @@ IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
 
 await sniffer.StartSniffingAsync();
 
-Console.WriteLine("Client running. Press Enter to exit.");
+Console.WriteLine("Client running. Press Enter to exit or type 'show' to display window.");
 
 bool stop = false;
 
@@ -55,35 +62,54 @@ while (stop == false)
 {
     string? message = Console.ReadLine();
 
-    if (string.IsNullOrWhiteSpace(message) == false && int.TryParse(message, out int actionType))
+    if (string.IsNullOrWhiteSpace(message) == false)
     {
-        switch (actionType)
+        if (message.Equals("show", StringComparison.OrdinalIgnoreCase))
         {
-            case 1:
-                // SEND A TEST PACKET WITH 10 MINUTES REMAINING
-                
-                Random random = new();
+            Thread uiThread = new Thread(() =>
+            {
+                var window = new TestWindow();
+                window.Show();
+                System.Windows.Threading.Dispatcher.Run();
+            });
 
-                sniffer.HandlePacketAsync(["4", "@015", "0"]);
+            uiThread.SetApartmentState(ApartmentState.STA);
+            uiThread.Start();
+        }
+        else if (int.TryParse(message, out int actionType))
+        {
+            switch (actionType)
+            {
+                case 1:
+                    // SEND A TEST PACKET WITH 10 MINUTES REMAINING
 
-                sniffer.HandlePacketAsync(["1", "0", "0", "600"]);
+                    Random random = new();
 
-                sniffer.HandlePacketAsync(["3", "1", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                    sniffer.HandlePacketAsync(["4", "@015", "0"]);
 
-                sniffer.HandlePacketAsync(["2", "0", random.Next(1, 101).ToString()]);
+                    sniffer.HandlePacketAsync(["1", "0", "0", "600"]);
 
-                sniffer.HandlePacketAsync(["2", "2", random.Next(1, 101).ToString()]);
+                    sniffer.HandlePacketAsync(["3", "1", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacketAsync(["3", "3", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                    sniffer.HandlePacketAsync(["2", "0", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacketAsync(["3", "7", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+                    sniffer.HandlePacketAsync(["2", "2", random.Next(1, 101).ToString()]);
 
-                sniffer.HandlePacketAsync(["4", "@014", "0"]);
+                    sniffer.HandlePacketAsync(["3", "3", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
 
-                break;
-            default:
-                Console.WriteLine("Unknown action.");
-                break;
+                    sniffer.HandlePacketAsync(["3", "7", "0", random.Next(1, 201).ToString(), "0", "0", "0", random.Next(1, 101).ToString()]);
+
+                    sniffer.HandlePacketAsync(["4", "@014", "0"]);
+
+                    break;
+                default:
+                    Console.WriteLine("Unknown action.");
+                    break;
+            }
+        }
+        else
+        {
+            stop = true;
         }
     }
     else
