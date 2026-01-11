@@ -109,7 +109,6 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             {
                 case 1:
                     // Timing Packet
-                    //Task.Run(() => _actions.HandleTimingPacketAsync(decodedData));
 
                     await _actions.HandleTimingPacketAsync(decodedData);
                     break;
@@ -119,13 +118,11 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
                     break;
                 case 3:
                     // Player Score Packet
-                    //Task.Run(() => _actions.HandlePlayerScorePacketAsync(decodedData));
 
                     await _actions.HandlePlayerScorePacketAsync(decodedData);
                     break;
                 case 4:
                     // Game Status Packet
-                    //Task.Run(() => _actions.HandleGameStatusPacketAsync(decodedData));
 
                     await _actions.HandleGameStatusPacketAsync(decodedData);
                     break;
@@ -152,5 +149,4 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
 
         return sb.ToString();
     }
-
 }

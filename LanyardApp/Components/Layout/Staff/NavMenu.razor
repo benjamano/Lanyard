@@ -6,24 +6,17 @@
 
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
     <div class="container-fluid px-4">
-        
-        <!-- Logo/Brand -->
         <a class="navbar-brand d-flex align-items-center" href="/staff">
             <FluentIcon Value="@(new Icons.Regular.Size24.Apps())" Color="Color.Custom" CustomColor="#700f88" class="me-2" />
             <span style="font-size: 1.5rem; font-weight: 700; color: #700f88;">Lanyard</span>
         </a>
 
-        <!-- Navbar toggler for mobile -->
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
         </button>
 
-        <!-- Center and Right Navigation -->
         <div class="collapse navbar-collapse" id="navbarNav">
-            
-            <!-- Center Navigation Links -->
-            <ul class="navbar-nav mx-auto">
-                
+            <ul class="navbar-nav mx-auto me-0">
                 <li class="nav-item">
                     <a class="nav-link d-flex align-items-center px-3" href="/staff">
                         <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.Custom" CustomColor="#333" class="me-2" />
@@ -31,7 +24,7 @@
                     </a>
                 </li>
 
-                <AuthorizeView Roles="Admin, CanControlMusic">
+                <AuthorizeView Roles="Admin,CanControlMusic">
                     <Authorized>
                         <li class="nav-item">
                             <a class="nav-link d-flex align-items-center px-3" href="/staff/music">
@@ -96,7 +89,6 @@
                 </li>
             </ul>
 
-            <!-- Right Side User Menu -->
             <ul class="navbar-nav ms-auto">
                 <AuthorizeView>
                     <Authorized>

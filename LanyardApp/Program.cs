@@ -28,6 +28,8 @@ builder.Services.AddSingleton<MusicPlayerService>();
 // Other Business Services
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
+builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IMusicService, MusicService>();
 
 // Configure Database
 string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
