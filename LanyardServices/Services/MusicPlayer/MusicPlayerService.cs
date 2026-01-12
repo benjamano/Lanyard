@@ -13,7 +13,7 @@ namespace Lanyard.Application.Services;
 /// </summary>
 public class MusicPlayerService
 {
-    private readonly IHubContext<MusicControlHub> _hubContext;
+    private readonly IHubContext<SignalRControlHub> _hubContext;
     private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
     private readonly object _lock = new();
     private static readonly Random _rng = new();
@@ -25,7 +25,7 @@ public class MusicPlayerService
     private int _queueIndex = 0;
 
     public MusicPlayerService(
-        IHubContext<MusicControlHub> hubContext,
+        IHubContext<SignalRControlHub> hubContext,
         IDbContextFactory<ApplicationDbContext> contextFactory)
     {
         _hubContext = hubContext;

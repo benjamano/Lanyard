@@ -4,6 +4,7 @@ using Lanyard.Client.UI;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using static System.Net.Mime.MediaTypeNames;
@@ -46,7 +47,25 @@ List<Action<HubConnection>> registrations =
     provider.GetRequiredService<MusicControlHandler>().Register
 ];
 
-SignalRClient? signalRClient = new(serverUrl, registrations);
+string? baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lanyardClient");
+
+Directory.CreateDirectory(baseDir);
+
+string path = Path.Combine(baseDir, "client-id.txt");
+
+Guid clientId;
+
+if (File.Exists(path) && Guid.TryParse(File.ReadAllText(path), out var saved))
+{
+    clientId = saved;
+}
+else
+{
+    clientId = Guid.NewGuid();
+    File.WriteAllText(path, clientId.ToString());
+}
+
+SignalRClient? signalRClient = new(serverUrl, clientId, registrations);
 
 await signalRClient.StartAsync();
 

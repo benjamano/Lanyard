@@ -1,0 +1,11 @@
+﻿using Lanyard.Infrastructure.Models;
+using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Lanyard.Infrastructure.DTO;
+
+public class ClientConnectedDTO : Client
+{
+    public bool IsCurrentlyConnected { get; set; }
+}

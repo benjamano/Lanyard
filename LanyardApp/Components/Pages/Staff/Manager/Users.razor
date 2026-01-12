@@ -16,7 +16,7 @@
         <FluentSearch Placeholder="Search..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
     </FluentToolbar>
 
-    <FluentDataGrid Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <EmptyContent>
             No Users Found
         </EmptyContent>

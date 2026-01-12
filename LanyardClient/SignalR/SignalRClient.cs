@@ -4,10 +4,10 @@ public class SignalRClient : ISignalRClient
 {
     private readonly HubConnection _connection;
 
-    public SignalRClient(string serverUrl, IEnumerable<Action<HubConnection>> registrations)
+    public SignalRClient(string serverUrl, Guid clientId, IEnumerable<Action<HubConnection>> registrations)
     {
         _connection = new HubConnectionBuilder()
-            .WithUrl(serverUrl)
+            .WithUrl(serverUrl + $"?clientId={clientId}")
             .WithAutomaticReconnect()
             .Build();
 

@@ -75,6 +75,14 @@
                                         <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.Custom" CustomColor="#333" class="me-2" />
                                         <span>Users</span>
                                     </a>
+                                    <AuthorizeView Roles="Admin,CanControlMusic" Context="_context">
+                                    <Authorized>
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/clients">
+                                                <FluentIcon Value="@(new Icons.Regular.Size20.Tv())" Color="Color.Custom" CustomColor="#333" class="me-2" />
+                                                <span>Clients</span>
+                                            </a>
+                                    </Authorized>
+                                </AuthorizeView>
                                 </div>
                             </div>
                         </li>

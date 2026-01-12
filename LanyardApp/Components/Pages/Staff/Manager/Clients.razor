@@ -1,0 +1,159 @@
+﻿@page "/staff/manage/clients"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+
+@inject IClientService _clientService
+@inject IToastService _toastService
+
+<FluentCard Height="auto">
+    <FluentLabel Typo="Typography.PaneHeader">
+        Clients
+    </FluentLabel>
+    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x=> x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+        <ChildContent>
+            <PropertyColumn Property="x => x.Id" Title="Client ID" />
+            <TemplateColumn Sortable="true" Title="Name">
+                @context.Name
+                <FluentIcon OnClick="() => ShowUpdateClientNameDialog(context.Id)" Icon="Icons.Regular.Size20.Edit" Class="ms-1" role="button"></FluentIcon>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" />
+            <PropertyColumn IsDefaultSortColumn="true" Sortable="true" Property="x => x.LastLogin" Title="Last Login" />
+            <PropertyColumn Sortable="true" Property="x => x.IsCurrentlyConnected" Title="Currently Connected" />
+            <TemplateColumn Title="Session Length">
+                @if (context.IsCurrentlyConnected) {
+                    <span>
+                        @(((TimeSpan)(now - context.LastLogin)!).ToString(@"hh\:mm\:ss"))s
+                    </span>
+                }
+                else
+                {
+                    <span>00:00:00</span> 
+                }
+            </TemplateColumn>
+        </ChildContent>        
+        <LoadingContent>
+            Loading...
+        </LoadingContent>
+    </FluentDataGrid>
+</FluentCard>
+
+<FluentDialog @ref="updateClientNameDialog" @bind-Hidden="@hideUpdateClientNameDialog">
+    <FluentDialogHeader ShowDismiss="true" Visible="true">
+        Update Client Name
+    </FluentDialogHeader>
+
+    <EditForm Model="updateClientModel" OnValidSubmit="SaveNewClientName">
+        <FluentDialogBody Class="w-100">
+            <FluentTextField @bind-Value="updateClientModel.Name" class="w-100" Label="New Client Name" Placeholder="Enter new client name..." />
+        </FluentDialogBody>
+
+        <FluentDialogFooter>
+            <FluentButton Autofocus="true" @onclick="() => updateClientNameDialog!.Hide()">Close dialog</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit">Save</FluentButton>
+        </FluentDialogFooter>
+    </EditForm>
+</FluentDialog>
+
+@code {
+    private FluentDialog? updateClientNameDialog;
+    private UpdateClientModel updateClientModel = new();
+
+    private bool hideUpdateClientNameDialog = true;
+    private Guid? updatingClientId = null;
+
+    private class UpdateClientModel
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private IEnumerable<ClientConnectedDTO> clients = Array.Empty<ClientConnectedDTO>();
+
+    private PeriodicTimer? timer;
+    private DateTime now;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            updateClientNameDialog!.Hide();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetClientsAsync();
+
+        now = DateTime.Now;
+
+        timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        _ = Task.Run(async () =>
+        {
+            while (await timer.WaitForNextTickAsync())
+            {
+                now = DateTime.Now;
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+
+    private void ShowUpdateClientNameDialog(Guid clientId)
+    {
+        updatingClientId = clientId;
+
+        updateClientModel.Name = clients.FirstOrDefault(x => x.Id == clientId)?.Name ?? string.Empty;
+
+        updateClientNameDialog?.Show();
+    }
+
+    private async Task GetClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+
+        if (result.IsSuccess)
+        {
+            clients = result.Data!;
+        }
+        else
+        {
+            _toastService.ShowError("Failed to load connected clients!");
+        }
+    }
+
+    private async Task SaveNewClientName()
+    {
+        if (updatingClientId == null) return;
+
+        Result<Client?> getResult = await _clientService.GetClientFromIdAsync(updatingClientId ?? new Guid());
+
+        if (!getResult.IsSuccess || getResult.Data == null)
+        {
+            _toastService.ShowError($"An error occured when updating the name of this client, {getResult.Error}");
+        }
+
+        Client client = getResult.Data!;
+
+        client.Name = updateClientModel.Name;
+
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+
+        if (updateResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Name updated!");
+        }
+        else
+        {
+            _toastService.ShowError($"An error occured when updating the name of this client, {updateResult.Error}");
+        }
+
+        await GetClientsAsync();
+
+        updateClientNameDialog?.Hide();
+    }
+}

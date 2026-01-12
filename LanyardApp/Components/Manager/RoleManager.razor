@@ -34,7 +34,7 @@
                                 <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Name" />
                                 <TemplateColumn Title="Created By">
                                     @{
-                                        var createdBy = context.CreatedByUser?.GetName() ?? "N/A";
+                                        string? createdBy = context.CreatedByUser?.GetName() ?? "N/A";
                                     }
                                     @createdBy
                                 </TemplateColumn>

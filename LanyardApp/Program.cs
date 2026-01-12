@@ -30,6 +30,7 @@ builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
+builder.Services.AddScoped<IClientService, ClientService>();
 
 // Configure Database
 string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
@@ -114,7 +115,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // Map SignalR hub for music control
-app.MapHub<MusicControlHub>("/websocket");
+app.MapHub<SignalRControlHub>("/websocket");
 
 app.MapControllers();
 

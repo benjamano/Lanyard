@@ -7,8 +7,6 @@
 @ChildContent
 
 @code {
-    private ErrorBoundary? errorBoundary;
-
     protected override Task OnErrorAsync(Exception ex)
     {
         string title = ex.GetType().ToString();
@@ -21,7 +19,7 @@
 
         ToastService.ShowError($"{title}: {message}");
 
-        errorBoundary?.Recover();
+        // errorBoundary?.Recover();
 
         return Task.CompletedTask;
     }

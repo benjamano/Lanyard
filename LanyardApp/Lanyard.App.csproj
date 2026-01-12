@@ -35,8 +35,4 @@
     <ProjectReference Include="..\LanyardServices\Lanyard.Application.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Components\Pages\Staff\Utilities\" />
-  </ItemGroup>
-
 </Project>
