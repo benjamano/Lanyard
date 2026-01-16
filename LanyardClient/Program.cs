@@ -65,6 +65,8 @@ else
     File.WriteAllText(path, clientId.ToString());
 }
 
+Environment.SetEnvironmentVariable("LANYARD_CLIENT_ID", clientId.ToString());
+
 SignalRClient? signalRClient = new(serverUrl, clientId, registrations);
 
 await signalRClient.StartAsync();

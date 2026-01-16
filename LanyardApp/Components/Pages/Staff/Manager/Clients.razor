@@ -2,15 +2,18 @@
 @attribute [Authorize(Roles = "Admin")]
 
 @using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager
 
 @inject IClientService _clientService
 @inject IToastService _toastService
+
+<PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
     <FluentLabel Typo="Typography.PaneHeader">
         Clients
     </FluentLabel>
-    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x=> x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x=> x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <ChildContent>
             <PropertyColumn Property="x => x.Id" Title="Client ID" />
             <TemplateColumn Sortable="true" Title="Name">
@@ -18,7 +21,15 @@
                 <FluentIcon OnClick="() => ShowUpdateClientNameDialog(context.Id)" Icon="Icons.Regular.Size20.Edit" Class="ms-1" role="button"></FluentIcon>
             </TemplateColumn>
             <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" />
-            <PropertyColumn IsDefaultSortColumn="true" Sortable="true" Property="x => x.LastLogin" Title="Last Login" />
+            <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" Sortable="true" Property="x => x.LastLogin" Title="Last Login" />
+            <TemplateColumn Title="Capabilities">
+                @if (context.ProjectionEnabled)
+                {
+                    <FluentBadge Appearance="Appearance.Accent" Class="me-1">Projection</FluentBadge>
+                }
+
+                <FluentIcon OnClick="() => OpenUpdateClientCapabilitiesCard(context.Id)" Icon="Icons.Regular.Size20.Edit" Class="ms-1" role="button"></FluentIcon>
+            </TemplateColumn>
             <PropertyColumn Sortable="true" Property="x => x.IsCurrentlyConnected" Title="Currently Connected" />
             <TemplateColumn Title="Session Length">
                 @if (context.IsCurrentlyConnected) {
@@ -38,9 +49,16 @@
     </FluentDataGrid>
 </FluentCard>
 
+<ClientCapabilities IsShowing="@showClientCapabilitiesCard" clientId="@updatingClientId"></ClientCapabilities>
+
 <FluentDialog @ref="updateClientNameDialog" @bind-Hidden="@hideUpdateClientNameDialog">
-    <FluentDialogHeader ShowDismiss="true" Visible="true">
-        Update Client Name
+    <FluentDialogHeader @onclose="CloseUpdateClientNameDialog" ShowDismiss="true" Visible="true">
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
+            <FluentLabel Typo="Typography.PaneHeader">
+                Update Client Name
+            </FluentLabel>
+        </FluentStack>
     </FluentDialogHeader>
 
     <EditForm Model="updateClientModel" OnValidSubmit="SaveNewClientName">
@@ -48,14 +66,16 @@
             <FluentTextField @bind-Value="updateClientModel.Name" class="w-100" Label="New Client Name" Placeholder="Enter new client name..." />
         </FluentDialogBody>
 
-        <FluentDialogFooter>
-            <FluentButton Autofocus="true" @onclick="() => updateClientNameDialog!.Hide()">Close dialog</FluentButton>
-            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit">Save</FluentButton>
+        <FluentDialogFooter Class="d-flex justify-content-end">
+            <FluentButton Autofocus="true" @onclick="CloseUpdateClientNameDialog">Close</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
         </FluentDialogFooter>
     </EditForm>
 </FluentDialog>
 
 @code {
+    private bool showClientCapabilitiesCard = false;
+
     private FluentDialog? updateClientNameDialog;
     private UpdateClientModel updateClientModel = new();
 
@@ -67,7 +87,7 @@
         public string Name { get; set; } = string.Empty;
     }
 
-    private IEnumerable<ClientConnectedDTO> clients = Array.Empty<ClientConnectedDTO>();
+    private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
 
     private PeriodicTimer? timer;
     private DateTime now;
@@ -112,9 +132,16 @@
         updateClientNameDialog?.Show();
     }
 
+    private void CloseUpdateClientNameDialog()
+    {
+        updatingClientId = null;
+
+        updateClientNameDialog?.Hide();
+    }
+
     private async Task GetClientsAsync()
     {
-        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
 
         if (result.IsSuccess)
         {
@@ -122,7 +149,7 @@
         }
         else
         {
-            _toastService.ShowError("Failed to load connected clients!");
+            _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }
     }
 
@@ -155,5 +182,11 @@
         await GetClientsAsync();
 
         updateClientNameDialog?.Hide();
+    }
+
+    private void OpenUpdateClientCapabilitiesCard(Guid clientId)
+    {
+        updatingClientId = clientId;
+        showClientCapabilitiesCard = true;
     }
 }

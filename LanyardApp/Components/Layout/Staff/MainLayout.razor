@@ -17,12 +17,28 @@
                 <ErrorContent Context="exception">
                 </ErrorContent>
             </CustomErrorBoundaryHandler>
-
-            <Toast></Toast>
-
-            @* <Footer></Footer> *@
         </article>
     </main>
+
+    <FluentFooter>
+        <FluentCard AreaRestricted="false" MinimalStyle="true" Class="rounded-0">
+            <FluentStack VerticalAlignment="VerticalAlignment.Center">
+                <div style="flex: 1">
+                    <ThemeSelector></ThemeSelector>
+                </div>      
+                
+                <div>
+                    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Center" Orientation="Orientation.Vertical">
+                        <span class="mb-0">© Copyright @DateTime.Now.Year</span>
+                        <span>Version 1.2.1</span>
+                    </FluentStack>
+                </div>
+
+                <div style="flex: 1; text-align: right;">
+                </div>
+            </FluentStack>
+        </FluentCard>
+    </FluentFooter>
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>

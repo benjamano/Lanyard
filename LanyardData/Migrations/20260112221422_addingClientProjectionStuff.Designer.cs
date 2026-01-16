@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260112221422_addingClientProjectionStuff")]
+    partial class addingClientProjectionStuff
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -95,38 +98,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("Clients");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Height")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Index")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Width")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("ClientAvailableScreens");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -139,11 +110,8 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("DisplayIndex")
                         .HasColumnType("int");
 
-                    b.Property<int?>("Height")
+                    b.Property<int>("Height")
                         .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
 
                     b.Property<bool>("IsBorderless")
                         .HasColumnType("bit");
@@ -154,7 +122,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid>("ProjectionProgramId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int?>("Width")
+                    b.Property<int>("Width")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -265,14 +233,14 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid>("ProjectionProgramId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Source")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("Type")
                         .HasColumnType("int");
+
+                    b.Property<int?>("VideoSourceIndex")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Webpage")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -505,17 +473,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>

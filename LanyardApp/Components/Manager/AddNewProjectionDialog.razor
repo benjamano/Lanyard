@@ -1,0 +1,248 @@
+﻿@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.Models
+@implements IDialogContentComponent<Guid>
+
+@inject IToastService _toastService
+@inject IClientService _clientService
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.ProjectionScreenText())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            @(steps.Count() <= currentStepIndex ? "Finish" : steps[currentStepIndex])
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+@if (isSelectingScreen)
+{
+    <FluentDialogBody>
+        <FluentDataGrid ShowHover="true" Items="@projectionSettings.AsQueryable()" GridTemplateColumns="auto 1fr 1fr 1fr">
+            <SelectColumn SelectAll="true" OnSelect="@(x=> UpdateSelectedScreen(x.Item))" Property="@(x=> x == selectedScreen)" TGridItem="ClientAvailableScreen" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+            <PropertyColumn Property="x => x.Index" Title="Display Number" />
+            <PropertyColumn Property="x => x.Name" Title="Screen Name" />
+            <TemplateColumn Title="Size">
+                @context.Width x @(context.Height)px
+            </TemplateColumn>
+        </FluentDataGrid>
+    </FluentDialogBody>
+}
+else if (isConfiguringScreenSettings)
+{
+    <FluentDialogBody>
+        <FluentStack>
+            <FluentEditForm Model="newClientProjectionSettings">
+                <FluentValidationSummary />
+
+                <FluentCheckbox @bind-Value="newClientProjectionSettings.IsFullScreen">
+                    Full Screen
+                </FluentCheckbox>
+
+                <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsBorderless">
+                    Borderless
+                </FluentCheckbox>
+
+
+                <FluentNumberField @bind-Value="selectedScreen!.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required/>
+
+                <FluentNumberField @bind-Value="selectedScreen!.Height" Label="Height" Appearance="FluentInputAppearance.Outline" Required/>
+            </FluentEditForm>
+        </FluentStack>
+    </FluentDialogBody>
+}
+else if (isChoosingProjectionProgram)
+{
+    <FluentDialogBody>
+        <FluentStack Orientation="Orientation.Vertical">
+            <FluentDataGrid class="w-100" ShowHover="true" Items="@projectionPrograms.AsQueryable()" GridTemplateColumns="auto 1fr">
+                <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedProjectionProgram(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+                <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+            </FluentDataGrid>
+
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Right">
+                <FluentButton Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()">Create New Program</FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentDialogBody>
+}
+
+<FluentDialogFooter>
+    <FluentButton OnClick="HandleGoBack" Loading="@isCreating" Disabled="@previousButtonIsDisabled" IconStart="new Icons.Regular.Size20.ArrowPrevious()">Previous</FluentButton>
+    <FluentButton OnClick="HandleNextPage" Loading="@isCreating" Disabled="@nextButtonIsDisabled" IconStart="new Icons.Regular.Size20.ArrowNext()">@nextButtonText</FluentButton>
+    <FluentButton OnClick="CancelDialog" Loading="@isCreating" IconStart="new Icons.Regular.Size20.CalendarCancel()">Cancel</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    [Parameter]
+    public Guid Content { get; set; } = default!;
+
+    private ClientProjectionSettings newClientProjectionSettings = new();
+
+    private IEnumerable<ClientAvailableScreen> projectionSettings = Array.Empty<ClientAvailableScreen>();
+    private IEnumerable<ProjectionProgram> projectionPrograms = Array.Empty<ProjectionProgram>();
+
+    private ClientAvailableScreen? selectedScreen;
+    private ProjectionProgram? selectedProjectionProgram;
+
+    private int currentStepIndex = 0;
+    private List<string> steps = new()
+    {
+        "Select Screen",
+        "Configure Screen Settings",
+        "Select Projection Program",
+        "Review & Confirm"
+    };
+
+    private string nextButtonText = "Next";
+    private bool previousButtonIsDisabled = true;
+    private bool nextButtonIsDisabled = true;
+    private bool isCreating = false;
+
+    private bool isSelectingScreen = true;
+    private bool isConfiguringScreenSettings = false;
+    private bool isChoosingProjectionProgram = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ClientAvailableScreen>> result = await _clientService.GetClientAvailableScreensAsync(Content);
+
+        if (result.IsSuccess)
+        {
+            projectionSettings = result.Data!;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load projection settings, {result.Error}");
+
+            await CancelDialog();
+        }
+
+        Result<IEnumerable<ProjectionProgram>> programResult = await _clientService.GetProjectionProgramsAsync();
+
+        if (programResult.IsSuccess)
+        {
+            projectionPrograms = programResult.Data!;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load projection programs, {programResult.Error}");
+
+            await CancelDialog();
+        }
+    }
+
+    private async Task UpdateSelectedScreen(ClientAvailableScreen? clientAvailableScreen)
+    {
+        selectedScreen = clientAvailableScreen;
+
+        if (selectedScreen != null)
+        {
+            nextButtonIsDisabled = false;
+        }
+        else
+        {
+            nextButtonIsDisabled = true;
+        }
+    }
+
+    private async Task UpdateSelectedProjectionProgram(ProjectionProgram? projectionProgram)
+    {
+        selectedProjectionProgram = projectionProgram;
+
+        if (selectedProjectionProgram != null)
+        {
+            nextButtonIsDisabled = false;
+        }
+        else
+        {
+            nextButtonIsDisabled = true;
+        }
+    }
+
+    private async Task HandleNextPage()
+    {
+        currentStepIndex++;
+
+        if (currentStepIndex >= steps.Count - 1)
+        {
+            nextButtonText = "Finish";
+        }
+        else if (currentStepIndex >= steps.Count)
+        {
+            return;
+
+            // SAVE
+        }
+        else
+        {
+            nextButtonText = "Next";
+
+            previousButtonIsDisabled = false;
+        }
+
+        await HandleCurrentStep();
+    }
+
+    private async Task HandleCurrentStep()
+    {
+        isSelectingScreen = false;
+        isConfiguringScreenSettings = false;
+        isChoosingProjectionProgram = false;
+
+        switch (currentStepIndex)
+        {
+            case 0:
+                isSelectingScreen = true;
+
+                if (selectedScreen == null)
+                {
+                    nextButtonIsDisabled = true;
+                }
+                else
+                {
+                    nextButtonIsDisabled = false;
+                }
+                break;
+            case 1:
+                isConfiguringScreenSettings = true;
+                break;
+            case 2:
+                isChoosingProjectionProgram = true;
+
+                if (selectedProjectionProgram == null)
+                {
+                    nextButtonIsDisabled = true;
+                }
+                else
+                {
+                    nextButtonIsDisabled = false;
+                }
+                break;
+        }
+    }
+
+    private async Task HandleGoBack()
+    {
+        currentStepIndex--;
+
+        nextButtonText = "Next";
+
+        if (currentStepIndex == 0)
+        {
+            previousButtonIsDisabled = true;
+        }
+
+        await HandleCurrentStep();
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog!.CancelAsync();
+    }
+}

@@ -1,6 +1,8 @@
 ﻿using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -17,9 +19,8 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
 
-    private const string MusicGroup = "Music";
-
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
+
     public static IReadOnlyCollection<string> ConnectedIds => (IReadOnlyCollection<string>)_connections.Keys;
 
     public override async Task OnConnectedAsync()
@@ -88,7 +89,7 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
             }
         }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, MusicGroup);
+        await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
 
         _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to Music group", client.Name, Context.ConnectionId);
 
@@ -99,7 +100,7 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, MusicGroup);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
 
         _logger.LogInformation("Client {ConnectionId} disconnected from Music group", Context.ConnectionId);
 
@@ -114,41 +115,57 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
         
         _playerService.UpdatePlaybackState(state);
         
-        await Clients.Group(MusicGroup).SendAsync("PlaybackStateChanged", state);
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("PlaybackStateChanged", state);
     }
 
     public async Task CurrentPlayingSongChanged(Guid song)
     {
         _logger.LogInformation("Client {ConnectionId} reported new song: {Song}", Context.ConnectionId, song);
 
-        await Clients.Group(MusicGroup).SendAsync("CurrentPlayingSongChanged", song);
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("CurrentPlayingSongChanged", song);
+    }
+
+    public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens);
+
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogError("Failed to get client ID from connection ID {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return;
+        }
+
+        Guid clientId = getResult.Data!;
+
+        await _clientService.SetClientAvailableScreensAsync(clientId, screens);
     }
 
     public async Task Load(Guid songId)
     {
         _logger.LogInformation("Load command received for song {SongId}", songId);
         
-        await Clients.Group(MusicGroup).SendAsync("Load", songId);
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Load", songId);
     }
 
     public async Task Play()
     {
         _logger.LogInformation("Play command received");
         
-        await Clients.Group(MusicGroup).SendAsync("Play");
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Play");
     }
 
     public async Task Pause()
     {
         _logger.LogInformation("Pause command received");
         
-        await Clients.Group(MusicGroup).SendAsync("Pause");
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Pause");
     }
 
     public async Task Stop()
     {
         _logger.LogInformation("Stop command received");
         
-        await Clients.Group(MusicGroup).SendAsync("Stop");
+        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
     }
 }

@@ -19,10 +19,28 @@ public enum GameStatus
 
 public enum GameMode
 {
-    //TODO: Fill this out
+    StandardSolo = 0,
+    StandardTeam = 1,
+    FastSolo = 2,
+    FastTeam = 3,
+    SoloElimination = 4,
+    TeamElimination = 5,
+    FastTeamElimination = 6,
+    TeamReload = 7,
+    BirthdaySolo = 8,
+    BirthdayTeam = 9,
+    Vampire = 10,
+    Targets1 = 11,
+    Targets2 = 12,
+    ContinuousSolo = 13,
+    ContinuousTeam = 14,
+    Targets3 = 15,
+    Targets4 = 16,
+    Zombie = 17
 }
 
 public enum SoundSet
 {
-    //TODO: Fill this out
+    Male = 1,
+    Female = 2,
 }

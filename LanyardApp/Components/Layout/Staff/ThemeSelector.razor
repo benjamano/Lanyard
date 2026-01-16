@@ -1,0 +1,22 @@
+﻿<FluentSelect Embedded="true" Label="Theme" Items="@(Enum.GetValues<DesignThemeModes>())" @bind-SelectedOption="@Mode" />
+
+<FluentDesignTheme @bind-Mode="@Mode" @bind-OfficeColor="@OfficeColor" OnLoaded="@OnLoaded" OnLuminanceChanged="@OnLuminanceChanged" StorageName="theme" />
+
+@code {
+    public DesignThemeModes Mode { get; set; }
+
+    public OfficeColor? OfficeColor { get; set; }
+
+    void OnLoaded(LoadedEventArgs e)
+    {
+    }
+
+    void OnLuminanceChanged(LuminanceChangedEventArgs e)
+    {
+    }
+
+    void PickRandomColor()
+    {
+        OfficeColor = OfficeColorUtilities.GetRandom();
+    }
+}
