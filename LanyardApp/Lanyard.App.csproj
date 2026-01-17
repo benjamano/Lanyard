@@ -8,6 +8,8 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <AnalysisLevel>latest</AnalysisLevel>
     <PublishAot>False</PublishAot>
+
+	<Version>1.2</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
