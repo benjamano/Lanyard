@@ -2,4 +2,70 @@
 @attribute [Authorize(Roles = "Admin")]
 
 @using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager.ProjectionPrograms
+@using Lanyard.Application.Services.Clients
 
+@inject IClientService _clientService
+@inject IProjectionProgramService _projectionService
+@inject IToastService _toastService
+
+<PageTitle>Projection Programs</PageTitle>
+
+<FluentCard AreaRestricted="false">
+    <FluentMultiSplitter Class="h-100">
+        <FluentMultiSplitterPane Size="15%">
+            <div class="me-3">
+                <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr">
+                    <ChildContent>
+                        <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedScreen(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+                        <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                    </ChildContent>
+                    <EmptyContent>
+                        No Projection Programs Exist!
+                    </EmptyContent>
+                </FluentDataGrid>
+            </div>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="70%">
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <div class="w-50">
+                    <ProgramFlow></ProgramFlow>
+                </div>
+            </FluentStack>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="15%">
+            <Toolbox></Toolbox>
+        </FluentMultiSplitterPane>
+    </FluentMultiSplitter>
+</FluentCard>
+@code {
+    private IEnumerable<ProjectionProgram> projectionPrograms { get; set; } = Array.Empty<ProjectionProgram>();
+
+    private ProjectionProgram? selectedProjectionProgram;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetProjectionProgramsAsync();
+    }
+
+    private async Task GetProjectionProgramsAsync()
+    {
+        Result<IEnumerable<ProjectionProgram>> getResult = await _projectionService.GetProjectionProgramsAsync();
+
+        if (!getResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occured when fetching projection programs, {getResult.Error}");
+        }
+        else
+        {
+            projectionPrograms = getResult.Data!;
+        }
+    }
+
+    private async Task UpdateSelectedScreen(ProjectionProgram program)
+    {
+        selectedProjectionProgram = program;
+    }
+}

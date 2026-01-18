@@ -132,7 +132,6 @@ body {
     font-size: var(--type-ramp-base-font-size) !important;
     line-height: var(--type-ramp-base-line-height) !important;
     font-weight: var(--font-weight) !important;
-    color: var(--neutral-foreground-rest) !important;
     /*    background: var(--neutral-fill-layer-rest) !important;*/
     background-color: var(--neutral-layer-1) !important;
 }

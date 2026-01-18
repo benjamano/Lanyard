@@ -3,6 +3,7 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
@@ -33,6 +34,7 @@ builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
+builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 
 string? informationalVersion = Assembly
     .GetExecutingAssembly()
@@ -68,7 +70,7 @@ builder.Services.AddAuthorization();
 // Configure cookie to persist login across sessions
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.ExpireTimeSpan = TimeSpan.FromDays(30);
     options.SlidingExpiration = true;
     options.LoginPath = "/login";
     options.LogoutPath = "/logout";

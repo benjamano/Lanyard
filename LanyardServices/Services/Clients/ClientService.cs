@@ -278,6 +278,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .AsNoTracking()
                 .Where(x => x.ClientId == clientId)
                 .Where(x => x.IsActive)
+                .OrderBy(x=> x.Index)
                 .ToListAsync();
 
             return Result<IEnumerable<ClientAvailableScreen>>.Ok(screens);
@@ -285,25 +286,6 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
         catch (Exception ex)
         {
             return Result<IEnumerable<ClientAvailableScreen>>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<Result<IEnumerable<ProjectionProgram>>> GetProjectionProgramsAsync()
-    {
-        try
-        {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            IEnumerable<ProjectionProgram> programs = await ctx.ProjectionPrograms
-                .AsNoTracking()
-                .Where(x => x.IsActive)
-                .ToListAsync();
-
-            return Result<IEnumerable<ProjectionProgram>>.Ok(programs);
-        }
-        catch (Exception ex)
-        {
-            return Result<IEnumerable<ProjectionProgram>>.Fail(ex.Message);
         }
     }
 }

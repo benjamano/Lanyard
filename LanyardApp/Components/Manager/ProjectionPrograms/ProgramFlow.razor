@@ -1,0 +1,18 @@
+﻿<FluentStack class="text-center" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentCard MinimalStyle="true" Class="py-4">START</FluentCard>
+    <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
+    @if (steps != null)
+    {
+        @foreach (ProjectionProgramStep step in steps)
+        {
+            <FluentCard MinimalStyle="true" Class="py-4">START</FluentCard>
+            <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
+        }
+    }
+    <FluentCard MinimalStyle="true" Class="py-4">END</FluentCard>
+</FluentStack>
+
+@code{
+    [Parameter]
+    public IEnumerable<ProjectionProgramStep> steps { get; set; } = Array.Empty<ProjectionProgramStep>();
+}

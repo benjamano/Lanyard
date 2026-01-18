@@ -7,5 +7,9 @@
   "copilot.general.chat.enableCopilotCodingAgent": true,
   "copilot.general.chat.enableDotNetProjectSpecificInstructions": true,
   "copilot.general.chat.enableCustomInstructionsFiles": true,
-  "copilot.general.chat.defaultAgent": "Agent"
+  "copilot.general.chat.defaultAgent": "Agent",
+  "languages.defaults.general.wordWrap": true,
+  "languages.defaults.general.wordWrapVisualGlyphs": true,
+  "languages.androidXml.general.wordWrapVisualGlyphs": true,
+  "textEditor.general.display.wordWrapAutoIndent": true
 }

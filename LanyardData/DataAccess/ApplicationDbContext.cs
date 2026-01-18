@@ -23,6 +23,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
+        public DbSet<ProjectionProgramStepTemplate> ProjectionProgramStepTemplates { get; set; }
+        public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

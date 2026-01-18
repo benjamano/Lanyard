@@ -1,0 +1,80 @@
+﻿@using Lanyard.Application.Services.Clients
+
+@inject IProjectionProgramService _projectionService
+@inject IToastService _toastService
+
+<FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
+    <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical">
+        <FluentLabel Typo="Typography.PaneHeader">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" />
+            Toolbox
+        </FluentLabel>
+        <FluentDivider Orientation="Orientation.Horizontal" Class="w-100"></FluentDivider>
+
+        @foreach (ProjectionProgramStepTemplate template in stepTemplates)
+        {
+            <FluentCard MinimalStyle="true" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragover="OnDragOver" @ondrop="(e) => OnDrop(e, template)">
+                <FluentLabel Typo="Typography.H6" Class="text-center">@template.Name</FluentLabel>
+                <FluentLabel Class="text-center" Typo="Typography.Body">@template.Description</FluentLabel>
+            </FluentCard>
+        }
+    </FluentStack>
+
+    @* <AuthorizeView Roles="Admin">
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" class="mt-auto">
+            <AddNewProgramStepTemplate></AddNewProgramStepTemplate>
+        </FluentStack>
+    </AuthorizeView> *@
+</FluentStack>
+
+@code{
+    private IList<ProjectionProgramStepTemplate> stepTemplates { get; set; } = Array.Empty<ProjectionProgramStepTemplate>();
+
+    private ProjectionProgramStepTemplate? draggedTemplate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetStepTemplatesAsync();
+    }
+
+    private async Task GetStepTemplatesAsync()
+    {
+        Result<IEnumerable<ProjectionProgramStepTemplate>> getResult = await _projectionService.GetProjectionProgramStepTemplatesAsync();
+
+        if (!getResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occured when fetching projection program step templates, {getResult.Error}");
+        }
+        else
+        {
+            stepTemplates = getResult.Data!.ToList();
+        }
+    }
+
+    private void OnDragStart(DragEventArgs e, ProjectionProgramStepTemplate template)
+    {
+        draggedTemplate = template;
+    }
+
+    private void OnDragOver(DragEventArgs e)
+    {
+        // e.pre();
+    }
+
+    private void OnDrop(DragEventArgs e, ProjectionProgramStepTemplate targetTemplate)
+    {
+        if (draggedTemplate == null || draggedTemplate == targetTemplate)
+            return;
+
+        int fromIndex = stepTemplates.IndexOf(draggedTemplate);
+        int toIndex = stepTemplates.IndexOf(targetTemplate);
+
+        if (fromIndex < 0 || toIndex < 0)
+            return;
+
+        stepTemplates.RemoveAt(fromIndex);
+        stepTemplates.Insert(toIndex, draggedTemplate);
+
+        draggedTemplate = null;
+    }
+}

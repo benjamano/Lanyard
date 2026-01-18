@@ -1,9 +1,11 @@
 ﻿@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
+@using Lanyard.Application.Services.Clients
 @implements IDialogContentComponent<Guid>
 
 @inject IToastService _toastService
 @inject IClientService _clientService
+@inject IProjectionProgramService _projectionService
 
 <FluentDialogHeader ShowDismiss="true">
     <FluentStack VerticalAlignment="VerticalAlignment.Center">
@@ -127,7 +129,7 @@ else if (isChoosingProjectionProgram)
             await CancelDialog();
         }
 
-        Result<IEnumerable<ProjectionProgram>> programResult = await _clientService.GetProjectionProgramsAsync();
+        Result<IEnumerable<ProjectionProgram>> programResult = await _projectionService.GetProjectionProgramsAsync();
 
         if (programResult.IsSuccess)
         {

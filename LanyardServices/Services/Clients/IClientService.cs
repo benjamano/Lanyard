@@ -19,5 +19,4 @@ public interface IClientService
     Task<Result<Guid>> GetClientIdFromConnectionIdAsync(string connectionId);
     Task<Result<bool>> SetClientAvailableScreensAsync(Guid ClientId, IEnumerable<ClientAvailableScreenDTO> screens);
     Task<Result<IEnumerable<ClientAvailableScreen>>> GetClientAvailableScreensAsync(Guid clientId);
-    Task<Result<IEnumerable<ProjectionProgram>>> GetProjectionProgramsAsync();
 }
