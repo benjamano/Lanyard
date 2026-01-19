@@ -1,7 +1,9 @@
 ﻿@using Lanyard.Application.Services.Clients
+@using Lanyard.App.Services
 
 @inject IProjectionProgramService _projectionService
 @inject IToastService _toastService
+@inject DragStateService DragState
 
 <FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
     <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical">
@@ -13,24 +15,26 @@
 
         @foreach (ProjectionProgramStepTemplate template in stepTemplates)
         {
-            <FluentCard MinimalStyle="true" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragover="OnDragOver" @ondrop="(e) => OnDrop(e, template)">
+            <FluentCard MinimalStyle="true" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)">
                 <FluentLabel Typo="Typography.H6" Class="text-center">@template.Name</FluentLabel>
                 <FluentLabel Class="text-center" Typo="Typography.Body">@template.Description</FluentLabel>
             </FluentCard>
         }
     </FluentStack>
 
-    @* <AuthorizeView Roles="Admin">
-        <FluentStack VerticalAlignment="VerticalAlignment.Center" class="mt-auto">
-            <AddNewProgramStepTemplate></AddNewProgramStepTemplate>
-        </FluentStack>
-    </AuthorizeView> *@
+    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Right" class="mt-auto">
+        <FluentButton Disabled="@(ShowSaveButton == false)" OnClick="HandleSave" Appearance="Appearance.Accent" IconStart="new Icons.Regular.Size20.Save()">Save</FluentButton>
+    </FluentStack>
 </FluentStack>
 
 @code{
-    private IList<ProjectionProgramStepTemplate> stepTemplates { get; set; } = Array.Empty<ProjectionProgramStepTemplate>();
+    [Parameter]
+    public EventCallback OnSaveClicked { get; set; }
 
-    private ProjectionProgramStepTemplate? draggedTemplate;
+    [Parameter]
+    public bool ShowSaveButton { get; set; }
+
+    private IList<ProjectionProgramStepTemplate> stepTemplates { get; set; } = Array.Empty<ProjectionProgramStepTemplate>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,28 +57,11 @@
 
     private void OnDragStart(DragEventArgs e, ProjectionProgramStepTemplate template)
     {
-        draggedTemplate = template;
+        DragState.StartDrag(template, source: this);
     }
 
-    private void OnDragOver(DragEventArgs e)
+    private async Task HandleSave()
     {
-        // e.pre();
-    }
-
-    private void OnDrop(DragEventArgs e, ProjectionProgramStepTemplate targetTemplate)
-    {
-        if (draggedTemplate == null || draggedTemplate == targetTemplate)
-            return;
-
-        int fromIndex = stepTemplates.IndexOf(draggedTemplate);
-        int toIndex = stepTemplates.IndexOf(targetTemplate);
-
-        if (fromIndex < 0 || toIndex < 0)
-            return;
-
-        stepTemplates.RemoveAt(fromIndex);
-        stepTemplates.Insert(toIndex, draggedTemplate);
-
-        draggedTemplate = null;
+        await OnSaveClicked.InvokeAsync();
     }
 }

@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260118125946_updatingTemplateModel")]
+    partial class updatingTemplateModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -253,30 +256,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ProjectionPrograms");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramParameterValue", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ParameterId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ProjectionProgramStepId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Value")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ParameterId");
-
-                    b.HasIndex("ProjectionProgramStepId");
-
-                    b.ToTable("ProjectionProgramParameterValue");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
                 {
                     b.Property<Guid>("Id")
@@ -342,9 +321,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsRequired")
                         .HasColumnType("bit");
 
                     b.Property<string>("Name")
@@ -663,29 +639,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Song");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramParameterValue", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplateParameter", "Parameter")
-                        .WithMany()
-                        .HasForeignKey("ParameterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStep", "ProjectionProgramStep")
-                        .WithMany("ParameterValues")
-                        .HasForeignKey("ProjectionProgramStepId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Parameter");
-
-                    b.Navigation("ProjectionProgramStep");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgram", "ProjectionProgram")
-                        .WithMany("ProjectionProgramSteps")
+                        .WithMany()
                         .HasForeignKey("ProjectionProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -761,16 +718,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
-                {
-                    b.Navigation("ProjectionProgramSteps");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
-                {
-                    b.Navigation("ParameterValues");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>

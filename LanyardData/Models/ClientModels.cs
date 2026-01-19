@@ -38,32 +38,6 @@ public class ClientProjectionSettings
     public bool IsActive { get; set; }
 }
 
-public class ProjectionProgram
-{
-    public Guid Id { get; set; }
-
-    public required string Name { get; set; }
-    public string Description { get; set; } = string.Empty;
-
-    public bool IsActive { get; set; }
-}
-
-public class ProjectionProgramStep
-{
-    public Guid Id { get; set; }
-
-    public Guid ProjectionProgramId { get; set; }
-    public ProjectionProgram? ProjectionProgram { get; set; }
-
-    public ProjectionType Type { get; set; }
-
-    public string? Source { get; set; }
-
-    public int SortOrder { get; set; }
-
-    public bool IsActive { get; set; }
-}
-
 public class ClientAvailableScreen
 {
     public Guid Id { get; set; }

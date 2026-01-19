@@ -1,0 +1,77 @@
+﻿@using Lanyard.Application.Services.Clients
+
+@inject IProjectionProgramService _projectionService
+@inject IToastService _toastService
+
+@implements IDialogContentComponent
+
+<FluentDialogHeader>
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.WindowNew())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            Create new Projection Program
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <FluentEditForm Model="newProgram" OnValidSubmit="HandleCreate">
+        <FluentValidationSummary />
+
+        <FluentGridItem xs="12">
+            <FluentTextField Class="w-100" @bind-Value="newProgram.Name" Label="Template Name" Appearance="FluentInputAppearance.Outline" Required></FluentTextField>
+        </FluentGridItem>
+
+        <FluentGridItem xs="12">
+            <FluentTextArea Class="w-100" @bind-Value="newProgram.Description" Label="Template Description" Appearance="FluentInputAppearance.Outline"></FluentTextArea>
+        </FluentGridItem>
+    </FluentEditForm>
+</FluentDialogBody>
+
+
+<FluentDialogFooter>
+    <FluentButton OnClick="HandleCreate" Loading="@isCreating" Disabled="@finishButtonIsDisabled" IconStart="new Icons.Regular.Size20.Save()">Create</FluentButton>
+    <FluentButton OnClick="CancelDialog" Loading="@isCreating" IconStart="new Icons.Regular.Size20.CalendarCancel()">Cancel</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    private bool isCreating = false;
+    private bool finishButtonIsDisabled = false;
+
+    private ProjectionProgram newProgram = new()
+    {
+        Name = "New Program",
+        IsActive = true,
+    };
+
+    private async Task HandleCreate()
+    {
+        isCreating = true;
+
+        Result<ProjectionProgram> result = await _projectionService.CreateProjectionProgramAsync(newProgram);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("New Program created Successfully!");
+
+            await Dialog!.CloseAsync(DialogResult.Ok(result.Data));
+        }
+        else
+        {
+            finishButtonIsDisabled = false;
+
+            _toastService.ShowError($"An error occured when creating the program, {result.Error}");
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog!.CloseAsync();
+    }
+}

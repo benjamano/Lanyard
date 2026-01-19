@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyModel;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
+using Lanyard.App.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,9 @@ builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
+
+// Shared drag state service
+builder.Services.AddScoped<DragStateService>();
 
 string? informationalVersion = Assembly
     .GetExecutingAssembly()

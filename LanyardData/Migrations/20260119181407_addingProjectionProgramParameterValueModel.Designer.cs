@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260119181407_addingProjectionProgramParameterValueModel")]
+    partial class addingProjectionProgramParameterValueModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -262,7 +265,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid>("ParameterId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ProjectionProgramStepId")
+                    b.Property<int>("ProjectionProgramStepId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("ProjectionProgramStepId1")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Value")
@@ -272,7 +278,7 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("ParameterId");
 
-                    b.HasIndex("ProjectionProgramStepId");
+                    b.HasIndex("ProjectionProgramStepId1");
 
                     b.ToTable("ProjectionProgramParameterValue");
                 });
@@ -673,9 +679,7 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStep", "ProjectionProgramStep")
                         .WithMany("ParameterValues")
-                        .HasForeignKey("ProjectionProgramStepId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("ProjectionProgramStepId1");
 
                     b.Navigation("Parameter");
 

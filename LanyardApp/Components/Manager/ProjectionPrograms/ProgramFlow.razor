@@ -1,18 +1,201 @@
-﻿<FluentStack class="text-center" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentCard MinimalStyle="true" Class="py-4">START</FluentCard>
-    <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
-    @if (steps != null)
+﻿@using Lanyard.App.Services
+@using Lanyard.Infrastructure.Models
+
+@inject DragStateService DragState
+@inject IToastService _toastService
+
+@using System.Timers
+
+<FluentStack class="text-center flow-scroll" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, 0)">START</FluentCard>
+
+    <FluentStack HorizontalAlignment="HorizontalAlignment.Center" class="w-100 h-auto overflow-scroll" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, 0)">
+        <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
+    </FluentStack>
+
+    @if (selectedProgram?.ProjectionProgramSteps != null)
     {
-        @foreach (ProjectionProgramStep step in steps)
+        int index = 0;
+        foreach (ProjectionProgramStep step in selectedProgram!.ProjectionProgramSteps)
         {
-            <FluentCard MinimalStyle="true" Class="py-4">START</FluentCard>
-            <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
+            <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)">
+                @step.Template?.Name
+                
+                @if (step.Template?.Parameters.Any() == true)
+                {
+                    <FluentAccordion>
+                        <FluentAccordionItem class="mt-2" Expanded="false">
+                            <HeadingTemplate>
+                                <FluentIcon Value="@(new Icons.Regular.Size20.TaskListRtl())"></FluentIcon>
+                                Parameters
+                            </HeadingTemplate>
+                            <ChildContent>
+                                <FluentGrid>
+                                @foreach (ProjectionProgramStepTemplateParameter parameter in step.Template.Parameters)
+                                {
+                                    if (step.ParameterValues.Where(x => x.ParameterId == parameter.Id).FirstOrDefault() == null)
+                                    {
+                                        step.ParameterValues.Add(new ProjectionProgramParameterValue
+                                        {
+                                            ParameterId = parameter.Id,
+                                            ProjectionProgramStepId = step.Id,
+                                            Value = string.Empty
+                                        });
+                                    }
+
+                                    <FluentGridItem xs="4">
+                                    @switch (parameter.DataType)
+                                    {
+                                        case "String":
+                                            <div>
+                                                <FluentTextField @bind-Value="@step.ParameterValues.Where(x=> x.ParameterId == parameter.Id).FirstOrDefault()!.Value" Label="@parameter.Name" Appearance="FluentInputAppearance.Outline" Required></FluentTextField>
+                                            </div>
+                                            break;
+                                    }
+                                    </FluentGridItem>
+                                }
+                                </FluentGrid>
+                            </ChildContent>
+                        </FluentAccordionItem>
+                    </FluentAccordion>
+                }
+            </FluentCard>
+            <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index + 1)"></FluentDivider>
+            index++;
         }
     }
-    <FluentCard MinimalStyle="true" Class="py-4">END</FluentCard>
+
+    <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtEnd(e)">END</FluentCard>
 </FluentStack>
 
 @code{
     [Parameter]
-    public IEnumerable<ProjectionProgramStep> steps { get; set; } = Array.Empty<ProjectionProgramStep>();
+    public ProjectionProgram? selectedProgram { get; set; }
+
+    [Parameter]
+    public EventCallback<ProjectionProgram> OnSave { get; set; }
+
+    private Timer? saveTimer;
+
+    protected override Task OnInitializedAsync()
+    {
+        saveTimer = new Timer(10000);
+        saveTimer.AutoReset = true;
+        saveTimer.Elapsed += async (_, _) =>
+        {
+            if (selectedProgram is null){
+                return;
+            }
+
+            await InvokeAsync(async () =>
+            {
+                await Save();
+            });
+        };
+
+        // saveTimer.Start();
+
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        saveTimer?.Stop();
+        saveTimer?.Dispose();
+    }
+
+    private void OnDropAtIndex(DragEventArgs e, int insertIndex)
+    {
+        if (!DragState.HasDrag || DragState.CurrentTemplate is null){
+            return;
+        }
+
+        if (selectedProgram is null)
+        {
+            _toastService.ShowWarning("Please select a projection program to add steps to!");
+
+            return;
+        }
+
+        ProjectionProgramStep newStep = new()
+        {
+            Id = Guid.NewGuid(),
+            Template = DragState.CurrentTemplate,
+            SortOrder = insertIndex,
+            IsActive = true,
+            Source = DragState.CurrentTemplate!.Name,
+            ProjectionProgramId = selectedProgram!.Id
+        };
+
+        InsertStepAt(insertIndex, newStep);
+
+        DragState.Clear();
+    }
+
+    private void OnDropAtEnd(DragEventArgs e)
+    {
+        if (!DragState.HasDrag || DragState.CurrentTemplate is null){
+            return;
+        }
+
+        if (selectedProgram is null)
+        {
+            _toastService.ShowWarning("Please select a projection program to add steps to!");
+
+            return;
+        }
+
+        ProjectionProgramStep newStep = new()
+        {
+            Id = Guid.NewGuid(),
+            Template = DragState.CurrentTemplate,
+            SortOrder = selectedProgram!.ProjectionProgramSteps.Count,
+            IsActive = true,
+            Source = DragState.CurrentTemplate!.Name,
+            ProjectionProgramId = selectedProgram!.Id
+        };
+
+        InsertStepAt(selectedProgram!.ProjectionProgramSteps.Count, newStep);
+
+        DragState.Clear();
+    }
+
+    private void InsertStepAt(int index, ProjectionProgramStep newStep)
+    {
+        if (selectedProgram is null)
+        {
+            _toastService.ShowWarning("Please select a projection program to add steps to!");
+
+            return;
+        }
+
+        if (index < 0)
+        {
+            index = 0;
+        }
+
+        if (index > selectedProgram!.ProjectionProgramSteps.Count)
+        { 
+            index = selectedProgram!.ProjectionProgramSteps.Count;
+        }
+
+        selectedProgram!.ProjectionProgramSteps.Insert(index, newStep);
+
+        for (int i = 0; i < selectedProgram!.ProjectionProgramSteps.Count; i++)
+        {
+            selectedProgram!.ProjectionProgramSteps[i].SortOrder = i;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task Save()
+    {
+        await OnSave.InvokeAsync(selectedProgram!);
+    }
 }
