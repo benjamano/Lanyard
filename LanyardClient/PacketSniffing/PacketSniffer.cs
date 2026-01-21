@@ -13,9 +13,9 @@ namespace Lanyard.Client.PacketSniffing;
 
 public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
 {
-    private readonly List<string> IPFilter = ["192.168.0.10", "192.168.0.11"];
-    private readonly string BroadcastIP = "192.168.0.255";
-    private readonly PhysicalAddress PreferedInterfaceMacAddress = PhysicalAddress.None;
+    private readonly List<string> SourceIPs = ["192.168.0.10", "192.168.0.11", "192.168.2.42"];
+    private readonly string DestinationIP = "192.168.0.255";
+    private readonly PhysicalAddress PreferedInterfaceMacAddress = PhysicalAddress.Parse("9C-69-D3-4C-69-A1");
 
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
@@ -31,7 +31,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        ILiveDevice? device = devices.Where(x => x.MacAddress == PreferedInterfaceMacAddress).FirstOrDefault();
+        ILiveDevice? device = devices.Where(x => x.MacAddress?.ToString() == PreferedInterfaceMacAddress.ToString()).FirstOrDefault();
 
         if (device == null && devices.Any())
         {
@@ -69,8 +69,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
                 return;
             }
 
-            if (IPFilter.Contains(ipPacket.SourceAddress.ToString())
-                && ipPacket.DestinationAddress.ToString() == BroadcastIP)
+            if (SourceIPs.Contains(ipPacket.SourceAddress.ToString()) && ipPacket.DestinationAddress.ToString() == DestinationIP)
             {
                 _logger.LogInformation("Recieved a packet that aligns with the filters!, Source: {source}, Destination {dest}", ipPacket.SourceAddress.ToString(), ipPacket.DestinationAddress.ToString());
 
@@ -129,6 +128,7 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
                 case 5:
                     // Shot Confirmed Packet
 
+                    await _actions.HandleShotConfirmedPacketAsync(decodedData);
                     break;
             }
         }
