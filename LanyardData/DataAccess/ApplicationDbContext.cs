@@ -18,13 +18,20 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Song> Songs { get; set; }
         public DbSet<Playlist> Playlists { get; set; }
         public DbSet<PlaylistSongMember> PlaylistSongMembers { get; set; }
+        public DbSet<Client> Clients { get; set; }
+        public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
+        public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
+        public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
+        public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
+        public DbSet<ProjectionProgramStepTemplate> ProjectionProgramStepTemplates { get; set; }
+        public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
             {
                 optionsBuilder.UseSqlServer(
-                    "Server=(localdb)\\mssqllocaldb;Database=LanyardDb;Trusted_Connection=True;MultipleActiveResultSets=true",
+                    "Server=(localdb)\\mssqllocaldb;Database=LanyardDB;Trusted_Connection=True;",
                     b => b.MigrationsAssembly("Lanyard.Infrastructure"));
             }
         }

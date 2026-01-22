@@ -13,7 +13,18 @@
 
 main {
     flex: 1;
+    position: relative;
+    background: #560c69;
+    background: linear-gradient(180deg,rgba(86, 12, 105, 1) 0%, rgba(104, 19, 183, 1) 39%, rgba(192, 23, 234, 1) 100%);
 }
+
+    main::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, var(--dark-overlay));
+        pointer-events: none;
+    }
 
 .sidebar {
     border-right: 1px solid var(--bs-gray-500);
@@ -101,7 +112,7 @@ main {
     }
 
 
-body {
+/*body {
     margin: 0;
     padding: 0;
     height: 100vh;
@@ -111,6 +122,18 @@ body {
     font-weight: var(--font-weight);
     color: var(--neutral-foreground-rest);
     background: var(--neutral-fill-layer-rest);
+}*/
+
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    font-family: var(--body-font) !important;
+    font-size: var(--type-ramp-base-font-size) !important;
+    line-height: var(--type-ramp-base-line-height) !important;
+    font-weight: var(--font-weight) !important;
+    /*    background: var(--neutral-fill-layer-rest) !important;*/
+    background-color: var(--neutral-layer-1) !important;
 }
 
 html, body {
@@ -382,11 +405,6 @@ i.fas {
     .form-label .validation-message {
         margin-left: 1rem;
     }
-
-main {
-    background: #560c69;
-    background: linear-gradient(180deg,rgba(86, 12, 105, 1) 0%, rgba(104, 19, 183, 1) 39%, rgba(192, 23, 234, 1) 100%);
-}
 
 .bg-blur {
     --bs-bg-opacity: 0.75 !important;

@@ -5,7 +5,8 @@
 @using Microsoft.EntityFrameworkCore
 @using NAudio.Wave
 
-@inject ApplicationDbContext _context
+@inject IPlaylistService _playlistService;
+@inject IMusicService _musicService;
 @inject MusicPlayerService _player
 @inject IDialogService DialogService
 @inject IToastService ToastService
@@ -77,22 +78,26 @@
                 </FluentStack>
             </FluentCard>
 
-            <FluentCard Class="playlist-card p-2" Style="cursor: pointer;"
-                        @onclick="CreateNewPlaylist">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
-                    <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("New"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <FluentIcon Value="@(new Icons.Regular.Size24.Add())" Color="Color.Custom" CustomColor="white" />
-                    </div>
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
-                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            New Playlist
-                        </FluentLabel>
-                        <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            Create a New Playlist
-                        </FluentLabel>
-                    </FluentStack>
-                </FluentStack>
-            </FluentCard>
+            <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
+                <Authorized>
+                    <FluentCard Class="playlist-card p-2" Style="cursor: pointer;"
+                                @onclick="CreateNewPlaylist">
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
+                            <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("New"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <FluentIcon Value="@(new Icons.Regular.Size24.Add())" Color="Color.Custom" CustomColor="white" />
+                            </div>
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
+                                <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    New Playlist
+                                </FluentLabel>
+                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    Create a New Playlist
+                                </FluentLabel>
+                            </FluentStack>
+                        </FluentStack>
+                    </FluentCard>
+                </Authorized>
+            </AuthorizeView>
         </div>
     }
 </FluentStack>
@@ -116,63 +121,71 @@
 
     protected override async Task OnInitializedAsync()
     {
-        playlists = await _context.Playlists
-            .AsNoTracking()
-            .Where(p => p.DeleteDate == null)
-            .OrderByDescending(p => p.CreateDate)
-            .ToListAsync();
+        Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistsAsync();
+
+        if (result.IsSuccess)
+        {
+            playlists = result.Data!
+                .OrderByDescending(p => p.CreateDate)
+                .ToList();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to load playlists: " + result.Error);
+            playlists = new List<Playlist>();
+        }
 
         UpdateCurrentPlaylist();
     }
 
     private string GetPlaylistCardStyle(Guid playlistId)
     {
-        var styles = new List<string> { "cursor: pointer" };
-        
+        List<string> styles = new List<string> { "cursor: pointer" };
+
         if (selectedPlaylistId == playlistId)
         {
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
         }
-        
+
         if (currentlyPlayingPlaylistId == playlistId)
         {
             styles.Add("border: 2px solid var(--accent-fill-rest)");
         }
-        
+
         return string.Join("; ", styles) + ";";
     }
 
     private string GetPlaylistNameStyle(Guid playlistId)
     {
-        var styles = new List<string> 
+        List<string> styles = new List<string>
         { 
             "overflow: hidden", 
             "text-overflow: ellipsis", 
             "white-space: nowrap" 
         };
-        
+
         if (currentlyPlayingPlaylistId == playlistId)
         {
             styles.Add("color: var(--accent-fill-rest)");
         }
-        
+
         return string.Join("; ", styles) + ";";
     }
 
     private string GetAllSongsCardStyle()
     {
-        var styles = new List<string> { "cursor: pointer" };
-        
+        List<string> styles = new List<string> { "cursor: pointer" };
+
         if (allSongsSelected)
         {
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
         }
-        
+
         if (currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing)
         {
             styles.Add("border: 2px solid var(--accent-fill-rest)");
         }
-        
+
         return string.Join("; ", styles) + ";";
     }
 
@@ -203,13 +216,19 @@
         selectedPlaylistId = playlistId;
         allSongsSelected = false;
 
-        IEnumerable<PlaylistSongMember> songs = await _context.PlaylistSongMembers
-            .AsNoTracking()
-            .Where(s => s.PlaylistId == playlistId && s.DeleteDate == null)
-            .Include(x=> x.Song)
-            .Include(x=> x.Playlist)
-            .OrderBy(s => s.Song!.Name)
-            .ToListAsync();
+        IEnumerable<PlaylistSongMember> songs = Array.Empty<PlaylistSongMember>();
+
+        Result<IEnumerable<PlaylistSongMember>> playlistSongsResult = await _playlistService.GetPlaylistMembersAsync(playlistId);
+
+        if (playlistSongsResult.IsSuccess)
+        {
+            songs = playlistSongsResult.Data!
+                .OrderBy(s => s.Song!.Name);
+        }
+        else
+        {
+            ToastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
+        }
 
         await OnSongsSelected.InvokeAsync(songs);
     }
@@ -219,11 +238,19 @@
         selectedPlaylistId = null;
         allSongsSelected = true;
 
-        List<Song> songs = await _context.Songs
-            .AsNoTracking()
-            .Where(s => s.IsActive == true)
-            .OrderBy(s => s.Name)
-            .ToListAsync();
+        List<Song> songs = new List<Song>();
+
+        Result<IEnumerable<Song>> result = await _musicService.GetSongsAsync();
+
+        if (result.IsSuccess)
+        {
+            songs = result.Data!.ToList();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to load songs: " + result.Error);
+            return;
+        }
 
         await OnSongsSelected.InvokeAsync(songs.Select(x=> new PlaylistSongMember
         {
@@ -234,7 +261,7 @@
         }));
     }
 
-    private async Task CreateNewPlaylist()
+    private async Task CreateNewPlaylist() 
     {
         Playlist playlist = new Playlist
         {
@@ -264,11 +291,19 @@
             return;
         }
 
-        playlists = await _context.Playlists
-            .AsNoTracking()
-            .Where(p => p.DeleteDate == null)
-            .OrderByDescending(p => p.CreateDate)
-            .ToListAsync();
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
+
+        if (playlistResult.IsSuccess)
+        {
+            playlists = playlistResult.Data!
+                .OrderByDescending(p => p.CreateDate)
+                .ToList();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to load playlists: " + playlistResult.Error);
+            playlists = new List<Playlist>();
+        }
 
         StateHasChanged();
     }

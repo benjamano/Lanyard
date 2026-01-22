@@ -1,0 +1,46 @@
+﻿<FluentSelect Embedded="true" Label="Theme" Items="@(Enum.GetValues<DesignThemeModes>())" @bind-SelectedOption="@Mode" />
+
+@* <FluentSelect Label="Color"
+              Items="@(Enum.GetValues<OfficeColor>().Select(i => (OfficeColor?)i))"
+              Height="200px"
+              Width="250px"
+              @bind-SelectedOption="SelectedColour">
+    <OptionTemplate>
+        <FluentStack>
+            <FluentIcon Value="@(new Icons.Filled.Size20.RectangleLandscape())"
+                        Color="Color.Custom"
+                        CustomColor="@(@context.ToString() != "default" ? context.ToString() : "#036ac4")" />
+            <FluentLabel>@context</FluentLabel>
+        </FluentStack>
+    </OptionTemplate>
+</FluentSelect> *@
+
+<FluentDesignTheme @bind-Mode="@Mode" @bind-OfficeColor="@SelectedColour" OnLoaded="@OnLoaded" OnLuminanceChanged="@OnLuminanceChanged" StorageName="theme" />
+
+@code {
+    public DesignThemeModes Mode { get; set; }
+
+    public OfficeColor? SelectedColour { get; set; }
+
+    public List<OfficeColor> Colours { get; set; } = new();
+
+    void OnLoaded(LoadedEventArgs e)
+    {
+        Colours = [OfficeColor.OneNote, OfficeColor.Word, OfficeColor.Stream, OfficeColor.PowerApps];
+
+        //ONENNOTE or WORD or STREAM or POWERAPPS
+
+        Random random = new Random();
+
+        SelectedColour = Colours[random.Next(0, 3)];
+    }
+
+    void OnLuminanceChanged(LuminanceChangedEventArgs e)
+    {
+    }
+
+    void PickRandomColor()
+    {
+        SelectedColour = OfficeColorUtilities.GetRandom();
+    }
+}

@@ -1,0 +1,103 @@
+﻿@using Lanyard.Application.Services.Clients
+@using Lanyard.App.Services
+
+@inject IProjectionProgramService _projectionService
+@inject IToastService _toastService
+@inject DragStateService DragState
+
+<FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
+    <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical">
+        <FluentLabel Typo="Typography.PaneHeader">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" />
+            Toolbox
+        </FluentLabel>
+        <FluentDivider Orientation="Orientation.Horizontal" Class="w-100"></FluentDivider>
+
+        @if (isLoading)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="mt-4">
+                <FluentProgressRing />
+            </FluentStack>
+        }
+        else if (stepTemplates.Count == 0)
+        {
+            <FluentLabel Class="mt-4 text-center" Typo="Typography.Body">No templates available</FluentLabel>
+        }
+        else
+        {
+            foreach (ProjectionProgramStepTemplate template in stepTemplates)
+            {
+                <FluentCard MinimalStyle="true" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
+                    <FluentLabel Typo="Typography.H6" Class="text-center">@template.Name</FluentLabel>
+                    @if (!string.IsNullOrWhiteSpace(template.Description))
+                    {
+                        <FluentLabel Class="text-center" Typo="Typography.Body">@template.Description</FluentLabel>
+                    }
+                </FluentCard>
+            }
+        }
+    </FluentStack>
+
+    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Right" class="mt-auto">
+        <FluentButton Disabled="@(!ShowSaveButton || IsSaving)" 
+                     OnClick="HandleSave" 
+                     Appearance="Appearance.Accent" 
+                     IconStart="new Icons.Regular.Size20.Save()"
+                     Loading="@IsSaving">
+            Save
+        </FluentButton>
+    </FluentStack>
+</FluentStack>
+
+@code{
+    [Parameter]
+    public EventCallback OnSaveClicked { get; set; }
+
+    [Parameter]
+    public bool ShowSaveButton { get; set; }
+
+    [Parameter]
+    public bool IsSaving { get; set; }
+
+    private List<ProjectionProgramStepTemplate> stepTemplates = new();
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStepTemplatesAsync();
+    }
+
+    private async Task LoadStepTemplatesAsync()
+    {
+        isLoading = true;
+
+        Result<IEnumerable<ProjectionProgramStepTemplate>> getResult = await _projectionService.GetProjectionProgramStepTemplatesAsync();
+
+        if (!getResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occurred when fetching projection program step templates: {getResult.Error}");
+            stepTemplates = new();
+        }
+        else
+        {
+            stepTemplates = getResult.Data!.ToList();
+        }
+
+        isLoading = false;
+    }
+
+    private void OnDragStart(DragEventArgs e, ProjectionProgramStepTemplate template)
+    {
+        DragState.StartDrag(template, source: this);
+    }
+
+    private void OnDragEnd(DragEventArgs e)
+    {
+        DragState.Clear();
+    }
+
+    private async Task HandleSave()
+    {
+        await OnSaveClicked.InvokeAsync();
+    }
+}

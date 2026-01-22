@@ -1,0 +1,94 @@
+﻿@inject IClientService _clientService
+@inject IToastService _toastService
+
+<div hidden="@(IsShowing == false)">
+    <FluentDivider Class="my-2"></FluentDivider>
+
+    <FluentStack Orientation="Orientation.Horizontal">
+        <FluentGrid Class="w-100">
+            <FluentGridItem xs="6">
+                <FluentCard Height="auto">
+                    <FluentLabel Typo="Typography.PaneHeader">Projector</FluentLabel>
+
+                    <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+                        <ChildContent>
+                            <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                            <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
+                            <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
+                            <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
+                            <TemplateColumn Title="Size">
+                                @context.Width x @context.Height px
+                            </TemplateColumn>
+                        </ChildContent>
+                        <LoadingContent>
+                            Loading...
+                        </LoadingContent>
+                        <EmptyContent>
+                            No Projections set for this Client!
+                        </EmptyContent>
+                    </FluentDataGrid>
+
+                    <FluentButton class="mt-2 float-end" OnClick="OpenAddProjectionDialog" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ProjectionScreenTextSparkle()">Add Projection</FluentButton>
+                </FluentCard>
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentStack>
+</div>
+
+@code {
+    [Parameter]
+    public bool IsShowing { get; set; }
+
+    [Parameter] 
+    public Guid? clientId { get; set; }
+
+    private IEnumerable<ClientProjectionSettings> projectionSettings = Array.Empty<ClientProjectionSettings>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsShowing && clientId != null)
+        {
+            await RefreshCapabilities();
+        }
+    }
+
+    public async Task RefreshCapabilities()
+    {
+        Result<IEnumerable<ClientProjectionSettings>> result = await _clientService.GetClientProjectionSettingsAsync(clientId!.Value);
+
+        if (result.IsSuccess)
+        {
+            projectionSettings = result.Data!;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load client projection settings, {result.Error}");
+        }
+    }
+
+    private async Task OpenAddProjectionDialog()
+    {
+        if (clientId != null)
+        {
+            DialogParameters parameters = new DialogParameters()
+                {
+                    Title = "Add Projection",
+                    OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjection),
+                    PrimaryAction = "Create",
+                    PrimaryActionEnabled = false,
+                    SecondaryAction = "Cancel",
+                    Width = "50%",
+                    Height = "auto",
+                    TrapFocus = true,
+                    Modal = true,
+                };
+
+            await DialogService.ShowDialogAsync<AddNewProjectionDialog>(clientId, parameters);
+        }
+    }
+
+    private async Task HandleAddProjection(DialogResult result)
+    {
+        
+    }
+}

@@ -3,15 +3,19 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyModel;
 using Microsoft.FluentUI.AspNetCore.Components;
+using System.Reflection;
+using Lanyard.App.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +32,23 @@ builder.Services.AddSingleton<MusicPlayerService>();
 // Other Business Services
 builder.Services.AddScoped<SecurityService>();
 builder.Services.AddScoped<ApplicationRolesService>();
+builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IMusicService, MusicService>();
+builder.Services.AddScoped<IClientService, ClientService>();
+builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
+
+// Shared drag state service
+builder.Services.AddScoped<DragStateService>();
+
+string? informationalVersion = Assembly
+    .GetExecutingAssembly()
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+    .InformationalVersion ?? "0.0.0";
+
+builder.Services.AddSingleton(new AppInfo
+{
+    Version = informationalVersion
+});
 
 // Configure Database
 string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
@@ -53,7 +74,7 @@ builder.Services.AddAuthorization();
 // Configure cookie to persist login across sessions
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.ExpireTimeSpan = TimeSpan.FromDays(30);
     options.SlidingExpiration = true;
     options.LoginPath = "/login";
     options.LogoutPath = "/logout";
@@ -112,7 +133,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // Map SignalR hub for music control
-app.MapHub<MusicControlHub>("/websocket");
+app.MapHub<SignalRControlHub>("/websocket");
 
 app.MapControllers();
 

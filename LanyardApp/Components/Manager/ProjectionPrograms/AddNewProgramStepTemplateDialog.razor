@@ -1,0 +1,123 @@
+﻿@using Lanyard.Application.Services.Clients
+
+@inject IProjectionProgramService _projectionService
+
+@implements IDialogContentComponent
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.WindowNew())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            Create new Step Template
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <FluentEditForm Model="newTemplate" OnValidSubmit="HandleCreate">
+        <FluentValidationSummary />
+
+        <FluentGrid>
+            <FluentGridItem xs="4">
+                <FluentTextField Class="w-100" @bind-Value="newTemplate.Name" Label="Template Name" Appearance="FluentInputAppearance.Outline" Required></FluentTextField>
+            </FluentGridItem>
+            <FluentGridItem xs="4">
+                <FluentTextArea Class="w-100" @bind-Value="newTemplate.Description" Label="Template Description" Appearance="FluentInputAppearance.Outline"></FluentTextArea>
+            </FluentGridItem>
+        </FluentGrid>
+
+        <FluentGrid class="mt-2" Justify="JustifyContent.FlexStart">
+            <FluentGridItem xs="4">
+                <FluentTextField Class="w-100" @bind-Value="newParameter.Name" Label="Parameter Name" Appearance="FluentInputAppearance.Outline" Required></FluentTextField>
+            </FluentGridItem>
+
+            <FluentGridItem xs="4">
+                <FluentSelect Class="w-100" @bind-Value="newParameter.DataType" TOption="string" Label="Parameter Data Type" Required>
+                    <FluentOption Value="String">String</FluentOption>
+                    <FluentOption Value="Integer">Integer</FluentOption>
+                    <FluentOption Value="Float">Float</FluentOption>
+                    <FluentOption Value="Boolean">Boolean</FluentOption>
+                    <FluentOption Value="DateTime">DateTime</FluentOption>
+                </FluentSelect>
+            </FluentGridItem>
+
+            <FluentGridItem xs="4">
+                <FluentButton Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()" OnClick="HandleAddParameter">Add Parameter</FluentButton>
+            </FluentGridItem>
+        </FluentGrid>
+
+        <FluentDataGrid TGridItem="ProjectionProgramStepTemplateParameter" Items="@newTemplate.Parameters.AsQueryable()">
+            <ChildContent>
+                <PropertyColumn Property="x => x.Name" TProp="string" TGridItem="ProjectionProgramStepTemplateParameter" Title="Name" />
+                <PropertyColumn Property="x => x.DataType" TProp="string" TGridItem="ProjectionProgramStepTemplateParameter" Title="Data Type" />
+            </ChildContent>
+            <EmptyContent>
+                No Parameters Added!
+            </EmptyContent>
+        </FluentDataGrid>
+    </FluentEditForm>
+</FluentDialogBody>
+
+
+<FluentDialogFooter>
+    <FluentButton OnClick="HandleCreate" Loading="@isCreating" Disabled="@finishButtonIsDisabled" IconStart="new Icons.Regular.Size20.Save()">Create</FluentButton>
+    <FluentButton OnClick="CancelDialog" Loading="@isCreating" IconStart="new Icons.Regular.Size20.CalendarCancel()">Cancel</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    private bool isCreating = false;
+    private bool finishButtonIsDisabled = false;
+
+    private ProjectionProgramStepTemplateParameter newParameter = new()
+    {
+        TemplateId = Guid.Empty,
+        Name = "New Parameter",
+        DataType = "String"
+    };
+
+    private ProjectionProgramStepTemplate newTemplate = new()
+    {
+        Name = "New Template",
+        IsActive = true,
+        Parameters = []
+    };
+
+    private async Task HandleCreate()
+    {
+        isCreating = true;
+
+        Result<ProjectionProgramStepTemplate> result = await _projectionService.CreateProjectionProgramStepTemplateAsync(newTemplate);
+
+        if (result.IsSuccess)
+        {
+            await Dialog!.CloseAsync(DialogResult.Ok(result.Data));
+        }
+        else
+        {
+            finishButtonIsDisabled = false;
+        }
+    }
+
+    private async Task HandleAddParameter()
+    {
+        newTemplate.Parameters.Add(newParameter);
+
+        newParameter = new ProjectionProgramStepTemplateParameter
+        {
+            TemplateId = Guid.Empty,
+            Name = "New Parameter",
+            DataType = "String"
+        };
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog!.CloseAsync();
+    }
+}

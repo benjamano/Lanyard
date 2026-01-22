@@ -61,6 +61,111 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetRoles", (string)null);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastLogin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastUpdateDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MostRecentConnectionId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MostRecentIpAddress")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Clients");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Index")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.ToTable("ClientAvailableScreens");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("DisplayIndex")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsBorderless")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFullScreen")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("ProjectionProgramId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("ProjectionProgramId");
+
+                    b.ToTable("ClientProjectionSettings");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.Property<Guid>("Id")
@@ -124,6 +229,136 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("PlaylistId");
 
                     b.ToTable("PlaylistSongMembers");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProjectionPrograms");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramParameterValue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ParameterId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProjectionProgramStepId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParameterId");
+
+                    b.HasIndex("ProjectionProgramStepId");
+
+                    b.ToTable("ProjectionProgramParameterValue");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("ProjectionProgramId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Source")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectionProgramId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("ProjectionProgramSteps");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProjectionProgramStepTemplates");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplateParameter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("ProjectionProgramStepTemplateParameters");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
@@ -352,6 +587,36 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("CreatedByUser");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgram", "ProjectionProgram")
+                        .WithMany()
+                        .HasForeignKey("ProjectionProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("ProjectionProgram");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreateByUser")
@@ -396,6 +661,55 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Playlist");
 
                     b.Navigation("Song");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramParameterValue", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplateParameter", "Parameter")
+                        .WithMany()
+                        .HasForeignKey("ParameterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStep", "ProjectionProgramStep")
+                        .WithMany("ParameterValues")
+                        .HasForeignKey("ProjectionProgramStepId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Parameter");
+
+                    b.Navigation("ProjectionProgramStep");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgram", "ProjectionProgram")
+                        .WithMany("ProjectionProgramSteps")
+                        .HasForeignKey("ProjectionProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", "Template")
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectionProgram");
+
+                    b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplateParameter", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", "Template")
+                        .WithMany("Parameters")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -447,6 +761,21 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
+                {
+                    b.Navigation("ProjectionProgramSteps");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStep", b =>
+                {
+                    b.Navigation("ParameterValues");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>
+                {
+                    b.Navigation("Parameters");
                 });
 #pragma warning restore 612, 618
         }

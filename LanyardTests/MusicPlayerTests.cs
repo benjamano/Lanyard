@@ -14,14 +14,14 @@ namespace LanyardTests;
 [TestClass]
 public sealed class MusicPlayerTests
 {
-    private Mock<IHubContext<MusicControlHub>> _mockHubContext = null!;
+    private Mock<IHubContext<SignalRControlHub>> _mockHubContext = null!;
     private Mock<IDbContextFactory<ApplicationDbContext>> _mockContextFactory = null!;
     private MusicPlayerService _musicPlayerService = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _mockHubContext = new Mock<IHubContext<MusicControlHub>>();
+        _mockHubContext = new Mock<IHubContext<SignalRControlHub>>();
         _mockContextFactory = new Mock<IDbContextFactory<ApplicationDbContext>>();
         
         _musicPlayerService = new MusicPlayerService(

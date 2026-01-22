@@ -36,3 +36,15 @@
 html {
     scroll-behavior: smooth;
 }
+
+:root {
+    --dark-overlay: 0;
+}
+
+body[data-theme="dark"] {
+    --dark-overlay: 0.4;
+}
+
+body {
+    color: var(--neutral-foreground-rest) !important;
+}

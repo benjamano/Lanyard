@@ -1,0 +1,147 @@
+﻿@page "/staff/manage/projectionprograms"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager.ProjectionPrograms
+@using Lanyard.Application.Services.Clients
+
+@inject IClientService _clientService
+@inject IProjectionProgramService _projectionService
+@inject IToastService _toastService
+
+<PageTitle>Projection Programs</PageTitle>
+
+<FluentCard AreaRestricted="false">
+    <FluentMultiSplitter Class="h-100">
+        <FluentMultiSplitterPane Size="25%">
+            <div class="me-3">
+                @if (isLoading)
+                {
+                    <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="mt-4">
+                        <FluentProgressRing />
+                        <FluentLabel>Loading programs...</FluentLabel>
+                    </FluentStack>
+                }
+                else
+                {
+                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr">
+                        <ChildContent>
+                            <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedScreen(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+                            <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                        </ChildContent>
+                        <EmptyContent>
+                            No Projection Programs Exist!
+                        </EmptyContent>
+                    </FluentDataGrid>
+                }
+                <FluentButton Class="float-end mt-2" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()" OnClick="HandleCreateNewProjectionProgram" Disabled="@isLoading">New</FluentButton>
+            </div>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="60%">
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <div class="w-50">
+                    <ProgramFlow SelectedProgram="selectedProjectionProgram" OnSave="HandleSave" OnStepsChanged="HandleStepsChanged"></ProgramFlow>
+                </div>
+            </FluentStack>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="15%">
+            <Toolbox OnSaveClicked="HandleSave" ShowSaveButton="@ShowSaveButton" IsSaving="@isSaving"></Toolbox>
+        </FluentMultiSplitterPane>
+    </FluentMultiSplitter>
+</FluentCard>
+
+@code {
+    private List<ProjectionProgram> projectionPrograms = new();
+    private ProjectionProgram? selectedProjectionProgram;
+    private bool isLoading;
+    private bool isSaving;
+
+    private bool ShowSaveButton => selectedProjectionProgram?.ProjectionProgramSteps?.Any() == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjectionProgramsAsync();
+    }
+
+    private async Task LoadProjectionProgramsAsync()
+    {
+        isLoading = true;
+
+        Result<IEnumerable<ProjectionProgram>> getResult = await _projectionService.GetProjectionProgramsAsync();
+
+        if (!getResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occurred when fetching projection programs: {getResult.Error}");
+            projectionPrograms = new();
+        }
+        else
+        {
+            projectionPrograms = getResult.Data!.ToList();
+        }
+
+        isLoading = false;
+    }
+
+    private void UpdateSelectedScreen(ProjectionProgram program)
+    {
+        selectedProjectionProgram = program;
+    }
+
+    private async Task HandleCreateNewProjectionProgram()
+    {
+        DialogParameters parameters = new()
+        {
+            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
+            Width = "30%",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+
+        await DialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
+    }
+
+    private async Task HandleAddProjectionProgram(DialogResult result)
+    {
+        if (result.Cancelled == true || result.Data is not ProjectionProgram newProgram)
+        {
+            return;
+        }
+
+        projectionPrograms.Add(newProgram);
+        selectedProjectionProgram = newProgram;
+    }
+
+    private async Task HandleSave()
+    {
+        if (selectedProjectionProgram is null)
+        {
+            return;
+        }
+
+        isSaving = true;
+
+        Result<bool> saveResult = await _projectionService.SaveProjectionProgramStepsAsync(selectedProjectionProgram.ProjectionProgramSteps);
+
+        if (!saveResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occurred when saving the projection program: {saveResult.Error}");
+        }
+        else
+        {
+            _toastService.ShowSuccess("Projection program saved successfully!");
+
+            await LoadProjectionProgramsAsync();
+
+            selectedProjectionProgram = projectionPrograms.FirstOrDefault(x => x.Id == selectedProjectionProgram.Id);
+        }
+
+        isSaving = false;
+    }
+
+    private void HandleStepsChanged()
+    {
+    }
+}
