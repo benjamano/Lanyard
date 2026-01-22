@@ -76,57 +76,55 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     public async Task HandleGameStatusPacketAsync(string[] packetData)
     {
-        if (int.TryParse(packetData[1].ToString().Replace("@", ""), out int gameStatusValue))
+        if (packetData[1].Split("@").Count() == 4)
         {
-            if (gameStatusValue == 4)
+            // THIS MEANS THE GAME'S SETTINGS HAVE CHANGED, NOT THE STATUS
+
+            string[] values = packetData[1].ToString()!.Split("@");
+
+            foreach (string value in values)
             {
-                // THIS MEANS THE GAME'S SETTINGS HAVE CHANGED, NOT THE STATUS
-                string[] values = packetData.ToString()!.Split("@");
-
-                foreach (string value in values)
+                if (value.StartsWith("016"))
                 {
-                    if (value.StartsWith("016"))
-                    {
-                        _gameStateService.UpdateTimeRemaining(TimeSpan.FromMinutes(int.Parse(value.Substring(3))));
+                    _gameStateService.UpdateTimeRemaining(TimeSpan.FromMinutes(int.Parse(value.Substring(3))));
 
-                        _logger.LogInformation("Game time limit updated to {timelimit} minutes", value.Substring(3));
-                    }
-                    else if (value.StartsWith("017"))
-                    {
-                        //TODO: WORKOUT WHICH NUMBER EQUATES TO WHICH SOUND MODE
-                    }
-                    else if (value.StartsWith("00"))
-                    {
-                        //TODO: MAKE A LIST OF GAME MODES AND WORKOUT WHICH ID THEY ARE FOR
-                    }
+                    _logger.LogInformation("Game time limit updated to {timelimit} minutes", value[3..].Trim());
+                }
+                else if (value.StartsWith("017"))
+                {
+                    //TODO: WORKOUT WHICH NUMBER EQUATES TO WHICH SOUND MODE
+                }
+                else if (value.StartsWith("00"))
+                {
+                    //TODO: MAKE A LIST OF GAME MODES AND WORKOUT WHICH ID THEY ARE FOR
                 }
             }
-            else
+        }
+        else if (int.TryParse(packetData[1].ToString().Replace("@", ""), out int gameStatusValue))
+        {
+            // THE GAMES STATUS HAS CHANGED
+            GameStatus status = (GameStatus)gameStatusValue;
+            switch (status)
             {
-                // THE GAMES STATUS HAS CHANGED
-                GameStatus status = (GameStatus)gameStatusValue;
-                switch (status)
-                {
-                    case GameStatus.NotStarted:
-                        _logger.LogInformation("Game status updated to Not Started");
-                        if (_gameStateService.GetGameStatus() != GameStatus.NotStarted)
-                        {
-                            _gameStateService.HandleGameEnded();
-                        }
+                case GameStatus.NotStarted:
+                    _logger.LogInformation("Game status updated to Not Started");
+                    if (_gameStateService.GetGameStatus() != GameStatus.NotStarted)
+                    {
+                        _gameStateService.HandleGameEnded();
+                    }
 
-                        break;
-                    case GameStatus.InGame:
-                        _logger.LogInformation("Game status updated to In Progress");
-                        if (_gameStateService.GetGameStatus() != GameStatus.InGame && _gameStateService.GetGameStatus() != GameStatus.GetReady)
-                        {
-                            _gameStateService.HandleGameStarted();
-                        }
+                    break;
+                case GameStatus.InGame:
+                    _logger.LogInformation("Game status updated to In Progress");
+                    if (_gameStateService.GetGameStatus() != GameStatus.InGame && _gameStateService.GetGameStatus() != GameStatus.GetReady)
+                    {
+                        _gameStateService.HandleGameStarted();
+                    }
 
-                        break;
-                    default:
-                        _logger.LogWarning("Received unknown game status value: {statusValue}", gameStatusValue);
-                        break;
-                }
+                    break;
+                default:
+                    _logger.LogWarning("Received unknown game status value: {statusValue}", gameStatusValue);
+                    break;
             }
         }
         else
@@ -138,16 +136,16 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     public async Task HandleShotConfirmedPacketAsync(string[] packetData)
     {
-        if (int.TryParse(packetData[1], out int shotByGunId) == false)
+        if (int.TryParse(packetData[1], out int shotGunId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Shooter Gun ID figure! Value: {shooterGunIdValue}", packetData[1].ToString());
+            _logger.LogError("Invalid data parsed for the Shot Gun ID figure! Value: {shooterGunIdValue}", packetData[1].ToString());
 
             return;
         }
 
-        if (int.TryParse(packetData[2], out int shotGunId) == false)
+        if (int.TryParse(packetData[2], out int shotByGunId) == false)
         {
-            _logger.LogError("Invalid data parsed for the Target Gun ID figure! Value: {shotGunId}", packetData[2].ToString());
+            _logger.LogError("Invalid data parsed for the Shot by Gun ID figure! Value: {shotGunId}", packetData[2].ToString());
             return;
         }
 
