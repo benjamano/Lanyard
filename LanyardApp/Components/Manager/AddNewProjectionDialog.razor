@@ -16,7 +16,7 @@
     </FluentStack>
 </FluentDialogHeader>
 
-@if (isSelectingScreen)
+@if (currentStepIndex == 0)
 {
     <FluentDialogBody>
         <FluentDataGrid ShowHover="true" Items="@projectionSettings.AsQueryable()" GridTemplateColumns="auto 1fr 1fr 1fr">
@@ -29,7 +29,7 @@
         </FluentDataGrid>
     </FluentDialogBody>
 }
-else if (isConfiguringScreenSettings)
+else if (currentStepIndex == 1)
 {
     <FluentDialogBody>
         <FluentStack>
@@ -52,7 +52,7 @@ else if (isConfiguringScreenSettings)
         </FluentStack>
     </FluentDialogBody>
 }
-else if (isChoosingProjectionProgram)
+else if (currentStepIndex == 2)
 {
     <FluentDialogBody>
         <FluentStack Orientation="Orientation.Vertical">
@@ -68,6 +68,51 @@ else if (isChoosingProjectionProgram)
                     </FluentButton>
                 </a>
             </FluentStack>
+        </FluentStack>
+    </FluentDialogBody>
+}
+else if (currentStepIndex == 3)
+{
+    <FluentDialogBody>
+        <FluentStack Orientation="Orientation.Vertical" Gap="16">
+            <FluentCard MinimalStyle="true">
+                <FluentLabel Typo="Typography.H6">Screen Selection</FluentLabel>
+                @if (selectedScreen is not null)
+                {
+                    <FluentStack>
+                        <FluentLabel>Display Number: @selectedScreen.Index</FluentLabel>
+                        <FluentLabel>Screen Name: @selectedScreen.Name</FluentLabel>
+                        <FluentLabel>Resolution: @selectedScreen.Width x @selectedScreen.Height px</FluentLabel>
+                    </FluentStack>
+                }
+                else
+                {
+                    <FluentLabel>No screen selected.</FluentLabel>
+                }
+            </FluentCard>
+
+            <FluentCard MinimalStyle="true">
+                <FluentLabel Typo="Typography.H6">Screen Settings</FluentLabel>
+                <FluentStack>
+                    <FluentLabel>Full Screen: @(newClientProjectionSettings.IsFullScreen ? "Yes" : "No")</FluentLabel>
+                    <FluentLabel>Borderless: @(newClientProjectionSettings.IsBorderless ? "Yes" : "No")</FluentLabel>
+                    <FluentLabel>Width: @selectedScreen?.Width</FluentLabel>
+                    <FluentLabel>Height: @selectedScreen?.Height</FluentLabel>
+                </FluentStack>
+            </FluentCard>
+
+            <FluentCard MinimalStyle="true">
+                <FluentLabel Typo="Typography.H6">Projection Program</FluentLabel>
+                @if (selectedProjectionProgram is not null)
+                {
+                    <FluentLabel>Name: @selectedProjectionProgram.Name</FluentLabel>
+                    <FluentLabel>Description: @selectedProjectionProgram.Description</FluentLabel>
+                }
+                else
+                {
+                    <FluentLabel>No program selected.</FluentLabel>
+                }
+            </FluentCard>
         </FluentStack>
     </FluentDialogBody>
 }
@@ -109,10 +154,6 @@ else if (isChoosingProjectionProgram)
     private bool previousButtonIsDisabled = true;
     private bool nextButtonIsDisabled = true;
     private bool isCreating = false;
-
-    private bool isSelectingScreen = true;
-    private bool isConfiguringScreenSettings = false;
-    private bool isChoosingProjectionProgram = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -175,15 +216,18 @@ else if (isChoosingProjectionProgram)
     {
         currentStepIndex++;
 
-        if (currentStepIndex >= steps.Count - 1)
+        if (currentStepIndex >= steps.Count)
+        {
+            currentStepIndex--;
+
+            await AddNewClientProjection();
+
+            return;
+        }
+
+        if (currentStepIndex == steps.Count - 1)
         {
             nextButtonText = "Finish";
-        }
-        else if (currentStepIndex >= steps.Count)
-        {
-            return;
-
-            // SAVE
         }
         else
         {
@@ -197,15 +241,9 @@ else if (isChoosingProjectionProgram)
 
     private async Task HandleCurrentStep()
     {
-        isSelectingScreen = false;
-        isConfiguringScreenSettings = false;
-        isChoosingProjectionProgram = false;
-
         switch (currentStepIndex)
         {
             case 0:
-                isSelectingScreen = true;
-
                 if (selectedScreen == null)
                 {
                     nextButtonIsDisabled = true;
@@ -216,11 +254,8 @@ else if (isChoosingProjectionProgram)
                 }
                 break;
             case 1:
-                isConfiguringScreenSettings = true;
                 break;
             case 2:
-                isChoosingProjectionProgram = true;
-
                 if (selectedProjectionProgram == null)
                 {
                     nextButtonIsDisabled = true;
@@ -250,5 +285,23 @@ else if (isChoosingProjectionProgram)
     private async Task CancelDialog()
     {
         await Dialog!.CancelAsync();
+    }
+
+    private async Task AddNewClientProjection()
+    {
+        isCreating = true;
+
+        Result<bool> addResult = await _clientService.AddClientProjectionAsync(newClientProjectionSettings);
+
+        if (addResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Projection added successfully!");
+
+            await CancelDialog();
+        }
+        else
+        {
+            _toastService.ShowError($"An error occured, {addResult.Error}");
+        }
     }
 }

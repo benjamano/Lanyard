@@ -1,10 +1,10 @@
 ﻿@using Lanyard.App.Services
 @using Lanyard.Infrastructure.Models
+@using Lanyard.Application.Services.Clients
 
 @inject DragStateService DragState
 @inject IToastService _toastService
-
-@using System.Timers
+@inject IProjectionProgramService _projectionProgramService
 
 <FluentStack class="text-center flow-scroll" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
     <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, 0)">START</FluentCard>
@@ -13,13 +13,22 @@
         <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;"></FluentDivider>
     </FluentStack>
 
-    @if (selectedProgram?.ProjectionProgramSteps != null)
+    @if (SelectedProgram?.ProjectionProgramSteps != null)
     {
         int index = 0;
-        foreach (ProjectionProgramStep step in selectedProgram!.ProjectionProgramSteps)
+
+        foreach (ProjectionProgramStep step in SelectedProgram.ProjectionProgramSteps)
         {
-            <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)">
-                @step.Template?.Name
+            Dictionary<Guid, ProjectionProgramParameterValue> parameterValueDict = step.ParameterValues.ToDictionary(x => x.ParameterId);
+
+            <ProjectionStepOptionsMenu AnchorId="@($"menu-btn-step-{step.Id}")" ProjectionProgramStep="step" OnDeleteButtonClicked="DeleteProjectionProgramStep"></ProjectionStepOptionsMenu>
+
+            <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                    <div>
+                        @step.Template?.Name
+                    </div>
+                </FluentStack>
                 
                 @if (step.Template?.Parameters.Any() == true)
                 {
@@ -27,31 +36,24 @@
                         <FluentAccordionItem class="mt-2" Expanded="false">
                             <HeadingTemplate>
                                 <FluentIcon Value="@(new Icons.Regular.Size20.TaskListRtl())"></FluentIcon>
-                                Parameters
+                                Parameters (@step.Template.Parameters.Count)
                             </HeadingTemplate>
                             <ChildContent>
                                 <FluentGrid>
                                 @foreach (ProjectionProgramStepTemplateParameter parameter in step.Template.Parameters)
                                 {
-                                    if (step.ParameterValues.Where(x => x.ParameterId == parameter.Id).FirstOrDefault() == null)
+                                    if (!parameterValueDict.TryGetValue(parameter.Id, out ProjectionProgramParameterValue? paramValue))
                                     {
-                                        step.ParameterValues.Add(new ProjectionProgramParameterValue
-                                        {
-                                            ParameterId = parameter.Id,
-                                            ProjectionProgramStepId = step.Id,
-                                            Value = string.Empty
-                                        });
+                                        continue;
                                     }
 
                                     <FluentGridItem xs="4">
-                                    @switch (parameter.DataType)
-                                    {
-                                        case "String":
-                                            <div>
-                                                <FluentTextField @bind-Value="@step.ParameterValues.Where(x=> x.ParameterId == parameter.Id).FirstOrDefault()!.Value" Label="@parameter.Name" Appearance="FluentInputAppearance.Outline" Required></FluentTextField>
-                                            </div>
-                                            break;
-                                    }
+                                    <div>
+                                        <FluentTextField @bind-Value="@paramValue.Value" 
+                                                       Label="@parameter.Name" 
+                                                       Appearance="FluentInputAppearance.Outline" 
+                                                       Required="@parameter.IsRequired"></FluentTextField>
+                                    </div>
                                     </FluentGridItem>
                                 }
                                 </FluentGrid>
@@ -70,132 +72,131 @@
 
 @code{
     [Parameter]
-    public ProjectionProgram? selectedProgram { get; set; }
+    public ProjectionProgram? SelectedProgram { get; set; }
 
     [Parameter]
     public EventCallback<ProjectionProgram> OnSave { get; set; }
 
-    private Timer? saveTimer;
+    [Parameter]
+    public EventCallback OnStepsChanged { get; set; }
 
-    protected override Task OnInitializedAsync()
-    {
-        saveTimer = new Timer(10000);
-        saveTimer.AutoReset = true;
-        saveTimer.Elapsed += async (_, _) =>
-        {
-            if (selectedProgram is null){
-                return;
-            }
-
-            await InvokeAsync(async () =>
-            {
-                await Save();
-            });
-        };
-
-        // saveTimer.Start();
-
-        return Task.CompletedTask;
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        // StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        saveTimer?.Stop();
-        saveTimer?.Dispose();
-    }
+    public bool CanSave => SelectedProgram?.ProjectionProgramSteps?.Count > 0;
 
     private void OnDropAtIndex(DragEventArgs e, int insertIndex)
     {
-        if (!DragState.HasDrag || DragState.CurrentTemplate is null){
+        if (!DragState.HasDrag || DragState.CurrentTemplate is null || SelectedProgram is null)
+        {
+            if (SelectedProgram is null)
+            {
+                _toastService.ShowWarning("Please select a projection program to add steps to!");
+            }
             return;
         }
 
-        if (selectedProgram is null)
-        {
-            _toastService.ShowWarning("Please select a projection program to add steps to!");
-
-            return;
-        }
-
-        ProjectionProgramStep newStep = new()
-        {
-            Id = Guid.NewGuid(),
-            Template = DragState.CurrentTemplate,
-            SortOrder = insertIndex,
-            IsActive = true,
-            Source = DragState.CurrentTemplate!.Name,
-            ProjectionProgramId = selectedProgram!.Id
-        };
-
+        ProjectionProgramStep newStep = CreateNewStep(DragState.CurrentTemplate, insertIndex, SelectedProgram.Id);
         InsertStepAt(insertIndex, newStep);
 
         DragState.Clear();
+        _ = NotifyStepsChangedAsync();
     }
 
     private void OnDropAtEnd(DragEventArgs e)
     {
-        if (!DragState.HasDrag || DragState.CurrentTemplate is null){
-            return;
-        }
-
-        if (selectedProgram is null)
+        if (!DragState.HasDrag || DragState.CurrentTemplate is null || SelectedProgram is null)
         {
-            _toastService.ShowWarning("Please select a projection program to add steps to!");
-
+            if (SelectedProgram is null)
+            {
+                _toastService.ShowWarning("Please select a projection program to add steps to!");
+            }
             return;
         }
 
+        int insertIndex = SelectedProgram.ProjectionProgramSteps.Count;
+        ProjectionProgramStep newStep = CreateNewStep(DragState.CurrentTemplate, insertIndex, SelectedProgram.Id);
+        InsertStepAt(insertIndex, newStep);
+
+        DragState.Clear();
+        _ = NotifyStepsChangedAsync();
+    }
+
+    private ProjectionProgramStep CreateNewStep(ProjectionProgramStepTemplate template, int sortOrder, Guid programId)
+    {
         ProjectionProgramStep newStep = new()
         {
             Id = Guid.NewGuid(),
-            Template = DragState.CurrentTemplate,
-            SortOrder = selectedProgram!.ProjectionProgramSteps.Count,
+            Template = template,
+            TemplateId = template.Id,
+            SortOrder = sortOrder,
             IsActive = true,
-            Source = DragState.CurrentTemplate!.Name,
-            ProjectionProgramId = selectedProgram!.Id
+            Source = template.Name,
+            ProjectionProgramId = programId,
+            ParameterValues = new List<ProjectionProgramParameterValue>()
         };
 
-        InsertStepAt(selectedProgram!.ProjectionProgramSteps.Count, newStep);
+        if (template.Parameters?.Any() == true)
+        {
+            foreach (ProjectionProgramStepTemplateParameter parameter in template.Parameters)
+            {
+                newStep.ParameterValues.Add(new ProjectionProgramParameterValue
+                {
+                    Id = Guid.NewGuid(),
+                    ParameterId = parameter.Id,
+                    Parameter = parameter,
+                    ProjectionProgramStepId = newStep.Id,
+                    Value = string.Empty
+                });
+            }
+        }
 
-        DragState.Clear();
+        return newStep;
     }
 
     private void InsertStepAt(int index, ProjectionProgramStep newStep)
     {
-        if (selectedProgram is null)
+        if (SelectedProgram is null)
         {
-            _toastService.ShowWarning("Please select a projection program to add steps to!");
-
             return;
         }
 
-        if (index < 0)
+        index = Math.Clamp(index, 0, SelectedProgram.ProjectionProgramSteps.Count);
+
+        SelectedProgram.ProjectionProgramSteps.Insert(index, newStep);
+
+        for (int i = 0; i < SelectedProgram.ProjectionProgramSteps.Count; i++)
         {
-            index = 0;
+            SelectedProgram.ProjectionProgramSteps[i].SortOrder = i;
         }
-
-        if (index > selectedProgram!.ProjectionProgramSteps.Count)
-        { 
-            index = selectedProgram!.ProjectionProgramSteps.Count;
-        }
-
-        selectedProgram!.ProjectionProgramSteps.Insert(index, newStep);
-
-        for (int i = 0; i < selectedProgram!.ProjectionProgramSteps.Count; i++)
-        {
-            selectedProgram!.ProjectionProgramSteps[i].SortOrder = i;
-        }
-
-        StateHasChanged();
     }
 
-    private async Task Save()
+    private async Task NotifyStepsChangedAsync()
     {
-        await OnSave.InvokeAsync(selectedProgram!);
+        await OnStepsChanged.InvokeAsync();
+    }
+
+    private async Task DeleteProjectionProgramStep(ProjectionProgramStep step)
+    {
+        if (SelectedProgram is null)
+        {
+            return;
+        }
+
+        Result<bool> deleteResult = await _projectionProgramService.DeleteProjectionProgramStepAsync(step.Id);
+
+        if (!deleteResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to delete projection program step: {deleteResult.Error}");
+            return;
+        }
+
+        SelectedProgram.ProjectionProgramSteps.RemoveAll(x => x.Id == step.Id);
+
+        for (int i = 0; i < SelectedProgram.ProjectionProgramSteps.Count; i++)
+        {
+            SelectedProgram.ProjectionProgramSteps[i].SortOrder = i;
+        }
+
+        _toastService.ShowSuccess("Projection program step deleted.");
+
+        await NotifyStepsChangedAsync();
     }
 }

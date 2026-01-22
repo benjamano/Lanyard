@@ -1,0 +1,26 @@
+﻿<FluentMenu Anchor="@AnchorId"
+            Trigger="MouseButton.Right"
+            Anchored="false">
+
+    <FluentMenuItem OnClick="@OnDelete">
+        <FluentIcon Value="@(new Icons.Regular.Size24.BinRecycle())" Slot="start" />
+        Delete Step
+    </FluentMenuItem>
+
+</FluentMenu>
+
+@code {
+    [Parameter]
+    public string AnchorId { get; set; } = string.Empty;
+
+    [Parameter]
+    public ProjectionProgramStep ProjectionProgramStep { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<ProjectionProgramStep> OnDeleteButtonClicked { get; set; }
+
+    private async Task OnDelete()
+    {
+        await OnDeleteButtonClicked.InvokeAsync(ProjectionProgramStep);
+    }
+}

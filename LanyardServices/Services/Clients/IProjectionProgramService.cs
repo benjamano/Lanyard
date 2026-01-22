@@ -13,4 +13,5 @@ public interface IProjectionProgramService
     Task<Result<ProjectionProgramStepTemplate>> CreateProjectionProgramStepTemplateAsync(ProjectionProgramStepTemplate template);
     Task<Result<ProjectionProgram>> CreateProjectionProgramAsync(ProjectionProgram projectionProgram);
     Task<Result<bool>> SaveProjectionProgramStepsAsync(IEnumerable<ProjectionProgramStep> projectionProgramSteps);
+    Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid Id);
 }

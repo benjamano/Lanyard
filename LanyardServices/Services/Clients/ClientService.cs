@@ -288,4 +288,24 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
             return Result<IEnumerable<ClientAvailableScreen>>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<bool>> AddClientProjectionAsync(ClientProjectionSettings clientProjectionSettings)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            clientProjectionSettings.Client = null;
+
+            ctx.Add(clientProjectionSettings);
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
 }
