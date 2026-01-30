@@ -142,7 +142,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()
-                        .Where(x => x.IsActive && x.ClientId == x.ClientId)
+                        .Where(y => y.IsActive && x.Id == y.ClientId)
                         .Any()
                 })
                 .ToListAsync();
@@ -296,8 +296,38 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             clientProjectionSettings.Client = null;
+            clientProjectionSettings.ProjectionProgram = null;
+
+            clientProjectionSettings.IsActive = true;
 
             ctx.Add(clientProjectionSettings);
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+    
+    public async Task<Result<bool>> DeleteClientProjectionSettingsAsync(Guid clientProjectionSettingsId)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ClientProjectionSettings? projectionSettings = await ctx.ClientProjectionSettings
+                .Where(x => x.Id == clientProjectionSettingsId)
+                .FirstOrDefaultAsync();
+
+            if (projectionSettings == null)
+            {
+                return Result<bool>.Fail("Client projection settings not found.");
+            }
+
+            projectionSettings.IsActive = false;
 
             await ctx.SaveChangesAsync();
 

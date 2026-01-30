@@ -19,6 +19,9 @@
                             <TemplateColumn Title="Size">
                                 @context.Width x @context.Height px
                             </TemplateColumn>
+                            <TemplateColumn Title="Delete">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
+                            </TemplateColumn>
                         </ChildContent>
                         <LoadingContent>
                             Loading...
@@ -41,6 +44,9 @@
 
     [Parameter] 
     public Guid? clientId { get; set; }
+
+    [Parameter]
+    public EventCallback UpdateClientCapabilities { get; set; }
 
     private IEnumerable<ClientProjectionSettings> projectionSettings = Array.Empty<ClientProjectionSettings>();
 
@@ -71,17 +77,17 @@
         if (clientId != null)
         {
             DialogParameters parameters = new DialogParameters()
-                {
-                    Title = "Add Projection",
-                    OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjection),
-                    PrimaryAction = "Create",
-                    PrimaryActionEnabled = false,
-                    SecondaryAction = "Cancel",
-                    Width = "50%",
-                    Height = "auto",
-                    TrapFocus = true,
-                    Modal = true,
-                };
+            {
+                Title = "Add Projection",
+                OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjection),
+                PrimaryAction = "Create",
+                PrimaryActionEnabled = false,
+                SecondaryAction = "Cancel",
+                Width = "50%",
+                Height = "auto",
+                TrapFocus = true,
+                Modal = true,
+            };
 
             await DialogService.ShowDialogAsync<AddNewProjectionDialog>(clientId, parameters);
         }
@@ -89,6 +95,25 @@
 
     private async Task HandleAddProjection(DialogResult result)
     {
-        
+        await RefreshCapabilities();
+    }
+
+    private async Task DeleteClientProjectionSettings(Guid projectionSettingsId)
+    {
+        Result<bool> result = await _clientService.DeleteClientProjectionSettingsAsync(projectionSettingsId);
+
+        if (result.IsSuccess)
+        {
+            await RefreshCapabilities();
+
+            if (projectionSettings.Any() == false)
+            {
+                await UpdateClientCapabilities.InvokeAsync();
+            }
+        }
+        else
+        {
+            _toastService.ShowError($"An error occured when deleting the projection, {result.Error}");
+        }
     }
 }
