@@ -1,6 +1,6 @@
 ﻿using Lanyard.Client.Controllers;
 using Lanyard.Client.PacketSniffing;
-using Lanyard.Client.UI;
+using Lanyard.Client.ProjectionPrograms;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -9,6 +9,21 @@ using System.Threading;
 using System.Windows;
 using static System.Net.Mime.MediaTypeNames;
 using Application = System.Windows.Application;
+using System.Threading;
+
+ManualResetEvent wpfReady = new(false);
+
+Thread wpfThread = new(() =>
+{
+    var app = new Application();
+    wpfReady.Set(); // Signal that Application.Current is now set
+    app.Run();
+});
+wpfThread.SetApartmentState(ApartmentState.STA);
+wpfThread.IsBackground = true;
+wpfThread.Start();
+
+wpfReady.WaitOne(); // Wait until WPF Application is ready before continuing
 
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");
@@ -34,17 +49,18 @@ services.AddHttpClient();
 services.AddSingleton<IPacketSniffer, PacketSniffer>();
 services.AddSingleton<IActionFunctions, Actions>();
 services.AddSingleton<IGameStateService, GameStateService>();
+services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();
 
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
-
-services.AddSingleton<WindowManager>();
+services.AddSingleton<ProjectionProgramController>();
 
 ServiceProvider provider = services.BuildServiceProvider();
 
 List<Action<HubConnection>> registrations =
 [
-    provider.GetRequiredService<MusicControlHandler>().Register
+    provider.GetRequiredService<MusicControlHandler>().Register,
+    provider.GetRequiredService<ProjectionProgramController>().Register
 ];
 
 string? baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lanyardClient");
@@ -87,15 +103,6 @@ while (stop == false)
     {
         if (message.Equals("show", StringComparison.OrdinalIgnoreCase))
         {
-            Thread uiThread = new Thread(() =>
-            {
-                var window = new TestWindow();
-                window.Show();
-                System.Windows.Threading.Dispatcher.Run();
-            });
-
-            uiThread.SetApartmentState(ApartmentState.STA);
-            uiThread.Start();
         }
         else if (int.TryParse(message, out int actionType))
         {

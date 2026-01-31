@@ -10,6 +10,8 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Shared.DTO;
 using Lanyard.Application.Services;
+using Lanyard.Application.SignalR;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Lanyard.Tests.Services.Clients
 {
@@ -31,7 +33,14 @@ namespace Lanyard.Tests.Services.Clients
             factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
                 .ReturnsAsync(() => new ApplicationDbContext(options));
 
-            return new ClientService(factoryMock.Object);
+            var signalRProjectionControlHubMock = new Mock<ISignalRProjectionControlHub>();
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            serviceProviderMock.Setup(sp => sp.GetService(typeof(ISignalRProjectionControlHub)))
+                .Returns(signalRProjectionControlHubMock.Object);
+
+            var hubContextMock = new Mock<IHubContext<SignalRControlHub>>();
+
+            return new ClientService(factoryMock.Object, serviceProviderMock.Object, hubContextMock.Object);
         }
 
         private ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
@@ -40,7 +49,9 @@ namespace Lanyard.Tests.Services.Clients
             factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
                 .ReturnsAsync(() => new ApplicationDbContext(options));
 
-            return new ProjectionProgramService(factoryMock.Object);
+            var clientServiceMock = new Mock<IClientService>();
+
+            return new ProjectionProgramService(factoryMock.Object, clientServiceMock.Object);
         }
 
         [TestMethod]

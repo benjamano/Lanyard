@@ -34,7 +34,7 @@ public class SignalRClient : ISignalRClient
 
             await SendAvailableScreensToServer();
 
-            await SendAvailableAudioDevicesToServer();
+            //await SendAvailableAudioDevicesToServer();
         }
         catch (Exception ex)
         {

@@ -1,13 +1,16 @@
-﻿using Lanyard.Infrastructure.DataAccess;
+﻿using Lanyard.Application.SignalR;
+using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services.Clients;
 
-public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> factory) : IProjectionProgramService
+public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> factory, IClientService clientService) : IProjectionProgramService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IClientService _clientService = clientService;
 
     public async Task<Result<IEnumerable<ProjectionProgram>>> GetProjectionProgramsAsync()
     {
@@ -113,36 +116,28 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             Guid programId = stepsList.First().ProjectionProgramId;
 
-            // Load existing steps with parameter values
             List<ProjectionProgramStep> existingSteps = await ctx.ProjectionProgramSteps
                 .Include(x => x.ParameterValues)
                 .Where(x => x.ProjectionProgramId == programId && x.IsActive)
                 .ToListAsync();
 
-            // Create lookup for efficient updates
             Dictionary<Guid, ProjectionProgramStep> existingStepsDict = existingSteps.ToDictionary(x => x.Id);
 
-            // Update existing steps
             foreach (ProjectionProgramStep step in stepsList.Where(x => existingStepsDict.ContainsKey(x.Id)))
             {
                 ProjectionProgramStep existingStep = existingStepsDict[step.Id];
                 existingStep.SortOrder = step.SortOrder;
-                existingStep.Source = step.Source;
                 existingStep.TemplateId = step.TemplateId;
 
-                // Update parameter values efficiently
-                UpdateParameterValues(ctx, existingStep, step.ParameterValues);
+                await UpdateParameterValues(existingStep, step.ParameterValues);
             }
 
-            // Add new steps
             foreach (ProjectionProgramStep newStep in stepsList.Where(x => !existingStepsDict.ContainsKey(x.Id)))
             {
                 newStep.IsActive = true;
-                // Clear navigation properties but keep TemplateId - this is the critical fix
                 newStep.Template = null;
                 newStep.ProjectionProgram = null;
 
-                // Prepare parameter values for insertion
                 foreach (ProjectionProgramParameterValue paramValue in newStep.ParameterValues)
                 {
                     paramValue.Parameter = null;
@@ -154,6 +149,8 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             await ctx.SaveChangesAsync();
 
+            await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(projectionProgramSteps.First().ProjectionProgramId);
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)
@@ -162,38 +159,38 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         }
     }
 
-    private void UpdateParameterValues(ApplicationDbContext ctx, ProjectionProgramStep existingStep, List<ProjectionProgramParameterValue> newParameterValues)
+    private async Task UpdateParameterValues(ProjectionProgramStep existingStep, List<ProjectionProgramParameterValue> newParameterValues)
     {
-        // Create lookup for existing parameter values
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
         Dictionary<Guid, ProjectionProgramParameterValue> existingValuesDict = existingStep.ParameterValues.ToDictionary(x => x.ParameterId);
 
         foreach (ProjectionProgramParameterValue newValue in newParameterValues)
         {
             if (existingValuesDict.TryGetValue(newValue.ParameterId, out ProjectionProgramParameterValue? existingValue))
             {
-                // Update existing value
                 existingValue.Value = newValue.Value;
             }
             else
             {
-                // Add new parameter value
                 newValue.ProjectionProgramStepId = existingStep.Id;
                 newValue.Parameter = null;
                 newValue.ProjectionProgramStep = null;
+
                 ctx.Add(newValue);
             }
         }
 
-        // Remove parameter values that are no longer present
         HashSet<Guid> newParameterIds = newParameterValues.Select(x => x.ParameterId).ToHashSet();
-        List<ProjectionProgramParameterValue> toRemove = existingStep.ParameterValues
-            .Where(x => !newParameterIds.Contains(x.ParameterId))
-            .ToList();
+
+        List<ProjectionProgramParameterValue> toRemove = [.. existingStep.ParameterValues.Where(x => !newParameterIds.Contains(x.ParameterId))];
 
         foreach (ProjectionProgramParameterValue valueToRemove in toRemove)
         {
             ctx.Remove(valueToRemove);
         }
+
+        await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(existingStep.ProjectionProgramId);
     }
 
     public async Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid id)
@@ -202,10 +199,21 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            await ctx.ProjectionProgramSteps
+            ProjectionProgramStep? projectionProgramStep = await ctx.ProjectionProgramSteps
                 .Where(x => x.Id == id)
-                .ExecuteUpdateAsync(x => x.SetProperty(y => y.IsActive, false));
- 
+                .FirstOrDefaultAsync();
+
+            if (projectionProgramStep == null)
+            {
+                return Result<bool>.Fail("Projection program step not found.");
+            }
+
+            projectionProgramStep.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(projectionProgramStep.ProjectionProgramId);
+
             return Result<bool>.Ok(true);
         }
         catch (Exception ex)

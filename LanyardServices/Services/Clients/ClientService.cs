@@ -1,9 +1,12 @@
-﻿using Lanyard.Application.SignalR;
+﻿using Lanyard.Application.Services.Clients;
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -11,9 +14,13 @@ using System.Text;
 
 namespace Lanyard.Application.Services;
 
-public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IClientService
+public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IServiceProvider serviceProvider, IHubContext<SignalRControlHub> hubContext) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IServiceProvider _serviceProvider = serviceProvider;
+    private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
+
+    private ISignalRProjectionControlHub GetSignalRHub() => _serviceProvider.GetRequiredService<ISignalRProjectionControlHub>();
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {
@@ -166,6 +173,30 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .Where(x=> x.ClientId == clientId)
                 .Where(x => x.IsActive)
                 .Include(x=> x.ProjectionProgram)
+                    .ThenInclude(x=> x!.ProjectionProgramSteps)
+                        .ThenInclude(x=> x.ParameterValues)
+                            .ThenInclude(x=> x.Parameter)
+                .ToListAsync();
+
+            return Result<IEnumerable<ClientProjectionSettings>>.Ok(projectionSettings);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ClientProjectionSettings>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ClientProjectionSettings>>> GetClientProjectionSettingsForSendingToClientAsync(Guid clientId)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ClientProjectionSettings> projectionSettings = await ctx.ClientProjectionSettings
+                .AsNoTracking()
+                .Where(x => x.ClientId == clientId)
+                .Where(x => x.IsActive)
+                .Include(x => x.ProjectionProgram)
                 .ToListAsync();
 
             return Result<IEnumerable<ClientProjectionSettings>>.Ok(projectionSettings);
@@ -330,6 +361,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             await ctx.SaveChangesAsync();
 
+            await SendUpdatedProjectionProgramInfoToClientsAsync(clientProjectionSettings.ProjectionProgramId);
+
             return Result<Guid>.Ok(clientProjectionSettings.Id);
         }
         catch (Exception ex)
@@ -356,6 +389,137 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
             projectionSettings.IsActive = false;
 
             await ctx.SaveChangesAsync();
+
+            await SendUpdatedProjectionProgramInfoToClientsAsync(projectionSettings.ProjectionProgramId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public Result<IEnumerable<ClientProjectionSettingsDTO>> ConvertIntoClientProjectionSettingsDTO(IEnumerable<ClientProjectionSettings> settings)
+    {
+        try
+        {
+            IList<ClientProjectionSettingsDTO> dtoList = [];
+
+            foreach (ClientProjectionSettings setting in settings)
+            {
+                if (setting.ProjectionProgram == null)
+                {
+                    continue;
+                }
+
+                if (setting.Width == null || setting.Height == null)
+                {
+                    continue;
+                }
+
+                List<ProjectionProgramStepDTO> steps = [];
+
+                foreach (ProjectionProgramStep step in setting.ProjectionProgram.ProjectionProgramSteps.OrderBy(x => x.SortOrder))
+                {
+                    List<ProjectionProgramParameterValueDTO> parameterValues = [];
+
+                    foreach (ProjectionProgramParameterValue paramValue in step.ParameterValues)
+                    {
+                        ProjectionProgramStepTemplateParameterDTO param = new()
+                        {
+                            Name = paramValue.Parameter!.Name,
+                            Description = paramValue.Parameter.Description,
+                            DataType = paramValue.Parameter.DataType,
+                            IsRequired = paramValue.Parameter.IsRequired
+                        };
+
+                        ProjectionProgramParameterValueDTO paramDto = new()
+                        {
+                            Parameter = param,
+                            Value = paramValue.Value
+                        };
+
+                        parameterValues.Add(paramDto);
+                    }
+
+                    ProjectionProgramStepDTO stepDto = new()
+                    {
+                        SortOrder = step.SortOrder,
+                        ParameterValues = parameterValues
+                    };
+
+                    steps.Add(stepDto);
+                }
+
+                ProjectionProgramDTO projectionProgram = new()
+                {
+                    Name = setting.ProjectionProgram.Name,
+                    Description = setting.ProjectionProgram.Description,
+
+                    ProjectionProgramSteps = steps
+                };
+
+                ClientProjectionSettingsDTO dto = new()
+                {
+                    DisplayIndex = setting.DisplayIndex,
+
+                    Height = setting.Height ?? 0,
+                    Width = setting.Width ?? 0,
+
+                    IsBorderless = setting.IsBorderless,
+                    IsFullScreen = setting.IsFullScreen,
+
+                    ProjectionProgram = projectionProgram,
+                };
+
+                dtoList.Add(dto);
+            }
+
+            return Result<IEnumerable<ClientProjectionSettingsDTO>>.Ok(dtoList);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ClientProjectionSettingsDTO>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<Client> clients = await ctx.ClientProjectionSettings
+                .AsNoTracking()
+                .Where(x => x.ProjectionProgramId == projectionProgramId)
+                .Select(x => x.Client!)
+                .Distinct()
+                .ToListAsync();
+
+            foreach (Client client in clients)
+            {
+                Result<IEnumerable<ClientProjectionSettings>> result = await GetClientProjectionSettingsAsync(client.Id);
+
+                if (!result.IsSuccess)
+                {
+                    continue;
+                }
+
+                Result<IEnumerable<ClientProjectionSettingsDTO>> resultDto = ConvertIntoClientProjectionSettingsDTO(result.Data!);
+
+                if (!resultDto.IsSuccess || resultDto.Data == null)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(client.MostRecentConnectionId)) 
+                {
+                    continue;
+                }
+
+                await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveProjectionPrograms", resultDto.Data);
+            }
 
             return Result<bool>.Ok(true);
         }

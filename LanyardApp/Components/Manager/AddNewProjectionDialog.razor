@@ -193,6 +193,7 @@ else if (currentStepIndex == 3)
         {
             newClientProjectionSettings.Width = selectedScreen.Width;
             newClientProjectionSettings.Height = selectedScreen.Height;
+            newClientProjectionSettings.DisplayIndex = selectedScreen.Index;
 
             nextButtonIsDisabled = false;
         }
@@ -296,7 +297,7 @@ else if (currentStepIndex == 3)
     {
         isCreating = true;
 
-        Result<bool> addResult = await _clientService.AddClientProjectionAsync(newClientProjectionSettings);
+        Result<Guid> addResult = await _clientService.AddClientProjectionAsync(newClientProjectionSettings);
 
         if (addResult.IsSuccess)
         {

@@ -12,7 +12,7 @@ using System.Collections.Concurrent;
 
 namespace Lanyard.Application.SignalR;
 
-public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerService playerService, IClientService clientService) : Hub
+public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerService playerService, IClientService clientService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -87,6 +87,8 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
                 Context.Abort();
                 return;
             }
+
+            await SendProjectionProgramInfoToClientAsync(client.Id);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -127,7 +129,7 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
 
     public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)
     {
-        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens);
+        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens.Select(x=> x.Name));
 
         Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getResult.IsSuccess)
@@ -167,5 +169,60 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
         _logger.LogInformation("Stop command received");
         
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
+    }
+
+    public async Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId)
+    {
+        try
+        {
+            Result<Client?> getResult = await _clientService.GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                _logger.LogError("Failed to get client {ClientId}: {Error}", clientId, getResult.Error);
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data!.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                _logger.LogWarning("Client {ClientId} has no recent connection ID", clientId);
+                return Result<bool>.Fail("Client has no recent connection ID.");
+            }
+
+            Result<IEnumerable<ClientProjectionSettings>> result = await _clientService.GetClientProjectionSettingsAsync(clientId);
+
+            if (!result.IsSuccess)
+            {
+                _logger.LogError("Failed to get projection settings for client {ConnectionId}: {Error}", Context.ConnectionId, result.Error);
+                return Result<bool>.Fail("Failed to get projection settings.");
+            }
+
+            Result<IEnumerable<ClientProjectionSettingsDTO>> result1 = _clientService.ConvertIntoClientProjectionSettingsDTO(result.Data!);
+
+            if (!result1.IsSuccess)
+            {
+                _logger.LogError("Failed to convert projection settings into DTO for client {ConnectionId}: {Error}", Context.ConnectionId, result.Error);
+                return Result<bool>.Fail("Failed to convert projection settings into DTO.");
+            }
+
+            if (result1.Data == null || !result1.Data.Any())
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            _logger.LogInformation("Sending projection program info to client {ConnectionId}", connectionId);
+
+            await Clients.Clients(connectionId).SendAsync("ReceiveProjectionPrograms", result1.Data);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while sending projection program info to client {clientId}", clientId);
+
+            return Result<bool>.Fail("An error occurred while sending projection program info to client.");
+        }
     }
 }

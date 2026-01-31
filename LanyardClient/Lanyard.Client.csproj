@@ -22,10 +22,4 @@
     <ProjectReference Include="..\LanyardData\Lanyard.Infrastructure.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="UI\Test.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </None>
-  </ItemGroup>
-
 </Project>
