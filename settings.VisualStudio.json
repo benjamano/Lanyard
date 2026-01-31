@@ -11,5 +11,7 @@
   "languages.defaults.general.wordWrap": true,
   "languages.defaults.general.wordWrapVisualGlyphs": true,
   "languages.androidXml.general.wordWrapVisualGlyphs": true,
-  "textEditor.general.display.wordWrapAutoIndent": true
+  "textEditor.general.display.wordWrapAutoIndent": true,
+  "environment.visualExperience.colorTheme": "one-dark-pro-darker",
+  "debugging.hotReload.enableForNoDebugLaunch": false
 }

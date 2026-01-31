@@ -77,10 +77,17 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
     {
         try
         {
+            if (string.IsNullOrEmpty(projectionProgram.Name))
+            {
+                return Result<ProjectionProgram>.Fail("Projection program name cannot be empty.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             projectionProgram.IsActive = true;
+
             ctx.Add(projectionProgram);
+
             await ctx.SaveChangesAsync();
 
             return Result<ProjectionProgram>.Ok(projectionProgram);

@@ -213,7 +213,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             if (client == null)
             {
-                return Result<bool>.Fail("Client not found for the given connection ID.");
+                return Result<bool>.Fail("Client not found for the given client ID.");
             }
 
             IEnumerable<ClientAvailableScreen> existingScreens = screens
@@ -247,6 +247,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 {
                     incoming.ClientId = ClientId;
                     incoming.IsActive = true;
+
                     ctx.ClientAvailableScreens.Add(incoming);
                 }
                 else
@@ -289,10 +290,35 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<bool>> AddClientProjectionAsync(ClientProjectionSettings clientProjectionSettings)
+    public async Task<Result<Guid>> AddClientProjectionAsync(ClientProjectionSettings clientProjectionSettings)
     {
         try
         {
+            if (clientProjectionSettings.ProjectionProgramId == Guid.Empty)
+            {
+                return Result<Guid>.Fail("Projection program ID is required.");
+            }
+
+            if (clientProjectionSettings.ClientId == Guid.Empty)
+            {
+                return Result<Guid>.Fail("Client ID is required.");
+            }
+
+            if (clientProjectionSettings.DisplayIndex < 0)
+            {
+                return Result<Guid>.Fail("Display index must be zero or greater.");
+            }
+
+            if (clientProjectionSettings.Height == null || clientProjectionSettings.Height <= 0)
+            {
+                return Result<Guid>.Fail("Height must be greater than zero.");
+            }
+
+            if (clientProjectionSettings.Width == null || clientProjectionSettings.Width <= 0)
+            {
+                return Result<Guid>.Fail("Width must be greater than zero.");
+            }
+
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             clientProjectionSettings.Client = null;
@@ -304,11 +330,11 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             await ctx.SaveChangesAsync();
 
-            return Result<bool>.Ok(true);
+            return Result<Guid>.Ok(clientProjectionSettings.Id);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Fail(ex.Message);
+            return Result<Guid>.Fail(ex.Message);
         }
     }
     
