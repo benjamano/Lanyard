@@ -7,7 +7,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
-using Lanyard.Application.Services.Clients;
 using Lanyard.Shared.DTO;
 using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
@@ -506,6 +505,42 @@ namespace Lanyard.Tests.Services.Clients
             Assert.IsTrue(projectionSettings.Success);
 
             Assert.AreEqual(0, projectionSettings.Data?.Count(), "Expected zero client projection settings after deletion.");
+        }
+
+        [TestMethod]
+        public async Task GetProjectionProgramAsync_ShouldReturnErrorWhenNotFound()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetProjectionProgramService(options);
+
+            var result = await service.GetProjectionProgramAsync(Guid.NewGuid());
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("Projection program not found.", result.Error);
+        }
+
+        [TestMethod]
+        public async Task GetProjectionProgramAsync_ShouldReturnProjectionProgram()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetProjectionProgramService(options);
+
+            var result1 = await service.CreateProjectionProgramAsync(new ProjectionProgram
+            {
+                Name = "Test Program",
+                IsActive = true
+            });
+
+            Assert.IsTrue(result1.IsSuccess);
+            Assert.IsNotNull(result1.Data);
+
+            var result = await service.GetProjectionProgramAsync(result1.Data.Id);
+
+            Assert.IsTrue(result.Success);
+            Assert.IsNotNull(result.Data);
+            Assert.AreEqual("Test Program", result.Data.Name);
         }
     }
 }

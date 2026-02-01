@@ -1,5 +1,4 @@
-﻿using Lanyard.Application.Services.Clients;
-using Lanyard.Application.SignalR;
+﻿using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -454,6 +453,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, ISer
 
                 ProjectionProgramDTO projectionProgram = new()
                 {
+                    Id = setting.ProjectionProgramId,
+
                     Name = setting.ProjectionProgram.Name,
                     Description = setting.ProjectionProgram.Description,
 

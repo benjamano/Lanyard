@@ -3,7 +3,7 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
-using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;

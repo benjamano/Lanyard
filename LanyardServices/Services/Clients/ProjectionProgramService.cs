@@ -5,7 +5,7 @@ using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Lanyard.Application.Services.Clients;
+namespace Lanyard.Application.Services;
 
 public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> factory, IClientService clientService) : IProjectionProgramService
 {
@@ -219,6 +219,29 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         catch (Exception ex)
         {
             return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<ProjectionProgram>> GetProjectionProgramAsync(Guid projectionProgramId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ProjectionProgram? projectionProgram = await ctx.ProjectionPrograms
+                .Where(x => x.Id == projectionProgramId)
+                .FirstOrDefaultAsync();
+
+            if (projectionProgram == null)
+            {
+                return Result<ProjectionProgram>.Fail("Projection program not found.");
+            }
+
+            return Result<ProjectionProgram>.Ok(projectionProgram);
+        }
+        catch (Exception ex)
+        {
+            return Result<ProjectionProgram>.Fail(ex.Message);
         }
     }
 }

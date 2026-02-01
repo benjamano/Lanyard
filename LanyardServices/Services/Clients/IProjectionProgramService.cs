@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Lanyard.Application.Services.Clients;
+namespace Lanyard.Application.Services;
 
 public interface IProjectionProgramService
 {
@@ -14,4 +14,5 @@ public interface IProjectionProgramService
     Task<Result<ProjectionProgram>> CreateProjectionProgramAsync(ProjectionProgram projectionProgram);
     Task<Result<bool>> SaveProjectionProgramStepsAsync(IEnumerable<ProjectionProgramStep> projectionProgramSteps);
     Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid Id);
+    Task<Result<ProjectionProgram>> GetProjectionProgramAsync(Guid projectionProgramId);
 }

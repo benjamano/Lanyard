@@ -11,19 +11,19 @@ using static System.Net.Mime.MediaTypeNames;
 using Application = System.Windows.Application;
 using System.Threading;
 
-ManualResetEvent wpfReady = new(false);
+//ManualResetEvent wpfReady = new(false);
 
-Thread wpfThread = new(() =>
-{
-    var app = new Application();
-    wpfReady.Set(); // Signal that Application.Current is now set
-    app.Run();
-});
-wpfThread.SetApartmentState(ApartmentState.STA);
-wpfThread.IsBackground = true;
-wpfThread.Start();
+//Thread wpfThread = new(() =>
+//{
+//    var app = new Application();
+//    wpfReady.Set(); 
+//    app.Run();
+//});
+//wpfThread.SetApartmentState(ApartmentState.STA);
+//wpfThread.IsBackground = true;
+//wpfThread.Start();
 
-wpfReady.WaitOne(); // Wait until WPF Application is ready before continuing
+//wpfReady.WaitOne();
 
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");

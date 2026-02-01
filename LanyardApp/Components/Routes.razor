@@ -1,5 +1,6 @@
 ﻿@using Lanyard.App.Components.Layout.Staff
 @using Lanyard.App.Components.Layout.Customer
+@using Lanyard.App.Components.Layout
 @using Microsoft.AspNetCore.Components.Routing
 
 <CascadingAuthenticationState>
@@ -32,7 +33,14 @@
         Type? pageType = routeData.PageType;
 
         if (pageType.Namespace?.Contains(".Staff") == true)
+        {
+            if (pageType.Name == "Kiosk")
+            {
+                return typeof(EmptyLayout);
+            }
+
             return typeof(MainLayout);
+        }
 
         return typeof(CustomerMainLayout);
     }

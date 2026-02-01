@@ -1,4 +1,53 @@
-﻿@page "/staff/kiosk"
+﻿@page "/staff/kiosk/{clientId}/{projectionProgramId}"
 
-@using Microsoft.AspNetCore.Authorization
-@attribute [Authorize]
+@using Lanyard.Application.Services
+
+@inject IProjectionProgramService _projectionProgramService
+@inject IToastService _toastService
+
+<PageTitle>Kiosk</PageTitle>
+
+@if (projectionProgram == null)
+{
+    <FluentCard Height="auto">
+        Loading..
+        <FluentProgress Width="200px"></FluentProgress>
+
+        <FluentLabel Color="Color.Lightweight" Typo="Typography.H6">Client Id: @clientId</FluentLabel>
+    </FluentCard>
+}
+else
+{
+    <h3>
+        Your projectionProgramId : @projectionProgramId
+        @projectionProgram?.Name
+        @projectionProgram?.Description
+    </h3>
+}
+
+@code {
+    [Parameter]
+    public string clientId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string projectionProgramId { get; set; } = string.Empty;
+
+    private ProjectionProgram? projectionProgram { get; set; } = null;
+
+    protected async override Task OnInitializedAsync()
+    {
+        Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(Guid.Parse(projectionProgramId));
+
+        if (getResult.IsSuccess)
+        {
+            projectionProgram = getResult.Data!;
+        }
+        else
+        {
+            if (getResult.Error != null)
+            {
+                _toastService.ShowError(getResult.Error);
+            }
+        }
+    }
+}
