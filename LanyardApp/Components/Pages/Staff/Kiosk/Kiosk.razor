@@ -1,6 +1,7 @@
 ﻿@page "/staff/kiosk/{clientId}/{projectionProgramId}"
 
 @using Lanyard.Application.Services
+@using Lanyard.App.Components.Kiosk
 
 @inject IProjectionProgramService _projectionProgramService
 @inject IToastService _toastService
@@ -13,16 +14,12 @@
         Loading..
         <FluentProgress Width="200px"></FluentProgress>
 
-        <FluentLabel Color="Color.Lightweight" Typo="Typography.H6">Client Id: @clientId</FluentLabel>
+        <FluentLabel Color="Color.Lightweight" Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentLabel>
     </FluentCard>
 }
 else
 {
-    <h3>
-        Your projectionProgramId : @projectionProgramId
-        @projectionProgram?.Name
-        @projectionProgram?.Description
-    </h3>
+    <KioskDisplay ProjectionProgram="@projectionProgram"></KioskDisplay>
 }
 
 @code {

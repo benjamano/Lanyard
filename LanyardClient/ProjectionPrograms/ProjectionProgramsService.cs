@@ -71,7 +71,7 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
         string url = $"{Environment.GetEnvironmentVariable("KIOSK_SERVER_URL")}/{clientId}/{projectionProgramId}";
 
-        string args = $"--kiosk \"{url}\" --window-position={x},{y} --window-size={width},{height} {(IsFullScreen ? "--edge-kiosk-type=fullscreen" : "")}";
+        string args = $"--no-first-run --no-default-browser-check --new-window --kiosk \"{url}\" --window-position={x},{y} --window-size={width},{height} {(IsFullScreen ? "--edge-kiosk-type=fullscreen" : "")}";
 
         Process process = Process.Start("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", args);
         _kioskProcess = process;

@@ -542,5 +542,91 @@ namespace Lanyard.Tests.Services.Clients
             Assert.IsNotNull(result.Data);
             Assert.AreEqual("Test Program", result.Data.Name);
         }
+
+        [TestMethod]
+        public async Task GetProjectionProgramAsync_ShouldReturnProjectionProgramWithAllIncludes()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetProjectionProgramService(options);
+
+            var result1 = await service.CreateProjectionProgramAsync(new ProjectionProgram
+            {
+                Name = "Test Program",
+                IsActive = true,
+                ProjectionProgramSteps =
+                [
+                    new()
+                    {
+                        IsActive = true,
+                        SortOrder = 0,
+                        Template = new ProjectionProgramStepTemplate
+                        {
+                            Name = "Template 1",
+                            IsActive = true,
+                            Parameters = 
+                            [
+                                new()  
+                                {
+                                    TemplateId = Guid.NewGuid(),
+                                    DataType = "String",
+                                    IsActive = true,
+                                    Name = "Parameter 1",
+                                    IsRequired = false
+                                }
+                            ]
+                        },
+                    }
+                ]
+            });
+
+            Assert.IsTrue(result1.IsSuccess);
+            Assert.IsNotNull(result1.Data);
+
+            var result = await service.GetProjectionProgramAsync(result1.Data.Id);
+
+            Assert.IsTrue(result.Success);
+            Assert.IsNotNull(result.Data);
+            Assert.IsNotNull(result.Data.ProjectionProgramSteps);
+            Assert.HasCount(1, result.Data.ProjectionProgramSteps);
+            Assert.IsNotNull(result.Data.ProjectionProgramSteps[0].Template);
+            Assert.IsNotNull(result.Data.ProjectionProgramSteps[0].Template!.Parameters);
+            Assert.HasCount(1, result.Data.ProjectionProgramSteps[0].Template!.Parameters);
+            Assert.AreEqual("Test Program", result.Data.Name);
+        }
+
+        [TestMethod]
+        public async Task DeleteProjectionProgramAsync_ShouldReturnErrorWhenNotFound()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetProjectionProgramService(options);
+
+            var result = await service.DeleteProjectionProgramAsync(Guid.NewGuid());
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("Projection program not found.", result.Error);
+        }
+
+        [TestMethod]
+        public async Task DeleteProjectionProgramAsync_ShouldReturnTrueWhenFound()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetProjectionProgramService(options);
+
+            var result1 = await service.CreateProjectionProgramAsync(new ProjectionProgram
+            {
+                Name = "Test Program",
+                IsActive = true
+            });
+
+            Assert.IsTrue(result1.IsSuccess);
+            Assert.IsNotNull(result1.Data);
+
+            var result = await service.DeleteProjectionProgramAsync(result1.Data.Id);
+
+            Assert.IsTrue(result.Success);
+        }
     }
 }

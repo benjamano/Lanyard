@@ -230,6 +230,11 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             ProjectionProgram? projectionProgram = await ctx.ProjectionPrograms
                 .Where(x => x.Id == projectionProgramId)
+                .Include(x=> x.ProjectionProgramSteps)
+                    .ThenInclude(x=> x.ParameterValues)
+                .Include(x=> x.ProjectionProgramSteps)
+                    .ThenInclude(x=> x.Template)
+                        .ThenInclude(x=> x!.Parameters)
                 .FirstOrDefaultAsync();
 
             if (projectionProgram == null)
@@ -242,6 +247,35 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         catch (Exception ex)
         {
             return Result<ProjectionProgram>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> DeleteProjectionProgramAsync(Guid projectionProgramId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ProjectionProgram? projectionProgram = await ctx.ProjectionPrograms
+                .Where(x => x.Id == projectionProgramId)
+                .FirstOrDefaultAsync();
+
+            if (projectionProgram == null)
+            {
+                return Result<bool>.Fail("Projection program not found.");
+            }
+
+            projectionProgram.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(projectionProgramId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
         }
     }
 }

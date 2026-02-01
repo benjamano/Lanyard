@@ -24,10 +24,13 @@
                 }
                 else
                 {
-                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr">
+                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr auto">
                         <ChildContent>
                             <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedScreen(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
                             <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                            <TemplateColumn Title="Delete">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteProjectionProgram(context.Id)"></FluentIcon>
+                            </TemplateColumn>
                         </ChildContent>
                         <EmptyContent>
                             No Projection Programs Exist!
@@ -139,6 +142,27 @@
         }
 
         isSaving = false;
+    }
+
+    private async Task DeleteProjectionProgram(Guid projectionProgramId)
+    {
+        Result<bool> deleteResult = await _projectionService.DeleteProjectionProgramAsync(projectionProgramId);
+
+        if (!deleteResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occurred when deleting the projection program: {deleteResult.Error}");
+        }
+        else
+        {
+            _toastService.ShowSuccess("Projection program deleted successfully!");
+
+            await LoadProjectionProgramsAsync();
+
+            if (selectedProjectionProgram?.Id == projectionProgramId)
+            {
+                selectedProjectionProgram = null;
+            }
+        }
     }
 
     private void HandleStepsChanged()

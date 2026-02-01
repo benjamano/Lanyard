@@ -15,4 +15,5 @@ public interface IProjectionProgramService
     Task<Result<bool>> SaveProjectionProgramStepsAsync(IEnumerable<ProjectionProgramStep> projectionProgramSteps);
     Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid Id);
     Task<Result<ProjectionProgram>> GetProjectionProgramAsync(Guid projectionProgramId);
+    Task<Result<bool>> DeleteProjectionProgramAsync(Guid projectionProgramId);
 }

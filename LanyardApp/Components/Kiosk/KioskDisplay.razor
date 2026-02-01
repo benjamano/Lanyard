@@ -1,0 +1,43 @@
+﻿@inject IToastService _toastService
+
+@switch (currentProjectionStep.Template?.Name)
+{
+    case "Show Text":
+        <FluentLabel Color="Color.FillInverse" Typo="Typography.Body">@currentProjectionStep.ParameterValues.Where(x=> x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
+        break;
+}
+
+@code {
+    [Parameter]
+    public ProjectionProgram projectionProgram { get; set; } = new() { Name = "" };
+
+    private ProjectionProgramStep currentProjectionStep { get; set; } = new();
+    private string? currentText;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ = ProcessStepsAsync();
+    }
+
+    private async Task ProcessStepsAsync()
+    {
+        foreach (var step in projectionProgram.ProjectionProgramSteps)
+        {
+            if (step.Template == null)
+            {
+                _toastService.ShowError("A step without a template was found, skipping...");
+
+                continue;
+            }
+
+            if (step.Template.Name != "Delay")
+            {
+                currentProjectionStep = step;
+
+                StateHasChanged();
+            }
+
+            await Task.Delay(step.HoldForMilliseconds);
+        }
+    }
+}
