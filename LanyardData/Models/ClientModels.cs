@@ -29,7 +29,9 @@ public class ClientProjectionSettings
     public Guid ProjectionProgramId { get; set; }
     public ProjectionProgram? ProjectionProgram { get; set; }
 
+    //UNUSED
     public bool IsFullScreen { get; set; } = true;
+    //UNUSED
     public bool IsBorderless { get; set; } = true;
 
     public int? Width { get; set; }

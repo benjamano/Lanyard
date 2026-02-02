@@ -47,10 +47,11 @@
 
     private Type GetNotFoundPage()
     {
-        var uri = new Uri(NavigationManager.Uri);
+        Uri uri = new Uri(NavigationManager.Uri);
         
-        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase))
+        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase)){
             return typeof(StaffNotFound);
+        }
         
         return typeof(CustomerNotFound);
     }

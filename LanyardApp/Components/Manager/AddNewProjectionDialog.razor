@@ -36,13 +36,13 @@ else if (currentStepIndex == 1)
             <FluentEditForm Model="newClientProjectionSettings">
                 <FluentValidationSummary />
 
-                <FluentCheckbox @bind-Value="newClientProjectionSettings.IsFullScreen">
+              @*   <FluentCheckbox @bind-Value="newClientProjectionSettings.IsFullScreen">
                     Full Screen
                 </FluentCheckbox>
 
                 <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsBorderless">
                     Borderless
-                </FluentCheckbox>
+                </FluentCheckbox> *@
 
 
                 <FluentNumberField @bind-Value="newClientProjectionSettings.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required />

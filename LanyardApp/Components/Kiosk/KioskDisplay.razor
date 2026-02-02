@@ -3,7 +3,7 @@
 @switch (currentProjectionStep.Template?.Name)
 {
     case "Show Text":
-        <FluentLabel Color="Color.FillInverse" Typo="Typography.Body">@currentProjectionStep.ParameterValues.Where(x=> x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
+        <FluentLabel Color="Color.Fill" Typo="Typography.Body">@currentProjectionStep.ParameterValues.Where(x=> x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
         break;
 }
 
@@ -21,7 +21,7 @@
 
     private async Task ProcessStepsAsync()
     {
-        foreach (var step in projectionProgram.ProjectionProgramSteps)
+        foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
         {
             if (step.Template == null)
             {

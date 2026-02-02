@@ -190,7 +190,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
             ctx.Remove(valueToRemove);
         }
 
-        await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(existingStep.ProjectionProgramId);
+        //await _clientService.SendUpdatedProjectionProgramInfoToClientsAsync(existingStep.ProjectionProgramId);
     }
 
     public async Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid id)
@@ -230,9 +230,9 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             ProjectionProgram? projectionProgram = await ctx.ProjectionPrograms
                 .Where(x => x.Id == projectionProgramId)
-                .Include(x=> x.ProjectionProgramSteps)
+                .Include(x=> x.ProjectionProgramSteps.Where(x=> x.IsActive))
                     .ThenInclude(x=> x.ParameterValues)
-                .Include(x=> x.ProjectionProgramSteps)
+                .Include(x=> x.ProjectionProgramSteps.Where(x=> x.IsActive))
                     .ThenInclude(x=> x.Template)
                         .ThenInclude(x=> x!.Parameters)
                 .FirstOrDefaultAsync();

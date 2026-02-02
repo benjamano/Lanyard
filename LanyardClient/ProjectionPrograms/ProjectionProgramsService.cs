@@ -2,6 +2,7 @@
 using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Forms;
 
 namespace Lanyard.Client.ProjectionPrograms;
@@ -16,10 +17,10 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     public async Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms)
     {
+        HideWindow();
+
         if (projectionPrograms == null || !projectionPrograms.Any())
         {
-            HideWindow();
-
             return;
         }
 
@@ -51,29 +52,60 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     private void HideWindow()
     {
-        _kioskProcess?.Kill();
-        _kioskProcess = null;
+        try
+        {
+            if (_kioskProcess != null)
+            {
+                _kioskProcess.Kill();
+                _kioskProcess.WaitForExit();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to kill kiosk process.");
+        }
+        finally
+        {
+            _kioskProcess?.Dispose();
+            _kioskProcess = null;
+        }
     }
 
-    void ShowWindow(int displayIndex, int width, int height, bool IsFullScreen, Guid projectionProgramId, Guid clientId)
+    void ShowWindow(int displayIndex, int width, int height, bool isFullScreen, Guid projectionProgramId, Guid clientId)
     {
         Screen[] screens = Screen.AllScreens;
 
         if (displayIndex < 0 || displayIndex >= screens.Length)
-        {
             displayIndex = 0;
-        }
 
-        Screen? screen = screens[displayIndex];
+        Screen screen = screens[displayIndex];
 
         int x = screen.Bounds.Left;
         int y = screen.Bounds.Top;
 
         string url = $"{Environment.GetEnvironmentVariable("KIOSK_SERVER_URL")}/{clientId}/{projectionProgramId}";
 
-        string args = $"--no-first-run --no-default-browser-check --new-window --kiosk \"{url}\" --window-position={x},{y} --window-size={width},{height} {(IsFullScreen ? "--edge-kiosk-type=fullscreen" : "")}";
+        string userDataDir = Path.Combine(
+            Path.GetTempPath(),
+            "LanyardKiosk",
+            projectionProgramId.ToString()
+        );
 
-        Process process = Process.Start("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", args);
-        _kioskProcess = process;
+        Directory.CreateDirectory(userDataDir);
+
+        string args =
+            $"--kiosk \"{url}\" " +
+            $"--user-data-dir=\"{userDataDir}\" " +
+            $"--window-position={x},{y} " +
+            $"--window-size={width/2},{height/2} " +
+            $"--no-first-run --disable-session-crashed-bubble " +
+            (isFullScreen ? "--edge-kiosk-type=fullscreen " : "");
+
+        _kioskProcess = Process.Start(new ProcessStartInfo
+        {
+            FileName = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            Arguments = args,
+            UseShellExecute = false
+        });
     }
 }
