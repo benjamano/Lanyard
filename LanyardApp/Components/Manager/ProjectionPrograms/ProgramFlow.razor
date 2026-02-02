@@ -17,7 +17,7 @@
     {
         int index = 0;
 
-        foreach (ProjectionProgramStep step in SelectedProgram.ProjectionProgramSteps)
+        foreach (ProjectionProgramStep step in SelectedProgram.ProjectionProgramSteps.OrderBy(x=> x.SortOrder))
         {
             Dictionary<Guid, ProjectionProgramParameterValue> parameterValueDict = step.ParameterValues.ToDictionary(x => x.ParameterId);
 

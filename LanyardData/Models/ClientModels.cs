@@ -34,6 +34,12 @@ public class ClientProjectionSettings
     //UNUSED
     public bool IsBorderless { get; set; } = true;
 
+    public bool IsDarkTheme { get; set; }
+    public bool ShowDebugMode { get; set; }
+
+    public int RepeatNumberOfTimes { get; set; } = 0;
+    public bool RepeatInfinitely { get; set; } = true;
+
     public int? Width { get; set; }
     public int? Height { get; set; }
 

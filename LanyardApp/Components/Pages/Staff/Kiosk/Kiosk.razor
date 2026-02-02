@@ -4,23 +4,28 @@
 @using Lanyard.App.Components.Kiosk
 
 @inject IProjectionProgramService _projectionProgramService
+@inject IClientService _clientService
 @inject IToastService _toastService
 
 <PageTitle>Kiosk</PageTitle>
 
-@if (projectionProgram == null)
+@if (projectionProgram == null || clientProjectionSettings == null)
 {
     <FluentCard Height="auto">
         Loading..
         <FluentProgress Width="200px"></FluentProgress>
 
-        <FluentLabel Color="Color.Lightweight" Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentLabel>
+        <FluentLabel Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentLabel>
     </FluentCard>
 }
 else
 {
-    <KioskDisplay ProjectionProgram="@projectionProgram"></KioskDisplay>
+    <KioskDisplay ProjectionProgram="@projectionProgram" RepeatCount="clientProjectionSettings.RepeatNumberOfTimes" RepeatInfinitely="clientProjectionSettings.RepeatInfinitely"></KioskDisplay>
+
+    <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" CurrentStep="CurrentStep" StepsCount="projectionProgram.ProjectionProgramSteps.Count()"></KioskDebugInfo>
 }
+
+<FluentDesignTheme @bind-Mode="@themeMode" StorageName="kiosk-theme" />
 
 @code {
     [Parameter]
@@ -29,11 +34,33 @@ else
     [Parameter]
     public string projectionProgramId { get; set; } = string.Empty;
 
+    public ProjectionProgramStep? CurrentStep { get; set; } = null;
+
+    private ClientProjectionSettings? clientProjectionSettings { get; set; } = null;
+
     private ProjectionProgram? projectionProgram { get; set; } = null;
+
+    public DesignThemeModes themeMode { get; set; }
 
     protected async override Task OnInitializedAsync()
     {
         Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(Guid.Parse(projectionProgramId));
+
+        Result<IEnumerable<ClientProjectionSettings>> getResult1 = await _clientService.GetClientProjectionSettingsAsync(Guid.Parse(clientId));
+
+        if (getResult1.IsSuccess)
+        {
+            clientProjectionSettings = getResult1.Data!.Where(x => x.ProjectionProgramId == Guid.Parse(projectionProgramId)).FirstOrDefault();
+        }
+        else
+        {
+            if (getResult1.Error != null)
+            {
+                _toastService.ShowError(getResult1.Error);
+            }
+
+            return;
+        }
 
         if (getResult.IsSuccess)
         {
@@ -45,6 +72,10 @@ else
             {
                 _toastService.ShowError(getResult.Error);
             }
+
+            return;
         }
+
+        themeMode = clientProjectionSettings!.IsDarkTheme ? DesignThemeModes.Dark : DesignThemeModes.Light;
     }
 }

@@ -1,9 +1,11 @@
 ﻿@inject IToastService _toastService
 
-@switch (currentProjectionStep.Template?.Name)
+@switch (CurrentProjectionStep?.Template?.Name)
 {
     case "Show Text":
-        <FluentLabel Color="Color.Fill" Typo="Typography.Body">@currentProjectionStep.ParameterValues.Where(x=> x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+            <FluentLabel Typo="Typography.HeroTitle">@CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
+        </FluentStack>
         break;
 }
 
@@ -11,33 +13,77 @@
     [Parameter]
     public ProjectionProgram projectionProgram { get; set; } = new() { Name = "" };
 
-    private ProjectionProgramStep currentProjectionStep { get; set; } = new();
-    private string? currentText;
+    [Parameter]
+    public bool RepeatInfinitely { get; set; } = true;
 
-    protected override async Task OnInitializedAsync()
+    [Parameter]
+    public int RepeatCount { get; set; } = 0;
+
+    public ProjectionProgramStep CurrentProjectionStep { get; set; } = new();
+
+    private string? currentText;
+    private CancellationTokenSource? _cts;
+    private Task? _processingTask;
+
+    protected override async Task OnParametersSetAsync()
     {
-        _ = ProcessStepsAsync();
+        StartProcessing();
     }
 
-    private async Task ProcessStepsAsync()
+    private void StartProcessing()
     {
-        foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _processingTask = ProcessStepsAsync(_cts.Token);
+    }
+
+    private async Task ProcessStepsAsync(CancellationToken cancellationToken)
+    {
+        bool runLoop = true;
+        int runCount = 0;
+
+        while (runLoop && !cancellationToken.IsCancellationRequested)
         {
-            if (step.Template == null)
+            foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
             {
-                _toastService.ShowError("A step without a template was found, skipping...");
+                if (cancellationToken.IsCancellationRequested){
+                    return;
+                }
 
-                continue;
+                if (step.Template == null)
+                {
+                    _toastService.ShowError("A step without a template was found, skipping...");
+                    continue;
+                }
+
+                if (step.Template.Name != "Delay")
+                {
+                    CurrentProjectionStep = step;
+                    StateHasChanged();
+                }
+
+                try
+                {
+                    await Task.Delay(step.HoldForMilliseconds == 0 ? 5000 : step.HoldForMilliseconds, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
             }
 
-            if (step.Template.Name != "Delay")
+            if (!RepeatInfinitely && runCount == RepeatCount)
             {
-                currentProjectionStep = step;
-
-                StateHasChanged();
+                runLoop = false;
             }
 
-            await Task.Delay(step.HoldForMilliseconds);
+            runCount++;
         }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 }

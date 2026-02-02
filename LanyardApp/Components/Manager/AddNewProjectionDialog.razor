@@ -43,11 +43,32 @@ else if (currentStepIndex == 1)
                 <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsBorderless">
                     Borderless
                 </FluentCheckbox> *@
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.RepeatInfinitely">
+                        Repeat Infinitely
+                    </FluentCheckbox>
+                    <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsDarkTheme">
+                        Dark Mode Theme
+                    </FluentCheckbox>
+                    <AuthorizeView Roles="Admin" Context="_context">
+                        <Authorized>
+                            <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.ShowDebugMode">
+                                Debug Mode
+                            </FluentCheckbox>
+                        </Authorized>
+                    </AuthorizeView>
+                </FluentStack>
 
+                <FluentNumberField @bind-Value="newClientProjectionSettings.RepeatNumberOfTimes" Label="Repeat Number of Times (0 for run once)" Appearance="FluentInputAppearance.Outline" Disabled="@newClientProjectionSettings.RepeatInfinitely" />
 
-                <FluentNumberField @bind-Value="newClientProjectionSettings.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required />
-
-                <FluentNumberField @bind-Value="newClientProjectionSettings.Height" Label="Height" Appearance="FluentInputAppearance.Outline" Required />
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <div>
+                        <FluentNumberField @bind-Value="newClientProjectionSettings.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required />
+                    </div>
+                    <div>
+                        <FluentNumberField @bind-Value="newClientProjectionSettings.Height" Label="Height" Appearance="FluentInputAppearance.Outline" Required />
+                    </div>
+                </FluentStack>
             </FluentEditForm>
         </FluentStack>
     </FluentDialogBody>

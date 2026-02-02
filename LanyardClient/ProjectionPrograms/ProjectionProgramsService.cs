@@ -91,6 +91,8 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             projectionProgramId.ToString()
         );
 
+        _logger.LogInformation("Opening page with URL: {url}", url);
+
         Directory.CreateDirectory(userDataDir);
 
         string args =

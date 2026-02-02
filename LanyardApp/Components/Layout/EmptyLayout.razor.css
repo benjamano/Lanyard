@@ -108,7 +108,7 @@ main {
     background: var(--neutral-fill-layer-rest);
 }*/
 
-body {
+.page {
     margin: 0;
     padding: 0;
     height: 100vh;
@@ -116,7 +116,7 @@ body {
     font-size: var(--type-ramp-base-font-size) !important;
     line-height: var(--type-ramp-base-line-height) !important;
     font-weight: var(--font-weight) !important;
-    /*    background: var(--neutral-fill-layer-rest) !important;*/
+    background: var(--neutral-fill-layer-rest) !important;
     background-color: var(--neutral-layer-1) !important;
 }
 
