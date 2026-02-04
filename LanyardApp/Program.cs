@@ -3,7 +3,6 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
-using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
@@ -12,11 +11,9 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyModel;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
 using Lanyard.App.Services;
-using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +29,7 @@ builder.Services.AddSingleton<MusicPlayerService>();
 
 // Other Business Services
 builder.Services.AddScoped<SecurityService>();
+builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();

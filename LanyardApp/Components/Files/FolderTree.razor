@@ -1,0 +1,49 @@
+@using Lanyard.Infrastructure.Models
+@inject HttpClient Http
+@inject IToastService _toastService
+@inject IFileService _fileService
+
+<FluentListbox TOption="string" Value="@SelectedFolderId.ToString()" ValueChanged="() => OnFolderChanged(SelectedFolderId)">
+    <FluentOption Value="@(null)" Selected="true">Root</FluentOption>
+    @foreach (Folder folder in folders)
+    {
+        <FluentOption Value="@folder.Id.ToString()">@folder.Name</FluentOption>
+    }
+</FluentListbox>
+
+@code {
+    [Parameter] 
+    public Guid? SelectedFolderId { get; set; }
+
+    [Parameter] 
+    public EventCallback<Guid?> SelectedFolderIdChanged { get; set; }
+
+    private List<Folder> folders = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFoldersAsync();
+    }
+
+    private async Task LoadFoldersAsync()
+    {
+        try
+        {
+            Result<IReadOnlyList<Folder>>? result = await _fileService.ListFoldersAsync(SelectedFolderId, CancellationToken.None);
+
+            if (result?.Success == true && result.Data != null)
+            {
+                folders = result.Data.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _toastService.ShowError($"An error occured while loading the files: {ex.Message}");
+        }
+    }
+
+    private async Task OnFolderChanged(Guid? folderId)
+    {
+        await SelectedFolderIdChanged.InvokeAsync(folderId);
+    }
+}

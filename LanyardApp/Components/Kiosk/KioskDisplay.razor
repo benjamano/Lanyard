@@ -7,6 +7,26 @@
             <FluentLabel Typo="Typography.HeroTitle">@CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
         </FluentStack>
         break;
+    case "Play Video":
+        string? fileId = CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "FileId").Select(x => x.Value).FirstOrDefault();
+        bool repeat = bool.Parse(CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "ShouldRepeat").Select(x => x.Value).FirstOrDefault() ?? "false");
+
+        if (string.IsNullOrEmpty(fileId))
+        {
+            break;
+        }
+
+        string videoApiUrl = $"/api/files/download/{fileId}";
+
+        if (repeat)
+        {
+            <video src="@videoApiUrl" loop></video>
+        }
+        else
+        {
+            <video src="@videoApiUrl"></video>
+        }
+        break;
 }
 
 @code {
@@ -21,7 +41,6 @@
 
     public ProjectionProgramStep CurrentProjectionStep { get; set; } = new();
 
-    private string? currentText;
     private CancellationTokenSource? _cts;
     private Task? _processingTask;
 

@@ -1,0 +1,74 @@
+@using Lanyard.Infrastructure.Models
+
+@inject HttpClient Http
+@inject IFileService _fileService
+@inject IToastService _toastService
+
+<FluentButton IconEnd="@(new Icons.Regular.Size20.Rename())" OnClick="ShowRenameDialog"></FluentButton>
+<FluentButton IconEnd="@(new Icons.Regular.Size20.BinRecycle())" OnClick="DeleteFile"></FluentButton>
+
+<FluentDialog Hidden="!showRenameDialog" OnDialogResult="CloseRenameDialog">
+    <FluentTextField @bind-Value="renameValue" Label="New Name" />
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="ConfirmRename">Rename</FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="CloseRenameDialog">Cancel</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    [Parameter] public FileMetadata File { get; set; } = default!;
+    [Parameter] public EventCallback<Guid> OnFileDeleted { get; set; }
+    [Parameter] public EventCallback<FileMetadata> OnFileRenamed { get; set; }
+
+    private bool showRenameDialog = false;
+    private string renameValue = string.Empty;
+    private string renameValueExtensions = string.Empty;
+
+    private async Task DeleteFile()
+    {
+        Result<bool> result = await _fileService.DeleteFileAsync(File.Id, CancellationToken.None);
+
+        if (result?.Success == true)
+        {
+            await OnFileDeleted.InvokeAsync(File.Id);
+        }
+    }
+
+    private void ShowRenameDialog()
+    {
+        renameValueExtensions = Path.GetExtension(File.FileName);
+        renameValue = Path.GetFileNameWithoutExtension(File.FileName);
+
+        showRenameDialog = true;
+    }
+
+    private void CloseRenameDialog()
+    {
+        showRenameDialog = false;
+    }
+
+    private async Task ConfirmRename()
+    {
+        if (!string.IsNullOrWhiteSpace(renameValue))
+        {
+            renameValue = renameValue + renameValueExtensions;
+
+            Result<FileMetadata> result = await _fileService.RenameFileAsync(File.Id, renameValue, CancellationToken.None);
+
+            if (result?.Success == true && result.Data != null)
+            {
+                await OnFileRenamed.InvokeAsync(result.Data);
+
+                CloseRenameDialog();
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to rename file, {result?.Error}");
+            }
+        }
+        else
+        {
+            _toastService.ShowError("Invalid file name!");
+        }
+    }
+}

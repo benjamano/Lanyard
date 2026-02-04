@@ -25,6 +25,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
         public DbSet<ProjectionProgramStepTemplate> ProjectionProgramStepTemplates { get; set; }
         public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
+        public DbSet<FileMetadata> FileMetadata { get; set; }
+        public DbSet<Folder> Folders { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -48,6 +50,30 @@ namespace Lanyard.Infrastructure.DataAccess
                     .WithMany()
                     .HasForeignKey(r => r.CreatedByUserId)
                     .IsRequired();
+            });
+
+            modelBuilder.Entity<FileMetadata>(entity =>
+            {
+                entity.HasKey(f => f.Id);
+                entity.HasIndex(f => f.FileName);
+                entity.HasIndex(f => f.FolderId);
+
+                entity.HasOne(f => f.Folder)
+                    .WithMany(folder => folder.Files)
+                    .HasForeignKey(f => f.FolderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<Folder>(entity =>
+            {
+                entity.HasKey(f => f.Id);
+                entity.HasIndex(f => f.ParentFolderId);
+                entity.HasIndex(f => f.Name);
+
+                entity.HasOne(f => f.ParentFolder)
+                    .WithMany(parent => parent.SubFolders)
+                    .HasForeignKey(f => f.ParentFolderId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

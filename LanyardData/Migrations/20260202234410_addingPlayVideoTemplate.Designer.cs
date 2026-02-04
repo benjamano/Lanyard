@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,13 +12,15 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260202234410_addingPlayVideoTemplate")]
+    partial class addingPlayVideoTemplate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.1")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -176,87 +179,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ProjectionProgramId");
 
                     b.ToTable("ClientProjectionSettings");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.FileMetadata", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("ContentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<long>("FileSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid?>("FolderId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UploadedBy")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<TimeSpan?>("VideoLength")
-                        .HasColumnType("time");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FileName");
-
-                    b.HasIndex("FolderId");
-
-                    b.ToTable("FileMetadata");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Folder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<Guid?>("ParentFolderId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name");
-
-                    b.HasIndex("ParentFolderId");
-
-                    b.ToTable("Folders");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
@@ -710,26 +632,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ProjectionProgram");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.FileMetadata", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Folder", "Folder")
-                        .WithMany("Files")
-                        .HasForeignKey("FolderId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Folder");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Folder", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Folder", "ParentFolder")
-                        .WithMany("SubFolders")
-                        .HasForeignKey("ParentFolderId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("ParentFolder");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreateByUser")
@@ -874,13 +776,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Folder", b =>
-                {
-                    b.Navigation("Files");
-
-                    b.Navigation("SubFolders");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>
