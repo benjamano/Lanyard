@@ -8,8 +8,7 @@
 @inject IPlaylistService _playlistService;
 @inject IMusicService _musicService;
 @inject MusicPlayerService _player
-@inject IDialogService DialogService
-@inject IToastService ToastService
+@inject IToastService _toastService;
 
 @using Lanyard.App.Components.Music;
 
@@ -131,7 +130,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlists: " + result.Error);
+            _toastService.ShowError("Failed to load playlists: " + result.Error);
             playlists = new List<Playlist>();
         }
 
@@ -227,7 +226,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
+            _toastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
         }
 
         await OnSongsSelected.InvokeAsync(songs);
@@ -248,7 +247,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load songs: " + result.Error);
+            _toastService.ShowError("Failed to load songs: " + result.Error);
             return;
         }
 
@@ -271,7 +270,7 @@
         DialogParameters parameters = new DialogParameters()
         {
             Title = "Create New Playlist",
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleSavePlaylist),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleSavePlaylist),
             PrimaryAction = "Create",
             PrimaryActionEnabled = false,
             SecondaryAction = "Cancel",
@@ -281,7 +280,7 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
+        await _dialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
     }
 
     private async Task HandleSavePlaylist(DialogResult result)
@@ -301,7 +300,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlists: " + playlistResult.Error);
+            _toastService.ShowError("Failed to load playlists: " + playlistResult.Error);
             playlists = new List<Playlist>();
         }
 

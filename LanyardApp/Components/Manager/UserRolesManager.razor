@@ -2,7 +2,7 @@
 @using Lanyard.Application.Services.ApplicationRoles
 @using Lanyard.Application.Services.Authentication
 @inject ApplicationRolesService _rApi
-@inject SecurityService _sApi
+@inject SecurityService _securityService
 @inject UserManager<UserProfile> _umApi
 @inject IToastService ToastService
 
@@ -130,7 +130,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        userProfiles = await _sApi.GetAllUsersAsync();
+        userProfiles = await _securityService.GetAllUsersAsync();
         await LoadRoles();
     }
 
@@ -213,7 +213,7 @@
             return;
         }
 
-        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+        string? currentUserId = await _securityService.GetCurrentUserIdAsync();
 
         if (result.Data == currentUserId)
         {
@@ -243,7 +243,7 @@
             return;
         }
 
-        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+        string? currentUserId = await _securityService.GetCurrentUserIdAsync();
 
         if (result.Data == currentUserId)
         {

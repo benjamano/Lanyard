@@ -47,7 +47,7 @@
 
     private async Task OpenChangePasswordDialog()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        UserProfile? user = await _securityService.GetCurrentUserProfileAsync();
 
         if (user is null)
         {
@@ -67,6 +67,6 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
+        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
     }
 }

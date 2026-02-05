@@ -79,7 +79,7 @@
             DialogParameters parameters = new DialogParameters()
             {
                 Title = "Add Projection",
-                OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjection),
+                OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjection),
                 PrimaryAction = "Create",
                 PrimaryActionEnabled = false,
                 SecondaryAction = "Cancel",
@@ -89,7 +89,7 @@
                 Modal = true,
             };
 
-            await DialogService.ShowDialogAsync<AddNewProjectionDialog>(clientId, parameters);
+            await _dialogService.ShowDialogAsync<AddNewProjectionDialog>(clientId, parameters);
         }
     }
 

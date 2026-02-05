@@ -8,14 +8,14 @@
     {
         DialogParameters parameters = new DialogParameters()
         {
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjection),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjection),
             Width = "50%",
             Height = "auto",
             TrapFocus = true,
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<AddNewProgramStepTemplateDialog>(parameters);
+        await _dialogService.ShowDialogAsync<AddNewProgramStepTemplateDialog>(parameters);
     }
 
     private async Task HandleAddProjection(DialogResult result)

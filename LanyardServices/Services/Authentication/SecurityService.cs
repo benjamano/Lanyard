@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 
 namespace Lanyard.Application.Services.Authentication;
 
-public class SecurityService
+public class SecurityService : ISecurityService
 {
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;

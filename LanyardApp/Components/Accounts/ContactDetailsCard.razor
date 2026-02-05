@@ -38,7 +38,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        UserProfile? user = await _securityService.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
@@ -50,7 +50,7 @@
 
     public async Task HandleSave()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        UserProfile? user = await _securityService.GetCurrentUserProfileAsync();
 
         if (user is not null)
         {
@@ -58,7 +58,7 @@
             user.PhoneNumber = model.PhoneNumber;
             user.DateOfBirth = model.DateOfBirth;
 
-            await _sApi.UpdateUserProfileAsync(user);
+            await _securityService.UpdateUserProfileAsync(user);
 
             ToastService.ShowSuccess("Details Saved!");
         }

@@ -96,14 +96,14 @@
     {
         DialogParameters parameters = new()
         {
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
             Width = "30%",
             Height = "auto",
             TrapFocus = true,
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
+        await _dialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
     }
 
     private async Task HandleAddProjectionProgram(DialogResult result)

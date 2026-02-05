@@ -17,10 +17,10 @@ namespace Lanyard.Application.Services;
 public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
-    private readonly SecurityService _securityService;
+    private readonly ISecurityService _securityService;
     private readonly string _storageRoot;
 
-    public FileService(IDbContextFactory<ApplicationDbContext> dbFactory, SecurityService securityService)
+    public FileService(IDbContextFactory<ApplicationDbContext> dbFactory, ISecurityService securityService)
     {
         _dbFactory = dbFactory;
         _storageRoot = Path.Combine(Directory.GetCurrentDirectory(), "UploadedFiles");
