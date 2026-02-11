@@ -2,7 +2,8 @@
 @attribute [Authorize(Roles = "Admin")]
 
 @using Microsoft.AspNetCore.Authorization
-@using Lanyard.App.Components.Manager.ProjectionPrograms
+@using Lanyard.App.Components.Manager;
+@using Lanyard.App.Components.ProjectionPrograms;
 @using Lanyard.Application.Services
 
 @inject IClientService _clientService
@@ -42,7 +43,7 @@
         </FluentMultiSplitterPane>
 
         <FluentMultiSplitterPane Size="60%">
-            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="overflow-y-scroll h-100 me-4">
                 <div class="w-50">
                     <ProgramFlow SelectedProgram="selectedProjectionProgram" OnSave="HandleSave" OnStepsChanged="HandleStepsChanged"></ProgramFlow>
                 </div>

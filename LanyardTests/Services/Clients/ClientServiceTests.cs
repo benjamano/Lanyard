@@ -33,16 +33,13 @@ namespace Lanyard.Tests.Services.Clients
                 .ReturnsAsync(() => new ApplicationDbContext(options));
 
             var signalRProjectionControlHubMock = new Mock<ISignalRProjectionControlHub>();
-            var serviceProviderMock = new Mock<IServiceProvider>();
-            serviceProviderMock.Setup(sp => sp.GetService(typeof(ISignalRProjectionControlHub)))
-                .Returns(signalRProjectionControlHubMock.Object);
 
             var hubContextMock = new Mock<IHubContext<SignalRControlHub>>();
 
-            return new ClientService(factoryMock.Object, serviceProviderMock.Object, hubContextMock.Object);
+            return new ClientService(factoryMock.Object, hubContextMock.Object);
         }
 
-        private ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
+        private static ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
         {
             var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
             factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))

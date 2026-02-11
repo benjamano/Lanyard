@@ -14,7 +14,9 @@
             <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChanged" />
         </FluentGridItem>
         <FluentGridItem xs="11" class="w-100">
-            <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
+            <AuthorizeView>
+                <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
+            </AuthorizeView>
             <FileList @key="fileListKey" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
         </FluentGridItem>
     </FluentGrid>

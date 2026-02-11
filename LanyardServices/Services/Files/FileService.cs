@@ -29,14 +29,14 @@ public class FileService : IFileService
 
     public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken)
     {
-        string? uploadedByUserId = await _securityService.GetCurrentUserIdAsync();
+        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
 
-        if (uploadedByUserId == null)
+        if (!getResult.IsSuccess || getResult.Data is null)
         {
-            return Result<FileMetadata>.Fail("User is not logged in");
+            return Result<FileMetadata>.Fail(getResult.Error!);
         }
 
-        return await UploadFileAsync(file, folderId, uploadedByUserId, cancellationToken);
+        return await UploadFileAsync(file, folderId, getResult.Data, cancellationToken);
     }
 
     public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken)

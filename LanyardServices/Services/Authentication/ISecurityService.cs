@@ -6,9 +6,9 @@ namespace Lanyard.Application.Services.Authentication
 {
     public interface ISecurityService
     {
-        Task<string?> GetCurrentUserIdAsync();
+        Task<Result<string>> GetCurrentUserIdAsync();
         Task<bool> IsUserLoggedIn();
-        Task<UserProfile?> GetCurrentUserProfileAsync();
+        Task<Result<UserProfile>> GetCurrentUserProfileAsync();
         Task<string?> GetCurrentUserName();
         Task<IEnumerable<UserProfile>> GetAllUsersAsync();
         Task UpdateUserProfileAsync(UserProfile updatedUserProfile);

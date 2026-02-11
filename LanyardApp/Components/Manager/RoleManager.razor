@@ -3,7 +3,7 @@
 @using Lanyard.Infrastructure.Models
 
 @inject ApplicationRolesService _rApi
-@inject SecurityService _securityService
+@inject ISecurityService _securityService
 @inject SignInManager<UserProfile> SignInManager
 @inject UserManager<UserProfile> _umApi
 @inject IToastService ToastService
@@ -173,8 +173,9 @@
             return;
         }
 
-        string? currentUserId = await _securityService.GetCurrentUserIdAsync();
-        if (result.Data is not null && result.Data.Contains(currentUserId!))
+        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (result.Data is not null && getResult.Data is not null && result.Data.Contains(getResult.Data))
         {
             ToastService.ShowWarning("Your roles have changed. Please log out and log back in for changes to take effect.");
         }

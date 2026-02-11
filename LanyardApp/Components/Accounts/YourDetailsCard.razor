@@ -43,26 +43,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UserProfile? user = await _securityService.GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await _securityService.GetCurrentUserProfileAsync();
 
-        if (user is not null)
+        if (getResult.IsSuccess && getResult.Data is not null)
         {
-            model.UserName = user.UserName!;
-            model.FirstName = user.FirstName;
-            model.LastName = user.LastName;
+            model.UserName = getResult.Data.UserName!;
+            model.FirstName = getResult.Data.FirstName;
+            model.LastName = getResult.Data.LastName;
         }
     }
 
     public async Task HandleSave()
     {
-        UserProfile? user = await _securityService.GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await _securityService.GetCurrentUserProfileAsync();
 
-        if (user is not null)
+        if (getResult.IsSuccess && getResult.Data is not null)
         {
-            user.FirstName = model.FirstName;
-            user.LastName = model.LastName;
+            getResult.Data.FirstName = model.FirstName;
+            getResult.Data.LastName = model.LastName;
 
-            await _securityService.UpdateUserProfileAsync(user);
+            await _securityService.UpdateUserProfileAsync(getResult.Data);
 
             ToastService.ShowSuccess("Details Saved!");
         }

@@ -13,13 +13,10 @@ using System.Text;
 
 namespace Lanyard.Application.Services;
 
-public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IServiceProvider serviceProvider, IHubContext<SignalRControlHub> hubContext) : IClientService
+public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<SignalRControlHub> hubContext) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
-
-    private ISignalRProjectionControlHub GetSignalRHub() => _serviceProvider.GetRequiredService<ISignalRProjectionControlHub>();
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {

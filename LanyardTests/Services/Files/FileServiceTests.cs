@@ -38,7 +38,7 @@ public class FileServiceTests
     }
 
     [TestMethod]
-    public async Task WhenUploadingValidFileThenFileIsSaved()
+    public async Task UploadFileAsync_WhenUploadingValidFileThenFileIsSaved()
     {
         var fileMock = new Mock<IFormFile>();
         var content = new MemoryStream(new byte[] { 1, 2, 3 });
@@ -48,8 +48,7 @@ public class FileServiceTests
         fileMock.Setup(f => f.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .Returns((Stream s, CancellationToken ct) => content.CopyToAsync(s, ct));
 
-        _securityServiceMock.Setup(s => s.GetCurrentUserIdAsync())
-            .ReturnsAsync("user1");
+        _securityServiceMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
 
         var result = await _fileService.UploadFileAsync(fileMock.Object, null, CancellationToken.None);
 
@@ -60,7 +59,7 @@ public class FileServiceTests
     }
 
     [TestMethod]
-    public async Task WhenDeletingFileThenFileIsRemoved()
+    public async Task DeleteFileAsync_WhenDeletingFileThenFileIsRemoved()
     {
         var fileId = Guid.NewGuid();
         var fileMeta = new FileMetadata
@@ -87,7 +86,7 @@ public class FileServiceTests
     }
 
     [TestMethod]
-    public async Task WhenRenamingFileThenNameIsUpdated()
+    public async Task RenameFileAsync_WhenRenamingFileThenNameIsUpdated()
     {
         var fileId = Guid.NewGuid();
         var fileMeta = new FileMetadata

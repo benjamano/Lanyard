@@ -28,7 +28,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<MusicPlayerService>();
 
 // Other Business Services
-builder.Services.AddScoped<SecurityService>();
+builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
