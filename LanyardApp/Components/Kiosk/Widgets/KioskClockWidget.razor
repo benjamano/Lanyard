@@ -4,7 +4,7 @@
 <FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Stretch" VerticalAlignment="VerticalAlignment.Stretch" Class="clock-widget-stack">
         <div class="clock-widget-header">
-            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Clock" : Widget.Title)</FluentLabel>
+            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)</FluentLabel>
         </div>
 
         <div class="clock-visual">
@@ -26,7 +26,7 @@
             }
         </div>
 
-        <FluentButton Class="clock-mode-toggle"
+        <FluentButton Class="clock-mode-toggle mt-2 w-auto"
                       Appearance="Appearance.Lightweight"
                       OnClick="ToggleClockMode">
             @(IsAnalogClock() ? "Switch to Digital" : "Switch to Analog")

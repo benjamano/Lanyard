@@ -29,14 +29,17 @@
 		"launch": {
 			"configurations": [
 				{
-					"name": "LanyardApp (Debug EXE)",
+					"name": "LanyardApp (Debug EXE HTTPS)",
 					"type": "coreclr",
 					"request": "launch",
 					"program": "${workspaceFolder}/LanyardApp/bin/Debug/net10.0/Lanyard.App.exe",
 					"cwd": "${workspaceFolder}/LanyardApp",
 					"stopAtEntry": false,
 					"justMyCode": true,
-					"requireExactSource": false
+					"requireExactSource": false,
+					"env": {
+						"ASPNETCORE_URLS": "https://localhost:7175"
+					}
 				}
 			]
 		}
