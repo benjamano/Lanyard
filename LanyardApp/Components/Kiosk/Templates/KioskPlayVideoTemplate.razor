@@ -1,0 +1,139 @@
+@implements IDisposable
+@using Lanyard.App.Components.Kiosk
+
+@inject IToastService _toastService
+@inject IFileService _fileService
+@inject IJSRuntime JS
+
+@if (string.IsNullOrWhiteSpace(_currentVideoSource))
+{
+    <FluentLabel Typo="Typography.Body">Unable to load video.</FluentLabel>
+}
+else if (_currentVideoRepeat)
+{
+    <video id="video_@_currentVideoFileId" width="100%" height="100%" src="@_currentVideoSource" loop autoplay></video>
+}
+else
+{
+    <video id="video_@_currentVideoFileId" width="100%" height="100%" src="@_currentVideoSource" autoplay></video>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionProgramStep Step { get; set; } = default!;
+
+    private CancellationTokenSource? _loadCts;
+    private string? _currentVideoSource;
+    private Guid? _currentVideoFileId;
+    private bool _currentVideoRepeat;
+    private string _currentVolume = "1";
+    private bool _applyVolumeAfterRender;
+
+    private Guid _lastStepId = Guid.Empty;
+    private string? _lastVideoValue;
+    private string? _lastRepeatValue;
+    private string? _lastVolumeValue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        string? videoValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Video);
+        string? repeatValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.ShouldRepeat);
+        string? volumeValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Volume);
+
+        bool hasRelevantChange = _lastStepId != Step.Id
+            || !string.Equals(videoValue, _lastVideoValue, StringComparison.Ordinal)
+            || !string.Equals(repeatValue, _lastRepeatValue, StringComparison.Ordinal)
+            || !string.Equals(volumeValue, _lastVolumeValue, StringComparison.Ordinal);
+
+        if (!hasRelevantChange)
+        {
+            return;
+        }
+
+        _lastStepId = Step.Id;
+        _lastVideoValue = videoValue;
+        _lastRepeatValue = repeatValue;
+        _lastVolumeValue = volumeValue;
+
+        _currentVideoRepeat = bool.TryParse(repeatValue, out bool repeat) && repeat;
+        _currentVolume = string.IsNullOrWhiteSpace(volumeValue) ? "1" : volumeValue;
+
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+
+        if (!Guid.TryParse(videoValue, out Guid fileId))
+        {
+            ClearLoadedVideo();
+            return;
+        }
+
+        if (_currentVideoFileId == fileId && !string.IsNullOrWhiteSpace(_currentVideoSource))
+        {
+            _applyVolumeAfterRender = true;
+            return;
+        }
+
+        try
+        {
+            Result<Stream> downloadResult = await _fileService.DownloadFileAsync(fileId, _loadCts.Token);
+            if (!downloadResult.Success || downloadResult.Data is null)
+            {
+                _toastService.ShowError($"Unable to load video file: {downloadResult.Error}");
+                ClearLoadedVideo();
+                return;
+            }
+
+            Result<FileMetadata> metadataResult = await _fileService.GetFileMetadataAsync(fileId, _loadCts.Token);
+
+            string contentType = metadataResult.Success && !string.IsNullOrWhiteSpace(metadataResult.Data?.ContentType)
+                ? metadataResult.Data.ContentType
+                : "application/octet-stream";
+
+            await using Stream sourceStream = downloadResult.Data;
+            using MemoryStream buffer = new();
+            await sourceStream.CopyToAsync(buffer, _loadCts.Token);
+
+            _currentVideoSource = $"data:{contentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
+            _currentVideoFileId = fileId;
+            _applyVolumeAfterRender = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Step switched while loading; ignore canceled load.
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_applyVolumeAfterRender || _currentVideoFileId is null)
+        {
+            return;
+        }
+
+        _applyVolumeAfterRender = false;
+        await JS.InvokeVoidAsync("setVideoVolume", $"video_{_currentVideoFileId}", double.Parse(_currentVolume) / 100);
+    }
+
+    private string? GetStepParameterValue(string parameterName)
+    {
+        return Step.ParameterValues
+            .Where(x => x.Parameter?.Name == parameterName)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+    }
+
+    private void ClearLoadedVideo()
+    {
+        _currentVideoSource = null;
+        _currentVideoFileId = null;
+        _applyVolumeAfterRender = false;
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        ClearLoadedVideo();
+    }
+}

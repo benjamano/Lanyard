@@ -5,6 +5,7 @@
 @inject DragStateService DragState
 @inject IToastService _toastService
 @inject IProjectionProgramService _projectionProgramService
+@inject IDashboardService _dashboardService
 
 <FluentStack class="text-center flow-scroll" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
     <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, 0)">START</FluentCard>
@@ -23,7 +24,7 @@
 
             <ProjectionStepOptionsMenu AnchorId="@($"menu-btn-step-{step.Id}")" ProjectionProgramStep="step" OnDeleteButtonClicked="DeleteProjectionProgramStep"></ProjectionStepOptionsMenu>
 
-            <FluentCard MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
+            <FluentCard AreaRestricted="false" MinimalStyle="true" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
                     <div>
                         @step.Template?.Name
@@ -47,13 +48,36 @@
                                         continue;
                                     }
 
-                                    <FluentGridItem xs="4">
-                                    <div>
-                                        <FluentTextField @bind-Value="@paramValue.Value" 
-                                                       Label="@parameter.Name" 
-                                                       Appearance="FluentInputAppearance.Outline" 
-                                                       Required="@parameter.IsRequired"></FluentTextField>
-                                    </div>
+                                    bool isVideoParameter = string.Equals(parameter.Name, "VideoFile", StringComparison.OrdinalIgnoreCase)
+                                        || string.Equals(parameter.DataType, "VideoFile", StringComparison.OrdinalIgnoreCase);
+
+                                    <FluentGridItem xs="6">
+                                        @if (string.Equals(parameter.DataType, "Dashboard", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <FluentSelect Class="w-100"
+                                                          @bind-Value="paramValue.Value"
+                                                          TOption="string"
+                                                          Label="@parameter.Name">
+                                                <FluentOption Value="">Select dashboard...</FluentOption>
+                                                @foreach (Dashboard dashboard in dashboards)
+                                                {
+                                                    <FluentOption Value="@dashboard.Id.ToString()">@dashboard.Name</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        }
+                                        else if (parameter.DataType == "File" || isVideoParameter)
+                                        {
+                                            <FilePicker SelectedFileId="@paramValue.Value"
+                                                        AllowedExtensions="@(isVideoParameter ? VideoExtensions : null)"
+                                                        OnFileSelected="id => paramValue.Value = id" />
+                                        }
+                                        else
+                                        {
+                                            <FluentTextField @bind-Value="@paramValue.Value" 
+                                                        Label="@parameter.Name" 
+                                                        Appearance="FluentInputAppearance.Outline" 
+                                                        Required="@parameter.IsRequired"></FluentTextField>
+                                        }
                                     </FluentGridItem>
                                 }
                                 </FluentGrid>
@@ -81,6 +105,22 @@
     public EventCallback OnStepsChanged { get; set; }
 
     public bool CanSave => SelectedProgram?.ProjectionProgramSteps?.Count > 0;
+    private static readonly string[] VideoExtensions = [".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".wmv"];
+    private List<Dashboard> dashboards = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<Dashboard>> result = await _dashboardService.GetDashboardsAsync();
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            dashboards = result.Data.ToList();
+        }
+        else
+        {
+            dashboards = [];
+        }
+    }
 
     private void OnDropAtIndex(DragEventArgs e, int insertIndex)
     {

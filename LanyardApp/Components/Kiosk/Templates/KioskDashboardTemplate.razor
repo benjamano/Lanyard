@@ -1,0 +1,72 @@
+@implements IDisposable
+@using Lanyard.App.Components.Kiosk
+@using Lanyard.App.Components.Kiosk.Widgets
+@using Lanyard.Infrastructure.Models
+
+@inject IDashboardService _dashboardService
+@inject ILogger<KioskDashboardTemplate> _logger
+
+@if (_dashboard is not null && _dashboard.Widgets.Any(x => x.IsActive))
+{
+    <div class="kiosk-dashboard-grid">
+        @foreach (DashboardWidget widget in _dashboard.Widgets.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+        {
+            <div class="kiosk-dashboard-widget-slot" style="@GetWidgetStyle(widget)">
+                <KioskDashboardWidgetHost Widget="widget" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionProgramStep Step { get; set; } = default!;
+
+    private Guid? _loadedDashboardId;
+    private Dashboard? _dashboard;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        string? dashboardIdValue = Step.ParameterValues
+            .Where(x => x.Parameter?.Name == KioskTemplateConstants.ParameterNames.Dashboard)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (!Guid.TryParse(dashboardIdValue, out Guid dashboardId))
+        {
+            _dashboard = null;
+            _loadedDashboardId = null;
+            return;
+        }
+
+        if (_loadedDashboardId == dashboardId)
+        {
+            return;
+        }
+
+        _loadedDashboardId = dashboardId;
+
+        Result<Dashboard> result = await _dashboardService.GetDashboardForRenderAsync(dashboardId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _logger.LogWarning("Failed to load dashboard {DashboardId} for kiosk step {StepId}: {Error}", dashboardId, Step.Id, result.Error);
+            _dashboard = null;
+            return;
+        }
+
+        _dashboard = result.Data;
+    }
+
+    private static string GetWidgetStyle(DashboardWidget widget)
+    {
+        int gridColumnStart = widget.GridX + 1;
+        int gridRowStart = widget.GridY + 1;
+
+        return $"grid-column: {gridColumnStart} / span {Math.Max(1, widget.GridW)}; grid-row: {gridRowStart} / span {Math.Max(1, widget.GridH)};";
+    }
+
+    public void Dispose()
+    {
+    }
+}

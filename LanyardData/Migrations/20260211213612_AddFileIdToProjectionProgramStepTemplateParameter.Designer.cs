@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,13 +12,15 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260211213612_AddFileIdToProjectionProgramStepTemplateParameter")]
+    partial class AddFileIdToProjectionProgramStepTemplateParameter
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -176,80 +179,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ProjectionProgramId");
 
                     b.ToTable("ClientProjectionSettings");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dashboard", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("LastUpdateDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive", "Name");
-
-                    b.ToTable("Dashboards");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.DashboardWidget", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("ConfigJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("DashboardId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("GridH")
-                        .HasColumnType("int");
-
-                    b.Property<int>("GridW")
-                        .HasColumnType("int");
-
-                    b.Property<int>("GridX")
-                        .HasColumnType("int");
-
-                    b.Property<int>("GridY")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DashboardId", "IsActive", "SortOrder");
-
-                    b.ToTable("DashboardWidgets");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.FileMetadata", b =>
@@ -507,6 +436,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("FileId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -784,17 +716,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ProjectionProgram");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.DashboardWidget", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Dashboard", "Dashboard")
-                        .WithMany("Widgets")
-                        .HasForeignKey("DashboardId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Dashboard");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.FileMetadata", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Folder", "Folder")
@@ -959,11 +880,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dashboard", b =>
-                {
-                    b.Navigation("Widgets");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Folder", b =>

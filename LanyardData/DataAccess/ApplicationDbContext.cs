@@ -2,6 +2,7 @@ using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Lanyard.Infrastructure.DataAccess
 {
@@ -25,6 +26,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
         public DbSet<ProjectionProgramStepTemplate> ProjectionProgramStepTemplates { get; set; }
         public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
+        public DbSet<Dashboard> Dashboards { get; set; }
+        public DbSet<DashboardWidget> DashboardWidgets { get; set; }
         public DbSet<FileMetadata> FileMetadata { get; set; }
         public DbSet<Folder> Folders { get; set; }
 
@@ -36,6 +39,11 @@ namespace Lanyard.Infrastructure.DataAccess
                     "Server=(localdb)\\mssqllocaldb;Database=LanyardDB;Trusted_Connection=True;",
                     b => b.MigrationsAssembly("Lanyard.Infrastructure"));
             }
+
+            optionsBuilder.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.PendingModelChangesWarning);
+            });
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -74,6 +82,23 @@ namespace Lanyard.Infrastructure.DataAccess
                     .WithMany(parent => parent.SubFolders)
                     .HasForeignKey(f => f.ParentFolderId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<Dashboard>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.IsActive, x.Name });
+            });
+
+            modelBuilder.Entity<DashboardWidget>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.DashboardId, x.IsActive, x.SortOrder });
+
+                entity.HasOne(x => x.Dashboard)
+                    .WithMany(x => x.Widgets)
+                    .HasForeignKey(x => x.DashboardId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

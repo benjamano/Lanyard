@@ -1,32 +1,20 @@
-﻿@inject IToastService _toastService
+@implements IDisposable
+@using Lanyard.App.Components.Kiosk.Templates
 
-@switch (CurrentProjectionStep?.Template?.Name)
+@inject IToastService _toastService
+@inject ILogger<KioskDisplay> _logger
+
+@if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.ShowText)
 {
-    case "Show Text":
-        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
-            <FluentLabel Typo="Typography.HeroTitle">@CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "Text").Select(x => x.Value).FirstOrDefault()</FluentLabel>
-        </FluentStack>
-        break;
-    case "Play Video":
-        string? fileId = CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "FileId").Select(x => x.Value).FirstOrDefault();
-        bool repeat = bool.Parse(CurrentProjectionStep.ParameterValues.Where(x => x.Parameter?.Name == "ShouldRepeat").Select(x => x.Value).FirstOrDefault() ?? "false");
-
-        if (string.IsNullOrEmpty(fileId))
-        {
-            break;
-        }
-
-        string videoApiUrl = $"/api/files/download/{fileId}";
-
-        if (repeat)
-        {
-            <video src="@videoApiUrl" loop></video>
-        }
-        else
-        {
-            <video src="@videoApiUrl"></video>
-        }
-        break;
+    <KioskShowTextTemplate Step="CurrentProjectionStep" />
+}
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.PlayVideo)
+{
+    <KioskPlayVideoTemplate Step="CurrentProjectionStep" />
+}
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.Dashboard)
+{
+    <KioskDashboardTemplate Step="CurrentProjectionStep" />
 }
 
 @code {
@@ -43,13 +31,9 @@
 
     private CancellationTokenSource? _cts;
     private Task? _processingTask;
+    private readonly HashSet<Guid> _loggedUnsupportedTemplateStepIds = [];
 
-    protected override async Task OnParametersSetAsync()
-    {
-        StartProcessing();
-    }
-
-    private void StartProcessing()
+    public void StartProcessing()
     {
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
@@ -65,7 +49,8 @@
         {
             foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
             {
-                if (cancellationToken.IsCancellationRequested){
+                if (cancellationToken.IsCancellationRequested)
+                {
                     return;
                 }
 
@@ -75,9 +60,15 @@
                     continue;
                 }
 
-                if (step.Template.Name != "Delay")
+                if (!string.Equals(step.Template.Name, KioskTemplateConstants.TemplateNames.Delay, StringComparison.Ordinal))
                 {
                     CurrentProjectionStep = step;
+
+                    if (!IsSupportedTemplate(step.Template.Name) && _loggedUnsupportedTemplateStepIds.Add(step.Id))
+                    {
+                        _logger.LogWarning("Unsupported kiosk template '{TemplateName}' for step {StepId}. Rendering will be skipped.", step.Template.Name, step.Id);
+                    }
+
                     StateHasChanged();
                 }
 
@@ -98,6 +89,13 @@
 
             runCount++;
         }
+    }
+
+    private static bool IsSupportedTemplate(string templateName)
+    {
+        return string.Equals(templateName, KioskTemplateConstants.TemplateNames.ShowText, StringComparison.Ordinal)
+            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.PlayVideo, StringComparison.Ordinal)
+            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.Dashboard, StringComparison.Ordinal);
     }
 
     public void Dispose()

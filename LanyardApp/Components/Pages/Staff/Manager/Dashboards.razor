@@ -1,0 +1,576 @@
+@page "/staff/manage/dashboards"
+@attribute [Authorize(Roles = "Admin,Manager")]
+@implements IAsyncDisposable
+
+@using Microsoft.AspNetCore.Authorization
+@using System.Globalization
+@using Lanyard.App.Components.Kiosk.Widgets
+
+@inject IDashboardService _dashboardService
+@inject IClientService _clientService
+@inject IToastService _toastService
+@inject IJSRuntime JS
+
+<PageTitle>Dashboards</PageTitle>
+
+<FluentCard AreaRestricted="false" Style="height: calc(100vh - 120px); min-height: 680px; overflow: hidden;">
+    <FluentMultiSplitter Style="height: 100%;">
+        <FluentMultiSplitterPane Size="20%">
+            <FluentStack Orientation="Orientation.Vertical" Style="height: 100%; min-height: 0;">
+                <FluentToolbar Class="w-100">
+                    <FluentLabel slot="start" Typo="Typography.PaneHeader">Dashboards</FluentLabel>
+                    <FluentButton slot="end" Appearance="Appearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateNewDashboard">
+                        New
+                    </FluentButton>
+                </FluentToolbar>
+
+                <div class="dashboard-list-grid-wrap">
+                    <FluentDataGrid ShowHover="true"
+                                    Items="dashboards.AsQueryable()"
+                                    GridTemplateColumns="auto 1fr"
+                                    Class="dashboard-list-grid"
+                                    Pagination="new PaginationState { ItemsPerPage = 12 }">
+                        <ChildContent>
+                            <SelectColumn SelectAll="true"
+                                          OnSelect="@(x => SelectDashboard(x.Item))"
+                                          Property="@(x => selectedDashboard is not null && x.Id == selectedDashboard.Id)"
+                                          TGridItem="Dashboard"
+                                          SelectMode="DataGridSelectMode.Single"
+                                          SelectFromEntireRow="true"></SelectColumn>
+                            <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                        </ChildContent>
+                        <EmptyContent>
+                            No dashboards yet.
+                        </EmptyContent>
+                    </FluentDataGrid>
+                </div>
+            </FluentStack>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="80%" Class="px-3" Style="height: 100%; min-height: 0;">
+            @if (selectedDashboard is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+                    <FluentLabel>Select or create a dashboard.</FluentLabel>
+                </FluentStack>
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" Style="height: 100%; min-height: 0; overflow: auto;">
+                    <FluentToolbar Class="w-100">
+                        <FluentLabel slot="start" Typo="Typography.PaneHeader">
+                            @(selectedDashboard.Id == Guid.Empty ? "New Dashboard" : "Edit Dashboard")
+                        </FluentLabel>
+                        <div slot="end" class="dashboard-edit-actions">
+                            <FluentButton Appearance="Appearance.Accent" OnClick="SaveDashboardAsync">
+                                Save
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline" Disabled="@(selectedDashboard.Id == Guid.Empty)" OnClick="DeleteDashboardAsync">
+                                Delete
+                            </FluentButton>
+                        </div>
+                    </FluentToolbar>
+
+                    <FluentGrid Class="mb-2">
+                        <FluentGridItem xs="4">
+                            <FluentTextField Class="w-100" @bind-Value="selectedDashboard.Name" Label="Name" Appearance="FluentInputAppearance.Outline" Required />
+                        </FluentGridItem>
+                        <FluentGridItem xs="8">
+                            <FluentTextArea Class="w-100" @bind-Value="selectedDashboard.Description" Label="Description" Appearance="FluentInputAppearance.Outline" />
+                        </FluentGridItem>
+                    </FluentGrid>
+
+                    <FluentStack Orientation="Orientation.Vertical" Style="gap: 12px; flex: 1; min-height: 0; align-items: stretch; overflow: auto; padding-bottom: 8px;">
+                        <FluentCard AreaRestricted="false" Style="width: 100%;">
+                            <FluentLabel Class="mb-2" Typo="Typography.H6">Widgets</FluentLabel>
+                            <FluentStack>
+                                @foreach (string widgetType in widgetTypes)
+                                {
+                                    <FluentCard Class="h-auto"
+                                                MinimalStyle="true"
+                                                Style="cursor: grab; margin-top: 8px; text-align: center; font-weight: 600;"
+                                                draggable="true"
+                                                @ondragstart="(e) => StartToolboxDrag(widgetType)">
+                                        @widgetType
+                                    </FluentCard>
+                                }
+                            </FluentStack>
+                        </FluentCard>
+
+                        <div id="@CanvasId"
+                             class="dashboard-canvas"
+                             @ondragover:preventDefault
+                             @ondrop="HandleCanvasDropAsync">
+                            @foreach (DashboardWidget widget in selectedDashboard.Widgets.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+                            {
+                                <div class="dashboard-widget h-auto"
+                                     style="@GetWidgetStyle(widget)">
+                                    <div class="dashboard-widget-header"
+                                         draggable="true"
+                                         @ondragstart="(e) => StartWidgetDrag(widget.Id)">
+                                        <span>@(string.IsNullOrWhiteSpace(widget.Title) ? widget.Type : widget.Title)</span>
+                                        <FluentIcon Class="widget-delete"
+                                                    Value="@(new Icons.Regular.Size16.Dismiss())"
+                                                    OnClick="() => RemoveWidget(widget.Id)"></FluentIcon>
+                                    </div>
+
+                                    <div class="dashboard-widget-body">
+                                        @if (widget.Type == "Clock")
+                                        {
+                                            <div class="widget-clock">
+                                                <div class="clock-visual">
+                                                    @if (IsAnalogClock(widget))
+                                                    {
+                                                        <div class="clock-analog-face">
+                                                            <div class="clock-hand clock-hour-hand" style="@GetClockHandStyle(GetHourHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-hand clock-minute-hand" style="@GetClockHandStyle(GetMinuteHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-hand clock-second-hand" style="@GetClockHandStyle(GetSecondHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-center-dot"></div>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="clock-digital">
+                                                            <span class="clock-digital-time">@_clockNowLocal.ToString("hh:mm:ss tt")</span>
+                                                            <span class="clock-digital-date">@_clockNowLocal.ToString("dddd, MMM dd")</span>
+                                                        </div>
+                                                    }
+                                                </div>
+
+                                                <FluentButton Class="clock-mode-toggle"
+                                                              Appearance="Appearance.Lightweight"
+                                                              OnClick="() => ToggleClockMode(widget)">
+                                                    @(IsAnalogClock(widget) ? "Switch to Digital" : "Switch to Analog")
+                                                </FluentButton>
+                                            </div>
+                                        }
+                                        else if (widget.Type == "MusicControls")
+                                        {
+                                            <span class="widget-placeholder">Music controls placeholder</span>
+                                        }
+                                        else if (widget.Type == "LaserStats")
+                                        {
+                                            <FluentStack Orientation="Orientation.Vertical" Class="w-100 h-100">
+                                                <FluentSelect Class="w-100"
+                                                              @bind-Value="widget.ConfigJson"
+                                                              TOption="string"
+                                                              Label="Client">
+                                                    <FluentOption Value="">Select client...</FluentOption>
+                                                    @foreach (ClientConnectedDTO client in clients.OrderBy(x => x.Name))
+                                                    {
+                                                        <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
+                                                    }
+                                                </FluentSelect>
+                                                <KioskLaserGameStatusWidget Widget="widget" />
+                                            </FluentStack>
+                                        }
+                                    </div>
+
+                                    <div class="widget-resize-handle" @onmousedown="(e) => BeginResizeAsync(widget, e)"></div>
+                                </div>
+                            }
+                        </div>
+                    </FluentStack>
+                </FluentStack>
+            }
+        </FluentMultiSplitterPane>
+    </FluentMultiSplitter>
+</FluentCard>
+
+@code {
+    private List<Dashboard> dashboards = [];
+    private List<ClientConnectedDTO> clients = [];
+    private Dashboard? selectedDashboard;
+
+    private string? draggingWidgetType;
+    private Guid? draggingWidgetId;
+
+    private readonly string CanvasId = "dashboard-editor-canvas";
+    private readonly string[] widgetTypes = ["Clock", "MusicControls", "LaserStats"];
+    private const string ClockModeAnalog = "analog";
+    private const string ClockModeDigital = "digital";
+    private const int GridColumns = 12;
+    private const int GridRowHeight = 60;
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<Dashboards>? _dotNetRef;
+    private readonly CancellationTokenSource _clockCts = new();
+    private Task? _clockTickerTask;
+    private DateTime _clockNowLocal = DateTime.Now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _clockTickerTask = RunClockTickerAsync(_clockCts.Token);
+        await LoadClientsAsync();
+        await LoadDashboardsAsync();
+    }
+
+    private async Task LoadClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            clients = [];
+            return;
+        }
+
+        clients = result.Data.ToList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./dashboardEditor.js");
+        _dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    private async Task LoadDashboardsAsync()
+    {
+        Result<IEnumerable<Dashboard>> result = await _dashboardService.GetDashboardsAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load dashboards: {result.Error}");
+            dashboards = [];
+            selectedDashboard = null;
+            return;
+        }
+
+        dashboards = result.Data.OrderBy(x => x.Name).ToList();
+
+        if (selectedDashboard is not null)
+        {
+            Dashboard? selected = dashboards.FirstOrDefault(x => x.Id == selectedDashboard.Id);
+            if (selected is not null)
+            {
+                selectedDashboard = CloneDashboard(selected);
+                return;
+            }
+        }
+
+        if (dashboards.Count > 0)
+        {
+            selectedDashboard = CloneDashboard(dashboards[0]);
+        }
+    }
+
+    private void SelectDashboard(Dashboard dashboard)
+    {
+        selectedDashboard = CloneDashboard(dashboard);
+    }
+
+    private void CreateNewDashboard()
+    {
+        selectedDashboard = new Dashboard
+        {
+            Id = Guid.Empty,
+            Name = "New Dashboard",
+            Description = string.Empty,
+            IsActive = true,
+            CreateDate = DateTime.UtcNow,
+            LastUpdateDate = DateTime.UtcNow,
+            Widgets = []
+        };
+    }
+
+    private void StartToolboxDrag(string widgetType)
+    {
+        draggingWidgetType = widgetType;
+        draggingWidgetId = null;
+    }
+
+    private void StartWidgetDrag(Guid widgetId)
+    {
+        draggingWidgetId = widgetId;
+        draggingWidgetType = null;
+    }
+
+    private void EndDrag()
+    {
+        draggingWidgetType = null;
+        draggingWidgetId = null;
+    }
+
+    private async Task HandleCanvasDropAsync(DragEventArgs eventArgs)
+    {
+        if (selectedDashboard is null || _module is null)
+        {
+            return;
+        }
+
+        int[] gridPosition = await _module.InvokeAsync<int[]>(
+            "getGridCoordinates",
+            CanvasId,
+            eventArgs.ClientX,
+            eventArgs.ClientY,
+            GridColumns,
+            GridRowHeight);
+
+        int x = gridPosition[0];
+        int y = gridPosition[1];
+
+        if (draggingWidgetType is not null)
+        {
+            DashboardWidget widget = CreateDefaultWidget(draggingWidgetType, x, y, selectedDashboard.Widgets.Count);
+            selectedDashboard.Widgets.Add(widget);
+        }
+        else if (draggingWidgetId.HasValue)
+        {
+            DashboardWidget? widget = selectedDashboard.Widgets.FirstOrDefault(x1 => x1.Id == draggingWidgetId.Value && x1.IsActive);
+            if (widget is not null)
+            {
+                widget.GridX = Math.Clamp(x, 0, GridColumns - 1);
+                widget.GridY = Math.Max(0, y);
+            }
+        }
+
+        EndDrag();
+    }
+
+    private async Task BeginResizeAsync(DashboardWidget widget, MouseEventArgs eventArgs)
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        await _module.InvokeVoidAsync(
+            "startWidgetResize",
+            _dotNetRef,
+            widget.Id.ToString(),
+            CanvasId,
+            eventArgs.ClientX,
+            eventArgs.ClientY,
+            widget.GridW,
+            widget.GridH,
+            GridColumns,
+            GridRowHeight);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _clockCts.Cancel();
+        if (_clockTickerTask is not null)
+        {
+            try
+            {
+                await _clockTickerTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        _clockCts.Dispose();
+
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+
+        _dotNetRef?.Dispose();
+    }
+
+    [JSInvokable]
+    public Task OnWidgetResizeChanged(string widgetId, int gridW, int gridH)
+    {
+        if (selectedDashboard is null || !Guid.TryParse(widgetId, out Guid id))
+        {
+            return Task.CompletedTask;
+        }
+
+        DashboardWidget? widget = selectedDashboard.Widgets.FirstOrDefault(x => x.Id == id && x.IsActive);
+        if (widget is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        int maxWidthFromCurrentX = Math.Max(1, GridColumns - widget.GridX);
+
+        widget.GridW = Math.Clamp(gridW, 1, maxWidthFromCurrentX);
+        widget.GridH = Math.Max(1, gridH);
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RunClockTickerAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _clockNowLocal = DateTime.Now;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task SaveDashboardAsync()
+    {
+        if (selectedDashboard is null)
+        {
+            return;
+        }
+
+        List<DashboardWidget> activeWidgets = selectedDashboard.Widgets
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .ToList();
+
+        for (int i = 0; i < activeWidgets.Count; i++)
+        {
+            activeWidgets[i].SortOrder = i;
+        }
+
+        Result<Dashboard> result = await _dashboardService.SaveDashboardAsync(selectedDashboard);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to save dashboard: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("Dashboard saved.");
+        selectedDashboard = CloneDashboard(result.Data);
+        await LoadDashboardsAsync();
+    }
+
+    private async Task DeleteDashboardAsync()
+    {
+        if (selectedDashboard is null || selectedDashboard.Id == Guid.Empty)
+        {
+            return;
+        }
+
+        Result<bool> result = await _dashboardService.DeleteDashboardAsync(selectedDashboard.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to delete dashboard: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("Dashboard deleted.");
+        selectedDashboard = null;
+        await LoadDashboardsAsync();
+    }
+
+    private void RemoveWidget(Guid widgetId)
+    {
+        if (selectedDashboard is null)
+        {
+            return;
+        }
+
+        DashboardWidget? widget = selectedDashboard.Widgets.FirstOrDefault(x => x.Id == widgetId);
+        if (widget is null)
+        {
+            return;
+        }
+
+        widget.IsActive = false;
+    }
+
+    private static DashboardWidget CreateDefaultWidget(string widgetType, int x, int y, int sortOrder)
+    {
+        return new DashboardWidget
+        {
+            Id = Guid.NewGuid(),
+            Type = widgetType,
+            Title = widgetType,
+            GridX = Math.Clamp(x, 0, GridColumns - 1),
+            GridY = Math.Max(0, y),
+            GridW = 4,
+            GridH = 3,
+            SortOrder = sortOrder,
+            ConfigJson = widgetType == "Clock" ? ClockModeDigital : string.Empty,
+            IsActive = true
+        };
+    }
+
+    private static bool IsAnalogClock(DashboardWidget widget)
+    {
+        return string.Equals(GetClockMode(widget), ClockModeAnalog, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetClockMode(DashboardWidget widget)
+    {
+        string mode = widget.ConfigJson?.Trim() ?? string.Empty;
+        if (string.Equals(mode, ClockModeAnalog, StringComparison.OrdinalIgnoreCase))
+        {
+            return ClockModeAnalog;
+        }
+
+        return ClockModeDigital;
+    }
+
+    private static void ToggleClockMode(DashboardWidget widget)
+    {
+        widget.ConfigJson = IsAnalogClock(widget) ? ClockModeDigital : ClockModeAnalog;
+    }
+
+    private static double GetHourHandDegrees(DateTime localTime)
+    {
+        return ((localTime.Hour % 12) + (localTime.Minute / 60d)) * 30d;
+    }
+
+    private static double GetMinuteHandDegrees(DateTime localTime)
+    {
+        return (localTime.Minute + (localTime.Second / 60d)) * 6d;
+    }
+
+    private static double GetSecondHandDegrees(DateTime localTime)
+    {
+        return localTime.Second * 6d;
+    }
+
+    private static string GetClockHandStyle(double degrees)
+    {
+        return $"transform: translate(-50%, 0) rotate({degrees.ToString("0.###", CultureInfo.InvariantCulture)}deg);";
+    }
+
+    private static Dashboard CloneDashboard(Dashboard dashboard)
+    {
+        return new Dashboard
+        {
+            Id = dashboard.Id,
+            Name = dashboard.Name,
+            Description = dashboard.Description,
+            IsActive = dashboard.IsActive,
+            CreateDate = dashboard.CreateDate,
+            LastUpdateDate = dashboard.LastUpdateDate,
+            Widgets = dashboard.Widgets
+                .Select(x => new DashboardWidget
+                {
+                    Id = x.Id,
+                    DashboardId = x.DashboardId,
+                    Type = x.Type,
+                    Title = x.Title,
+                    GridX = x.GridX,
+                    GridY = x.GridY,
+                    GridW = x.GridW,
+                    GridH = x.GridH,
+                    SortOrder = x.SortOrder,
+                    ConfigJson = x.ConfigJson,
+                    IsActive = x.IsActive
+                })
+                .ToList()
+        };
+    }
+
+    private static string GetWidgetStyle(DashboardWidget widget)
+    {
+        int gridColumnStart = widget.GridX + 1;
+        int gridRowStart = widget.GridY + 1;
+
+        return $"grid-column: {gridColumnStart} / span {widget.GridW}; grid-row: {gridRowStart} / span {widget.GridH};";
+    }
+}

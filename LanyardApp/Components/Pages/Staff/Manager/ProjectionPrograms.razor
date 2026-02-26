@@ -1,5 +1,5 @@
 ﻿@page "/staff/manage/projectionprograms"
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager;
@@ -116,6 +116,8 @@
 
         projectionPrograms.Add(newProgram);
         selectedProjectionProgram = newProgram;
+
+        StateHasChanged();
     }
 
     private async Task HandleSave()

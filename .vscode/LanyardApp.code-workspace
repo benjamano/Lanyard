@@ -32,7 +32,7 @@
 					"name": "LanyardApp (Debug EXE)",
 					"type": "coreclr",
 					"request": "launch",
-					"program": "${workspaceFolder}/LanyardApp/bin/Debug/net10.0-windows/Lanyard.App.exe",
+					"program": "${workspaceFolder}/LanyardApp/bin/Debug/net10.0/Lanyard.App.exe",
 					"cwd": "${workspaceFolder}/LanyardApp",
 					"stopAtEntry": false,
 					"justMyCode": true,

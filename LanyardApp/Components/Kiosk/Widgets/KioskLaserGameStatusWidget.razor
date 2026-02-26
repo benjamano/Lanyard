@@ -1,0 +1,154 @@
+@implements IDisposable
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+
+@inject ILaserGameStatusStore _laserGameStatusStore
+@inject IClientService _clientService
+@inject ILogger<KioskLaserGameStatusWidget> _logger
+
+<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" Class="laser-widget-stack">
+        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Laser Stats" : Widget.Title)</FluentLabel>
+
+        @if (!_selectedClientId.HasValue)
+        {
+            <FluentLabel Typo="Typography.Body">No client selected.</FluentLabel>
+        }
+        else
+        {
+            <FluentLabel Typo="Typography.Body" Class="laser-client-name">@_selectedClientName</FluentLabel>
+
+            @if (_status is null)
+            {
+                <FluentLabel Typo="Typography.Body">No status received yet.</FluentLabel>
+            }
+            else
+            {
+                <FluentGrid>
+                    <FluentGridItem xs="6">
+                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Status</FluentLabel>
+                        <FluentLabel Typo="Typography.Body">@GetStatusText(_status.Status)</FluentLabel>
+                    </FluentGridItem>
+                    <FluentGridItem xs="6">
+                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Time Left</FluentLabel>
+                        <FluentLabel Typo="Typography.Body">@FormatSeconds(_status.TimeRemainingSeconds)</FluentLabel>
+                    </FluentGridItem>
+                    <FluentGridItem xs="12">
+                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Players Tracked</FluentLabel>
+                        <FluentLabel Typo="Typography.Body">@_status.PlayerCount</FluentLabel>
+                    </FluentGridItem>
+                </FluentGrid>
+            }
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+
+    private CancellationTokenSource _cts = new();
+    private Task? _tickerTask;
+    private Guid? _selectedClientId;
+    private string _selectedClientName = "Unknown client";
+    private LaserGameStatusDTO? _status;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Guid? incomingClientId = ParseClientIdFromConfig(Widget.ConfigJson);
+        bool selectionChanged = incomingClientId != _selectedClientId;
+
+        _selectedClientId = incomingClientId;
+
+        if (selectionChanged)
+        {
+            _status = null;
+            _selectedClientName = await ResolveClientNameAsync(_selectedClientId);
+        }
+
+        UpdateStatusSnapshot();
+
+        if (_tickerTask is null)
+        {
+            _tickerTask = RunRefreshTickerAsync(_cts.Token);
+        }
+    }
+
+    private async Task RunRefreshTickerAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                UpdateStatusSnapshot();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void UpdateStatusSnapshot()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            _status = null;
+            return;
+        }
+
+        bool found = _laserGameStatusStore.TryGetStatus(_selectedClientId.Value, out LaserGameStatusDTO? currentStatus);
+        _status = found ? currentStatus : null;
+    }
+
+    private async Task<string> ResolveClientNameAsync(Guid? clientId)
+    {
+        if (!clientId.HasValue)
+        {
+            return "No client selected";
+        }
+
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId.Value);
+        if (!result.IsSuccess || result.Data is null || string.IsNullOrWhiteSpace(result.Data.Name))
+        {
+            return "Unknown client";
+        }
+
+        return result.Data.Name;
+    }
+
+    private static Guid? ParseClientIdFromConfig(string? configJson)
+    {
+        if (Guid.TryParse(configJson, out Guid clientId))
+        {
+            return clientId;
+        }
+
+        return null;
+    }
+
+    private static string GetStatusText(GameStatus status)
+    {
+        return status switch
+        {
+            GameStatus.InGame => "In Game",
+            GameStatus.GetReady => "Get Ready",
+            _ => "Not Started"
+        };
+    }
+
+    private static string FormatSeconds(int seconds)
+    {
+        int safeSeconds = Math.Max(0, seconds);
+        TimeSpan time = TimeSpan.FromSeconds(safeSeconds);
+        return $"{time.Minutes:00}:{time.Seconds:00}";
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

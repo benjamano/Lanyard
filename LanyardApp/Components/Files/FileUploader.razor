@@ -2,13 +2,13 @@
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IFileService _fileService
+@inject IToastService _toastService
 
 <FluentInputFile Id="my-file-uploader"
                  Mode="InputFileMode.SaveToTemporaryFolder"
                  Multiple="true"
                  MaximumFileCount="4"
-                 MaximumFileSize="@(10*1024*1024)"
-                 Accept="image/*"
+                 MaximumFileSize="@(100*1024*1024)"
                  @bind-ProgressPercent="@ProgressPercent"
                  OnCompleted="@OnCompletedAsync"
                  Style="height: 200px;">
@@ -23,6 +23,8 @@
             for them.
             <br />
             <em>Maximum of 4 files allowed.</em>
+            <br />
+            <em>Maximum file size: 100 MB.</em>
         </div>
     </ChildContent>
 </FluentInputFile>
@@ -41,6 +43,12 @@
 
         foreach (FluentInputFileEventArgs file in Files)
         {
+            if (file.ErrorMessage != null)
+            {
+                _toastService.ShowError($"Error uploading {file.Name}: {file.ErrorMessage}");
+                continue;
+            }
+
             using FileStream fileStream = file.LocalFile!.OpenRead();
             using StreamContent streamContent = new StreamContent(fileStream);
 

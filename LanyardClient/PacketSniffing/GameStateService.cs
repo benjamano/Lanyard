@@ -9,6 +9,7 @@ namespace Lanyard.Client.PacketSniffing;
 
 public class GameStateService : IGameStateService
 {
+    public event Action? GameStateChanged;
     public event Action? GameStarted;
     public event Action? GameEnded;
 
@@ -30,6 +31,7 @@ public class GameStateService : IGameStateService
         GameStatus = GameStatus.InGame;
 
         CurrentPlayerScores = [];
+        GameStateChanged?.Invoke();
     }
 
     public void HandleGameEnded()
@@ -37,11 +39,13 @@ public class GameStateService : IGameStateService
         GameEnded?.Invoke();
 
         GameStatus = GameStatus.NotStarted;
+        GameStateChanged?.Invoke();
     }
 
     public void HandlePlayerHit(int shotGunId, int shotByGunId)
     {
         PlayerHit?.Invoke(new PlayerHitDTO { ShotByGunId = shotByGunId, ShotGunId = shotGunId });
+        GameStateChanged?.Invoke();
     }
 
     public void UpdateTimeRemaining(TimeSpan timeRemaining)
@@ -49,6 +53,7 @@ public class GameStateService : IGameStateService
         TimeRemaining = timeRemaining;
 
         TimeRemainingUpdated?.Invoke(timeRemaining);
+        GameStateChanged?.Invoke();
     }
 
     public TimeSpan GetTimeRemaining()
@@ -82,10 +87,13 @@ public class GameStateService : IGameStateService
         {
             CurrentPlayerScores.Add(playerScore);
         }
+
+        GameStateChanged?.Invoke();
     }
 
     public void UpdateGameLength(TimeSpan gameLength)
     {
         GameLength = gameLength;
+        GameStateChanged?.Invoke();
     }
 }

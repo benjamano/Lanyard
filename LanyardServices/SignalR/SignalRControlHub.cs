@@ -12,12 +12,17 @@ using System.Collections.Concurrent;
 
 namespace Lanyard.Application.SignalR;
 
-public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerService playerService, IClientService clientService) : Hub, ISignalRProjectionControlHub
+public class SignalRControlHub(
+    ILogger<SignalRControlHub> logger,
+    MusicPlayerService playerService,
+    IClientService clientService,
+    ILaserGameStatusStore laserGameStatusStore) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
+    private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -106,6 +111,12 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
 
         _logger.LogInformation("Client {ConnectionId} disconnected from Music group", Context.ConnectionId);
 
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (getClientResult.IsSuccess)
+        {
+            _laserGameStatusStore.RemoveStatus(getClientResult.Data);
+        }
+
         _connections.TryRemove(Context.ConnectionId, out _);
 
         await base.OnDisconnectedAsync(exception);
@@ -141,6 +152,20 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
         Guid clientId = getResult.Data!;
 
         await _clientService.SetClientAvailableScreensAsync(clientId, screens);
+    }
+
+    public async Task UpdateLaserGameStatus(LaserGameStatusDTO status)
+    {
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID for laser status update from {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return;
+        }
+
+        Guid clientId = getResult.Data;
+
+        _laserGameStatusStore.UpdateStatus(clientId, status);
     }
 
     public async Task Load(Guid songId)

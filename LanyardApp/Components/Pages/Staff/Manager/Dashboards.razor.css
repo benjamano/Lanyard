@@ -1,0 +1,187 @@
+.dashboard-list-grid-wrap {
+    margin-top: 8px;
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+    width: 100%;
+}
+
+.dashboard-list-grid {
+    width: 100%;
+    min-width: 100%;
+}
+
+.dashboard-list-grid ::deep table {
+    width: 100%;
+}
+
+.dashboard-edit-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dashboard-canvas {
+    flex: 1;
+    min-height: 520px;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    min-width: 0;
+    background-image:
+        linear-gradient(to right, rgba(120, 120, 120, 0.15) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(120, 120, 120, 0.15) 1px, transparent 1px);
+    background-size: calc(100% / 12) 60px;
+    border: 1px solid var(--neutral-stroke-divider-rest);
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-auto-rows: 60px;
+    gap: 8px;
+    padding: 8px;
+    overflow: auto;
+}
+
+.dashboard-widget {
+    background: var(--neutral-layer-2);
+    border: 1px solid var(--neutral-stroke-divider-rest);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.dashboard-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    font-weight: 700;
+    cursor: grab;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest);
+    user-select: none;
+}
+
+.dashboard-widget-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    overflow: hidden;
+}
+
+.widget-placeholder {
+    color: var(--neutral-foreground-hint);
+    text-align: center;
+}
+
+.widget-delete {
+    cursor: pointer;
+}
+
+.widget-resize-handle {
+    width: 12px;
+    height: 12px;
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    cursor: nwse-resize;
+    border-right: 2px solid var(--accent-fill-rest);
+    border-bottom: 2px solid var(--accent-fill-rest);
+}
+
+.widget-clock {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+.clock-mode-toggle {
+    justify-self: center;
+    margin-top: 4px;
+    max-width: 100%;
+}
+
+.clock-visual {
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.clock-digital {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.clock-digital-time {
+    font-size: clamp(1rem, 2.2vw, 1.6rem);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.clock-digital-date {
+    font-size: clamp(0.75rem, 1.5vw, 0.95rem);
+    color: var(--neutral-foreground-hint);
+}
+
+.clock-analog-face {
+    width: min(100%, 110px);
+    height: min(100%, 110px);
+    aspect-ratio: 1 / 1;
+    border: 2px solid var(--neutral-stroke-divider-rest);
+    border-radius: 50%;
+    position: relative;
+    background: var(--neutral-layer-3);
+    margin: auto;
+}
+
+.clock-hand {
+    position: absolute;
+    left: 50%;
+    bottom: 50%;
+    transform-origin: 50% 100%;
+    border-radius: 999px;
+}
+
+.clock-hour-hand {
+    width: 4px;
+    height: 28%;
+    background: var(--neutral-foreground-rest);
+}
+
+.clock-minute-hand {
+    width: 3px;
+    height: 36%;
+    background: var(--neutral-foreground-rest);
+}
+
+.clock-second-hand {
+    width: 2px;
+    height: 40%;
+    background: var(--accent-foreground-rest);
+}
+
+.clock-center-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--neutral-foreground-rest);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}

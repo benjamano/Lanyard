@@ -1,5 +1,4 @@
-﻿using Lanyard.Client.UI;
-using Lanyard.Shared.DTO;
+﻿using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;

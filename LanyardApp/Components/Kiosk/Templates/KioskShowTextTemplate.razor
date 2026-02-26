@@ -1,0 +1,15 @@
+@using Lanyard.App.Components.Kiosk
+
+<FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+    <FluentLabel Typo="Typography.HeroTitle">@DisplayText</FluentLabel>
+</FluentStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionProgramStep Step { get; set; } = default!;
+
+    private string? DisplayText => Step.ParameterValues
+        .Where(x => x.Parameter?.Name == KioskTemplateConstants.ParameterNames.Text)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+}

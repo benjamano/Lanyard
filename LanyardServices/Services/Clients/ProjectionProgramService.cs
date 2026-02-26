@@ -22,7 +22,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
                 .AsNoTracking()
                 .Include(x => x.ProjectionProgramSteps.Where(s => s.IsActive))
                     .ThenInclude(x => x.Template)
-                        .ThenInclude(x => x!.Parameters)
+                        .ThenInclude(x => x!.Parameters.Where(p => p.IsActive))
                 .Include(x => x.ProjectionProgramSteps)
                     .ThenInclude(x => x.ParameterValues)
                         .ThenInclude(pv => pv.Parameter)
@@ -46,7 +46,8 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             List<ProjectionProgramStepTemplate> templates = await ctx.ProjectionProgramStepTemplates
                 .AsNoTracking()
-                .Include(x => x.Parameters)
+                .Include(x => x.Parameters
+                    .Where(x=> x.IsActive))
                 .Where(x => x.IsActive)
                 .OrderBy(x => x.Name)
                 .ToListAsync();
@@ -61,18 +62,141 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
     public async Task<Result<ProjectionProgramStepTemplate>> CreateProjectionProgramStepTemplateAsync(ProjectionProgramStepTemplate template)
     {
+        return await SaveProjectionProgramStepTemplateAsync(template);
+    }
+
+    public async Task<Result<ProjectionProgramStepTemplate>> SaveProjectionProgramStepTemplateAsync(ProjectionProgramStepTemplate template)
+    {
         try
         {
+            if (string.IsNullOrWhiteSpace(template.Name))
+            {
+                return Result<ProjectionProgramStepTemplate>.Fail("Template name is required.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            ctx.Add(template);
+            ProjectionProgramStepTemplate? existingTemplate = template.Id == Guid.Empty
+                ? null
+                : await ctx.ProjectionProgramStepTemplates
+                    .Include(x => x.Parameters)
+                    .FirstOrDefaultAsync(x => x.Id == template.Id);
+
+            ProjectionProgramStepTemplate targetTemplate;
+
+            if (existingTemplate is null)
+            {
+                targetTemplate = new ProjectionProgramStepTemplate
+                {
+                    Id = template.Id == Guid.Empty ? Guid.NewGuid() : template.Id,
+                    Name = template.Name.Trim(),
+                    Description = template.Description?.Trim(),
+                    IsActive = true,
+                    Parameters = []
+                };
+
+                ctx.ProjectionProgramStepTemplates.Add(targetTemplate);
+            }
+            else
+            {
+                targetTemplate = existingTemplate;
+                targetTemplate.Name = template.Name.Trim();
+                targetTemplate.Description = template.Description?.Trim();
+                targetTemplate.IsActive = true;
+            }
+
+            List<ProjectionProgramStepTemplateParameter> incomingParameters = template.Parameters?.ToList() ?? [];
+            Dictionary<Guid, ProjectionProgramStepTemplateParameter> existingParameters = targetTemplate.Parameters.ToDictionary(x => x.Id);
+            HashSet<Guid> seenParameterIds = [];
+
+            foreach (ProjectionProgramStepTemplateParameter incomingParameter in incomingParameters)
+            {
+                if (string.IsNullOrWhiteSpace(incomingParameter.Name) || string.IsNullOrWhiteSpace(incomingParameter.DataType))
+                {
+                    continue;
+                }
+
+                Guid parameterId = incomingParameter.Id == Guid.Empty ? Guid.NewGuid() : incomingParameter.Id;
+
+                if (existingParameters.TryGetValue(parameterId, out ProjectionProgramStepTemplateParameter? existingParameter))
+                {
+                    existingParameter.Name = incomingParameter.Name.Trim();
+                    existingParameter.Description = incomingParameter.Description?.Trim();
+                    existingParameter.DataType = incomingParameter.DataType.Trim();
+                    existingParameter.IsRequired = incomingParameter.IsRequired;
+                    existingParameter.IsActive = true;
+                }
+                else
+                {
+                    targetTemplate.Parameters.Add(new ProjectionProgramStepTemplateParameter
+                    {
+                        Id = parameterId,
+                        TemplateId = targetTemplate.Id,
+                        Name = incomingParameter.Name.Trim(),
+                        Description = incomingParameter.Description?.Trim(),
+                        DataType = incomingParameter.DataType.Trim(),
+                        IsRequired = incomingParameter.IsRequired,
+                        IsActive = true
+                    });
+                }
+
+                seenParameterIds.Add(parameterId);
+            }
+
+            foreach (ProjectionProgramStepTemplateParameter existingParameter in targetTemplate.Parameters.Where(x => !seenParameterIds.Contains(x.Id)))
+            {
+                existingParameter.IsActive = false;
+            }
+
             await ctx.SaveChangesAsync();
 
-            return Result<ProjectionProgramStepTemplate>.Ok(template);
+            ProjectionProgramStepTemplate? savedTemplate = await ctx.ProjectionProgramStepTemplates
+                .AsNoTracking()
+                .Include(x => x.Parameters.Where(p => p.IsActive))
+                .FirstOrDefaultAsync(x => x.Id == targetTemplate.Id);
+
+            if (savedTemplate is null)
+            {
+                return Result<ProjectionProgramStepTemplate>.Fail("Template saved but could not be reloaded.");
+            }
+
+            return Result<ProjectionProgramStepTemplate>.Ok(savedTemplate);
         }
         catch (Exception ex)
         {
             return Result<ProjectionProgramStepTemplate>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> DeleteProjectionProgramStepTemplateAsync(Guid templateId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ProjectionProgramStepTemplate? template = await ctx.ProjectionProgramStepTemplates
+                .Include(x => x.Parameters)
+                .FirstOrDefaultAsync(x => x.Id == templateId);
+
+            if (template is null)
+            {
+                return Result<bool>.Fail("Projection program step template not found.");
+            }
+
+            template.IsActive = false;
+
+            foreach (ProjectionProgramStepTemplateParameter parameter in template.Parameters)
+            {
+                parameter.IsActive = false;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
@@ -234,7 +358,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
                     .ThenInclude(x=> x.ParameterValues)
                 .Include(x=> x.ProjectionProgramSteps.Where(x=> x.IsActive))
                     .ThenInclude(x=> x.Template)
-                        .ThenInclude(x=> x!.Parameters)
+                        .ThenInclude(x=> x!.Parameters.Where(p => p.IsActive))
                 .FirstOrDefaultAsync();
 
             if (projectionProgram == null)

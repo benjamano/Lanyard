@@ -1,4 +1,10 @@
-﻿public interface ISignalRClient
+using Lanyard.Shared.DTO;
+using Microsoft.AspNetCore.SignalR.Client;
+
+namespace Lanyard.Client.SignalR;
+
+public interface ISignalRClient
 {
-    Task StartAsync();
+    Task Connect(string serverUrl, Guid clientId, List<Action<HubConnection>> registrations);
+    Task SendLaserGameStatusAsync(LaserGameStatusDTO status);
 }
