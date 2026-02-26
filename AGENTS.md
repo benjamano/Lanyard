@@ -112,6 +112,8 @@ Lanyard is a .NET 10 solution with a layered architecture and two runtime fronte
 - Prefer `Task` for async handlers (`async void` only for true event callbacks where unavoidable).
 - Dispose/cleanup long-running operations and cancellation token sources.
 - Use Fluent UI components already in use across the project.
+- Prefer Bootstrap utility/classes for primary layout and spacing styling when possible.
+- Add custom CSS only when Bootstrap/Fluent component parameters cannot reasonably achieve the required result.
 
 ### 6) SignalR patterns
 
