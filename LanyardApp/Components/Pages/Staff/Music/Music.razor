@@ -5,22 +5,52 @@
 @using Lanyard.App.Components.Music
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.Models
 @using Microsoft.AspNetCore.Authorization
 @using NAudio.Wave;
 
 @inject MusicPlayerService _player
+@inject IClientService _clientService
+@inject IToastService _toastService
 
 @implements IDisposable
 
 <PageTitle>Music</PageTitle>
 
+<FluentCard Class="mb-2 p-2">
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Right" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12">
+        <FluentSelect
+                      @bind-Value="selectedClientIdString"
+                      TOption="string"
+                      Class="col-auto"
+                      Disabled="@(!(clients.Count() > 1))">
+
+            @if (!clients.Any())
+            {
+                <FluentOption Value="">No connected clients</FluentOption>
+            }
+            else
+            {
+                @foreach (ClientConnectedWithCapabilitiesDTO client in clients.OrderBy(x => x.Name))
+                {
+                    <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
+                }
+            }
+        </FluentSelect>
+
+        <FluentButton Appearance="Appearance.Outline" OnClick="RefreshClientsAsync">
+            Refresh
+        </FluentButton>
+    </FluentStack>
+</FluentCard>
+
 <div style="height: calc(100vh - 120px); overflow-y: auto;">
     <FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
-        <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
+        <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"></Playlists>
 
         <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
-            <SongList Songs="currentSongs"></SongList>
+            <SongList Songs="currentSongs" SelectedClientId="selectedClientId"></SongList>
         </FluentStack>
     </FluentStack>
 </div>
@@ -35,6 +65,7 @@
                       Title="Previous (Double-click) / Restart (Single-click)"
                       OnClick="RestartSong"
                       @ondblclick="PreviousSong"
+                      Disabled="@(selectedClientId == null)"
                       Style="border-radius: 50%; width: 40px; height: 40px;">
             <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
         </FluentButton>
@@ -43,6 +74,7 @@
                       IconOnly="true"
                       Title="@(isPlaying ? "Pause" : "Play")"
                       OnClick="TogglePlay"
+                      Disabled="@(selectedClientId == null)"
                       Style="border-radius: 50%; width: 40px; height: 40px;">
             @if (isPlaying)
             {
@@ -58,6 +90,7 @@
                       IconOnly="true"
                       Title="Next"
                       OnClick="NextSong"
+                      Disabled="@(selectedClientId == null)"
                       Style="border-radius: 50%; width: 40px; height: 40px;">
             <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
         </FluentButton>
@@ -67,41 +100,119 @@
 @code {
     private IEnumerable<PlaylistSongMember>? currentSongs;
     private bool isPlaying = false;
+    private List<ClientConnectedWithCapabilitiesDTO> clients = [];
+    private Guid? selectedClientId;
 
-    protected override void OnInitialized()
+    private string selectedClientIdString
     {
-        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        get => selectedClientId?.ToString() ?? string.Empty;
+        set
+        {
+            if (Guid.TryParse(value, out Guid clientId))
+            {
+                selectedClientId = clientId;
+                isPlaying = _player.GetCurrentPlaybackState(clientId) == PlaybackState.Playing;
+            }
+            else
+            {
+                selectedClientId = null;
+                isPlaying = false;
+            }
+        }
     }
 
-    private void HandlePlaybackStateChanged(PlaybackState state)
+    protected override async Task OnInitializedAsync()
     {
+        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        await RefreshClientsAsync();
+    }
+
+    private void HandlePlaybackStateChanged(Guid clientId, PlaybackState state)
+    {
+        if (selectedClientId != clientId)
+        {
+            return;
+        }
+
         isPlaying = state == PlaybackState.Playing;
         InvokeAsync(StateHasChanged);
     }
 
-    private async Task TogglePlay()
+    private async Task RefreshClientsAsync()
     {
-        await _player.TogglePlay();
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Failed to load clients: {result.Error}");
+            clients = [];
+            selectedClientId = null;
+            isPlaying = false;
+            return;
+        }
+
+        clients = result.Data
+            .Where(x => x.IsCurrentlyConnected)
+            .OrderBy(x => x.Name)
+            .ToList();
+
+        if (!clients.Any())
+        {
+            selectedClientId = null;
+            isPlaying = false;
+            return;
+        }
+
+        if (selectedClientId == null || !clients.Any(x => x.Id == selectedClientId))
+        {
+            selectedClientId = clients.First().Id;
+        }
+
+        isPlaying = _player.GetCurrentPlaybackState(selectedClientId.Value) == PlaybackState.Playing;
     }
 
-    private async Task Play()
+    private async Task TogglePlay()
     {
-        await _player.Play();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.TogglePlay(selectedClientId.Value);
     }
 
     private async Task RestartSong()
     {
-        await _player.Restart();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Restart(selectedClientId.Value);
     }
 
     private async Task PreviousSong()
     {
-        await _player.Previous();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Previous(selectedClientId.Value);
     }
 
     private async Task NextSong()
     {
-        await _player.Next();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Next(selectedClientId.Value);
     }
 
     private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)

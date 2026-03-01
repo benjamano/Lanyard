@@ -125,17 +125,29 @@ public class SignalRControlHub(
     public async Task PlaybackStateChanged(PlaybackState state)
     {
         _logger.LogInformation("Client {ConnectionId} reported playback state: {State}", Context.ConnectionId, state);
-        
-        _playerService.UpdatePlaybackState(state);
-        
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("PlaybackStateChanged", state);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        _playerService.UpdatePlaybackState(getClientResult.Data, state);
     }
 
     public async Task CurrentPlayingSongChanged(Guid song)
     {
         _logger.LogInformation("Client {ConnectionId} reported new song: {Song}", Context.ConnectionId, song);
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("CurrentPlayingSongChanged", song);
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        _playerService.UpdateCurrentSong(getClientResult.Data, song);
     }
 
     public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)

@@ -12,6 +12,8 @@
 
 @using Lanyard.App.Components.Music;
 
+@implements IDisposable
+
 <FluentStack Width="auto" class="ps-1 h-100" Orientation="Orientation.Vertical">
     @if (playlists == null)
     {
@@ -103,6 +105,7 @@
 
 @code {
     [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
+    [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? selectedPlaylistId;
     private Guid? currentlyPlayingPlaylistId;
@@ -120,6 +123,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _player.OnSongChanged += HandleSongChanged;
+        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
+
         Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistsAsync();
 
         if (result.IsSuccess)
@@ -135,6 +141,11 @@
         }
 
         UpdateCurrentPlaylist();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateCurrentPlaylist(triggerRender: false);
     }
 
     private string GetPlaylistCardStyle(Guid playlistId)
@@ -180,7 +191,9 @@
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
         }
 
-        if (currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing)
+        if (SelectedClientId != null &&
+            currentlyPlayingPlaylistId == null &&
+            _player.GetCurrentPlaybackState(SelectedClientId.Value) == PlaybackState.Playing)
         {
             styles.Add("border: 2px solid var(--accent-fill-rest)");
         }
@@ -307,9 +320,49 @@
         StateHasChanged();
     }
 
-    private void UpdateCurrentPlaylist()
+    private void UpdateCurrentPlaylist(bool triggerRender = true)
     {
-        currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
-        StateHasChanged();
+        if (SelectedClientId == null)
+        {
+            currentlyPlayingPlaylistId = null;
+            if (triggerRender)
+            {
+                StateHasChanged();
+            }
+            return;
+        }
+
+        currentlyPlayingPlaylistId = _player.GetCurrentPlaylist(SelectedClientId.Value)?.Id;
+
+        if (triggerRender)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSongChanged(Guid clientId, Guid? songId)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
+        UpdateCurrentPlaylist();
+    }
+
+    private void HandlePlaybackStatusChanged(Guid clientId, PlaybackState state)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandleSongChanged;
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStatusChanged;
     }
 }

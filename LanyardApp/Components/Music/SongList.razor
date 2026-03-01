@@ -27,7 +27,7 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" 
                                            Color="Color.Accent" 
                                            Style="cursor: pointer;"
-                                            @onclick="() => _player.Play(context.Song!, context.Playlist!)" />
+                                            @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
                             }
 
                             <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
@@ -45,7 +45,7 @@
 
                     <TemplateColumn Title="Title">
                         <div style="cursor: pointer; display: flex; align-items: center;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
                                          Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
                                 @context.Song!.Name
@@ -55,21 +55,21 @@
 
                     <TemplateColumn Title="Album">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@context.Song!.AlbumName</FluentLabel>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Date Added">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Length" Align="Align.Start">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")</FluentLabel>
                         </div>
                     </TemplateColumn>
@@ -101,6 +101,7 @@
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
+    [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? CurrentlyPlayingSongId;
 
@@ -109,8 +110,24 @@
         _player.OnSongChanged += UpdateCurrentSong;
     }
 
-    private void UpdateCurrentSong(Guid? songid)
+    protected override void OnParametersSet()
     {
+        if (SelectedClientId == null)
+        {
+            CurrentlyPlayingSongId = null;
+            return;
+        }
+
+        CurrentlyPlayingSongId = _player.GetCurrentSong(SelectedClientId.Value)?.Id;
+    }
+
+    private void UpdateCurrentSong(Guid clientId, Guid? songid)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
         CurrentlyPlayingSongId = songid;
         InvokeAsync(StateHasChanged);
     }
@@ -118,6 +135,17 @@
     private bool IsCurrentlyPlaying(Song song)
     {
         return CurrentlyPlayingSongId.HasValue && CurrentlyPlayingSongId.Value == song.Id;
+    }
+
+    private async Task PlaySong(Song song, Playlist? playlist)
+    {
+        if (SelectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Play(SelectedClientId.Value, song, playlist);
     }
 
     private async Task OpenAddSongToPlaylistDialog(Song song)
