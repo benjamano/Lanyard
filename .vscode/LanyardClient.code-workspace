@@ -3,6 +3,10 @@
     {
       "name": "LanyardClient",
       "path": ".."
+    },
+    {
+      "name": "OriginalTesting",
+      "path": "../../../../Documents/PlatformIO/Projects/OriginalTesting"
     }
   ],
   "settings": {
