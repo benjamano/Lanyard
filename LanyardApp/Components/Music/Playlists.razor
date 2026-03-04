@@ -8,12 +8,13 @@
 @inject IPlaylistService _playlistService;
 @inject IMusicService _musicService;
 @inject MusicPlayerService _player
-@inject IDialogService DialogService
-@inject IToastService ToastService
+@inject IToastService _toastService;
 
 @using Lanyard.App.Components.Music;
 
-<FluentStack Width="auto" class="ps-1 h-100" Orientation="Orientation.Vertical">
+@implements IDisposable
+
+<FluentStack Width="auto" class="ps-1 h-100 playlists-root" Orientation="Orientation.Vertical">
     @if (playlists == null)
     {
         <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
@@ -23,7 +24,7 @@
     }
     else
     {
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 280px)); gap: 16px;">
+        <div class="playlists-grid">
             @foreach (Playlist playlist in playlists)
             {
                 <FluentCard class="playlist-card p-2" Style="@GetPlaylistCardStyle(playlist.Id)"
@@ -102,8 +103,23 @@
     }
 </FluentStack>
 
+<style>
+    .playlists-root {
+        min-height: 100%;
+        width: 100%;
+    }
+
+    .playlists-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+        gap: 16px;
+        align-content: start;
+    }
+</style>
+
 @code {
     [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
+    [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? selectedPlaylistId;
     private Guid? currentlyPlayingPlaylistId;
@@ -121,6 +137,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _player.OnSongChanged += HandleSongChanged;
+        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
+
         Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistsAsync();
 
         if (result.IsSuccess)
@@ -131,11 +150,16 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlists: " + result.Error);
+            _toastService.ShowError("Failed to load playlists: " + result.Error);
             playlists = new List<Playlist>();
         }
 
         UpdateCurrentPlaylist();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateCurrentPlaylist(triggerRender: false);
     }
 
     private string GetPlaylistCardStyle(Guid playlistId)
@@ -181,7 +205,9 @@
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
         }
 
-        if (currentlyPlayingPlaylistId == null && _player.CurrentPlaybackState == PlaybackState.Playing)
+        if (SelectedClientId != null &&
+            currentlyPlayingPlaylistId == null &&
+            _player.GetCurrentPlaybackState(SelectedClientId.Value) == PlaybackState.Playing)
         {
             styles.Add("border: 2px solid var(--accent-fill-rest)");
         }
@@ -227,7 +253,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
+            _toastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
         }
 
         await OnSongsSelected.InvokeAsync(songs);
@@ -248,7 +274,7 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load songs: " + result.Error);
+            _toastService.ShowError("Failed to load songs: " + result.Error);
             return;
         }
 
@@ -271,7 +297,7 @@
         DialogParameters parameters = new DialogParameters()
         {
             Title = "Create New Playlist",
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleSavePlaylist),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleSavePlaylist),
             PrimaryAction = "Create",
             PrimaryActionEnabled = false,
             SecondaryAction = "Cancel",
@@ -281,7 +307,7 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
+        await _dialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
     }
 
     private async Task HandleSavePlaylist(DialogResult result)
@@ -301,16 +327,56 @@
         }
         else
         {
-            ToastService.ShowError("Failed to load playlists: " + playlistResult.Error);
+            _toastService.ShowError("Failed to load playlists: " + playlistResult.Error);
             playlists = new List<Playlist>();
         }
 
         StateHasChanged();
     }
 
-    private void UpdateCurrentPlaylist()
+    private void UpdateCurrentPlaylist(bool triggerRender = true)
     {
-        currentlyPlayingPlaylistId = _player.CurrentPlaylist?.Id;
-        StateHasChanged();
+        if (SelectedClientId == null)
+        {
+            currentlyPlayingPlaylistId = null;
+            if (triggerRender)
+            {
+                StateHasChanged();
+            }
+            return;
+        }
+
+        currentlyPlayingPlaylistId = _player.GetCurrentPlaylist(SelectedClientId.Value)?.Id;
+
+        if (triggerRender)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSongChanged(Guid clientId, Guid? songId)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
+        UpdateCurrentPlaylist();
+    }
+
+    private void HandlePlaybackStatusChanged(Guid clientId, PlaybackState state)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandleSongChanged;
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStatusChanged;
     }
 }

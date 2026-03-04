@@ -19,5 +19,8 @@ public interface IClientService
     Task<Result<Guid>> GetClientIdFromConnectionIdAsync(string connectionId);
     Task<Result<bool>> SetClientAvailableScreensAsync(Guid ClientId, IEnumerable<ClientAvailableScreenDTO> screens);
     Task<Result<IEnumerable<ClientAvailableScreen>>> GetClientAvailableScreensAsync(Guid clientId);
-    Task<Result<bool>> AddClientProjectionAsync(ClientProjectionSettings clientProjectionSettings);
+    Task<Result<Guid>> AddClientProjectionAsync(ClientProjectionSettings clientProjectionSettings);
+    Task<Result<bool>> DeleteClientProjectionSettingsAsync(Guid clientProjectionSettingsId);
+    Result<IEnumerable<ClientProjectionSettingsDTO>> ConvertIntoClientProjectionSettingsDTO(IEnumerable<ClientProjectionSettings> settings);
+    Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId);
 }

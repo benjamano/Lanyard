@@ -102,7 +102,7 @@
                 PhoneNumber = model.PhoneNumber
             };
 
-            Result<UserProfile> result = await _sApi.CreateUserAsync(newUser);
+            Result<UserProfile> result = await _securityService.CreateUserAsync(newUser);
 
             if (result.IsSuccess)
             {

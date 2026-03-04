@@ -5,103 +5,318 @@
 @using Lanyard.App.Components.Music
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.Models
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
 @using NAudio.Wave;
 
 @inject MusicPlayerService _player
+@inject IClientService _clientService
+@inject IToastService _toastService
+@inject IJSRuntime JS
 
 @implements IDisposable
 
 <PageTitle>Music</PageTitle>
 
-<div style="height: calc(100vh - 120px); overflow-y: auto;">
-    <FluentStack Orientation="Orientation.Horizontal" Style="height: 100%;">
-        <Playlists OnSongsSelected="HandleSongsSelected"></Playlists>
+<div class="music-page">
+    <div class="music-content p-2">
+        <div class="music-panes">
+            <div class="music-pane music-playlists-pane">
+                <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"></Playlists>
+            </div>
 
-        <FluentStack Orientation="Orientation.Vertical" Style="width: 100%; padding-left: 0.5rem;">
-            <SongList Songs="currentSongs"></SongList>
+            <div class="w-100">
+                <SongList Songs="currentSongs" SelectedClientId="selectedClientId"></SongList>
+            </div>
+        </div>
+    </div>
+
+    <div class="music-bottom-controls">
+        <FluentStack Orientation="Orientation.Horizontal"
+                     HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                     VerticalAlignment="VerticalAlignment.Center"
+                     HorizontalGap="12"
+                     Class="music-bottom-controls-stack">
+            <div style="position: relative; left: 50%; transform: translateX(-50%);">
+                <FluentStack Orientation="Orientation.Horizontal"
+                            VerticalAlignment="VerticalAlignment.Center"
+                            HorizontalGap="8"
+                            Width="auto"
+                            Class="">
+                    <FluentButton Appearance="Appearance.Outline"
+                                IconOnly="true"
+                                Title="Previous (Double-click) / Restart (Single-click)"
+                                OnClick="RestartSong"
+                                @ondblclick="PreviousSong"
+                                Disabled="@(selectedClientId == null)"
+                                Style="border-radius: 50%; width: 40px; height: 40px;">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+                    </FluentButton>
+
+                    <FluentButton Appearance="Appearance.Accent"
+                                IconOnly="true"
+                                Title="@(isPlaying ? "Pause" : "Play")"
+                                OnClick="TogglePlay"
+                                Disabled="@(selectedClientId == null)"
+                                Style="border-radius: 50%; width: 40px; height: 40px;">
+                        @if (isPlaying)
+                        {
+                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+                        }
+                        else
+                        {
+                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+                        }
+                    </FluentButton>
+
+                    <FluentButton Appearance="Appearance.Outline"
+                                IconOnly="true"
+                                Title="Next"
+                                OnClick="NextSong"
+                                Disabled="@(selectedClientId == null)"
+                                Style="border-radius: 50%; width: 40px; height: 40px;">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+                    </FluentButton>
+                </FluentStack>
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal"
+                         VerticalAlignment="VerticalAlignment.Center"
+                         HorizontalGap="8"
+                         Class="music-client-controls"
+                         Width="auto">
+                <FluentSelect @bind-Value="selectedClientIdString"
+                              TOption="string"
+                              Class="music-client-select"
+                              Disabled="@(!(clients.Count > 1))">
+                    @if (!clients.Any())
+                    {
+                        <FluentOption Value="">No connected clients</FluentOption>
+                    }
+                    else
+                    {
+                        @foreach (ClientConnectedWithCapabilitiesDTO client in clients)
+                        {
+                            <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
+                        }
+                    }
+                </FluentSelect>
+
+                <FluentButton Appearance="Appearance.Outline" OnClick="RefreshClientsAsync">
+                    Refresh
+                </FluentButton>
+            </FluentStack>
         </FluentStack>
-    </FluentStack>
+    </div>
 </div>
 
-<FluentStack Orientation="Orientation.Horizontal"
-             HorizontalAlignment="HorizontalAlignment.Center"
-             VerticalAlignment="VerticalAlignment.Center"
-             Style="position: fixed; bottom: 0; left: 0; right: 0; width: 100%; padding: 1rem; background-color: var(--neutral-layer-1); border-top: 1px solid var(--neutral-stroke-divider-rest); z-index: 1000; box-shadow: 0 -2px 8px rgba(0,0,0,0.1);">
-    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
-        <FluentButton Appearance="Appearance.Outline"
-                      IconOnly="true"
-                      Title="Previous (Double-click) / Restart (Single-click)"
-                      OnClick="RestartSong"
-                      @ondblclick="PreviousSong"
-                      Style="border-radius: 50%; width: 40px; height: 40px;">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
-        </FluentButton>
+@code {
+    private const string StorageSelectedClientKey = "staff.music.selectedClientId";
 
-        <FluentButton Appearance="Appearance.Accent"
-                      IconOnly="true"
-                      Title="@(isPlaying ? "Pause" : "Play")"
-                      OnClick="TogglePlay"
-                      Style="border-radius: 50%; width: 40px; height: 40px;">
-            @if (isPlaying)
+    private IEnumerable<PlaylistSongMember>? currentSongs;
+    private bool isPlaying = false;
+    private List<ClientConnectedWithCapabilitiesDTO> clients = [];
+    private Guid? selectedClientId;
+    private bool firstRenderCompleted;
+
+    private string selectedClientIdString
+    {
+        get => selectedClientId?.ToString() ?? string.Empty;
+        set
+        {
+            if (Guid.TryParse(value, out Guid clientId))
             {
-                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+                SetSelectedClient(clientId);
+                _ = PersistSelectedClientIdAsync(clientId);
             }
             else
             {
-                <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+                SetSelectedClient(null);
+                _ = ClearPersistedSelectedClientIdAsync();
             }
-        </FluentButton>
-
-        <FluentButton Appearance="Appearance.Outline"
-                      IconOnly="true"
-                      Title="Next"
-                      OnClick="NextSong"
-                      Style="border-radius: 50%; width: 40px; height: 40px;">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
-        </FluentButton>
-    </FluentStack>
-</FluentStack>
-
-@code {
-    private IEnumerable<PlaylistSongMember>? currentSongs;
-    private bool isPlaying = false;
-
-    protected override void OnInitialized()
-    {
-        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        }
     }
 
-    private void HandlePlaybackStateChanged(PlaybackState state)
+    protected override async Task OnInitializedAsync()
     {
+        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        await LoadConnectedClientsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || firstRenderCompleted)
+        {
+            return;
+        }
+
+        firstRenderCompleted = true;
+
+        Guid? restoredClientId = await GetPersistedSelectedClientIdAsync();
+
+        if (restoredClientId.HasValue && clients.Any(x => x.Id == restoredClientId.Value))
+        {
+            SetSelectedClient(restoredClientId.Value);
+        }
+        else if (selectedClientId == null && clients.Any())
+        {
+            SetSelectedClient(clients[0].Id);
+            await PersistSelectedClientIdAsync(clients[0].Id);
+        }
+        else if (!clients.Any())
+        {
+            await ClearPersistedSelectedClientIdAsync();
+        }
+    }
+
+    private void HandlePlaybackStateChanged(Guid clientId, PlaybackState state)
+    {
+        if (selectedClientId != clientId)
+        {
+            return;
+        }
+
         isPlaying = state == PlaybackState.Playing;
         InvokeAsync(StateHasChanged);
     }
 
-    private async Task TogglePlay()
+    private async Task RefreshClientsAsync()
     {
-        await _player.TogglePlay();
+        Guid? previousSelectedClientId = selectedClientId;
+
+        await LoadConnectedClientsAsync();
+
+        if (!clients.Any())
+        {
+            SetSelectedClient(null);
+            await ClearPersistedSelectedClientIdAsync();
+            return;
+        }
+
+        if (previousSelectedClientId.HasValue && !clients.Any(x => x.Id == previousSelectedClientId.Value))
+        {
+            SetSelectedClient(null);
+            _toastService.ShowWarning("Selected client disconnected. Please select another client.");
+            await ClearPersistedSelectedClientIdAsync();
+            return;
+        }
+
+        if (selectedClientId == null || !clients.Any(x => x.Id == selectedClientId.Value))
+        {
+            Guid? restoredClientId = await GetPersistedSelectedClientIdAsync();
+            Guid selectedId = restoredClientId.HasValue && clients.Any(x => x.Id == restoredClientId.Value)
+                ? restoredClientId.Value
+                : clients[0].Id;
+
+            SetSelectedClient(selectedId);
+            await PersistSelectedClientIdAsync(selectedId);
+        }
     }
 
-    private async Task Play()
+    private async Task LoadConnectedClientsAsync()
     {
-        await _player.Play();
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Failed to load clients: {result.Error}");
+            clients = [];
+            SetSelectedClient(null);
+            return;
+        }
+
+        clients = result.Data
+            .Where(x => x.IsCurrentlyConnected)
+            .OrderBy(x => x.Name)
+            .ToList();
+    }
+
+    private void SetSelectedClient(Guid? clientId)
+    {
+        selectedClientId = clientId;
+        isPlaying = clientId.HasValue && _player.GetCurrentPlaybackState(clientId.Value) == PlaybackState.Playing;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<Guid?> GetPersistedSelectedClientIdAsync()
+    {
+        try
+        {
+            string? value = await JS.InvokeAsync<string?>("localStorage.getItem", StorageSelectedClientKey);
+            return Guid.TryParse(value, out Guid clientId) ? clientId : null;
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    private async Task PersistSelectedClientIdAsync(Guid clientId)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", StorageSelectedClientKey, clientId.ToString());
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task ClearPersistedSelectedClientIdAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", StorageSelectedClientKey);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private async Task TogglePlay()
+    {
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.TogglePlay(selectedClientId.Value);
     }
 
     private async Task RestartSong()
     {
-        await _player.Restart();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Restart(selectedClientId.Value);
     }
 
     private async Task PreviousSong()
     {
-        await _player.Previous();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Previous(selectedClientId.Value);
     }
 
     private async Task NextSong()
     {
-        await _player.Next();
+        if (selectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Next(selectedClientId.Value);
     }
 
     private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)

@@ -12,12 +12,17 @@ using System.Collections.Concurrent;
 
 namespace Lanyard.Application.SignalR;
 
-public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerService playerService, IClientService clientService) : Hub
+public class SignalRControlHub(
+    ILogger<SignalRControlHub> logger,
+    MusicPlayerService playerService,
+    IClientService clientService,
+    ILaserGameStatusStore laserGameStatusStore) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
+    private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -87,6 +92,8 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
                 Context.Abort();
                 return;
             }
+
+            await SendProjectionProgramInfoToClientAsync(client.Id);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -104,6 +111,12 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
 
         _logger.LogInformation("Client {ConnectionId} disconnected from Music group", Context.ConnectionId);
 
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (getClientResult.IsSuccess)
+        {
+            _laserGameStatusStore.RemoveStatus(getClientResult.Data);
+        }
+
         _connections.TryRemove(Context.ConnectionId, out _);
 
         await base.OnDisconnectedAsync(exception);
@@ -112,22 +125,34 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
     public async Task PlaybackStateChanged(PlaybackState state)
     {
         _logger.LogInformation("Client {ConnectionId} reported playback state: {State}", Context.ConnectionId, state);
-        
-        _playerService.UpdatePlaybackState(state);
-        
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("PlaybackStateChanged", state);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        _playerService.UpdatePlaybackState(getClientResult.Data, state);
     }
 
     public async Task CurrentPlayingSongChanged(Guid song)
     {
         _logger.LogInformation("Client {ConnectionId} reported new song: {Song}", Context.ConnectionId, song);
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("CurrentPlayingSongChanged", song);
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        _playerService.UpdateCurrentSong(getClientResult.Data, song);
     }
 
     public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)
     {
-        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens);
+        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens.Select(x=> x.Name));
 
         Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getResult.IsSuccess)
@@ -139,6 +164,20 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
         Guid clientId = getResult.Data!;
 
         await _clientService.SetClientAvailableScreensAsync(clientId, screens);
+    }
+
+    public async Task UpdateLaserGameStatus(LaserGameStatusDTO status)
+    {
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID for laser status update from {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return;
+        }
+
+        Guid clientId = getResult.Data;
+
+        _laserGameStatusStore.UpdateStatus(clientId, status);
     }
 
     public async Task Load(Guid songId)
@@ -167,5 +206,60 @@ public class SignalRControlHub(ILogger<SignalRControlHub> logger, MusicPlayerSer
         _logger.LogInformation("Stop command received");
         
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
+    }
+
+    public async Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId)
+    {
+        try
+        {
+            Result<Client?> getResult = await _clientService.GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                _logger.LogError("Failed to get client {ClientId}: {Error}", clientId, getResult.Error);
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data!.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                _logger.LogWarning("Client {ClientId} has no recent connection ID", clientId);
+                return Result<bool>.Fail("Client has no recent connection ID.");
+            }
+
+            Result<IEnumerable<ClientProjectionSettings>> result = await _clientService.GetClientProjectionSettingsAsync(clientId);
+
+            if (!result.IsSuccess)
+            {
+                _logger.LogError("Failed to get projection settings for client {ConnectionId}: {Error}", Context.ConnectionId, result.Error);
+                return Result<bool>.Fail("Failed to get projection settings.");
+            }
+
+            Result<IEnumerable<ClientProjectionSettingsDTO>> result1 = _clientService.ConvertIntoClientProjectionSettingsDTO(result.Data!);
+
+            if (!result1.IsSuccess)
+            {
+                _logger.LogError("Failed to convert projection settings into DTO for client {ConnectionId}: {Error}", Context.ConnectionId, result.Error);
+                return Result<bool>.Fail("Failed to convert projection settings into DTO.");
+            }
+
+            if (result1.Data == null || !result1.Data.Any())
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            _logger.LogInformation("Sending projection program info to client {ConnectionId}", connectionId);
+
+            await Clients.Clients(connectionId).SendAsync("ReceiveProjectionPrograms", result1.Data);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while sending projection program info to client {clientId}", clientId);
+
+            return Result<bool>.Fail("An error occurred while sending projection program info to client.");
+        }
     }
 }

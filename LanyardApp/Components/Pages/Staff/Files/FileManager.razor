@@ -1,0 +1,55 @@
+@page "/staff/files"
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.App.Components.Files
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>File Manager</PageTitle>
+
+<FluentCard>
+    <FluentGrid class="h-100 w-100">
+        <FluentGridItem xs="1">
+            <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChanged" />
+        </FluentGridItem>
+        <FluentGridItem xs="11" class="w-100">
+            <AuthorizeView>
+                <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
+            </AuthorizeView>
+            <FileList @key="fileListKey" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+        </FluentGridItem>
+    </FluentGrid>
+</FluentCard>
+
+@code {
+    private Guid? selectedFolderId;
+
+    public EventCallback RefreshFileList;
+
+    private int fileListKey = 0;
+
+    private void OnFolderChanged(Guid? folderId)
+    {
+        selectedFolderId = folderId;
+        StateHasChanged();
+    }
+
+    private void OnFileUploaded(FileMetadata file)
+    {
+        fileListKey++;
+        StateHasChanged();
+    }
+
+    private void OnFileDeleted(Guid fileId)
+    {
+        fileListKey++;
+        StateHasChanged();
+    }
+
+    private void OnFileRenamed(FileMetadata file)
+    {
+        fileListKey++;
+        StateHasChanged();
+    }
+}

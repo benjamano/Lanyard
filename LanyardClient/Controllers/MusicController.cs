@@ -5,10 +5,6 @@ using NAudio.Wave;
 
 namespace Lanyard.Client.Controllers;
 
-/// <summary>
-/// Handles SignalR communication between the server and the headless music player.
-/// Receives playback commands from the server and sends state updates back.
-/// </summary>
 public class MusicControlHandler
 {
     private readonly IMusicPlayer _musicPlayer;
@@ -26,10 +22,6 @@ public class MusicControlHandler
         _musicPlayer.PlayingSongChanged += OnPlayingSongChanged;
     }
 
-    /// <summary>
-    /// Registers this handler with a SignalR hub connection.
-    /// Sets up event handlers for server commands.
-    /// </summary>
     public void Register(HubConnection connection)
     {
         _connection = connection;

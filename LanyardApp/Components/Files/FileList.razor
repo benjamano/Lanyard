@@ -1,0 +1,46 @@
+@using Lanyard.Infrastructure.Models
+@inject HttpClient Http
+@inject IFileService _fileService
+@inject IToastService _toastService
+
+<FluentDataGrid Items="@(files?.AsQueryable())" AutoItemsPerPage="true" ItemSize="46" Virtualize="true">
+    <ChildContent>
+        <PropertyColumn Property="x => x.FileName" Title="Name" />
+        <PropertyColumn Property="x => x.FileSize" Title="Size" />
+        <PropertyColumn Property="x => x.ContentType" Title="Type" />
+        <PropertyColumn Property="x => x.UploadedAt" Title="Uploaded" />
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+        </TemplateColumn>
+    </ChildContent>
+    @* <LoadingContent>
+        Loading... <FluentProgressRing></FluentProgressRing>
+    </LoadingContent> *@
+</FluentDataGrid>
+
+@code {
+    [Parameter] public Guid? FolderId { get; set; }
+    [Parameter] public EventCallback<Guid> OnFileDeleted { get; set; }
+    [Parameter] public EventCallback<FileMetadata> OnFileRenamed { get; set; }
+
+    private List<FileMetadata>? files;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadFilesAsync();
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(FolderId, CancellationToken.None);
+
+        if (result?.Success == true && result.Data != null)
+        {
+            files = result.Data.ToList();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load files, {result?.Error}");
+        }
+    }
+}

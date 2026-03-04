@@ -37,4 +37,8 @@
     <ProjectReference Include="..\LanyardServices\Lanyard.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Components\Pages\Staff\Kiosk\" />
+  </ItemGroup>
+
 </Project>

@@ -22,3 +22,14 @@ public class PlayerHitDTO
     public int ShotGunId { get; set; }
 
 }
+
+public class LaserGameStatusDTO
+{
+    public Guid ClientId { get; set; }
+
+    public GameStatus Status { get; set; } = GameStatus.NotStarted;
+    public int TimeRemainingSeconds { get; set; }
+    public int PlayerCount { get; set; }
+
+    public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
+}

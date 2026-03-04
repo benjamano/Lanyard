@@ -1,0 +1,32 @@
+﻿@inject NavigationManager _httpContext;
+
+@if (Hidden)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical">
+            <code class="fs-4 text-decoration-underline">
+                DEBUG MODE
+            </code>
+            <code>
+                Page URL: <a href="@_httpContext.Uri">@_httpContext.Uri</a>
+            </code>
+            <code>
+                Steps Count: @StepsCount
+            </code>
+            <code>
+                Current Step: @CurrentStep?.Template!.Name
+            </code>
+        </FluentStack>
+    </FluentCard>
+}
+
+@code{
+    [Parameter]
+    public bool Hidden { get; set; }
+
+    [Parameter]
+    public int StepsCount { get; set; }
+
+    [Parameter]
+    public ProjectionProgramStep? CurrentStep { get; set; }
+}

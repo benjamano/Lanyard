@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 
 namespace Lanyard.Application.Services.Authentication;
 
-public class SecurityService
+public class SecurityService : ISecurityService
 {
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
@@ -25,19 +25,27 @@ public class SecurityService
         _userManager = userManager;
     }
 
-    public async Task<string?> GetCurrentUserIdAsync()
+    public async Task<Result<string>> GetCurrentUserIdAsync()
     {
         AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
         ClaimsPrincipal user = authState.User;
 
-        if (user?.Identity?.IsAuthenticated == true)
+        if (user is null || user.Identity == null)
         {
-            return user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value
-                ?? user.FindFirst("sub")?.Value;
+            return Result<string>.Fail("User information is not available");
         }
 
-        return null;
+        if (user.Identity?.IsAuthenticated == false)
+        {
+            return Result<string>.Fail("User is not authenticated");
+        }
+
+        if (user.FindFirst(ClaimTypes.NameIdentifier) is null && user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier") is null && user.FindFirst("sub") is null)
+        {
+            return Result<string>.Fail("User ID claim not found");
+        }
+
+        return Result<string>.Ok((user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value ?? user.FindFirst("sub")?.Value)!);
     }
 
     public async Task<bool> IsUserLoggedIn()
@@ -46,26 +54,35 @@ public class SecurityService
         return authState.User?.Identity?.IsAuthenticated == true;
     }
 
-    public async Task<UserProfile?> GetCurrentUserProfileAsync()
+    public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
-        string? userId = await GetCurrentUserIdAsync();
+        Result<string> getResult = await GetCurrentUserIdAsync();
 
-        if (userId is not null)
+        if (!getResult.IsSuccess || getResult.Data == null)
         {
-            return await _userManager.FindByIdAsync(userId);
+            return Result<UserProfile>.Fail("User ID is not available");
         }
 
-        return null;
+        UserProfile? user = await _userManager.FindByIdAsync(getResult.Data);
+
+        if (user is null)
+        {
+            return Result<UserProfile>.Fail("User not found");
+        }
+
+        return Result<UserProfile>.Ok(user);
     }
 
     public async Task<string?> GetCurrentUserName()
     {
-        UserProfile? user = await GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await GetCurrentUserProfileAsync();
 
-        if (user is null)
+        if (!getResult.IsSuccess || getResult.Data is null)
         {
             return null;
         }
+
+        UserProfile user = getResult.Data;
 
         if (!string.IsNullOrEmpty(user.FirstName) && !string.IsNullOrEmpty(user.LastName))
         {

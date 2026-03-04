@@ -15,18 +15,25 @@
     <link rel="icon" type="image/png" href="favicon.png" />
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.js"]"></script>
     <script src="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js" type="module" async></script>
+    <script src="@Assets["app.js"]"></script>
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
     <script src="_content/Microsoft.FluentUI.AspNetCore.Components/js/loading-theme.js" type="text/javascript"></script>
-    <loading-theme storage-name="theme"></loading-theme>
 
     <Routes @rendermode="PageRenderMode" />
     @* <ReconnectModal /> *@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     @* <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script> *@
     <script src="https://kit.fontawesome.com/9d35a24d36.js" crossorigin="anonymous"></script>
+    <script src="/_framework/aspnetcore-browser-refresh.js"></script>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
 </body>
 
 </html>

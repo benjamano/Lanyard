@@ -29,8 +29,16 @@ public class ClientProjectionSettings
     public Guid ProjectionProgramId { get; set; }
     public ProjectionProgram? ProjectionProgram { get; set; }
 
+    //UNUSED
     public bool IsFullScreen { get; set; } = true;
+    //UNUSED
     public bool IsBorderless { get; set; } = true;
+
+    public bool IsDarkTheme { get; set; }
+    public bool ShowDebugMode { get; set; }
+
+    public int RepeatNumberOfTimes { get; set; } = 0;
+    public bool RepeatInfinitely { get; set; } = true;
 
     public int? Width { get; set; }
     public int? Height { get; set; }

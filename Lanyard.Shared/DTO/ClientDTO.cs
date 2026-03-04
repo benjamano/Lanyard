@@ -23,3 +23,16 @@ public class ClientAvailableAudioDeviceDTO
     public required string Id { get; set; }
     public required string Name { get; set; }
 }
+
+public class ClientProjectionSettingsDTO
+{
+    public int DisplayIndex { get; set; } = 0;
+
+    public required ProjectionProgramDTO ProjectionProgram { get; set; }
+
+    public bool IsFullScreen { get; set; } = true;
+    public bool IsBorderless { get; set; } = true;
+
+    public int Width { get; set; }
+    public int Height { get; set; }
+}

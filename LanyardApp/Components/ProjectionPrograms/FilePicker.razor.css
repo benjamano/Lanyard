@@ -1,0 +1,38 @@
+.file-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.file-picker-dialog-body {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.file-picker-dialog-body .fluent-grid {
+    min-height: 360px;
+    min-width: 0;
+}
+
+.file-picker-dialog-body .fluent-grid-item {
+    min-width: 0;
+}
+
+.file-picker-dialog-body fluent-card {
+    display: block;
+    height: 100%;
+    max-height: 360px;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.file-picker-current-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

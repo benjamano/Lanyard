@@ -2,43 +2,49 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
+using Lanyard.Client.SignalR;
+using System.Net.Http;
 using System.Windows.Forms;
 
-public class SignalRClient : ISignalRClient
+public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
 {
-    private readonly HubConnection _connection;
+    private HubConnection? _connection;
+    private readonly ILogger<ISignalRClient> _logger = logger;
 
-    public SignalRClient(string serverUrl, Guid clientId, IEnumerable<Action<HubConnection>> registrations)
-    {
-        _connection = new HubConnectionBuilder()
-            .WithUrl(serverUrl + $"?clientId={clientId}")
-            .WithAutomaticReconnect()
-            .Build();
+    private bool _isConnected = false;
 
-        foreach (Action<HubConnection> register in registrations)
-        {
-            register(_connection);
-        }
-    }
-
-    public async Task StartAsync()
+    public async Task Connect(string serverUrl, Guid clientId, List<Action<HubConnection>> registrations)
     {
         Console.WriteLine("Waiting 5 seconds to start the Signal R connection.");
 
         await Task.Delay(5000);
-
-        try
+        
+        while (_isConnected == false)
         {
-            await _connection.StartAsync();
-            Console.WriteLine("SignalR connected.");
+            try
+            {
+                _connection = new HubConnectionBuilder()
+                    .WithUrl(serverUrl + $"?clientId={clientId}")
+                    .WithAutomaticReconnect()
+                    .Build();
 
-            await SendAvailableScreensToServer();
+                foreach (Action<HubConnection> register in registrations)
+                {
+                    register(_connection);
+                }
 
-            await SendAvailableAudioDevicesToServer();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
+                await _connection!.StartAsync();
+
+                _isConnected = true;
+
+                await SendAvailableScreensToServer();
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError("Error initializing SignalR connection: {Message}", ex.Message);
+                _logger.LogInformation("Retrying in 5 seconds...");
+                Thread.Sleep(5000);
+            }
         }
     }
 
@@ -54,7 +60,7 @@ public class SignalRClient : ISignalRClient
                 Index = Array.IndexOf(Screen.AllScreens, x)
             });
 
-        await _connection.InvokeAsync("UpdateAvailableScreens", screens);
+        await _connection!.InvokeAsync("UpdateAvailableScreens", screens);
     }
 
     private async Task SendAvailableAudioDevicesToServer()
@@ -70,5 +76,15 @@ public class SignalRClient : ISignalRClient
             });
 
         await _connection.InvokeAsync("UpdateAvailableAudioDevices", devices);
+    }
+
+    public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
+    {
+        if (_connection == null || _connection.State != HubConnectionState.Connected)
+        {
+            return;
+        }
+
+        await _connection.InvokeAsync("UpdateLaserGameStatus", status);
     }
 }

@@ -1,6 +1,6 @@
 ﻿@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
-@using Lanyard.Application.Services.Clients
+@using Lanyard.Application.Services
 @implements IDialogContentComponent<Guid>
 
 @inject IToastService _toastService
@@ -36,18 +36,39 @@ else if (currentStepIndex == 1)
             <FluentEditForm Model="newClientProjectionSettings">
                 <FluentValidationSummary />
 
-                <FluentCheckbox @bind-Value="newClientProjectionSettings.IsFullScreen">
+              @*   <FluentCheckbox @bind-Value="newClientProjectionSettings.IsFullScreen">
                     Full Screen
                 </FluentCheckbox>
 
                 <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsBorderless">
                     Borderless
-                </FluentCheckbox>
+                </FluentCheckbox> *@
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.RepeatInfinitely">
+                        Repeat Infinitely
+                    </FluentCheckbox>
+                    <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.IsDarkTheme">
+                        Dark Mode Theme
+                    </FluentCheckbox>
+                    <AuthorizeView Roles="Admin" Context="_context">
+                        <Authorized>
+                            <FluentCheckbox Class="mb-2" @bind-Value="newClientProjectionSettings.ShowDebugMode">
+                                Debug Mode
+                            </FluentCheckbox>
+                        </Authorized>
+                    </AuthorizeView>
+                </FluentStack>
 
+                <FluentNumberField @bind-Value="newClientProjectionSettings.RepeatNumberOfTimes" Label="Repeat Number of Times (0 for run once)" Appearance="FluentInputAppearance.Outline" Disabled="@newClientProjectionSettings.RepeatInfinitely" />
 
-                <FluentNumberField @bind-Value="selectedScreen!.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required/>
-
-                <FluentNumberField @bind-Value="selectedScreen!.Height" Label="Height" Appearance="FluentInputAppearance.Outline" Required/>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <div>
+                        <FluentNumberField @bind-Value="newClientProjectionSettings.Width" Label="Width" Appearance="FluentInputAppearance.Outline" Required />
+                    </div>
+                    <div>
+                        <FluentNumberField @bind-Value="newClientProjectionSettings.Height" Label="Height" Appearance="FluentInputAppearance.Outline" Required />
+                    </div>
+                </FluentStack>
             </FluentEditForm>
         </FluentStack>
     </FluentDialogBody>
@@ -57,7 +78,7 @@ else if (currentStepIndex == 2)
     <FluentDialogBody>
         <FluentStack Orientation="Orientation.Vertical">
             <FluentDataGrid class="w-100" ShowHover="true" Items="@projectionPrograms.AsQueryable()" GridTemplateColumns="auto 1fr">
-                <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedProjectionProgram(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+                <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedProjectionProgram(x.Item))" Property="@(x => x == newClientProjectionSettings.ProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
                 <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
             </FluentDataGrid>
 
@@ -103,10 +124,10 @@ else if (currentStepIndex == 3)
 
             <FluentCard MinimalStyle="true">
                 <FluentLabel Typo="Typography.H6">Projection Program</FluentLabel>
-                @if (selectedProjectionProgram is not null)
+                @if (newClientProjectionSettings.ProjectionProgram is not null)
                 {
-                    <FluentLabel>Name: @selectedProjectionProgram.Name</FluentLabel>
-                    <FluentLabel>Description: @selectedProjectionProgram.Description</FluentLabel>
+                    <FluentLabel>Name: @newClientProjectionSettings.ProjectionProgram.Name</FluentLabel>
+                    <FluentLabel>Description: @newClientProjectionSettings.ProjectionProgram.Description</FluentLabel>
                 }
                 else
                 {
@@ -139,7 +160,6 @@ else if (currentStepIndex == 3)
     private IEnumerable<ProjectionProgram> projectionPrograms = Array.Empty<ProjectionProgram>();
 
     private ClientAvailableScreen? selectedScreen;
-    private ProjectionProgram? selectedProjectionProgram;
 
     private int currentStepIndex = 0;
     private List<string> steps = new()
@@ -157,6 +177,8 @@ else if (currentStepIndex == 3)
 
     protected override async Task OnInitializedAsync()
     {
+        newClientProjectionSettings.ClientId = Content;
+
         Result<IEnumerable<ClientAvailableScreen>> result = await _clientService.GetClientAvailableScreensAsync(Content);
 
         if (result.IsSuccess)
@@ -190,6 +212,10 @@ else if (currentStepIndex == 3)
 
         if (selectedScreen != null)
         {
+            newClientProjectionSettings.Width = selectedScreen.Width;
+            newClientProjectionSettings.Height = selectedScreen.Height;
+            newClientProjectionSettings.DisplayIndex = selectedScreen.Index;
+
             nextButtonIsDisabled = false;
         }
         else
@@ -200,9 +226,10 @@ else if (currentStepIndex == 3)
 
     private async Task UpdateSelectedProjectionProgram(ProjectionProgram? projectionProgram)
     {
-        selectedProjectionProgram = projectionProgram;
+        newClientProjectionSettings.ProjectionProgram = projectionProgram;
+        newClientProjectionSettings.ProjectionProgramId = projectionProgram?.Id ?? Guid.Empty;
 
-        if (selectedProjectionProgram != null)
+        if (newClientProjectionSettings.ProjectionProgram != null)
         {
             nextButtonIsDisabled = false;
         }
@@ -256,7 +283,7 @@ else if (currentStepIndex == 3)
             case 1:
                 break;
             case 2:
-                if (selectedProjectionProgram == null)
+                if (newClientProjectionSettings.ProjectionProgram == null)
                 {
                     nextButtonIsDisabled = true;
                 }
@@ -291,7 +318,7 @@ else if (currentStepIndex == 3)
     {
         isCreating = true;
 
-        Result<bool> addResult = await _clientService.AddClientProjectionAsync(newClientProjectionSettings);
+        Result<Guid> addResult = await _clientService.AddClientProjectionAsync(newClientProjectionSettings);
 
         if (addResult.IsSuccess)
         {
@@ -302,6 +329,8 @@ else if (currentStepIndex == 3)
         else
         {
             _toastService.ShowError($"An error occured, {addResult.Error}");
+
+            isCreating = false;
         }
     }
 }

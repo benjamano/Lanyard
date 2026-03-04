@@ -1,5 +1,6 @@
 ﻿@using Lanyard.App.Components.Layout.Staff
 @using Lanyard.App.Components.Layout.Customer
+@using Lanyard.App.Components.Layout
 @using Microsoft.AspNetCore.Components.Routing
 
 <CascadingAuthenticationState>
@@ -32,17 +33,25 @@
         Type? pageType = routeData.PageType;
 
         if (pageType.Namespace?.Contains(".Staff") == true)
+        {
+            if (pageType.Name == "Kiosk")
+            {
+                return typeof(EmptyLayout);
+            }
+
             return typeof(MainLayout);
+        }
 
         return typeof(CustomerMainLayout);
     }
 
     private Type GetNotFoundPage()
     {
-        var uri = new Uri(NavigationManager.Uri);
+        Uri uri = new Uri(NavigationManager.Uri);
         
-        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase))
+        if (uri.AbsolutePath.StartsWith("/staff", StringComparison.OrdinalIgnoreCase)){
             return typeof(StaffNotFound);
+        }
         
         return typeof(CustomerNotFound);
     }

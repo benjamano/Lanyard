@@ -38,27 +38,27 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await _securityService.GetCurrentUserProfileAsync();
 
-        if (user is not null)
+        if (getResult.IsSuccess && getResult.Data is not null)
         {
-            model.Email = user.Email;
-            model.PhoneNumber = user.PhoneNumber;
-            model.DateOfBirth = user.DateOfBirth;
+            model.Email = getResult.Data.Email;
+            model.PhoneNumber = getResult.Data.PhoneNumber;
+            model.DateOfBirth = getResult.Data.DateOfBirth;
         }
     }
 
     public async Task HandleSave()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await _securityService.GetCurrentUserProfileAsync();
 
-        if (user is not null)
+        if (getResult.IsSuccess && getResult.Data is not null)
         {
-            user.Email = model.Email;
-            user.PhoneNumber = model.PhoneNumber;
-            user.DateOfBirth = model.DateOfBirth;
+            getResult.Data.Email = model.Email;
+            getResult.Data.PhoneNumber = model.PhoneNumber;
+            getResult.Data.DateOfBirth = model.DateOfBirth;
 
-            await _sApi.UpdateUserProfileAsync(user);
+            await _securityService.UpdateUserProfileAsync(getResult.Data);
 
             ToastService.ShowSuccess("Details Saved!");
         }

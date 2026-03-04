@@ -1,0 +1,73 @@
+{
+	"folders": [
+		{
+			"name": "LanyardApp",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/bin": true,
+			"**/obj": true,
+			"TestResults": true,
+			"docs": true,
+			".vs": true,
+			".gitignore": true,
+			".gitattributes": true,
+			"README.md": true,
+			"LICENSE": true,
+			"*.slnLaunch": true,
+			".dockerignore": true,
+			"AGENTS.md": true,
+			"COPILOT_INSTRUCTIONS.md": true,
+			".github": true,
+			"*.VisualStudio.json": true,
+			"LanyardClient": true,
+			"*/artifacts": true,
+			"**/*.csproj.user": true,
+		},
+		"launch": {
+			"configurations": [
+				{
+					"name": "LanyardApp (Debug EXE HTTPS)",
+					"type": "coreclr",
+					"preLaunchTask": "build",
+					"request": "launch",
+					"program": "${workspaceFolder}/LanyardApp/bin/Debug/net10.0/Lanyard.App.exe",
+					"cwd": "${workspaceFolder}/LanyardApp",
+					"stopAtEntry": false,
+					"justMyCode": true,
+					"requireExactSource": false,
+					"env": {
+						"ASPNETCORE_URLS": "https://localhost:7175"
+					}
+				}
+			]
+		}
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "build",
+				"type": "process",
+				"command": "dotnet",
+				"args": [
+					"build",
+					"${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
+				],
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"problemMatcher": "$msCompile"
+			}
+		]
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-dotnettools.csharp",
+			"ms-dotnettools.csdevkit",
+		]
+	}
+}

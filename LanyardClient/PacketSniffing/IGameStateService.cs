@@ -3,6 +3,7 @@ using Lanyard.Shared.Enum;
 
 public interface IGameStateService
 {
+    event Action? GameStateChanged;
     event Action? GameStarted;
     event Action? GameEnded;
 
@@ -20,6 +21,7 @@ public interface IGameStateService
     TimeSpan GetTimeRemaining();
 
     PlayerScoreDTO? GetPlayersScore(int gunId);
+    List<PlayerScoreDTO> GetAllPlayerScores();
     void UpdatePlayerScore(PlayerScoreDTO playerScore);
 
     void UpdateGameLength(TimeSpan gameLength);

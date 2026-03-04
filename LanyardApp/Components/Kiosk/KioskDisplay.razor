@@ -1,0 +1,106 @@
+@implements IDisposable
+@using Lanyard.App.Components.Kiosk.Templates
+
+@inject IToastService _toastService
+@inject ILogger<KioskDisplay> _logger
+
+@if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.ShowText)
+{
+    <KioskShowTextTemplate Step="CurrentProjectionStep" />
+}
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.PlayVideo)
+{
+    <KioskPlayVideoTemplate Step="CurrentProjectionStep" />
+}
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.Dashboard)
+{
+    <KioskDashboardTemplate Step="CurrentProjectionStep" />
+}
+
+@code {
+    [Parameter]
+    public ProjectionProgram projectionProgram { get; set; } = new() { Name = "" };
+
+    [Parameter]
+    public bool RepeatInfinitely { get; set; } = true;
+
+    [Parameter]
+    public int RepeatCount { get; set; } = 0;
+
+    public ProjectionProgramStep CurrentProjectionStep { get; set; } = new();
+
+    private CancellationTokenSource? _cts;
+    private Task? _processingTask;
+    private readonly HashSet<Guid> _loggedUnsupportedTemplateStepIds = [];
+
+    public void StartProcessing()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _processingTask = ProcessStepsAsync(_cts.Token);
+    }
+
+    private async Task ProcessStepsAsync(CancellationToken cancellationToken)
+    {
+        bool runLoop = true;
+        int runCount = 0;
+
+        while (runLoop && !cancellationToken.IsCancellationRequested)
+        {
+            foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (step.Template == null)
+                {
+                    _toastService.ShowError("A step without a template was found, skipping...");
+                    continue;
+                }
+
+                if (!string.Equals(step.Template.Name, KioskTemplateConstants.TemplateNames.Delay, StringComparison.Ordinal))
+                {
+                    CurrentProjectionStep = step;
+
+                    if (!IsSupportedTemplate(step.Template.Name) && _loggedUnsupportedTemplateStepIds.Add(step.Id))
+                    {
+                        _logger.LogWarning("Unsupported kiosk template '{TemplateName}' for step {StepId}. Rendering will be skipped.", step.Template.Name, step.Id);
+                    }
+
+                    StateHasChanged();
+                }
+
+                try
+                {
+                    await Task.Delay(step.HoldForMilliseconds == 0 ? 5000 : step.HoldForMilliseconds, cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+            }
+
+            if (!RepeatInfinitely && runCount == RepeatCount)
+            {
+                runLoop = false;
+            }
+
+            runCount++;
+        }
+    }
+
+    private static bool IsSupportedTemplate(string templateName)
+    {
+        return string.Equals(templateName, KioskTemplateConstants.TemplateNames.ShowText, StringComparison.Ordinal)
+            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.PlayVideo, StringComparison.Ordinal)
+            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.Dashboard, StringComparison.Ordinal);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

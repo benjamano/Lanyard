@@ -1,0 +1,103 @@
+@implements IDisposable
+@using System.Globalization
+
+<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Stretch" VerticalAlignment="VerticalAlignment.Stretch" Class="clock-widget-stack">
+        <div class="clock-widget-header">
+            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)</FluentLabel>
+        </div>
+
+        <div class="clock-visual">
+            @if (IsAnalogClock())
+            {
+                <div class="clock-analog-face">
+                    <div class="clock-hand clock-hour-hand" style="@GetClockHandStyle(GetHourHandDegrees(_nowLocal))"></div>
+                    <div class="clock-hand clock-minute-hand" style="@GetClockHandStyle(GetMinuteHandDegrees(_nowLocal))"></div>
+                    <div class="clock-hand clock-second-hand" style="@GetClockHandStyle(GetSecondHandDegrees(_nowLocal))"></div>
+                    <div class="clock-center-dot"></div>
+                </div>
+            }
+            else
+            {
+                <div class="clock-digital">
+                    <FluentLabel Typo="Typography.H1" Class="clock-time">@_timeString</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Class="clock-date">@_dateString</FluentLabel>
+                </div>
+            }
+        </div>
+
+        <FluentButton Class="clock-mode-toggle mt-2 w-auto"
+                      Appearance="Appearance.Lightweight"
+                      OnClick="ToggleClockMode">
+            @(IsAnalogClock() ? "Switch to Digital" : "Switch to Analog")
+        </FluentButton>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+
+    private const string ClockModeAnalog = "analog";
+    private const string ClockModeDigital = "digital";
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+    private DateTime _nowLocal = DateTime.Now;
+    private string _timeString = DateTime.Now.ToString("HH:mm:ss");
+    private string _dateString = DateTime.Now.ToString("dddd, dd MMM yyyy");
+
+    protected override void OnInitialized()
+    {
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        _ = Task.Run(async () =>
+        {
+            while (_timer is not null && await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                _nowLocal = DateTime.Now;
+                _timeString = _nowLocal.ToString("HH:mm:ss");
+                _dateString = _nowLocal.ToString("dddd, dd MMM yyyy");
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }, _cts.Token);
+    }
+
+    private bool IsAnalogClock()
+    {
+        return string.Equals(Widget.ConfigJson?.Trim(), ClockModeAnalog, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleClockMode()
+    {
+        Widget.ConfigJson = IsAnalogClock() ? ClockModeDigital : ClockModeAnalog;
+    }
+
+    private static double GetHourHandDegrees(DateTime localTime)
+    {
+        return ((localTime.Hour % 12) + (localTime.Minute / 60d)) * 30d;
+    }
+
+    private static double GetMinuteHandDegrees(DateTime localTime)
+    {
+        return (localTime.Minute + (localTime.Second / 60d)) * 6d;
+    }
+
+    private static double GetSecondHandDegrees(DateTime localTime)
+    {
+        return localTime.Second * 6d;
+    }
+
+    private static string GetClockHandStyle(double degrees)
+    {
+        return $"transform: translate(-50%, 0) rotate({degrees.ToString("0.###", CultureInfo.InvariantCulture)}deg);";
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

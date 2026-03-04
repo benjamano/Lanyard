@@ -54,9 +54,8 @@ namespace Lanyard.Infrastructure.Models
         public Guid TemplateId { get; set; }
         public ProjectionProgramStepTemplate? Template { get; set; }
 
-        public string? Source { get; set; }
-
         public int SortOrder { get; set; }
+        public int HoldForMilliseconds { get; set; } = 10000;
 
         public bool IsActive { get; set; }
 

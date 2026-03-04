@@ -1,0 +1,11 @@
+<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Laser Stats" : Widget.Title)</FluentLabel>
+        <FluentLabel Typo="Typography.Body">Laser game stats placeholder</FluentLabel>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+}

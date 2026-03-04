@@ -1,0 +1,10 @@
+.laser-widget-stack {
+    height: 100%;
+    width: 100%;
+    padding: 16px;
+    gap: 8px;
+}
+
+.laser-client-name {
+    color: var(--neutral-foreground-hint);
+}

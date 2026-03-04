@@ -1,0 +1,17 @@
+﻿@inherits LayoutComponentBase
+
+<loading-theme storage-name="kiosk-theme"></loading-theme>
+
+<div class="page" style="display: flex; flex-direction: column; height: 100vh;">
+    <main style="flex: 1; overflow-y: auto;">
+        <article class="content position-relative h-100 p-0 px-2 py-2 m-0">
+            @Body
+        </article>
+    </main>
+</div>
+
+<FluentToastProvider />
+<FluentDialogProvider />
+<FluentTooltipProvider />
+<FluentMessageBarProvider />
+<FluentMenuProvider />

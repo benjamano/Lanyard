@@ -1,0 +1,305 @@
+@using Lanyard.Infrastructure.Models
+
+@inject IFileService FileService
+@inject IToastService ToastService
+
+<div class="file-picker">
+    <FluentTextField Value="@selectedFileDisplayName"
+                     Label="Selected File"
+                     Appearance="FluentInputAppearance.Outline"
+                     ReadOnly />
+
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+        <FluentButton Appearance="Appearance.Accent"
+                      IconStart="@(new Icons.Regular.Size20.FolderOpen())"
+                      OnClick="OpenPickerAsync">
+            Browse
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline"
+                      IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                      Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
+                      OnClick="ClearSelectionAsync">
+            Clear
+        </FluentButton>
+    </FluentStack>
+</div>
+
+<FluentDialog Hidden="@(!isPickerOpen)" OnDialogResult="ClosePicker">
+    <FluentDialogHeader ShowDismiss="true">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+            <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
+            <FluentLabel Typo="Typography.PaneHeader">Select File</FluentLabel>
+        </FluentStack>
+    </FluentDialogHeader>
+
+    <FluentDialogBody>
+        @if (isLoading)
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+                <FluentProgressRing />
+            </FluentStack>
+        }
+        else
+        {
+            <div class="file-picker-dialog-body">
+                <FluentStack Orientation="Orientation.Horizontal"
+                             VerticalAlignment="VerticalAlignment.Center"
+                             HorizontalGap="8"
+                             Class="mb-2">
+                    <FluentButton Appearance="Appearance.Outline"
+                                  Disabled="@(!currentFolderId.HasValue)"
+                                  OnClick="NavigateUpAsync">
+                        Up
+                    </FluentButton>
+                    <FluentLabel Class="file-picker-current-path">@GetCurrentPathText()</FluentLabel>
+                </FluentStack>
+
+                <FluentGrid Class="w-100">
+                    <FluentGridItem xs="4">
+                        <FluentCard MinimalStyle="true" AreaRestricted="false" Class="h-100">
+                            <FluentLabel>Folders</FluentLabel>
+                            <FluentDivider class="my-1" />
+
+                            @if (folders.Count == 0)
+                            {
+                                <FluentLabel>No folders</FluentLabel>
+                            }
+                            else
+                            {
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                                    @foreach (Folder folder in folders)
+                                    {
+                                        <FluentButton Appearance="Appearance.Stealth"
+                                                      OnClick="@(() => OpenFolderAsync(folder.Id))">
+                                            @folder.Name
+                                        </FluentButton>
+                                    }
+                                </FluentStack>
+                            }
+                        </FluentCard>
+                    </FluentGridItem>
+
+                    <FluentGridItem xs="8">
+                        <FluentCard MinimalStyle="true" AreaRestricted="false" Class="h-100">
+                            <FluentLabel>Files</FluentLabel>
+                            <FluentDivider class="my-1" />
+
+                            @if (files.Count == 0)
+                            {
+                                <FluentLabel>No files in this folder</FluentLabel>
+                            }
+                            else
+                            {
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                                    @foreach (FileMetadata file in files)
+                                    {
+                                        <FluentButton Appearance="Appearance.Stealth"
+                                                      OnClick="@(() => SelectFileAsync(file))">
+                                            @file.FileName
+                                        </FluentButton>
+                                    }
+                                </FluentStack>
+                            }
+                        </FluentCard>
+                    </FluentGridItem>
+                </FluentGrid>
+            </div>
+        }
+    </FluentDialogBody>
+
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" OnClick="ClosePicker">Close</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    [Parameter]
+    public string? SelectedFileId { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnFileSelected { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string>? AllowedExtensions { get; set; }
+
+    private readonly HashSet<string> allowedExtensions = [];
+    private readonly Dictionary<Guid, Folder> folderLookup = [];
+
+    private List<FileMetadata> files = [];
+    private List<Folder> folders = [];
+    private string? selectedFileId;
+    private string selectedFileDisplayName = "No file selected";
+    private bool isPickerOpen;
+    private bool isLoading;
+    private Guid? currentFolderId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        RefreshAllowedExtensions();
+
+        if (SelectedFileId == selectedFileId)
+        {
+            return;
+        }
+
+        selectedFileId = SelectedFileId;
+
+        if (!Guid.TryParse(selectedFileId, out Guid fileId))
+        {
+            selectedFileDisplayName = "No file selected";
+            return;
+        }
+
+        Result<FileMetadata> metadataResult = await FileService.GetFileMetadataAsync(fileId, CancellationToken.None);
+
+        if (metadataResult.Success && metadataResult.Data is not null)
+        {
+            selectedFileDisplayName = metadataResult.Data.FileName;
+            return;
+        }
+
+        selectedFileDisplayName = "Unknown file";
+    }
+
+    private async Task OpenPickerAsync()
+    {
+        isPickerOpen = true;
+        await LoadFolderContentsAsync(currentFolderId);
+    }
+
+    private void ClosePicker()
+    {
+        isPickerOpen = false;
+    }
+
+    private async Task LoadFolderContentsAsync(Guid? folderId)
+    {
+        isLoading = true;
+        currentFolderId = folderId;
+
+        Result<IReadOnlyList<Folder>> folderResult = await FileService.ListFoldersAsync(folderId, CancellationToken.None);
+        if (folderResult.Success && folderResult.Data is not null)
+        {
+            folders = folderResult.Data.OrderBy(x => x.Name).ToList();
+            foreach (Folder folder in folders)
+            {
+                folderLookup[folder.Id] = folder;
+            }
+        }
+        else
+        {
+            folders = [];
+            ToastService.ShowError($"Failed to load folders: {folderResult.Error}");
+        }
+
+        Result<IReadOnlyList<FileMetadata>> fileResult = await FileService.ListFilesAsync(folderId, CancellationToken.None);
+        if (fileResult.Success && fileResult.Data is not null)
+        {
+            files = fileResult.Data
+                .Where(IsAllowedFile)
+                .OrderBy(x => x.FileName)
+                .ToList();
+        }
+        else
+        {
+            files = [];
+            ToastService.ShowError($"Failed to load files: {fileResult.Error}");
+        }
+
+        isLoading = false;
+    }
+
+    private async Task OpenFolderAsync(Guid folderId)
+    {
+        await LoadFolderContentsAsync(folderId);
+    }
+
+    private async Task NavigateUpAsync()
+    {
+        if (!currentFolderId.HasValue)
+        {
+            return;
+        }
+
+        if (!folderLookup.TryGetValue(currentFolderId.Value, out Folder? currentFolder))
+        {
+            await LoadFolderContentsAsync(null);
+            return;
+        }
+
+        await LoadFolderContentsAsync(currentFolder.ParentFolderId);
+    }
+
+    private async Task SelectFileAsync(FileMetadata file)
+    {
+        selectedFileId = file.Id.ToString();
+        selectedFileDisplayName = file.FileName;
+        isPickerOpen = false;
+        await OnFileSelected.InvokeAsync(selectedFileId);
+    }
+
+    private async Task ClearSelectionAsync()
+    {
+        selectedFileId = null;
+        selectedFileDisplayName = "No file selected";
+        await OnFileSelected.InvokeAsync(null);
+    }
+
+    private string GetCurrentPathText()
+    {
+        if (!currentFolderId.HasValue)
+        {
+            return "Root";
+        }
+
+        if (!folderLookup.TryGetValue(currentFolderId.Value, out Folder? currentFolder))
+        {
+            return "Root";
+        }
+
+        List<string> segments = [currentFolder.Name];
+        Guid? parentId = currentFolder.ParentFolderId;
+
+        while (parentId.HasValue && folderLookup.TryGetValue(parentId.Value, out Folder? parentFolder))
+        {
+            segments.Add(parentFolder.Name);
+            parentId = parentFolder.ParentFolderId;
+        }
+
+        segments.Reverse();
+        return $"Root / {string.Join(" / ", segments)}";
+    }
+
+    private void RefreshAllowedExtensions()
+    {
+        allowedExtensions.Clear();
+
+        if (AllowedExtensions is null || AllowedExtensions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (string extension in AllowedExtensions.Where(x => !string.IsNullOrWhiteSpace(x)))
+        {
+            string normalized = extension.Trim().ToLowerInvariant();
+
+            if (!normalized.StartsWith('.'))
+            {
+                normalized = $".{normalized}";
+            }
+
+            allowedExtensions.Add(normalized);
+        }
+    }
+
+    private bool IsAllowedFile(FileMetadata file)
+    {
+        if (allowedExtensions.Count == 0)
+        {
+            return true;
+        }
+
+        string extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        return allowedExtensions.Contains(extension);
+    }
+}

@@ -1,0 +1,17 @@
+@if (Widget.Type == "Clock")
+{
+    <KioskClockWidget Widget="Widget" />
+}
+else if (Widget.Type == "MusicControls")
+{
+    <KioskMusicControlsPlaceholderWidget Widget="Widget" />
+}
+else if (Widget.Type == "LaserStats")
+{
+    <KioskLaserGameStatusWidget Widget="Widget" />
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+}

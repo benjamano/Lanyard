@@ -1,9 +1,9 @@
 ﻿@using System.Threading.Tasks
 @using Lanyard.Application.Services.ApplicationRoles
 @using Lanyard.Application.Services.Authentication
+
 @inject ApplicationRolesService _rApi
-@inject SecurityService _sApi
-@inject UserManager<UserProfile> _umApi
+@inject ISecurityService _securityService
 @inject IToastService ToastService
 
 <PageTitle>User Managment</PageTitle>
@@ -130,7 +130,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        userProfiles = await _sApi.GetAllUsersAsync();
+        userProfiles = await _securityService.GetAllUsersAsync();
         await LoadRoles();
     }
 
@@ -213,21 +213,15 @@
             return;
         }
 
-        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
 
-        if (result.Data == currentUserId)
+        if (getResult.Data == selectedUser)
         {
             ToastService.ShowWarning($"For these changes to propogate, please log out then back in again.");
-
-            // UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
-            // if (currentUser is not null)
-            // {
-            //     await _jwtTokenService.RegenerateTokenAsync(currentUser);
-            //     _authStateProvider.NotifyAuthenticationStateChanged();
-            // }
         }
 
         ToastService.ShowSuccess("Role Assigned - The role has been successfully assigned to the user.");
+
         await LoadUsersRoles();
     }
 
@@ -243,18 +237,11 @@
             return;
         }
 
-        string? currentUserId = await _sApi.GetCurrentUserIdAsync();
+        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
 
-        if (result.Data == currentUserId)
+        if (getResult.IsSuccess && result.Data == getResult.Data)
         {
             ToastService.ShowWarning($"For these changes to propogate, please log out then back in again.");
-
-            // UserProfile? currentUser = await _umApi.FindByIdAsync(currentUserId!);
-            // if (currentUser is not null)
-            // {
-            //     await _jwtTokenService.RegenerateTokenAsync(currentUser);
-            //     _authStateProvider.NotifyAuthenticationStateChanged();
-            // }
         }
 
         ToastService.ShowSuccess("Role Removed - The role has been successfully removed from the user.");

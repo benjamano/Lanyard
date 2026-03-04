@@ -1,0 +1,52 @@
+{
+  "folders": [
+    {
+      "name": "LanyardClient",
+      "path": ".."
+    },
+    {
+      "name": "OriginalTesting",
+      "path": "../../../../Documents/PlatformIO/Projects/OriginalTesting"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/bin": true,
+      "**/obj": true,
+      "TestResults": true,
+      "docs": true,
+      ".vs": true,
+      ".gitignore": true,
+      ".gitattributes": true,
+      "README.md": true,
+      "LICENSE": true,
+      "*.slnLaunch": true,
+      ".dockerignore": true,
+      "AGENTS.md": true,
+      "COPILOT_INSTRUCTIONS.md": true,
+      ".github": true,
+      "*.VisualStudio.json": true,
+      "LanyardAPI": true,
+      "LanyardApp": true,
+      "LanyardServices": true,
+      "LanyardTests": true,
+      "*/artifacts": true,
+      "**/*.csproj.user": true
+    },
+    "launch": {
+		"requireExactSource": false,
+			"configurations": [
+				{
+				"name": "LanyardClient (Debug EXE)",
+				"type": "coreclr",
+				"request": "launch",
+				"program": "${workspaceFolder}/LanyardClient/bin/Debug/net10.0-windows/Lanyard.Client.exe",
+				"cwd": "${workspaceFolder}/LanyardClient",
+				"stopAtEntry": false,
+				"justMyCode": true,
+				"requireExactSource": false
+				}
+			]
+    	}
+	}
+}

@@ -7,19 +7,19 @@
 @using Microsoft.EntityFrameworkCore
 
 @inject ApplicationDbContext _context
-@inject IDialogService DialogService
-@inject IToastService ToastService
+@inject IToastService _toastService
 @inject MusicPlayerService _player
 
 @implements IDisposable
 
-<FluentCard Height="auto" Style="width: 100%;">
-    <FluentStack Orientation="Orientation.Vertical" Style="width: 100%;">
+<FluentCard Height="auto" Class="song-list-card">
+    <FluentStack Orientation="Orientation.Vertical" Class="song-list-stack">
         @if (Songs is not null && Songs.Any())
         {
             <FluentDataGrid Items="@Songs.AsQueryable()" 
                             GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
-                            Style="width: 100%;">
+                            Style="width: 100%;"
+                            ShowHover="true">
                 <ChildContent>
                     <TemplateColumn Title="#" Align="Align.End">
                         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
@@ -28,7 +28,7 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" 
                                            Color="Color.Accent" 
                                            Style="cursor: pointer;"
-                                            @onclick="() => _player.Play(context.Song!, context.Playlist!)" />
+                                            @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
                             }
 
                             <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
@@ -46,7 +46,7 @@
 
                     <TemplateColumn Title="Title">
                         <div style="cursor: pointer; display: flex; align-items: center;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
                                          Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
                                 @context.Song!.Name
@@ -56,21 +56,21 @@
 
                     <TemplateColumn Title="Album">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@context.Song!.AlbumName</FluentLabel>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Date Added">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Length" Align="Align.Start">
                         <div style="cursor: pointer;"
-                             @onclick="() => _player.Play(context.Song!, context.Playlist!)">
+                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")</FluentLabel>
                         </div>
                     </TemplateColumn>
@@ -90,18 +90,9 @@
     </FluentStack>
 </FluentCard>
 
-<style>
-    fluent-data-grid-row {
-        cursor: pointer;
-    }
-
-    fluent-data-grid-row:hover {
-        background-color: var(--neutral-fill-stealth-hover);
-    }
-</style>
-
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
+    [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? CurrentlyPlayingSongId;
 
@@ -110,8 +101,24 @@
         _player.OnSongChanged += UpdateCurrentSong;
     }
 
-    private void UpdateCurrentSong(Guid? songid)
+    protected override void OnParametersSet()
     {
+        if (SelectedClientId == null)
+        {
+            CurrentlyPlayingSongId = null;
+            return;
+        }
+
+        CurrentlyPlayingSongId = _player.GetCurrentSong(SelectedClientId.Value)?.Id;
+    }
+
+    private void UpdateCurrentSong(Guid clientId, Guid? songid)
+    {
+        if (SelectedClientId != clientId)
+        {
+            return;
+        }
+
         CurrentlyPlayingSongId = songid;
         InvokeAsync(StateHasChanged);
     }
@@ -119,6 +126,17 @@
     private bool IsCurrentlyPlaying(Song song)
     {
         return CurrentlyPlayingSongId.HasValue && CurrentlyPlayingSongId.Value == song.Id;
+    }
+
+    private async Task PlaySong(Song song, Playlist? playlist)
+    {
+        if (SelectedClientId == null)
+        {
+            _toastService.ShowWarning("Select a connected client first.");
+            return;
+        }
+
+        await _player.Play(SelectedClientId.Value, song, playlist);
     }
 
     private async Task OpenAddSongToPlaylistDialog(Song song)
@@ -132,7 +150,7 @@
         DialogParameters parameters = new DialogParameters()
         {
             Title = $"Add {song.Name} To Playlist",
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddSongToPlaylist),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddSongToPlaylist),
             PrimaryAction = "Add",
             PrimaryActionEnabled = false,
             SecondaryAction = "Cancel",
@@ -142,7 +160,7 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<AddSongToPlaylistModal>(selection, parameters);
+        await _dialogService.ShowDialogAsync<AddSongToPlaylistModal>(selection, parameters);
     }
 
     private async Task HandleAddSongToPlaylist(DialogResult result)
@@ -157,7 +175,7 @@
         
         if (selectedPlaylist is null)
         {
-            ToastService.ShowWarning("Please select a playlist");
+            _toastService.ShowWarning("Please select a playlist");
             return;
         }
 
@@ -192,7 +210,7 @@
 
             if (alreadyInPlaylist)
             {
-                ToastService.ShowWarning($"'{song.Name}' is already in '{selectedPlaylist.Name}'");
+                _toastService.ShowWarning($"'{song.Name}' is already in '{selectedPlaylist.Name}'");
                 return;
             }
 
@@ -206,11 +224,11 @@
             _context.Add(playlistSongMember);
             await _context.SaveChangesAsync();
 
-            ToastService.ShowSuccess($"Added '{song.Name}' to '{selectedPlaylist.Name}'");
+            _toastService.ShowSuccess($"Added '{song.Name}' to '{selectedPlaylist.Name}'");
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Failed to add song: {ex.Message}");
+            _toastService.ShowError($"Failed to add song: {ex.Message}");
         }
     }
 

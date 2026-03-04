@@ -1,9 +1,10 @@
 ﻿@page "/staff/manage/projectionprograms"
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
-@using Lanyard.App.Components.Manager.ProjectionPrograms
-@using Lanyard.Application.Services.Clients
+@using Lanyard.App.Components.Manager;
+@using Lanyard.App.Components.ProjectionPrograms;
+@using Lanyard.Application.Services
 
 @inject IClientService _clientService
 @inject IProjectionProgramService _projectionService
@@ -24,10 +25,13 @@
                 }
                 else
                 {
-                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr">
+                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr auto">
                         <ChildContent>
                             <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedScreen(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
                             <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                            <TemplateColumn Title="Delete">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteProjectionProgram(context.Id)"></FluentIcon>
+                            </TemplateColumn>
                         </ChildContent>
                         <EmptyContent>
                             No Projection Programs Exist!
@@ -39,7 +43,7 @@
         </FluentMultiSplitterPane>
 
         <FluentMultiSplitterPane Size="60%">
-            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="overflow-y-scroll h-100 me-4">
                 <div class="w-50">
                     <ProgramFlow SelectedProgram="selectedProjectionProgram" OnSave="HandleSave" OnStepsChanged="HandleStepsChanged"></ProgramFlow>
                 </div>
@@ -93,14 +97,14 @@
     {
         DialogParameters parameters = new()
         {
-            OnDialogResult = DialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
             Width = "30%",
             Height = "auto",
             TrapFocus = true,
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
+        await _dialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
     }
 
     private async Task HandleAddProjectionProgram(DialogResult result)
@@ -112,6 +116,8 @@
 
         projectionPrograms.Add(newProgram);
         selectedProjectionProgram = newProgram;
+
+        StateHasChanged();
     }
 
     private async Task HandleSave()
@@ -139,6 +145,27 @@
         }
 
         isSaving = false;
+    }
+
+    private async Task DeleteProjectionProgram(Guid projectionProgramId)
+    {
+        Result<bool> deleteResult = await _projectionService.DeleteProjectionProgramAsync(projectionProgramId);
+
+        if (!deleteResult.IsSuccess)
+        {
+            _toastService.ShowError($"An error occurred when deleting the projection program: {deleteResult.Error}");
+        }
+        else
+        {
+            _toastService.ShowSuccess("Projection program deleted successfully!");
+
+            await LoadProjectionProgramsAsync();
+
+            if (selectedProjectionProgram?.Id == projectionProgramId)
+            {
+                selectedProjectionProgram = null;
+            }
+        }
     }
 
     private void HandleStepsChanged()

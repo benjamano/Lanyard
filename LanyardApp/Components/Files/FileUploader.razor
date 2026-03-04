@@ -1,0 +1,78 @@
+@using Lanyard.Infrastructure.Models
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IFileService _fileService
+@inject IToastService _toastService
+
+<FluentInputFile Id="my-file-uploader"
+                 Mode="InputFileMode.SaveToTemporaryFolder"
+                 Multiple="true"
+                 MaximumFileCount="4"
+                 MaximumFileSize="@(100*1024*1024)"
+                 @bind-ProgressPercent="@ProgressPercent"
+                 OnCompleted="@OnCompletedAsync"
+                 Style="height: 200px;">
+    <ChildContent>
+        <label for="my-file-uploader">
+            <FluentIcon Value="@(new @Icons.Regular.Size24.ArrowUpload())" />
+        </label>
+
+        <div>
+            Drag files here you wish to upload,
+            or <label for="my-file-uploader">browse</label>
+            for them.
+            <br />
+            <em>Maximum of 4 files allowed.</em>
+            <br />
+            <em>Maximum file size: 100 MB.</em>
+        </div>
+    </ChildContent>
+</FluentInputFile>
+
+@code
+{
+    [Parameter] public Guid? SelectedFolderId { get; set; }
+    [Parameter] public EventCallback<FileMetadata> OnFileUploaded { get; set; }
+
+    int ProgressPercent = 0;
+    FluentInputFileEventArgs[] Files = Array.Empty<FluentInputFileEventArgs>();
+
+    private async Task OnCompletedAsync(IEnumerable<FluentInputFileEventArgs> files)
+    {
+        Files = files.ToArray();
+
+        foreach (FluentInputFileEventArgs file in Files)
+        {
+            if (file.ErrorMessage != null)
+            {
+                _toastService.ShowError($"Error uploading {file.Name}: {file.ErrorMessage}");
+                continue;
+            }
+
+            using FileStream fileStream = file.LocalFile!.OpenRead();
+            using StreamContent streamContent = new StreamContent(fileStream);
+
+            IFormFile formFile = new FormFile(
+                baseStream: fileStream,
+                baseStreamOffset: 0,
+                length: fileStream.Length,
+                name: "file",
+                fileName: file.Name
+            )
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = file.ContentType
+            };
+
+            Result<FileMetadata> result = await _fileService.UploadFileAsync(formFile, SelectedFolderId, CancellationToken.None);
+
+            if (result.Success == true && result.Data != null)
+            {
+                await OnFileUploaded.InvokeAsync(result.Data);
+            }
+        }
+
+        await Task.Delay(3000);
+        ProgressPercent = 0;
+    }
+}

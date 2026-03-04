@@ -49,7 +49,7 @@
     </FluentDataGrid>
 </FluentCard>
 
-<ClientCapabilities IsShowing="@showClientCapabilitiesCard" clientId="@updatingClientId"></ClientCapabilities>
+<ClientCapabilities UpdateClientCapabilities="GetClientsAsync" IsShowing="@showClientCapabilitiesCard" clientId="@updatingClientId"></ClientCapabilities>
 
 <FluentDialog @ref="updateClientNameDialog" @bind-Hidden="@hideUpdateClientNameDialog">
     <FluentDialogHeader @onclose="CloseUpdateClientNameDialog" ShowDismiss="true" Visible="true">

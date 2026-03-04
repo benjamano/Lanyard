@@ -10,13 +10,13 @@ namespace Lanyard.Application.Services.ApplicationRoles;
 public class ApplicationRolesService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
-    private readonly SecurityService _sApi;
+    private readonly ISecurityService _sApi;
     private readonly UserManager<UserProfile> _umApi;
     private readonly RoleManager<ApplicationRole> _rmApi;
 
     public ApplicationRolesService(
         IDbContextFactory<ApplicationDbContext> factory,
-        SecurityService sApi,
+        ISecurityService sApi,
         UserManager<UserProfile> userManager,
         RoleManager<ApplicationRole> roleManager)
     {
@@ -74,11 +74,14 @@ public class ApplicationRolesService
                 return Result<bool>.Fail("Role already exists and is active!");
             }
 
-            string? currentUserId = await _sApi.GetCurrentUserIdAsync();
-            if (string.IsNullOrEmpty(currentUserId))
+            Result<string> getResult = await _sApi.GetCurrentUserIdAsync();
+
+            if (!getResult.IsSuccess || getResult.Data is null)
             {
-                return Result<bool>.Fail("Unable to determine current user.");
+                return Result<bool>.Fail(getResult.Error!);
             }
+
+            string currentUserId = getResult.Data;
 
             ApplicationRole newRole = new ApplicationRole
             {

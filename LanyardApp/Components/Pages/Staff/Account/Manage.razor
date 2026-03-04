@@ -47,9 +47,9 @@
 
     private async Task OpenChangePasswordDialog()
     {
-        UserProfile? user = await _sApi.GetCurrentUserProfileAsync();
+        Result<UserProfile> getResult = await _securityService.GetCurrentUserProfileAsync();
 
-        if (user is null)
+        if (!getResult.IsSuccess || getResult.Data is null)
         {
             ToastService.ShowError("Unable to load user profile.");
             return;
@@ -67,6 +67,6 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
+        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(getResult.Data, parameters);
     }
 }

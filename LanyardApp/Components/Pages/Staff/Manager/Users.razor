@@ -48,7 +48,7 @@
 
     private async Task GetUsers()
     {
-        users = await _sApi.GetActiveUsersAsync();
+        users = await _securityService.GetActiveUsersAsync();
         filteredUsers = users;
 
         await HandleSearchInput();
@@ -58,7 +58,7 @@
     {
         if (string.IsNullOrWhiteSpace(searchValue))
         {
-            users = await _sApi.GetActiveUsersAsync();
+            users = await _securityService.GetActiveUsersAsync();
             filteredUsers = users;
 
             searchValue = string.Empty;
@@ -93,7 +93,7 @@
 
     private async Task OpenRegisterUserDialog()
     {
-        IDialogReference dialog = await DialogService.ShowDialogAsync<RegisterUserDialog>(new DialogParameters()
+        IDialogReference dialog = await _dialogService.ShowDialogAsync<RegisterUserDialog>(new DialogParameters()
         {
             Width = "500px",
             Height = "auto",
@@ -114,7 +114,7 @@
         DialogParameters parameters = new DialogParameters()
         {
             Title = "Are you sure?",
-            OnDialogResult = DialogService.CreateDialogCallback(this, async result => await HandleDeleteUser(result)),
+            OnDialogResult = _dialogService.CreateDialogCallback(this, async result => await HandleDeleteUser(result)),
             PrimaryAction = "Yes",
             PrimaryActionEnabled = true,
             SecondaryAction = "No",
@@ -126,14 +126,14 @@
 
         parameters.Add("Message", $"Are you sure you want to delete the user '{user.GetName()}'?");
 
-        await DialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(user, parameters);
+        await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(user, parameters);
     }
 
     private async Task HandleDeleteUser(DialogResult result)
     {
         if (result.Cancelled == false)
         {
-            await _sApi.DeleteUserAsync(((UserProfile)result.Data!).Id);
+            await _securityService.DeleteUserAsync(((UserProfile)result.Data!).Id);
             await GetUsers();
         }
     }
@@ -158,6 +158,6 @@
             Modal = true,
         };
 
-        await DialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
+        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
     }
 }
