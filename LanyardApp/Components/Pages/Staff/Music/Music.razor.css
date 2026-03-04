@@ -20,20 +20,6 @@
     min-height: 0;
 }
 
-.music-pane {
-    min-height: 0;
-    overflow-y: auto;
-}
-
-.music-playlists-pane {
-    flex: 0 0 42%;
-    max-width: 42%;
-}
-
-.music-songs-pane {
-    flex: 1 1 auto;
-}
-
 .music-bottom-controls {
     border-top: 1px solid var(--neutral-stroke-divider-rest);
     background-color: var(--neutral-layer-1);
