@@ -14,7 +14,7 @@
 
 @implements IDisposable
 
-<FluentStack Width="auto" class="ps-1 h-100" Orientation="Orientation.Vertical">
+<FluentStack Width="auto" class="ps-1 h-100 playlists-root" Orientation="Orientation.Vertical">
     @if (playlists == null)
     {
         <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
@@ -24,7 +24,7 @@
     }
     else
     {
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 280px)); gap: 16px;">
+        <div class="playlists-grid">
             @foreach (Playlist playlist in playlists)
             {
                 <FluentCard class="playlist-card p-2" Style="@GetPlaylistCardStyle(playlist.Id)"
@@ -102,6 +102,20 @@
         </div>
     }
 </FluentStack>
+
+<style>
+    .playlists-root {
+        min-height: 100%;
+        width: 100%;
+    }
+
+    .playlists-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+        gap: 16px;
+        align-content: start;
+    }
+</style>
 
 @code {
     [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
