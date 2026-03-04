@@ -59,7 +59,7 @@ public class DashboardServiceTests
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.IsNotNull(result.Data);
-        Assert.AreEqual(1, result.Data.Widgets.Count);
+        Assert.HasCount(1, result.Data.Widgets);
     }
 
     [TestMethod]
@@ -111,11 +111,11 @@ public class DashboardServiceTests
         Result<Dashboard> updateResult = await service.SaveDashboardAsync(existing);
 
         Assert.IsTrue(updateResult.Success, updateResult.Error);
-        Assert.AreEqual(1, updateResult.Data!.Widgets.Count);
+        Assert.HasCount(1, updateResult.Data!.Widgets);
 
         await using ApplicationDbContext ctx = new(options);
         Dashboard dbDashboard = await ctx.Dashboards.Include(x => x.Widgets).FirstAsync(x => x.Id == existing.Id);
-        Assert.AreEqual(2, dbDashboard.Widgets.Count);
+        Assert.HasCount(2, dbDashboard.Widgets);
         Assert.AreEqual(1, dbDashboard.Widgets.Count(x => x.IsActive));
         Assert.AreEqual(1, dbDashboard.Widgets.Count(x => x.IsActive == false));
     }
@@ -196,7 +196,7 @@ public class DashboardServiceTests
 
         Result<Dashboard> renderResult = await service.GetDashboardForRenderAsync(createResult.Data!.Id);
         Assert.IsTrue(renderResult.Success, renderResult.Error);
-        Assert.AreEqual(0, renderResult.Data!.Widgets.Count);
+        Assert.IsEmpty(renderResult.Data!.Widgets);
     }
 
     [TestMethod]
