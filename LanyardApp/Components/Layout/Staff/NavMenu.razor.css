@@ -290,6 +290,7 @@
 
 .nav-dropdown-toggle {
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -387,4 +388,8 @@ fluent-icon {
         margin-top: 0.5rem;
         margin-bottom: 0.5rem;
     }
+}
+
+nav {
+    z-index: 9999 !important;
 }

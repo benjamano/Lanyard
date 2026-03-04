@@ -35,9 +35,9 @@ namespace Lanyard.Infrastructure.DataAccess
         {
             if (!optionsBuilder.IsConfigured)
             {
-                optionsBuilder.UseSqlServer(
-                    "Server=(localdb)\\mssqllocaldb;Database=LanyardDB;Trusted_Connection=True;",
-                    b => b.MigrationsAssembly("Lanyard.Infrastructure"));
+                    optionsBuilder.UseNpgsql(
+                        "Host=localhost;Port=5432;Database=LanyardDB;Username=postgres;Password=yourpassword",
+                        b => b.MigrationsAssembly("Lanyard.Infrastructure"));
             }
 
             optionsBuilder.ConfigureWarnings(warnings =>

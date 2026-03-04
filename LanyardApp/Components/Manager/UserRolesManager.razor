@@ -44,7 +44,7 @@
                             }
                             else
                             {
-                                <FluentDataGrid Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid AutoItemsPerPage="true" ItemSize="46" Virtualize="true" Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
                                     <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Role" />
                                     <PropertyColumn Property="@(r => r.CreateDate)" Title="Date Added" Format="g" />
                                     <TemplateColumn Title="Created By">
@@ -54,9 +54,7 @@
                                         @createdBy
                                     </TemplateColumn>
                                     <TemplateColumn Title="Actions">
-                                        <div class="d-flex align-items-center">
-                                            <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => RemoveRoleFromUser(context.Id))" />
-                                        </div>
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => RemoveRoleFromUser(context.Id))"></FluentButton>
                                     </TemplateColumn>
                                 </FluentDataGrid>
                             }
@@ -80,7 +78,7 @@
                             {
                                 @if (filteredRoles.Any())
                                 {
-                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;" AutoItemsPerPage="true" ItemSize="46" Virtualize="true">
                                         <TemplateColumn Title="Name">
                                             @{
                                                 var roleName = context.Name ?? string.Empty;
@@ -88,9 +86,7 @@
                                             @roleName
                                         </TemplateColumn>
                                         <TemplateColumn Title="Actions">
-                                            <div class="d-flex align-items-center">
-                                                <FluentIcon Icon="Icons.Regular.Size20.AddCircle" Color="Color.Success" OnClick="@(() => AddRoleToUser(context.Id))" />
-                                            </div>
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())" OnClick="@(() => AddRoleToUser(context.Id))"></FluentButton>
                                         </TemplateColumn>
                                     </FluentDataGrid>
                                 }
@@ -321,4 +317,4 @@
             }
         }
     }
-}}
+}

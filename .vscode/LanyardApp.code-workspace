@@ -25,6 +25,7 @@
 			"LanyardClient": true,
 			"*/artifacts": true,
 			"**/*.csproj.user": true,
+			"docker-compose.yml": true,
 		},
 		"launch": {
 			"configurations": [
@@ -43,6 +44,9 @@
 					}
 				}
 			]
+		},
+		"chat.tools.terminal.autoApprove": {
+			"dotnet build": true,
 		}
 	},
 	"tasks": {
@@ -56,11 +60,20 @@
 					"build",
 					"${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
 				],
+				"dependsOn": ["Start PostgreSQL (Docker Compose)"],
 				"group": {
 					"kind": "build",
 					"isDefault": true
 				},
 				"problemMatcher": "$msCompile"
+			},
+			{
+				"label": "Start PostgreSQL (Docker Compose)",
+				"type": "shell",
+				"command": "docker compose up -d",
+				"problemMatcher": [],
+				"group": "build",
+				"detail": "Starts the PostgreSQL container for LanyardApp development."
 			}
 		]
 	},

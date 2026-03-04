@@ -3,9 +3,11 @@
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
 
-<UserRolesManager @ref="_userRoleManager" />
+<div class="p-2">
+    <UserRolesManager @ref="_userRoleManager" />
 
-<RoleManager OnRolesChanged="HandleRolesChanged" />
+    <RoleManager OnRolesChanged="HandleRolesChanged" />
+</div>
 
 @code {
     private IEnumerable<ApplicationRole> roles = Array.Empty<ApplicationRole>();
