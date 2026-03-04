@@ -58,7 +58,7 @@ string? connectionString = builder.Configuration.GetConnectionString("DefaultCon
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
+    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 

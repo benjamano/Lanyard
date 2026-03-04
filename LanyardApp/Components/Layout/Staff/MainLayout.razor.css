@@ -391,12 +391,6 @@ i.fas {
         margin-left: 1rem;
     }
 
-.bg-blur {
-    --bs-bg-opacity: 0.75 !important;
-    background-color: rgba(var(--bs-light-rgb), var(--bs-bg-opacity)) !important;
-    backdrop-filter: blur(16px);
-}
-
 .playlist-card {
     transition: all 0.2s ease;
 }
