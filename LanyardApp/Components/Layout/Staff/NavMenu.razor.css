@@ -388,3 +388,7 @@ fluent-icon {
         margin-bottom: 0.5rem;
     }
 }
+
+nav {
+    z-index: 9999 !important;
+}

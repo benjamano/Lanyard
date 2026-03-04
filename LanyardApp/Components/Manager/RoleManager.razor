@@ -12,9 +12,9 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
             <FluentLabel Typo="Typography.H4">Role Manager</FluentLabel>
-            <FluentButton Appearance="Appearance.Accent" OnClick="HandleCreateNewRoleButtonClicked" IconEnd="@(new Icons.Regular.Size20.QuizNew().WithColor(Color.Fill))">
+            @* <FluentButton Appearance="Appearance.Accent" OnClick="HandleCreateNewRoleButtonClicked" IconEnd="@(new Icons.Regular.Size20.QuizNew().WithColor(Color.Fill))">
                 Create a new Role
-            </FluentButton>
+            </FluentButton> *@
         </FluentStack>
 
         <FluentGrid Class="w-100">
@@ -30,7 +30,7 @@
                         }
                         else
                         {
-                            <FluentDataGrid Items="@roles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Style="width: 100%;">
+                            <FluentDataGrid ShowHover="true" Items="@roles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Style="width: 100%;" AutoItemsPerPage="true" ItemSize="46" Virtualize="true">
                                 <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Name" />
                                 <TemplateColumn Title="Created By">
                                     @{
@@ -40,9 +40,7 @@
                                 </TemplateColumn>
                                 <PropertyColumn Property="@(r => r.CreateDate)" Title="Created Date" Format="g" />
                                 <TemplateColumn Title="Actions">
-                                    <div class="d-flex align-items-center">
-                                        <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => DeleteRole(context.Id))" />
-                                    </div>
+                                    <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => DeleteRole(context.Id))"></FluentButton>
                                 </TemplateColumn>
                             </FluentDataGrid>
                         }

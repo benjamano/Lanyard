@@ -13,15 +13,22 @@
 
 main {
     flex: 1;
-    position: relative;
     background: #560c69;
-    background: linear-gradient(180deg,rgba(86, 12, 105, 1) 0%, rgba(104, 19, 183, 1) 39%, rgba(192, 23, 234, 1) 100%);
+    background: linear-gradient(
+        180deg,
+        rgba(86, 12, 105, 1) 0%,
+        rgba(104, 19, 183, 1) 39%,
+        rgba(192, 23, 234, 1) 100%
+    );
 }
 
     main::before {
         content: "";
         position: absolute;
-        inset: 0;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background: rgba(0, 0, 0, var(--dark-overlay));
         pointer-events: none;
     }
