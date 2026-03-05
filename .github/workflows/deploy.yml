@@ -1,0 +1,102 @@
+name: Build + Deploy to VM
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:latest" >> $GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install EF tool (for bundle build)
+        run: dotnet tool install --global dotnet-ef --version 10.*
+
+      - name: Build migration bundle (from App project)
+        env:
+          PATH: /home/runner/.dotnet/tools:${{ env.PATH }}
+        run: |
+          dotnet restore ./LanyardApp/Lanyard.App.csproj
+
+          dotnet ef migrations bundle \
+            --project ./LanyardData/Lanyard.Infrastructure.csproj \
+            --startup-project ./LanyardApp/Lanyard.App.csproj \
+            --configuration Release \
+            --self-contained false \
+            -o ./migrate
+
+          chmod +x ./migrate
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+
+      - name: Copy migration bundle to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "migrate"
+          target: "/opt/lanyard/deploy"
+          overwrite: true
+
+      - name: Deploy and apply migrations via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            cd /opt/lanyard
+            mkdir -p /opt/lanyard/deploy
+            chmod +x /opt/lanyard/deploy/migrate
+
+            # Load env vars (POSTGRES_PASSWORD etc.)
+            if [ -f .env ]; then
+              set -a
+              . ./.env
+              set +a
+            fi
+
+            # Ensure db is running before migrations
+            docker compose up -d db
+
+            # Run migrations inside the compose network so "db" resolves
+            docker run --rm \
+              --network lanyard_appnet \
+              -v /opt/lanyard/deploy:/deploy \
+              mcr.microsoft.com/dotnet/runtime:10.0 \
+              /deploy/migrate --connection "Host=db;Database=LanyardDB;Username=postgres;Password=${POSTGRES_PASSWORD}"
+
+            # Deploy app
+            docker compose pull
+            docker compose up -d
+
+            docker image prune -f
