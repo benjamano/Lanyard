@@ -38,6 +38,7 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IFlowTriggerEventService, FlowTriggerEventService>();
 builder.Services.AddSignalR();
 
 // Shared drag state service
