@@ -46,6 +46,9 @@ public static class DevelopmentDataSeeder
             // Assign roles to admin user
             await AssignRolesToAdminAsync(userManager, adminUser, logger);
 
+            // Seed runtime-dispatch automation templates
+            await SeedAutomationTemplatesAsync(context, logger);
+
             logger.LogInformation("? Development data seeding completed successfully!");
         }
         catch (Exception ex)
@@ -180,5 +183,88 @@ public static class DevelopmentDataSeeder
                 logger.LogInformation("  ? Admin already has role: {Role}", role);
             }
         }
+    }
+
+    private static async Task SeedAutomationTemplatesAsync(
+        ApplicationDbContext context,
+        ILogger logger)
+    {
+        Dictionary<string, string> templateDescriptions = new Dictionary<string, string>
+        {
+            ["laser.game.started"] = "Trigger when a laser game starts.",
+            ["laser.game.ended"] = "Trigger when a laser game ends.",
+            ["music.set-playlist"] = "Action to change the active music playlist.",
+            ["music.play"] = "Action to start playback on the music player.",
+            ["music.stop"] = "Action to stop playback on the music player."
+        };
+
+        foreach (KeyValuePair<string, string> templateDefinition in templateDescriptions)
+        {
+            ProjectionProgramStepTemplate? existingTemplate = await context.ProjectionProgramStepTemplates
+                .Include(x => x.Parameters)
+                .FirstOrDefaultAsync(x => x.Name == templateDefinition.Key);
+
+            if (existingTemplate is null)
+            {
+                ProjectionProgramStepTemplate newTemplate = new ProjectionProgramStepTemplate
+                {
+                    Id = Guid.NewGuid(),
+                    Name = templateDefinition.Key,
+                    Description = templateDefinition.Value,
+                    IsActive = true
+                };
+
+                context.ProjectionProgramStepTemplates.Add(newTemplate);
+                logger.LogInformation("  ? Created automation template: {TemplateKey}", templateDefinition.Key);
+                continue;
+            }
+
+            existingTemplate.IsActive = true;
+            if (string.IsNullOrWhiteSpace(existingTemplate.Description))
+            {
+                existingTemplate.Description = templateDefinition.Value;
+            }
+
+            logger.LogInformation("  ? Automation template already exists: {TemplateKey}", templateDefinition.Key);
+        }
+
+        ProjectionProgramStepTemplate? setPlaylistTemplate = await context.ProjectionProgramStepTemplates
+            .Include(x => x.Parameters)
+            .FirstOrDefaultAsync(x => x.Name == "music.set-playlist");
+
+        if (setPlaylistTemplate is not null)
+        {
+            ProjectionProgramStepTemplateParameter? playlistParameter = setPlaylistTemplate.Parameters
+                .FirstOrDefault(x => x.Name == "playlistId");
+
+            if (playlistParameter is null)
+            {
+                setPlaylistTemplate.Parameters.Add(new ProjectionProgramStepTemplateParameter
+                {
+                    Id = Guid.NewGuid(),
+                    TemplateId = setPlaylistTemplate.Id,
+                    Name = "playlistId",
+                    Description = "Identifier of the playlist to activate.",
+                    DataType = "Guid",
+                    IsRequired = true,
+                    IsActive = true
+                });
+
+                logger.LogInformation("  ? Added parameter {ParameterName} to template {TemplateKey}", "playlistId", "music.set-playlist");
+            }
+            else
+            {
+                playlistParameter.IsActive = true;
+                playlistParameter.IsRequired = true;
+                if (string.IsNullOrWhiteSpace(playlistParameter.Description))
+                {
+                    playlistParameter.Description = "Identifier of the playlist to activate.";
+                }
+
+                logger.LogInformation("  ? Template parameter already exists: {TemplateKey}.{ParameterName}", "music.set-playlist", "playlistId");
+            }
+        }
+
+        await context.SaveChangesAsync();
     }
 }
