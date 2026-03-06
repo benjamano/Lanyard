@@ -1,0 +1,162 @@
+@page "/staff/manage/automationflows"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Automation
+
+@inject IProjectionProgramService _projectionProgramService
+@inject IClientService _clientService
+@inject IAutomationFlowRunLogService _automationFlowRunLogService
+@inject IToastService _toastService
+
+<PageTitle>Automation Flows</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="w-100">
+    <FluentLabel Typo="Typography.PaneHeader">Automation Flow Runs</FluentLabel>
+
+    <FluentCard Height="auto" Class="p-3">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Class="align-items-end flex-wrap">
+            <FluentSelect Label="Manual test client" TOption="string" @bind-Value="selectedClientId">
+                <FluentOption Value="">Select client...</FluentOption>
+                @foreach (ClientConnectedDTO client in clients.OrderBy(x => x.Name))
+                {
+                    <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
+                }
+            </FluentSelect>
+            <FluentButton Appearance="Appearance.Outline" OnClick="RefreshAsync" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())">Refresh</FluentButton>
+        </FluentStack>
+    </FluentCard>
+
+    <FluentCard Height="auto">
+        <FluentDataGrid ShowHover="true" Items="@flowRows.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 2fr 2fr 1fr" Style="width: 100%;">
+            <ChildContent>
+                <TemplateColumn Title="Flow">
+                    @context.FlowName
+                </TemplateColumn>
+                <TemplateColumn Title="Last Status">
+                    @if (context.LastStatusSuccess is null)
+                    {
+                        <FluentBadge Appearance="Appearance.Neutral">No Runs</FluentBadge>
+                    }
+                    else if (context.LastStatusSuccess == true)
+                    {
+                        <FluentBadge Appearance="Appearance.Accent">Success</FluentBadge>
+                    }
+                    else
+                    {
+                        <FluentBadge Appearance="Appearance.Lightweight">Failed</FluentBadge>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Last Run UTC">
+                    @if (context.LastRunUtc is null)
+                    {
+                        <span>-</span>
+                    }
+                    else
+                    {
+                        <span>@context.LastRunUtc.Value.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Latest Error">
+                    @if (string.IsNullOrWhiteSpace(context.LatestError))
+                    {
+                        <span>-</span>
+                    }
+                    else
+                    {
+                        <span>@context.LatestError</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Last Trigger Payload">
+                    @if (string.IsNullOrWhiteSpace(context.LastTriggerPayload))
+                    {
+                        <span>-</span>
+                    }
+                    else
+                    {
+                        <span>@context.LastTriggerPayload</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Actions">
+                    <FluentButton Appearance="Appearance.Outline" OnClick="() => RunManualTestTriggerAsync(context.FlowId)">Test Trigger</FluentButton>
+                </TemplateColumn>
+            </ChildContent>
+        </FluentDataGrid>
+    </FluentCard>
+</FluentStack>
+
+@code {
+    private List<FlowStatusRow> flowRows = [];
+    private List<ClientConnectedDTO> clients = [];
+    private string selectedClientId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        Result<IEnumerable<ProjectionProgram>> flowsResult = await _projectionProgramService.GetProjectionProgramsAsync();
+        if (!flowsResult.IsSuccess || flowsResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load flows: {flowsResult.Error}");
+            return;
+        }
+
+        Result<IEnumerable<ClientConnectedDTO>> clientsResult = await _clientService.GetClientsAsync();
+        clients = clientsResult.IsSuccess && clientsResult.Data is not null
+            ? clientsResult.Data.ToList()
+            : [];
+
+        Dictionary<Guid, AutomationFlowLatestStatus> latestByFlow = _automationFlowRunLogService
+            .GetLatestStatusByFlow()
+            .GroupBy(x => x.FlowId)
+            .ToDictionary(x => x.Key, x => x.First());
+
+        flowRows = flowsResult.Data
+            .OrderBy(x => x.Name)
+            .Select(flow =>
+            {
+                bool hasStatus = latestByFlow.TryGetValue(flow.Id, out AutomationFlowLatestStatus? status);
+
+                return new FlowStatusRow
+                {
+                    FlowId = flow.Id,
+                    FlowName = flow.Name,
+                    LastRunUtc = hasStatus ? status!.LastRunUtc : null,
+                    LastStatusSuccess = hasStatus ? status!.IsSuccess : null,
+                    LatestError = hasStatus ? status!.LatestError : null,
+                    LastTriggerPayload = hasStatus ? status!.TriggerPayload : null
+                };
+            })
+            .ToList();
+    }
+
+    private async Task RunManualTestTriggerAsync(Guid flowId)
+    {
+        if (!Guid.TryParse(selectedClientId, out Guid clientId))
+        {
+            _toastService.ShowWarning("Select a client before running a manual test trigger.");
+            return;
+        }
+
+        AutomationFlowRunRecord runRecord = await _automationFlowRunLogService.RunManualTestTriggerAsync(
+            clientId,
+            $"ManualTestTrigger: FlowId={flowId}",
+            [flowId]);
+
+        _toastService.ShowSuccess($"Test trigger recorded (Run {runRecord.RunId}).");
+        await RefreshAsync();
+    }
+
+    private sealed class FlowStatusRow
+    {
+        public Guid FlowId { get; set; }
+        public string FlowName { get; set; } = string.Empty;
+        public DateTime? LastRunUtc { get; set; }
+        public bool? LastStatusSuccess { get; set; }
+        public string? LatestError { get; set; }
+        public string? LastTriggerPayload { get; set; }
+    }
+}
