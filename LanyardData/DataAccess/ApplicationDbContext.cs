@@ -26,6 +26,12 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
         public DbSet<ProjectionProgramStepTemplate> ProjectionProgramStepTemplates { get; set; }
         public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
+        public DbSet<AutomationFlow> AutomationFlows { get; set; }
+        public DbSet<AutomationStep> AutomationSteps { get; set; }
+        public DbSet<AutomationStepTemplate> AutomationStepTemplates { get; set; }
+        public DbSet<AutomationStepTemplateParameter> AutomationStepTemplateParameters { get; set; }
+        public DbSet<AutomationStepParameterValue> AutomationStepParameterValues { get; set; }
+        public DbSet<FlowTriggerBinding> FlowTriggerBindings { get; set; }
         public DbSet<Dashboard> Dashboards { get; set; }
         public DbSet<DashboardWidget> DashboardWidgets { get; set; }
         public DbSet<FileMetadata> FileMetadata { get; set; }
@@ -98,6 +104,84 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.HasOne(x => x.Dashboard)
                     .WithMany(x => x.Widgets)
                     .HasForeignKey(x => x.DashboardId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlow>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.IsActive, x.Name });
+                entity.HasIndex(x => x.ClientId);
+                entity.HasIndex(x => x.TriggerEventName);
+
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<AutomationStep>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.IsActive, x.SortOrder });
+                entity.HasIndex(x => x.StepTypeTemplateId);
+
+                entity.HasOne(x => x.AutomationFlow)
+                    .WithMany(x => x.Steps)
+                    .HasForeignKey(x => x.AutomationFlowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.StepTypeTemplate)
+                    .WithMany(x => x.AutomationSteps)
+                    .HasForeignKey(x => x.StepTypeTemplateId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AutomationStepTemplate>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.IsActive, x.Category, x.Name });
+                entity.HasIndex(x => new { x.IsTrigger, x.IsAction });
+            });
+
+            modelBuilder.Entity<AutomationStepTemplateParameter>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.TemplateId, x.IsActive, x.Name });
+
+                entity.HasOne(x => x.Template)
+                    .WithMany(x => x.Parameters)
+                    .HasForeignKey(x => x.TemplateId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationStepParameterValue>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.AutomationStepId);
+                entity.HasIndex(x => x.ParameterId);
+                entity.HasIndex(x => new { x.AutomationStepId, x.ParameterId }).IsUnique();
+
+                entity.HasOne(x => x.AutomationStep)
+                    .WithMany(x => x.ParameterValues)
+                    .HasForeignKey(x => x.AutomationStepId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Parameter)
+                    .WithMany(x => x.StepParameterValues)
+                    .HasForeignKey(x => x.ParameterId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<FlowTriggerBinding>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.IsActive });
+                entity.HasIndex(x => x.EventName);
+
+                entity.HasOne(x => x.AutomationFlow)
+                    .WithMany(x => x.TriggerBindings)
+                    .HasForeignKey(x => x.AutomationFlowId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }
