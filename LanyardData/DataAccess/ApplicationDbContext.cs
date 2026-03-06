@@ -28,6 +28,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ProjectionProgramStepTemplateParameter> ProjectionProgramStepTemplateParameters { get; set; }
         public DbSet<Dashboard> Dashboards { get; set; }
         public DbSet<DashboardWidget> DashboardWidgets { get; set; }
+        public DbSet<AutomationFlow> AutomationFlows { get; set; }
+        public DbSet<AutomationFlowStep> AutomationFlowSteps { get; set; }
+        public DbSet<AutomationFlowRun> AutomationFlowRuns { get; set; }
+        public DbSet<AutomationFlowRunStepResult> AutomationFlowRunStepResults { get; set; }
         public DbSet<FileMetadata> FileMetadata { get; set; }
         public DbSet<Folder> Folders { get; set; }
 
@@ -98,6 +102,45 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.HasOne(x => x.Dashboard)
                     .WithMany(x => x.Widgets)
                     .HasForeignKey(x => x.DashboardId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlow>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.TriggerKey, x.ClientId, x.IsActive });
+            });
+
+            modelBuilder.Entity<AutomationFlowStep>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.IsActive, x.SortOrder });
+
+                entity.HasOne(x => x.AutomationFlow)
+                    .WithMany(x => x.Steps)
+                    .HasForeignKey(x => x.AutomationFlowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlowRun>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.RunStartedAtUtc });
+
+                entity.HasOne(x => x.AutomationFlow)
+                    .WithMany(x => x.Runs)
+                    .HasForeignKey(x => x.AutomationFlowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlowRunStepResult>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowRunId, x.SortOrder });
+
+                entity.HasOne(x => x.AutomationFlowRun)
+                    .WithMany(x => x.StepResults)
+                    .HasForeignKey(x => x.AutomationFlowRunId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }
