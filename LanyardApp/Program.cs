@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
 using Lanyard.App.Services;
+using Lanyard.Application.Services.FlowActions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +38,8 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
+builder.Services.AddScoped<IFlowActionDispatcher, FlowActionDispatcher>();
+builder.Services.AddScoped<IFlowActionHandler, MusicFlowActionHandler>();
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSignalR();
 
