@@ -1,0 +1,17 @@
+.trigger-template {
+    border-left: 4px solid var(--accent-fill-rest);
+    cursor: grab;
+}
+
+.action-template {
+    border-left: 4px solid var(--neutral-stroke-strong-rest);
+    cursor: grab;
+}
+
+.automation-trigger-title {
+    color: var(--accent-foreground-rest);
+}
+
+.automation-action-title {
+    color: var(--neutral-foreground-rest);
+}
