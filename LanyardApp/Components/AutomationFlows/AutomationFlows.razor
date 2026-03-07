@@ -1,0 +1,283 @@
+@inject IToastService _toastService
+
+<FluentCard AreaRestricted="false">
+    <FluentMultiSplitter Class="h-100">
+        <FluentMultiSplitterPane Size="25%">
+            <FluentStack Orientation="Orientation.Vertical" Class="me-3">
+                <FluentToolbar>
+                    <FluentLabel slot="start" Typo="Typography.PaneHeader">Automation Flows</FluentLabel>
+                    <FluentButton slot="end" Appearance="Appearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateFlow">
+                        New
+                    </FluentButton>
+                </FluentToolbar>
+
+                <FluentDataGrid Class="h-auto" Items="flows.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr">
+                    <ChildContent>
+                        <SelectColumn SelectAll="true" OnSelect="@(x => SelectFlow(x.Item))" Property="@(x => selectedFlow is not null && x.Id == selectedFlow.Id)" TGridItem="AutomationFlowDefinition" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
+                        <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
+                    </ChildContent>
+                    <EmptyContent>
+                        No automation flows exist.
+                    </EmptyContent>
+                </FluentDataGrid>
+            </FluentStack>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="60%">
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="overflow-y-scroll h-100 me-4">
+                @if (selectedFlow is null)
+                {
+                    <FluentLabel Class="mt-4">Create or select a flow to start editing.</FluentLabel>
+                }
+                else
+                {
+                    <div class="w-75">
+                        <FluentTextField @bind-Value="selectedFlow.Name" Label="Flow Name" Appearance="FluentInputAppearance.Outline" Required />
+                        <FluentTextArea @bind-Value="selectedFlow.Description" Label="Description" Appearance="FluentInputAppearance.Outline" Class="mt-2" />
+                        <AutomationFlowEditor SelectedFlow="selectedFlow" OnTemplateDropped="HandleTemplateDropAsync" OnFlowChanged="HandleFlowChangedAsync" />
+                    </div>
+                }
+            </FluentStack>
+        </FluentMultiSplitterPane>
+
+        <FluentMultiSplitterPane Size="15%">
+            <FluentStack Orientation="Orientation.Vertical" Class="h-100">
+                <FluentLabel Typo="Typography.PaneHeader">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" /> Toolbox
+                </FluentLabel>
+                <FluentDivider></FluentDivider>
+
+                <FluentLabel Typo="Typography.Body" Class="automation-trigger-title">Triggers</FluentLabel>
+                @foreach (AutomationStepTemplateDefinition triggerTemplate in templates.Where(x => x.Kind == AutomationStepKind.Trigger))
+                {
+                    <FluentCard MinimalStyle="true" Class="mb-2 trigger-template" draggable="true" @ondragstart="(args) => OnDragStart(triggerTemplate)" @ondragend="OnDragEnd">
+                        <FluentLabel>@triggerTemplate.Name</FluentLabel>
+                    </FluentCard>
+                }
+
+                <FluentLabel Typo="Typography.Body" Class="automation-action-title mt-2">Actions</FluentLabel>
+                @foreach (AutomationStepTemplateDefinition actionTemplate in templates.Where(x => x.Kind == AutomationStepKind.Action))
+                {
+                    <FluentCard MinimalStyle="true" Class="mb-2 action-template" draggable="true" @ondragstart="(args) => OnDragStart(actionTemplate)" @ondragend="OnDragEnd">
+                        <FluentLabel>@actionTemplate.Name</FluentLabel>
+                    </FluentCard>
+                }
+
+                <FluentButton Class="mt-auto" Appearance="Appearance.Accent" IconStart="@(new Icons.Regular.Size20.Save())" OnClick="SaveFlowAsync">
+                    Save
+                </FluentButton>
+            </FluentStack>
+        </FluentMultiSplitterPane>
+    </FluentMultiSplitter>
+</FluentCard>
+
+@code {
+    private readonly List<AutomationFlowDefinition> flows = [];
+    private readonly List<AutomationStepTemplateDefinition> templates = [];
+    private AutomationStepTemplateDefinition? currentDragTemplate;
+    private AutomationFlowDefinition? selectedFlow;
+
+    protected override void OnInitialized()
+    {
+        SeedTemplates();
+        CreateFlow();
+    }
+
+    private void CreateFlow()
+    {
+        AutomationFlowDefinition flow = new()
+        {
+            Id = Guid.NewGuid(),
+            Name = $"Flow {flows.Count + 1}",
+            Description = string.Empty,
+            Steps = []
+        };
+
+        flows.Add(flow);
+        selectedFlow = flow;
+    }
+
+    private void SelectFlow(AutomationFlowDefinition flow)
+    {
+        selectedFlow = flow;
+    }
+
+    private void OnDragStart(AutomationStepTemplateDefinition template)
+    {
+        currentDragTemplate = template;
+    }
+
+    private void OnDragEnd(DragEventArgs args)
+    {
+        currentDragTemplate = null;
+    }
+
+    private async Task HandleTemplateDropAsync(int index)
+    {
+        if (selectedFlow is null || currentDragTemplate is null)
+        {
+            if (selectedFlow is null)
+            {
+                _toastService.ShowWarning("Please select a flow before adding steps.");
+            }
+
+            return;
+        }
+
+        AutomationFlowStepDefinition step = new()
+        {
+            Id = Guid.NewGuid(),
+            SortOrder = index,
+            TemplateId = currentDragTemplate.Id,
+            Template = CloneTemplate(currentDragTemplate),
+            ParameterValues = currentDragTemplate.Parameters.Select(parameter => new AutomationStepParameterValueDefinition
+            {
+                ParameterId = parameter.Id,
+                Value = string.Empty
+            }).ToList()
+        };
+
+        index = Math.Clamp(index, 0, selectedFlow.Steps.Count);
+        selectedFlow.Steps.Insert(index, step);
+
+        for (int i = 0; i < selectedFlow.Steps.Count; i++)
+        {
+            selectedFlow.Steps[i].SortOrder = i;
+        }
+
+        await HandleFlowChangedAsync();
+        currentDragTemplate = null;
+    }
+
+    private Task HandleFlowChangedAsync()
+    {
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveFlowAsync()
+    {
+        if (selectedFlow is null)
+        {
+            _toastService.ShowWarning("Select a flow to save.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectedFlow.Name))
+        {
+            _toastService.ShowWarning("Flow name is required.");
+            return;
+        }
+
+        List<string> validationErrors = GetValidationErrors(selectedFlow);
+
+        if (validationErrors.Count > 0)
+        {
+            _toastService.ShowWarning($"Please fix required parameter values ({validationErrors.Count} issue(s)).");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Saved flow '{selectedFlow.Name}' with {selectedFlow.Steps.Count} step(s).");
+        await Task.CompletedTask;
+    }
+
+    private static List<string> GetValidationErrors(AutomationFlowDefinition flow)
+    {
+        List<string> errors = [];
+
+        foreach (AutomationFlowStepDefinition step in flow.Steps)
+        {
+            if (step.Template?.Parameters.Any() != true)
+            {
+                continue;
+            }
+
+            foreach (AutomationStepTemplateParameterDefinition parameter in step.Template.Parameters.Where(x => x.IsRequired))
+            {
+                AutomationStepParameterValueDefinition? value = step.ParameterValues.FirstOrDefault(x => x.ParameterId == parameter.Id);
+
+                if (value is null || string.IsNullOrWhiteSpace(value.Value))
+                {
+                    errors.Add($"{step.Template.Name}: {parameter.Name}");
+                }
+            }
+        }
+
+        return errors;
+    }
+
+    private void SeedTemplates()
+    {
+        templates.Clear();
+
+        templates.Add(new AutomationStepTemplateDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = "Schedule Trigger",
+            Description = "Runs on a cron-style schedule.",
+            Kind = AutomationStepKind.Trigger,
+            Parameters =
+            [
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Cron", DataType = "String", IsRequired = true },
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Timezone", DataType = "String", IsRequired = true }
+            ]
+        });
+
+        templates.Add(new AutomationStepTemplateDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = "Manual Trigger",
+            Description = "Staff can run this flow manually.",
+            Kind = AutomationStepKind.Trigger,
+            Parameters =
+            [
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "InitiatorRole", DataType = "String", IsRequired = true }
+            ]
+        });
+
+        templates.Add(new AutomationStepTemplateDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = "Send Notification",
+            Description = "Sends a message to subscribed users.",
+            Kind = AutomationStepKind.Action,
+            Parameters =
+            [
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Channel", DataType = "String", IsRequired = true },
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Message", DataType = "String", IsRequired = true }
+            ]
+        });
+
+        templates.Add(new AutomationStepTemplateDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = "Set Projection Program",
+            Description = "Updates the program assignment for a room.",
+            Kind = AutomationStepKind.Action,
+            Parameters =
+            [
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Room", DataType = "String", IsRequired = true },
+                new AutomationStepTemplateParameterDefinition { Id = Guid.NewGuid(), Name = "Program", DataType = "String", IsRequired = true }
+            ]
+        });
+    }
+
+    private static AutomationStepTemplateDefinition CloneTemplate(AutomationStepTemplateDefinition template)
+    {
+        return new AutomationStepTemplateDefinition
+        {
+            Id = template.Id,
+            Name = template.Name,
+            Description = template.Description,
+            Kind = template.Kind,
+            Parameters = template.Parameters.Select(parameter => new AutomationStepTemplateParameterDefinition
+            {
+                Id = parameter.Id,
+                Name = parameter.Name,
+                Description = parameter.Description,
+                DataType = parameter.DataType,
+                IsRequired = parameter.IsRequired
+            }).ToList()
+        };
+    }
+}

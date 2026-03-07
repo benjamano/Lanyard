@@ -2,6 +2,7 @@
 using Lanyard.Application.Services.Automation;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Constants;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.Http;
@@ -19,6 +20,7 @@ public class SignalRControlHub(
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
     IAutomationFlowRunLogService automationFlowRunLogService) : Hub, ISignalRProjectionControlHub
+    IFlowTriggerEventService flowTriggerEventService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -26,6 +28,7 @@ public class SignalRControlHub(
     private readonly IClientService _clientService = clientService;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
     private readonly IAutomationFlowRunLogService _automationFlowRunLogService = automationFlowRunLogService;
+    private readonly IFlowTriggerEventService _flowTriggerEventService = flowTriggerEventService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -261,6 +264,62 @@ public class SignalRControlHub(
         };
 
         await _automationFlowRunLogService.RecordRunAsync(runRecord);
+        bool foundPriorStatus = _laserGameStatusStore.TryGetStatus(clientId, out LaserGameStatusDTO? priorStatus);
+
+        _laserGameStatusStore.UpdateStatus(clientId, status);
+
+        await EmitLaserGameTransitionEventsAsync(clientId, foundPriorStatus ? priorStatus : null, status);
+    }
+
+    private async Task EmitLaserGameTransitionEventsAsync(Guid clientId, LaserGameStatusDTO? priorStatus, LaserGameStatusDTO currentStatus)
+    {
+        bool hasStatusChanged = priorStatus == null || priorStatus.Status != currentStatus.Status;
+        if (!hasStatusChanged)
+        {
+            return;
+        }
+
+        DateTime occurredUtc = DateTime.UtcNow;
+
+        Dictionary<string, string> payload = new()
+        {
+            ["previousStatus"] = priorStatus?.Status.ToString() ?? "Unknown",
+            ["currentStatus"] = currentStatus.Status.ToString(),
+            ["timeRemainingSeconds"] = currentStatus.TimeRemainingSeconds.ToString(),
+            ["playerCount"] = currentStatus.PlayerCount.ToString()
+        };
+
+        await _flowTriggerEventService.EmitAsync(new FlowTriggerEvent
+        {
+            EventKey = FlowTriggerEventKeys.LaserGameStatusChanged,
+            ClientId = clientId,
+            OccurredUtc = occurredUtc,
+            Payload = payload
+        });
+
+        bool isStartedTransition = priorStatus?.Status == GameStatus.NotStarted && currentStatus.Status == GameStatus.InGame;
+        if (isStartedTransition)
+        {
+            await _flowTriggerEventService.EmitAsync(new FlowTriggerEvent
+            {
+                EventKey = FlowTriggerEventKeys.LaserGameStarted,
+                ClientId = clientId,
+                OccurredUtc = occurredUtc,
+                Payload = new Dictionary<string, string>(payload)
+            });
+        }
+
+        bool isEndedTransition = priorStatus?.Status == GameStatus.InGame && currentStatus.Status == GameStatus.NotStarted;
+        if (isEndedTransition)
+        {
+            await _flowTriggerEventService.EmitAsync(new FlowTriggerEvent
+            {
+                EventKey = FlowTriggerEventKeys.LaserGameEnded,
+                ClientId = clientId,
+                OccurredUtc = occurredUtc,
+                Payload = new Dictionary<string, string>(payload)
+            });
+        }
     }
 
     public async Task Load(Guid songId)

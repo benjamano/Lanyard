@@ -1,0 +1,168 @@
+<FluentStack class="text-center flow-scroll" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
+    <FluentCard MinimalStyle="true" Class="py-4 w-100">START</FluentCard>
+
+    <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;" @ondragover:preventDefault @ondrop="(args) => DropAtIndexAsync(args, 0)"></FluentDivider>
+
+    @if (SelectedFlow?.Steps is not null)
+    {
+        int index = 0;
+
+        foreach (AutomationFlowStepDefinition step in SelectedFlow.Steps.OrderBy(x => x.SortOrder))
+        {
+            bool hasValidationErrors = StepHasRequiredValueErrors(step);
+
+            <FluentCard AreaRestricted="false" MinimalStyle="true" Class="py-4 w-100" @ondragover:preventDefault @ondrop="(args) => DropAtIndexAsync(args, index)">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Class="px-2">
+                    <FluentLabel Typo="Typography.PaneHeader">@step.Template?.Name</FluentLabel>
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentBadge Appearance="@(step.Template?.Kind == AutomationStepKind.Trigger ? Appearance.Accent : Appearance.Outline)">
+                            @step.Template?.Kind
+                        </FluentBadge>
+                        <FluentButton Appearance="Appearance.Lightweight" IconStart="@(new Icons.Regular.Size20.Delete())" OnClick="() => RemoveStep(step.Id)">
+                            Remove
+                        </FluentButton>
+                    </FluentStack>
+                </FluentStack>
+
+                @if (!string.IsNullOrWhiteSpace(step.Template?.Description))
+                {
+                    <FluentLabel>@step.Template.Description</FluentLabel>
+                }
+
+                @if (hasValidationErrors)
+                {
+                    <FluentBadge Appearance="Appearance.Stealth" Color="Color.Error" Class="mt-2">
+                        Missing required values.
+                    </FluentBadge>
+                }
+
+                @if (step.Template?.Parameters.Any() == true)
+                {
+                    <FluentGrid Class="mt-2">
+                        @foreach (AutomationStepTemplateParameterDefinition parameter in step.Template.Parameters)
+                        {
+                            AutomationStepParameterValueDefinition? parameterValue = step.ParameterValues.FirstOrDefault(x => x.ParameterId == parameter.Id);
+                            bool hasError = parameter.IsRequired && string.IsNullOrWhiteSpace(parameterValue?.Value);
+
+                            <FluentGridItem xs="6">
+                                <FluentTextField Value="@parameterValue?.Value"
+                                                 ValueChanged="value => UpdateParameterValue(step, parameter.Id, value)"
+                                                 Label="@BuildParameterLabel(parameter)"
+                                                 Appearance="FluentInputAppearance.Outline"
+                                                 Required="@parameter.IsRequired">
+                                </FluentTextField>
+                                @if (hasError)
+                                {
+                                    <FluentLabel Class="text-danger">Required value for @parameter.Name</FluentLabel>
+                                }
+                            </FluentGridItem>
+                        }
+                    </FluentGrid>
+                }
+            </FluentCard>
+
+            <FluentDivider Orientation="Orientation.Vertical" Style="height: 25px;" @ondragover:preventDefault @ondrop="(args) => DropAtIndexAsync(args, index + 1)"></FluentDivider>
+            index++;
+        }
+    }
+
+    <FluentCard MinimalStyle="true" Class="py-4 w-100" @ondragover:preventDefault @ondrop="DropAtEndAsync">END</FluentCard>
+</FluentStack>
+
+@code {
+    [Parameter]
+    public AutomationFlowDefinition? SelectedFlow { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnTemplateDropped { get; set; }
+
+    [Parameter]
+    public EventCallback OnFlowChanged { get; set; }
+
+    public bool HasValidationErrors => SelectedFlow?.Steps.Any(StepHasRequiredValueErrors) == true;
+
+    private async Task DropAtIndexAsync(DragEventArgs args, int index)
+    {
+        await OnTemplateDropped.InvokeAsync(index);
+    }
+
+    private async Task DropAtEndAsync(DragEventArgs args)
+    {
+        if (SelectedFlow is null)
+        {
+            await OnTemplateDropped.InvokeAsync(0);
+            return;
+        }
+
+        await OnTemplateDropped.InvokeAsync(SelectedFlow.Steps.Count);
+    }
+
+    private void RemoveStep(Guid stepId)
+    {
+        if (SelectedFlow is null)
+        {
+            return;
+        }
+
+        AutomationFlowStepDefinition? step = SelectedFlow.Steps.FirstOrDefault(x => x.Id == stepId);
+
+        if (step is null)
+        {
+            return;
+        }
+
+        SelectedFlow.Steps.Remove(step);
+        NormalizeSortOrder();
+        _ = OnFlowChanged.InvokeAsync();
+    }
+
+    private void UpdateParameterValue(AutomationFlowStepDefinition step, Guid parameterId, string? value)
+    {
+        AutomationStepParameterValueDefinition? parameter = step.ParameterValues.FirstOrDefault(x => x.ParameterId == parameterId);
+
+        if (parameter is null)
+        {
+            step.ParameterValues.Add(new AutomationStepParameterValueDefinition
+            {
+                ParameterId = parameterId,
+                Value = value ?? string.Empty
+            });
+        }
+        else
+        {
+            parameter.Value = value ?? string.Empty;
+        }
+
+        _ = OnFlowChanged.InvokeAsync();
+    }
+
+    private static string BuildParameterLabel(AutomationStepTemplateParameterDefinition parameter)
+    {
+        return $"{parameter.Name} ({parameter.DataType})";
+    }
+
+    private bool StepHasRequiredValueErrors(AutomationFlowStepDefinition step)
+    {
+        if (step.Template?.Parameters.Any() != true)
+        {
+            return false;
+        }
+
+        return step.Template.Parameters.Any(parameter =>
+            parameter.IsRequired &&
+            string.IsNullOrWhiteSpace(step.ParameterValues.FirstOrDefault(x => x.ParameterId == parameter.Id)?.Value));
+    }
+
+    private void NormalizeSortOrder()
+    {
+        if (SelectedFlow is null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < SelectedFlow.Steps.Count; i++)
+        {
+            SelectedFlow.Steps[i].SortOrder = i;
+        }
+    }
+}

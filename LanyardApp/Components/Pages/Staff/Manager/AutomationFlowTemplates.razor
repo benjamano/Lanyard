@@ -1,0 +1,9 @@
+@page "/staff/manage/automationflowtemplates"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>Automation Flow Templates</PageTitle>
+
+<DynamicComponent Type="typeof(Lanyard.App.Components.AutomationFlows.AutomationFlowTemplates)" />
