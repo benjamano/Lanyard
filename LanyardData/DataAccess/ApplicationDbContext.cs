@@ -34,6 +34,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<FlowTriggerBinding> FlowTriggerBindings { get; set; }
         public DbSet<Dashboard> Dashboards { get; set; }
         public DbSet<DashboardWidget> DashboardWidgets { get; set; }
+        public DbSet<AutomationFlow> AutomationFlows { get; set; }
+        public DbSet<AutomationFlowStep> AutomationFlowSteps { get; set; }
+        public DbSet<AutomationFlowRun> AutomationFlowRuns { get; set; }
+        public DbSet<AutomationFlowRunStepResult> AutomationFlowRunStepResults { get; set; }
         public DbSet<FileMetadata> FileMetadata { get; set; }
         public DbSet<Folder> Folders { get; set; }
 
@@ -110,6 +114,13 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationFlow>(entity =>
             {
                 entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.TriggerKey, x.ClientId, x.IsActive });
+            });
+
+            modelBuilder.Entity<AutomationFlowStep>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.IsActive, x.SortOrder });
                 entity.HasIndex(x => new { x.IsActive, x.Name });
                 entity.HasIndex(x => x.ClientId);
                 entity.HasIndex(x => x.TriggerEventName);
@@ -130,6 +141,27 @@ namespace Lanyard.Infrastructure.DataAccess
                     .WithMany(x => x.Steps)
                     .HasForeignKey(x => x.AutomationFlowId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlowRun>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowId, x.RunStartedAtUtc });
+
+                entity.HasOne(x => x.AutomationFlow)
+                    .WithMany(x => x.Runs)
+                    .HasForeignKey(x => x.AutomationFlowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AutomationFlowRunStepResult>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AutomationFlowRunId, x.SortOrder });
+
+                entity.HasOne(x => x.AutomationFlowRun)
+                    .WithMany(x => x.StepResults)
+                    .HasForeignKey(x => x.AutomationFlowRunId)
 
                 entity.HasOne(x => x.StepTypeTemplate)
                     .WithMany(x => x.AutomationSteps)
