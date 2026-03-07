@@ -1,4 +1,5 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.Automation;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Constants;
@@ -18,6 +19,7 @@ public class SignalRControlHub(
     MusicPlayerService playerService,
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
+    IAutomationFlowRunLogService automationFlowRunLogService) : Hub, ISignalRProjectionControlHub
     IFlowTriggerEventService flowTriggerEventService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
@@ -25,6 +27,7 @@ public class SignalRControlHub(
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
+    private readonly IAutomationFlowRunLogService _automationFlowRunLogService = automationFlowRunLogService;
     private readonly IFlowTriggerEventService _flowTriggerEventService = flowTriggerEventService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
@@ -179,7 +182,88 @@ public class SignalRControlHub(
         }
 
         Guid clientId = getResult.Data;
+        DateTime completedUtc = DateTime.UtcNow;
+        string triggerPayload = $"LaserGameStatus: Status={status.Status}, TimeRemainingSeconds={status.TimeRemainingSeconds}, PlayerCount={status.PlayerCount}";
 
+        List<Guid> matchedFlowIds = [];
+        List<AutomationFlowRunStepRecord> runSteps = [];
+        string? errorText = null;
+
+        try
+        {
+            Result<IEnumerable<ClientProjectionSettings>> projectionSettingsResult = await _clientService.GetClientProjectionSettingsAsync(clientId);
+            if (!projectionSettingsResult.IsSuccess)
+            {
+                errorText = projectionSettingsResult.Error ?? "Unable to resolve projection settings for matched flow IDs.";
+                runSteps.Add(new AutomationFlowRunStepRecord
+                {
+                    StepId = Guid.NewGuid(),
+                    Name = "ResolveMatchedFlows",
+                    IsSuccess = false,
+                    ResultText = "Failed to resolve matched flows.",
+                    ErrorText = errorText,
+                    CompletedUtc = completedUtc
+                });
+            }
+            else
+            {
+                matchedFlowIds = projectionSettingsResult.Data?
+                    .Where(x => x.IsActive)
+                    .Select(x => x.ProjectionProgramId)
+                    .Distinct()
+                    .ToList() ?? [];
+
+                runSteps.Add(new AutomationFlowRunStepRecord
+                {
+                    StepId = Guid.NewGuid(),
+                    Name = "ResolveMatchedFlows",
+                    IsSuccess = true,
+                    ResultText = $"Matched {matchedFlowIds.Count} flow(s) for client {clientId}.",
+                    CompletedUtc = completedUtc
+                });
+            }
+
+            _laserGameStatusStore.UpdateStatus(clientId, status);
+
+            runSteps.Add(new AutomationFlowRunStepRecord
+            {
+                StepId = Guid.NewGuid(),
+                Name = "UpdateLaserGameStatusStore",
+                IsSuccess = true,
+                ResultText = "Laser status store updated.",
+                CompletedUtc = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            errorText = ex.Message;
+            runSteps.Add(new AutomationFlowRunStepRecord
+            {
+                StepId = Guid.NewGuid(),
+                Name = "UpdateLaserGameStatusStore",
+                IsSuccess = false,
+                ResultText = "Laser status store update failed.",
+                ErrorText = ex.Message,
+                CompletedUtc = DateTime.UtcNow
+            });
+
+            _logger.LogError(ex, "Failed processing laser status update for client {ClientId}", clientId);
+        }
+
+        AutomationFlowRunRecord runRecord = new()
+        {
+            RunId = Guid.NewGuid(),
+            ClientId = clientId,
+            TriggerPayload = triggerPayload,
+            MatchedFlowIds = matchedFlowIds,
+            StartedUtc = completedUtc,
+            CompletedUtc = DateTime.UtcNow,
+            IsSuccess = string.IsNullOrWhiteSpace(errorText),
+            ErrorText = errorText,
+            Steps = runSteps
+        };
+
+        await _automationFlowRunLogService.RecordRunAsync(runRecord);
         bool foundPriorStatus = _laserGameStatusStore.TryGetStatus(clientId, out LaserGameStatusDTO? priorStatus);
 
         _laserGameStatusStore.UpdateStatus(clientId, status);

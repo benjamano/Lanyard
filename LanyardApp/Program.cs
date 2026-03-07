@@ -3,6 +3,7 @@ using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Automation;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
@@ -42,6 +43,7 @@ builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<IFlowActionDispatcher, FlowActionDispatcher>();
 builder.Services.AddScoped<IFlowActionHandler, MusicFlowActionHandler>();
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IAutomationFlowRunLogService, AutomationFlowRunLogService>();
 builder.Services.AddSingleton<IFlowTriggerEventService, FlowTriggerEventService>();
 builder.Services.AddSignalR();
 

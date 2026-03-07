@@ -83,6 +83,10 @@
                                         <FluentIcon Value="@(new Icons.Regular.Size20.ProjectionScreenText())" Color="Color.FillInverse" class="me-2" />
                                         <span>Projection</span>
                                     </a>
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/automationflows">
+                                        <FluentIcon Value="@(new Icons.Regular.Size20.GridDots())" Color="Color.FillInverse" class="me-2" />
+                                        <span>Automation Flows</span>
+                                    </a>
                                     <AuthorizeView Roles="Admin" Context="_context">
                                     <Authorized>
                                             <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/clients">
