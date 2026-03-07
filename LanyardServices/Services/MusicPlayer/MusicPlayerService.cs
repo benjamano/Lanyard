@@ -253,32 +253,46 @@ public class MusicPlayerService
             return;
         }
 
-        List<Song> queueToSet;
+        List<Song> queueToSet = playlist is not null
+            ? await BuildPlaylistQueueAsync(playlist, song)
+            : [song];
 
         if (playlist is not null)
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            List<Song> playlistSongs = await context.PlaylistSongMembers
-                .Where(x => x.PlaylistId == playlist.Id)
-                .Select(x => x.Song!)
-                .ToListAsync();
-
-            playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
-
-            queueToSet = [song, .. playlistSongs.Where(x => x.Id != song.Id)];
-
             await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.Select(x => x.Id));
-        }
-        else
-        {
-            queueToSet = [song];
         }
 
         SetQueue(clientId, queueToSet, playlist, 0);
 
         await SendToClientAsync(clientId, "Load", song.Id);
         await SendToClientAsync(clientId, "Play");
+    }
+
+    public async Task LoadPlaylist(Guid clientId, Playlist playlist)
+    {
+        List<Song> queueToSet = await BuildPlaylistQueueAsync(playlist);
+
+        SetQueue(clientId, queueToSet, playlist, 0);
+        await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.Select(x => x.Id));
+    }
+
+    private async Task<List<Song>> BuildPlaylistQueueAsync(Playlist playlist, Song? startSong = null)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        List<Song> playlistSongs = await context.PlaylistSongMembers
+            .Where(x => x.PlaylistId == playlist.Id)
+            .Select(x => x.Song!)
+            .ToListAsync();
+
+        playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
+
+        if (startSong is not null)
+        {
+            return [startSong, .. playlistSongs.Where(x => x.Id != startSong.Id)];
+        }
+
+        return playlistSongs;
     }
 
     public async Task Pause(Guid clientId)
