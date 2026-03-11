@@ -1,11 +1,6 @@
 ﻿@inherits LayoutComponentBase
 
 @using Lanyard.App.Components.Layout
-@using Lanyard.Application.Services.Authentication
-@using Microsoft.Extensions.Options
-@using Lanyard.Shared.DTO;
-
-@inject AppInfo AppInfo
 
 <loading-theme storage-name="theme"></loading-theme>
 
@@ -20,30 +15,11 @@
         </article>
     </main>
 
-    <FluentFooter>
-        <FluentCard AreaRestricted="false" MinimalStyle="true" Class="rounded-0">
-            <FluentStack VerticalAlignment="VerticalAlignment.Center">
-                <div style="flex: 1">
-                    <ThemeSelector></ThemeSelector>
-                </div>      
-                
-                <div>
-                    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Center" Orientation="Orientation.Vertical">
-                        <span class="mb-0">© @DateTime.Now.Year The Lanyard Development Team</span>
-                        <span class="mb-0"></span>
-                        <span>Version @AppInfo.Version</span>
-                    </FluentStack>
-                </div>
-
-                <div style="flex: 1; text-align: right;">
-                </div>
-            </FluentStack>
-        </FluentCard>
-    </FluentFooter>
+    <Footer />
 </div>
 
-<FluentToastProvider />
 <FluentDialogProvider />
 <FluentTooltipProvider />
 <FluentMessageBarProvider />
 <FluentMenuProvider />
+<FluentToastProvider />

@@ -48,3 +48,11 @@ body[data-theme="dark"] {
 body {
     color: var(--neutral-foreground-rest) !important;
 }
+
+#components-reconnect-modal{
+    color: var(--neutral-foreground-rest) !important;
+}
+
+.components-reconnect-dialog {
+    background-color: var(--fill-color) !important;
+}

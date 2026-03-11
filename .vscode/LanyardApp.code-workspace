@@ -20,12 +20,12 @@
 			".dockerignore": true,
 			"AGENTS.md": true,
 			"COPILOT_INSTRUCTIONS.md": true,
-			// ".github": true,
+			".github": true,
 			"*.VisualStudio.json": true,
 			"LanyardClient": true,
 			"*/artifacts": true,
 			"**/*.csproj.user": true,
-			"docker-compose.yml": true,
+			// "docker-compose.yml": true,
 		},
 		"launch": {
 			"configurations": [
