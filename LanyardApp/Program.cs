@@ -1,5 +1,4 @@
 using Lanyard.App.Components;
-using Lanyard.App.Data;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
@@ -111,9 +110,6 @@ builder.Services.AddFluentUIComponents(options =>
 builder.Services.AddSignalR();
 
 var app = builder.Build();
-
-// Seed development data (only runs in Development environment)
-await DevelopmentDataSeeder.SeedDevelopmentDataAsync(app.Services, app.Environment);
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())

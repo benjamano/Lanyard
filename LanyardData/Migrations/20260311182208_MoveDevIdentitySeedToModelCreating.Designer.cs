@@ -3,6 +3,7 @@ using System;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260311182208_MoveDevIdentitySeedToModelCreating")]
+    partial class MoveDevIdentitySeedToModelCreating
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -58,6 +61,58 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasDatabaseName("RoleNameIndex");
 
                     b.ToTable("AspNetRoles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "dev-role-admin",
+                            ConcurrencyStamp = "SEED-ROLE-ADMIN-CS",
+                            CreateDate = new DateTime(2026, 3, 11, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserId = "dev-admin-user",
+                            IsActive = true,
+                            Name = "Admin",
+                            NormalizedName = "ADMIN"
+                        },
+                        new
+                        {
+                            Id = "dev-role-manager",
+                            ConcurrencyStamp = "SEED-ROLE-MANAGER-CS",
+                            CreateDate = new DateTime(2026, 3, 11, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserId = "dev-admin-user",
+                            IsActive = true,
+                            Name = "Manager",
+                            NormalizedName = "MANAGER"
+                        },
+                        new
+                        {
+                            Id = "dev-role-staff",
+                            ConcurrencyStamp = "SEED-ROLE-STAFF-CS",
+                            CreateDate = new DateTime(2026, 3, 11, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserId = "dev-admin-user",
+                            IsActive = true,
+                            Name = "Staff",
+                            NormalizedName = "STAFF"
+                        },
+                        new
+                        {
+                            Id = "dev-role-can-control-music",
+                            ConcurrencyStamp = "SEED-ROLE-CAN-CONTROL-MUSIC-CS",
+                            CreateDate = new DateTime(2026, 3, 11, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserId = "dev-admin-user",
+                            IsActive = true,
+                            Name = "CanControlMusic",
+                            NormalizedName = "CANCONTROLMUSIC"
+                        },
+                        new
+                        {
+                            Id = "dev-role-can-clock-in",
+                            ConcurrencyStamp = "SEED-ROLE-CAN-CLOCK-IN-CS",
+                            CreateDate = new DateTime(2026, 3, 11, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedByUserId = "dev-admin-user",
+                            IsActive = true,
+                            Name = "CanClockIn",
+                            NormalizedName = "CANCLOCKIN"
+                        });
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
@@ -633,6 +688,26 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "dev-admin-user",
+                            AccessFailedCount = 0,
+                            ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP",
+                            Email = "admin@play2day.com",
+                            EmailConfirmed = true,
+                            FirstName = "System",
+                            LastName = "Administrator",
+                            LockoutEnabled = false,
+                            NormalizedEmail = "ADMIN@PLAY2DAY.COM",
+                            NormalizedUserName = "ADMIN",
+                            PasswordHash = "AQAAAAIAAYagAAAAEJ1AhlJOAablYfFpSBJmkOkqLkqidbamfdrRwkTGjXCnkD30AqM6PNAcAh96mQgYXg==",
+                            PhoneNumberConfirmed = false,
+                            SecurityStamp = "SEED-ADMIN-SECURITY-STAMP",
+                            TwoFactorEnabled = false,
+                            UserName = "admin"
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -720,6 +795,33 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("AspNetUserRoles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            UserId = "dev-admin-user",
+                            RoleId = "dev-role-admin"
+                        },
+                        new
+                        {
+                            UserId = "dev-admin-user",
+                            RoleId = "dev-role-manager"
+                        },
+                        new
+                        {
+                            UserId = "dev-admin-user",
+                            RoleId = "dev-role-staff"
+                        },
+                        new
+                        {
+                            UserId = "dev-admin-user",
+                            RoleId = "dev-role-can-control-music"
+                        },
+                        new
+                        {
+                            UserId = "dev-admin-user",
+                            RoleId = "dev-role-can-clock-in"
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>

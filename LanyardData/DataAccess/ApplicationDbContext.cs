@@ -9,6 +9,15 @@ namespace Lanyard.Infrastructure.DataAccess
     public class ApplicationDbContext
         : IdentityDbContext<UserProfile, ApplicationRole, string>
     {
+        private const string SeedAdminUserId = "dev-admin-user";
+        private const string SeedAdminRoleId = "dev-role-admin";
+        private const string SeedManagerRoleId = "dev-role-manager";
+        private const string SeedStaffRoleId = "dev-role-staff";
+        private const string SeedCanControlMusicRoleId = "dev-role-can-control-music";
+        private const string SeedCanClockInRoleId = "dev-role-can-clock-in";
+        private const string SeedAdminPasswordHash = "AQAAAAIAAYagAAAAEJ1AhlJOAablYfFpSBJmkOkqLkqidbamfdrRwkTGjXCnkD30AqM6PNAcAh96mQgYXg==";
+        private static readonly DateTime SeedRoleCreateDateUtc = new DateTime(2026, 03, 11, 0, 0, 0, DateTimeKind.Utc);
+
         public ApplicationDbContext() : base() { }
 
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
@@ -100,6 +109,82 @@ namespace Lanyard.Infrastructure.DataAccess
                     .HasForeignKey(x => x.DashboardId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            UserProfile seedAdminUser = new UserProfile
+            {
+                Id = SeedAdminUserId,
+                UserName = "admin",
+                NormalizedUserName = "ADMIN",
+                Email = "admin@play2day.com",
+                NormalizedEmail = "ADMIN@PLAY2DAY.COM",
+                EmailConfirmed = true,
+                FirstName = "System",
+                LastName = "Administrator",
+                PasswordHash = SeedAdminPasswordHash,
+                SecurityStamp = "SEED-ADMIN-SECURITY-STAMP",
+                ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP"
+            };
+
+            modelBuilder.Entity<UserProfile>().HasData(seedAdminUser);
+
+            modelBuilder.Entity<ApplicationRole>().HasData(
+                new ApplicationRole
+                {
+                    Id = SeedAdminRoleId,
+                    Name = "Admin",
+                    NormalizedName = "ADMIN",
+                    ConcurrencyStamp = "SEED-ROLE-ADMIN-CS",
+                    CreatedByUserId = SeedAdminUserId,
+                    CreateDate = SeedRoleCreateDateUtc,
+                    IsActive = true
+                },
+                new ApplicationRole
+                {
+                    Id = SeedManagerRoleId,
+                    Name = "Manager",
+                    NormalizedName = "MANAGER",
+                    ConcurrencyStamp = "SEED-ROLE-MANAGER-CS",
+                    CreatedByUserId = SeedAdminUserId,
+                    CreateDate = SeedRoleCreateDateUtc,
+                    IsActive = true
+                },
+                new ApplicationRole
+                {
+                    Id = SeedStaffRoleId,
+                    Name = "Staff",
+                    NormalizedName = "STAFF",
+                    ConcurrencyStamp = "SEED-ROLE-STAFF-CS",
+                    CreatedByUserId = SeedAdminUserId,
+                    CreateDate = SeedRoleCreateDateUtc,
+                    IsActive = true
+                },
+                new ApplicationRole
+                {
+                    Id = SeedCanControlMusicRoleId,
+                    Name = "CanControlMusic",
+                    NormalizedName = "CANCONTROLMUSIC",
+                    ConcurrencyStamp = "SEED-ROLE-CAN-CONTROL-MUSIC-CS",
+                    CreatedByUserId = SeedAdminUserId,
+                    CreateDate = SeedRoleCreateDateUtc,
+                    IsActive = true
+                },
+                new ApplicationRole
+                {
+                    Id = SeedCanClockInRoleId,
+                    Name = "CanClockIn",
+                    NormalizedName = "CANCLOCKIN",
+                    ConcurrencyStamp = "SEED-ROLE-CAN-CLOCK-IN-CS",
+                    CreatedByUserId = SeedAdminUserId,
+                    CreateDate = SeedRoleCreateDateUtc,
+                    IsActive = true
+                });
+
+            modelBuilder.Entity<IdentityUserRole<string>>().HasData(
+                new IdentityUserRole<string> { UserId = SeedAdminUserId, RoleId = SeedAdminRoleId },
+                new IdentityUserRole<string> { UserId = SeedAdminUserId, RoleId = SeedManagerRoleId },
+                new IdentityUserRole<string> { UserId = SeedAdminUserId, RoleId = SeedStaffRoleId },
+                new IdentityUserRole<string> { UserId = SeedAdminUserId, RoleId = SeedCanControlMusicRoleId },
+                new IdentityUserRole<string> { UserId = SeedAdminUserId, RoleId = SeedCanClockInRoleId });
         }
     }
 }
