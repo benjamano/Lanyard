@@ -4,11 +4,15 @@
 }
 else if (Widget.Type == "MusicControls")
 {
-    <KioskMusicControlsPlaceholderWidget Widget="Widget" />
+    <KioskMusicControlsWidget Widget="Widget" />
 }
 else if (Widget.Type == "LaserStats")
 {
     <KioskLaserGameStatusWidget Widget="Widget" />
+}
+else if (Widget.Type == "TextArea")
+{
+    <KioskTextAreaWidget Widget="Widget" />
 }
 
 @code {

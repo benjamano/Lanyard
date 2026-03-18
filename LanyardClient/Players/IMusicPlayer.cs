@@ -10,6 +10,7 @@ public interface IMusicPlayer
     Result<bool> Pause();
     Result<bool> PlayNext();
     Result<bool> PlayPrevious();
+    Result<bool> Seek(double seconds);
     Result<bool> LoadPlaylist(IEnumerable<Guid> songList);
 
     Result<PlaybackState> GetPlaybackStatus();

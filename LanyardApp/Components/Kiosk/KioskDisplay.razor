@@ -64,11 +64,6 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
                 {
                     CurrentProjectionStep = step;
 
-                    if (!IsSupportedTemplate(step.Template.Name) && _loggedUnsupportedTemplateStepIds.Add(step.Id))
-                    {
-                        _logger.LogWarning("Unsupported kiosk template '{TemplateName}' for step {StepId}. Rendering will be skipped.", step.Template.Name, step.Id);
-                    }
-
                     StateHasChanged();
                 }
 
@@ -89,15 +84,8 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 
             runCount++;
         }
-    }
-
-    private static bool IsSupportedTemplate(string templateName)
-    {
-        return string.Equals(templateName, KioskTemplateConstants.TemplateNames.ShowText, StringComparison.Ordinal)
-            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.PlayVideo, StringComparison.Ordinal)
-            || string.Equals(templateName, KioskTemplateConstants.TemplateNames.Dashboard, StringComparison.Ordinal);
-    }
-
+    } 
+    
     public void Dispose()
     {
         _cts?.Cancel();

@@ -1,0 +1,57 @@
+.music-widget-stack {
+    height: 100%;
+    width: 100%;
+    padding: 16px;
+    gap: 8px;
+}
+
+.music-widget-subtle {
+    color: var(--neutral-foreground-hint);
+}
+
+.music-widget-song-title {
+    font-weight: 600;
+}
+
+.music-widget-client-label {
+    color: var(--neutral-foreground-hint);
+}
+
+.music-widget-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.music-widget-toggle-button {
+    border: 1px solid var(--neutral-stroke-divider-rest);
+    background: var(--neutral-layer-2);
+    color: var(--neutral-foreground-rest);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+}
+
+.music-widget-toggle-on {
+    border-color: var(--accent-fill-rest);
+    color: var(--accent-foreground-rest);
+}
+
+.music-widget-seek-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.music-widget-seek-row input[type="range"] {
+    width: 100%;
+}
+
+.music-widget-time {
+    font-size: 0.75rem;
+    color: var(--neutral-foreground-hint);
+    min-width: 40px;
+    text-align: center;
+}

@@ -9,6 +9,8 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <PublishAot>False</PublishAot>
 
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute> 
 	<Version>1.2</Version>
   </PropertyGroup>
 

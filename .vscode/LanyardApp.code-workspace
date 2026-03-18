@@ -60,7 +60,7 @@
 					"build",
 					"${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
 				],
-				"dependsOn": ["Start PostgreSQL (Docker Compose)"],
+				// "dependsOn": ["Start PostgreSQL (Docker Compose)"],
 				"group": {
 					"kind": "build",
 					"isDefault": true

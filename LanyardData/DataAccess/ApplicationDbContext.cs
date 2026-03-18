@@ -45,7 +45,7 @@ namespace Lanyard.Infrastructure.DataAccess
             if (!optionsBuilder.IsConfigured)
             {
                 optionsBuilder.UseNpgsql(
-                    Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection"),
+                    "Host=100.67.245.90;Port=5432;Database=lanyarddb;Username=psqluser;Password=nFGDcVxzHbn7HsrrcReJtBY",
                     b => b.MigrationsAssembly("Lanyard.Infrastructure"));
             }
 

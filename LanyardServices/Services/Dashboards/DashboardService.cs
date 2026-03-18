@@ -13,7 +13,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
     [
         "Clock",
         "MusicControls",
-        "LaserStats"
+        "LaserStats",
+        "TextArea"
     ];
 
     public async Task<Result<IEnumerable<Dashboard>>> GetDashboardsAsync()

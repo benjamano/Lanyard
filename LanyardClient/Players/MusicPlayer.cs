@@ -25,7 +25,8 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
     public Result<bool> LoadPlaylist(IEnumerable<Guid> songList)
     {
-        SongQueue.AddRange(songList);
+        SongQueue = songList.ToList();
+        QueueIndex = 0;
 
         return Result<bool>.Ok(true);
     }
@@ -65,7 +66,10 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             _player.Play();
 
             PlaybackStateChanged?.Invoke(PlaybackState.Playing);
-            PlayingSongChanged?.Invoke(SongQueue[QueueIndex]);
+            if (SongQueue.Count > 0 && QueueIndex >= 0 && QueueIndex < SongQueue.Count)
+            {
+                PlayingSongChanged?.Invoke(SongQueue[QueueIndex]);
+            }
         }
 
         return Result<bool>.Ok(true);
@@ -105,8 +109,12 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     {
         try
         {
-            QueueIndex++;
+            if (SongQueue.Count == 0)
+            {
+                return Result<bool>.Fail("No songs are loaded.");
+            }
 
+            QueueIndex = (QueueIndex + 1) % SongQueue.Count;
             Result<bool> result = Load(SongQueue[QueueIndex]);
             if (!result.IsSuccess)
             {
@@ -127,7 +135,12 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     {
         try
         {
-            QueueIndex--;
+            if (SongQueue.Count == 0)
+            {
+                return Result<bool>.Fail("No songs are loaded.");
+            }
+
+            QueueIndex = QueueIndex - 1 < 0 ? SongQueue.Count - 1 : QueueIndex - 1;
 
             Result<bool> result = Load(SongQueue[QueueIndex]);
             if (!result.IsSuccess)
@@ -172,6 +185,11 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     {
         try
         {
+            if (SongQueue.Count == 0 || QueueIndex < 0 || QueueIndex >= SongQueue.Count)
+            {
+                return Result<Guid>.Fail("No current song.");
+            }
+
             return Result<Guid>.Ok(SongQueue[QueueIndex]);
         }
         catch (Exception ex)
@@ -179,6 +197,25 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             _logger.LogError(ex, "MusicPlayer: Failed to get current song id");
             return Result<Guid>.Fail($"Failed to get current song id: {ex.Message}");
         }
+    }
+
+    public Result<bool> Seek(double seconds)
+    {
+        if (_reader is null)
+        {
+            return Result<bool>.Fail("No song loaded.");
+        }
+
+        double safeSeconds = Math.Max(0, seconds);
+        TimeSpan targetTime = TimeSpan.FromSeconds(safeSeconds);
+
+        if (_reader.TotalTime > TimeSpan.Zero && targetTime > _reader.TotalTime)
+        {
+            targetTime = _reader.TotalTime;
+        }
+
+        _reader.CurrentTime = targetTime;
+        return Result<bool>.Ok(true);
     }
 
     public void Dispose()

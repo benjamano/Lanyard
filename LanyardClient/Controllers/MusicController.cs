@@ -123,6 +123,21 @@ public class MusicControlHandler
                 _logger.LogError("Failed to play previous song: {Error}", result.Error);
             }
         });
+
+        connection.On("Seek", (double seconds) =>
+        {
+            _logger.LogInformation("Received SEEK command to {Seconds}", seconds);
+            Result<bool> result = _musicPlayer.Seek(seconds);
+
+            if (result.IsSuccess)
+            {
+                _logger.LogInformation("Seek command applied");
+            }
+            else
+            {
+                _logger.LogError("Failed to seek: {Error}", result.Error);
+            }
+        });
     }
 
     /// <summary>

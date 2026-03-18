@@ -1,0 +1,101 @@
+@using Microsoft.JSInterop
+
+@inject IJSRuntime JS
+
+<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: 100%; width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" Class="text-area-widget-stack">
+        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Notes" : Widget.Title)</FluentLabel>
+
+        <FluentTextArea Rows="8"
+                        Value="@_textValue"
+                        @oninput="HandleTextInput"
+                        Class="text-area-widget-input"></FluentTextArea>
+
+        @* @if (_saveToLocalStorage)
+        {
+            <FluentLabel Typo="Typography.Body" Class="text-area-widget-caption">
+                Saved locally in this browser.
+            </FluentLabel>
+        } *@
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+
+    private Guid _loadedWidgetId;
+    private bool _saveToLocalStorage;
+    private bool _storageLoaded;
+    private string _textValue = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (_loadedWidgetId != Widget.Id)
+        {
+            _loadedWidgetId = Widget.Id;
+            _textValue = string.Empty;
+            _storageLoaded = false;
+        }
+
+        DashboardWidgetConfigs.TextAreaWidgetConfig config = DashboardWidgetConfigs.ParseTextAreaConfig(Widget.ConfigJson);
+        _saveToLocalStorage = config.SaveToLocalStorage;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_saveToLocalStorage || _storageLoaded || _loadedWidgetId == Guid.Empty)
+        {
+            return;
+        }
+
+        _storageLoaded = true;
+        string storageKey = GetStorageKey(_loadedWidgetId);
+        string? storedValue = await GetFromLocalStorageAsync(storageKey);
+
+        if (storedValue is not null)
+        {
+            _textValue = storedValue;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleTextInput(ChangeEventArgs eventArgs)
+    {
+        _textValue = eventArgs.Value?.ToString() ?? string.Empty;
+
+        if (_saveToLocalStorage && _loadedWidgetId != Guid.Empty)
+        {
+            string storageKey = GetStorageKey(_loadedWidgetId);
+            await SetInLocalStorageAsync(storageKey, _textValue);
+        }
+    }
+
+    private static string GetStorageKey(Guid widgetId)
+    {
+        return $"lanyard.dashboard.textarea.{widgetId}";
+    }
+
+    private async Task<string?> GetFromLocalStorageAsync(string key)
+    {
+        try
+        {
+            return await JS.InvokeAsync<string?>("localStorage.getItem", key);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    private async Task SetInLocalStorageAsync(string key, string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", key, value);
+        }
+        catch (JSException)
+        {
+        }
+    }
+}

@@ -42,6 +42,10 @@ public class MusicPlayerService
         public Playlist? CurrentPlaylist { get; set; }
         public List<Song> Queue { get; set; } = [];
         public int QueueIndex { get; set; }
+        public bool IsShuffleEnabled { get; set; }
+        public bool IsRepeatEnabled { get; set; } = true;
+        public double LastKnownPositionSeconds { get; set; }
+        public DateTime LastPositionUpdateUtc { get; set; } = DateTime.UtcNow;
     }
 
     private ClientMusicState GetOrCreateState(Guid clientId)
@@ -85,18 +89,57 @@ public class MusicPlayerService
         }
     }
 
+    public bool GetShuffleEnabled(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return state.IsShuffleEnabled;
+        }
+    }
+
+    public bool GetRepeatEnabled(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return state.IsRepeatEnabled;
+        }
+    }
+
+    public double GetEstimatedPositionSeconds(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        DateTime nowUtc = DateTime.UtcNow;
+
+        lock (_lock)
+        {
+            return EstimatePositionSeconds(state, nowUtc);
+        }
+    }
+
     public void UpdatePlaybackState(Guid clientId, PlaybackState state)
     {
         bool changed;
 
         ClientMusicState clientState = GetOrCreateState(clientId);
+        DateTime nowUtc = DateTime.UtcNow;
 
         lock (_lock)
         {
             changed = clientState.CurrentState != state;
-            if (changed)
+
+            if (clientState.CurrentState == PlaybackState.Playing && state != PlaybackState.Playing)
             {
-                clientState.CurrentState = state;
+                clientState.LastKnownPositionSeconds = EstimatePositionSeconds(clientState, nowUtc);
+            }
+
+            clientState.CurrentState = state;
+            clientState.LastPositionUpdateUtc = nowUtc;
+
+            if (state == PlaybackState.Stopped)
+            {
+                clientState.LastKnownPositionSeconds = 0;
             }
         }
 
@@ -125,6 +168,9 @@ public class MusicPlayerService
                     state.QueueIndex = queueIndex;
                 }
             }
+
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
         }
 
         OnSongChanged?.Invoke(clientId, songId);
@@ -141,6 +187,8 @@ public class MusicPlayerService
             if (changed)
             {
                 state.CurrentSong = song;
+                state.LastKnownPositionSeconds = 0;
+                state.LastPositionUpdateUtc = DateTime.UtcNow;
             }
         }
 
@@ -160,6 +208,8 @@ public class MusicPlayerService
             state.QueueIndex = startIndex;
             state.CurrentSong = songs.Count > 0 && startIndex < songs.Count ? songs[startIndex] : null;
             state.CurrentPlaylist = playlist;
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
         }
 
         OnSongChanged?.Invoke(clientId, state.CurrentSong?.Id);
@@ -169,6 +219,7 @@ public class MusicPlayerService
     {
         Song? nextSong;
         ClientMusicState state = GetOrCreateState(clientId);
+        DateTime nowUtc = DateTime.UtcNow;
 
         lock (_lock)
         {
@@ -177,9 +228,18 @@ public class MusicPlayerService
                 return false;
             }
 
-            state.QueueIndex = (state.QueueIndex + 1) % state.Queue.Count;
+            int? nextIndex = GetNextQueueIndex(state);
+
+            if (!nextIndex.HasValue)
+            {
+                return false;
+            }
+
+            state.QueueIndex = nextIndex.Value;
             nextSong = state.Queue[state.QueueIndex];
             state.CurrentSong = nextSong;
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = nowUtc;
         }
 
         OnSongChanged?.Invoke(clientId, nextSong?.Id);
@@ -190,6 +250,7 @@ public class MusicPlayerService
     {
         Song? previousSong;
         ClientMusicState state = GetOrCreateState(clientId);
+        DateTime nowUtc = DateTime.UtcNow;
 
         lock (_lock)
         {
@@ -198,13 +259,103 @@ public class MusicPlayerService
                 return false;
             }
 
-            state.QueueIndex = state.QueueIndex - 1 < 0 ? state.Queue.Count - 1 : state.QueueIndex - 1;
+            int? previousIndex = GetPreviousQueueIndex(state);
+
+            if (!previousIndex.HasValue)
+            {
+                return false;
+            }
+
+            state.QueueIndex = previousIndex.Value;
             previousSong = state.Queue[state.QueueIndex];
             state.CurrentSong = previousSong;
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = nowUtc;
         }
 
         OnSongChanged?.Invoke(clientId, previousSong?.Id);
         return true;
+    }
+
+    private static int? GetNextQueueIndex(ClientMusicState state)
+    {
+        if (state.Queue.Count == 0)
+        {
+            return null;
+        }
+
+        if (state.IsShuffleEnabled)
+        {
+            if (state.Queue.Count == 1)
+            {
+                return state.IsRepeatEnabled ? 0 : null;
+            }
+
+            int nextIndex;
+            do
+            {
+                nextIndex = _rng.Next(0, state.Queue.Count);
+            } while (nextIndex == state.QueueIndex);
+
+            return nextIndex;
+        }
+
+        int sequentialNext = state.QueueIndex + 1;
+        if (sequentialNext >= state.Queue.Count)
+        {
+            return state.IsRepeatEnabled ? 0 : null;
+        }
+
+        return sequentialNext;
+    }
+
+    private static int? GetPreviousQueueIndex(ClientMusicState state)
+    {
+        if (state.Queue.Count == 0)
+        {
+            return null;
+        }
+
+        if (state.IsShuffleEnabled)
+        {
+            if (state.Queue.Count == 1)
+            {
+                return state.IsRepeatEnabled ? 0 : null;
+            }
+
+            int previousIndex;
+            do
+            {
+                previousIndex = _rng.Next(0, state.Queue.Count);
+            } while (previousIndex == state.QueueIndex);
+
+            return previousIndex;
+        }
+
+        int sequentialPrevious = state.QueueIndex - 1;
+        if (sequentialPrevious < 0)
+        {
+            return state.IsRepeatEnabled ? state.Queue.Count - 1 : null;
+        }
+
+        return sequentialPrevious;
+    }
+
+    private static double EstimatePositionSeconds(ClientMusicState state, DateTime nowUtc)
+    {
+        double positionSeconds = state.LastKnownPositionSeconds;
+
+        if (state.CurrentState == PlaybackState.Playing)
+        {
+            positionSeconds += (nowUtc - state.LastPositionUpdateUtc).TotalSeconds;
+        }
+
+        if (state.CurrentSong is not null && state.CurrentSong.DurationSeconds > 0)
+        {
+            return Math.Clamp(positionSeconds, 0, state.CurrentSong.DurationSeconds);
+        }
+
+        return Math.Max(0, positionSeconds);
     }
 
     private async Task<string?> GetClientConnectionIdAsync(Guid clientId)
@@ -240,6 +391,12 @@ public class MusicPlayerService
 
     public async Task Play(Guid clientId)
     {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
         await SendToClientAsync(clientId, "Play");
     }
 
@@ -278,6 +435,12 @@ public class MusicPlayerService
         SetQueue(clientId, queueToSet, playlist, 0);
 
         await SendToClientAsync(clientId, "Load", song.Id);
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
         await SendToClientAsync(clientId, "Play");
     }
 
@@ -300,6 +463,13 @@ public class MusicPlayerService
 
     public async Task Stop(Guid clientId)
     {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
         await SendToClientAsync(clientId, "Stop");
     }
 
@@ -313,7 +483,14 @@ public class MusicPlayerService
 
         if (MoveToNext(clientId))
         {
-            await SendToClientAsync(clientId, "PlayNext");
+            Song? nextSong = GetCurrentSong(clientId);
+            if (nextSong is null)
+            {
+                return;
+            }
+
+            await SendToClientAsync(clientId, "Load", nextSong.Id);
+            await SendToClientAsync(clientId, "Play");
         }
     }
 
@@ -321,7 +498,14 @@ public class MusicPlayerService
     {
         if (MoveToPrevious(clientId))
         {
-            await SendToClientAsync(clientId, "PlayPrevious");
+            Song? previousSong = GetCurrentSong(clientId);
+            if (previousSong is null)
+            {
+                return;
+            }
+
+            await SendToClientAsync(clientId, "Load", previousSong.Id);
+            await SendToClientAsync(clientId, "Play");
         }
     }
 
@@ -330,8 +514,59 @@ public class MusicPlayerService
         Song? currentSong = GetCurrentSong(clientId);
         if (currentSong != null)
         {
+            ClientMusicState state = GetOrCreateState(clientId);
+            lock (_lock)
+            {
+                state.LastKnownPositionSeconds = 0;
+                state.LastPositionUpdateUtc = DateTime.UtcNow;
+            }
+
             await SendToClientAsync(clientId, "Load", currentSong.Id);
             await SendToClientAsync(clientId, "Play");
         }
+    }
+
+    public Task<bool> ToggleShuffle(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        bool isEnabled;
+
+        lock (_lock)
+        {
+            state.IsShuffleEnabled = !state.IsShuffleEnabled;
+            isEnabled = state.IsShuffleEnabled;
+        }
+
+        return Task.FromResult(isEnabled);
+    }
+
+    public Task<bool> ToggleRepeat(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        bool isEnabled;
+
+        lock (_lock)
+        {
+            state.IsRepeatEnabled = !state.IsRepeatEnabled;
+            isEnabled = state.IsRepeatEnabled;
+        }
+
+        return Task.FromResult(isEnabled);
+    }
+
+    public async Task Seek(Guid clientId, double positionSeconds)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        double normalizedSeconds;
+
+        lock (_lock)
+        {
+            double duration = state.CurrentSong?.DurationSeconds ?? 0;
+            normalizedSeconds = duration > 0 ? Math.Clamp(positionSeconds, 0, duration) : Math.Max(0, positionSeconds);
+            state.LastKnownPositionSeconds = normalizedSeconds;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
+        await SendToClientAsync(clientId, "Seek", normalizedSeconds);
     }
 }

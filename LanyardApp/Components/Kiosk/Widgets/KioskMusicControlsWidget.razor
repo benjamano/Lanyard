@@ -1,0 +1,417 @@
+@implements IDisposable
+@using System.Globalization
+@using NAudio.Wave
+
+@inject MusicPlayerService _player
+@inject IClientService _clientService
+
+<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+    <FluentStack Orientation="Orientation.Vertical" Class="music-widget-stack">
+        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Music Controls" : Widget.Title)</FluentLabel>
+
+        @if (DashboardWidgetConfigs.IsMusicClientModeUser(_config.ClientMode))
+        {
+            <div class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm"
+                        value="@(_selectedClientId?.ToString() ?? string.Empty)"
+                        @onchange="HandleClientSelectionChanged">
+                    @if (_clients.Count == 0)
+                    {
+                        <option value="">No connected clients</option>
+                    }
+                    else
+                    {
+                        @foreach (ClientConnectedWithCapabilitiesDTO client in _clients)
+                        {
+                            <option value="@client.Id.ToString()">@client.Name</option>
+                        }
+                    }
+                </select>
+
+                <FluentButton Appearance="Appearance.Outline" OnClick="RefreshClientsAsync">Refresh</FluentButton>
+            </div>
+        }
+        else
+        {
+            <FluentLabel Typo="Typography.Body" Class="music-widget-client-label">
+                Client: @_selectedClientName
+            </FluentLabel>
+        }
+
+        @if (_currentSong is null)
+        {
+            <FluentLabel Typo="Typography.Body" Class="music-widget-subtle">No song loaded.</FluentLabel>
+        }
+        else
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="2">
+                <FluentLabel Typo="Typography.Body" Class="music-widget-song-title">@_currentSong.Name</FluentLabel>
+                <FluentLabel Typo="Typography.Body" Class="music-widget-subtle">@_currentSong.AlbumName</FluentLabel>
+            </FluentStack>
+        }
+
+        <div class="music-widget-controls-row">
+            <button class="@GetToggleButtonCss(_shuffleEnabled)" @onclick="ToggleShuffleAsync" disabled="@(!_selectedClientId.HasValue)">
+                Shuffle
+            </button>
+
+            <FluentButton Appearance="Appearance.Outline"
+                          IconOnly="true"
+                          Title="Previous"
+                          OnClick="PreviousAsync"
+                          Disabled="@(!_selectedClientId.HasValue)">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+            </FluentButton>
+
+            <FluentButton Appearance="Appearance.Accent"
+                          IconOnly="true"
+                          Title="@(_isPlaying ? "Pause" : "Play")"
+                          OnClick="TogglePlayAsync"
+                          Disabled="@(!_selectedClientId.HasValue)">
+                @if (_isPlaying)
+                {
+                    <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+                }
+                else
+                {
+                    <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+                }
+            </FluentButton>
+
+            <FluentButton Appearance="Appearance.Outline"
+                          IconOnly="true"
+                          Title="Next"
+                          OnClick="NextAsync"
+                          Disabled="@(!_selectedClientId.HasValue)">
+                <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+            </FluentButton>
+
+            <button class="@GetToggleButtonCss(_repeatEnabled)" @onclick="ToggleRepeatAsync" disabled="@(!_selectedClientId.HasValue)">
+                Repeat
+            </button>
+        </div>
+
+        <div class="music-widget-seek-row">
+            <span class="music-widget-time">@FormatTime(_currentPositionSeconds)</span>
+            <input type="range"
+                   min="0"
+                   max="@GetDurationSeconds().ToString("0", CultureInfo.InvariantCulture)"
+                   step="1"
+                   value="@_currentPositionSeconds.ToString("0", CultureInfo.InvariantCulture)"
+                   disabled="@(!_selectedClientId.HasValue || _currentSong is null)"
+                   @oninput="HandleSeekInput"
+                   @onchange="CommitSeekAsync" />
+            <span class="music-widget-time">@FormatTime(GetDurationSeconds())</span>
+        </div>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardWidget Widget { get; set; } = default!;
+
+    private Guid _loadedWidgetId;
+    private DashboardWidgetConfigs.MusicControlsWidgetConfig _config = new();
+    private readonly List<ClientConnectedWithCapabilitiesDTO> _clients = [];
+    private Guid? _selectedClientId;
+    private string _selectedClientName = "No client selected";
+    private Song? _currentSong;
+    private bool _isPlaying;
+    private bool _shuffleEnabled;
+    private bool _repeatEnabled = true;
+    private double _currentPositionSeconds;
+    private bool _isSeekPreviewActive;
+    private CancellationTokenSource _cts = new();
+    private Task? _tickerTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _player.OnSongChanged += HandleSongChanged;
+        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
+
+        await RefreshClientsAsync();
+
+        _tickerTask = RunTickerAsync(_cts.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        bool widgetChanged = _loadedWidgetId != Widget.Id;
+        _loadedWidgetId = Widget.Id;
+        _config = DashboardWidgetConfigs.ParseMusicControlsConfig(Widget.ConfigJson);
+
+        if (widgetChanged)
+        {
+            _currentPositionSeconds = 0;
+            _isSeekPreviewActive = false;
+        }
+
+        await EnsureSelectionMatchesConfigAsync();
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task RunTickerAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                RefreshPlaybackSnapshot();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RefreshClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
+        _clients.Clear();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            await EnsureSelectionMatchesConfigAsync();
+            return;
+        }
+
+        IEnumerable<ClientConnectedWithCapabilitiesDTO> connectedClients = result.Data
+            .Where(x => x.IsCurrentlyConnected)
+            .OrderBy(x => x.Name);
+
+        _clients.AddRange(connectedClients);
+        await EnsureSelectionMatchesConfigAsync();
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task EnsureSelectionMatchesConfigAsync()
+    {
+        if (DashboardWidgetConfigs.IsMusicClientModeUser(_config.ClientMode))
+        {
+            if (_selectedClientId.HasValue && _clients.Any(x => x.Id == _selectedClientId.Value))
+            {
+                _selectedClientName = ResolveClientName(_selectedClientId.Value);
+                return;
+            }
+
+            _selectedClientId = _clients.Count == 0 ? null : _clients[0].Id;
+            _selectedClientName = _selectedClientId.HasValue ? ResolveClientName(_selectedClientId.Value) : "No client selected";
+            return;
+        }
+
+        _selectedClientId = _config.FixedClientId;
+        _selectedClientName = _selectedClientId.HasValue ? ResolveClientName(_selectedClientId.Value) : "No client selected";
+        await Task.CompletedTask;
+    }
+
+    private void RefreshPlaybackSnapshot()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            _currentSong = null;
+            _isPlaying = false;
+            _shuffleEnabled = false;
+            _repeatEnabled = true;
+            _currentPositionSeconds = 0;
+            return;
+        }
+
+        Guid clientId = _selectedClientId.Value;
+        _currentSong = _player.GetCurrentSong(clientId);
+        _isPlaying = _player.GetCurrentPlaybackState(clientId) == PlaybackState.Playing;
+        _shuffleEnabled = _player.GetShuffleEnabled(clientId);
+        _repeatEnabled = _player.GetRepeatEnabled(clientId);
+
+        if (!_isSeekPreviewActive)
+        {
+            _currentPositionSeconds = _player.GetEstimatedPositionSeconds(clientId);
+        }
+    }
+
+    private async Task HandleClientSelectionChanged(ChangeEventArgs eventArgs)
+    {
+        if (Guid.TryParse(eventArgs.Value?.ToString(), out Guid clientId))
+        {
+            _selectedClientId = clientId;
+            _selectedClientName = ResolveClientName(clientId);
+        }
+        else
+        {
+            _selectedClientId = null;
+            _selectedClientName = "No client selected";
+        }
+
+        _isSeekPreviewActive = false;
+        RefreshPlaybackSnapshot();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task TogglePlayAsync()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            return;
+        }
+
+        await _player.TogglePlay(_selectedClientId.Value);
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task PreviousAsync()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            return;
+        }
+
+        await _player.Previous(_selectedClientId.Value);
+        _isSeekPreviewActive = false;
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task NextAsync()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            return;
+        }
+
+        await _player.Next(_selectedClientId.Value);
+        _isSeekPreviewActive = false;
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task ToggleShuffleAsync()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            return;
+        }
+
+        await _player.ToggleShuffle(_selectedClientId.Value);
+        RefreshPlaybackSnapshot();
+    }
+
+    private async Task ToggleRepeatAsync()
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            return;
+        }
+
+        await _player.ToggleRepeat(_selectedClientId.Value);
+        RefreshPlaybackSnapshot();
+    }
+
+    private void HandleSeekInput(ChangeEventArgs eventArgs)
+    {
+        if (double.TryParse(eventArgs.Value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out double seconds))
+        {
+            _isSeekPreviewActive = true;
+            _currentPositionSeconds = ClampSeekValue(seconds);
+        }
+    }
+
+    private async Task CommitSeekAsync(ChangeEventArgs eventArgs)
+    {
+        if (!_selectedClientId.HasValue)
+        {
+            _isSeekPreviewActive = false;
+            return;
+        }
+
+        if (!double.TryParse(eventArgs.Value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out double seconds))
+        {
+            _isSeekPreviewActive = false;
+            RefreshPlaybackSnapshot();
+            return;
+        }
+
+        double clampedSeconds = ClampSeekValue(seconds);
+        _currentPositionSeconds = clampedSeconds;
+
+        await _player.Seek(_selectedClientId.Value, clampedSeconds);
+
+        _isSeekPreviewActive = false;
+        RefreshPlaybackSnapshot();
+    }
+
+    private double ClampSeekValue(double seconds)
+    {
+        double duration = GetDurationSeconds();
+        if (duration <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(seconds, 0, duration);
+    }
+
+    private double GetDurationSeconds()
+    {
+        if (_currentSong is null || _currentSong.DurationSeconds <= 0)
+        {
+            return 0;
+        }
+
+        return _currentSong.DurationSeconds;
+    }
+
+    private static string FormatTime(double seconds)
+    {
+        int safeSeconds = (int)Math.Max(0, Math.Floor(seconds));
+        TimeSpan time = TimeSpan.FromSeconds(safeSeconds);
+        return $"{time.Minutes:00}:{time.Seconds:00}";
+    }
+
+    private string ResolveClientName(Guid clientId)
+    {
+        ClientConnectedWithCapabilitiesDTO? matching = _clients.FirstOrDefault(x => x.Id == clientId);
+
+        if (matching is not null && !string.IsNullOrWhiteSpace(matching.Name))
+        {
+            return matching.Name;
+        }
+
+        return "Configured client";
+    }
+
+    private static string GetToggleButtonCss(bool enabled)
+    {
+        return enabled ? "music-widget-toggle-button music-widget-toggle-on" : "music-widget-toggle-button";
+    }
+
+    private void HandleSongChanged(Guid clientId, Guid? _)
+    {
+        if (_selectedClientId != clientId)
+        {
+            return;
+        }
+
+        _isSeekPreviewActive = false;
+        RefreshPlaybackSnapshot();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandlePlaybackStatusChanged(Guid clientId, PlaybackState _)
+    {
+        if (_selectedClientId != clientId)
+        {
+            return;
+        }
+
+        RefreshPlaybackSnapshot();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandleSongChanged;
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStatusChanged;
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

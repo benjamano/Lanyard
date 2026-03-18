@@ -1,0 +1,82 @@
+@page "/staff/manage/dashboards/preview/{dashboardId:guid}"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Kiosk.Widgets
+
+@inject IDashboardService _dashboardService
+@inject IToastService _toastService
+
+<PageTitle>Dashboard Preview</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" Style="height: calc(100vh - 120px); min-height: 680px;">
+    <FluentToolbar Class="w-100">
+        <FluentLabel slot="start" Typo="Typography.PaneHeader">Dashboard Preview</FluentLabel>
+        <FluentButton slot="end" Appearance="Appearance.Outline" Href="/staff/manage/dashboards">
+            Back to Dashboards
+        </FluentButton>
+    </FluentToolbar>
+
+    @if (isLoading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+            <FluentProgressRing />
+        </FluentStack>
+    }
+    else if (dashboard is null)
+    {
+        <FluentCard AreaRestricted="false" Class="w-100">
+            <FluentLabel>Dashboard not found.</FluentLabel>
+        </FluentCard>
+    }
+    else if (!dashboard.Widgets.Any(x => x.IsActive))
+    {
+        <FluentCard AreaRestricted="false" Class="w-100">
+            <FluentLabel>This dashboard has no active widgets.</FluentLabel>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="kiosk-dashboard-grid">
+            @foreach (DashboardWidget widget in dashboard.Widgets.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+            {
+                <div class="kiosk-dashboard-widget-slot" style="@GetWidgetStyle(widget)">
+                    <KioskDashboardWidgetHost Widget="widget" />
+                </div>
+            }
+        </div>
+    }
+</FluentStack>
+
+@code {
+    [Parameter]
+    public Guid dashboardId { get; set; }
+
+    private Dashboard? dashboard;
+    private bool isLoading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        Result<Dashboard> result = await _dashboardService.GetDashboardForRenderAsync(dashboardId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            dashboard = null;
+            _toastService.ShowError($"Failed to load dashboard preview: {result.Error}");
+            isLoading = false;
+            return;
+        }
+
+        dashboard = result.Data;
+        isLoading = false;
+    }
+
+    private static string GetWidgetStyle(DashboardWidget widget)
+    {
+        int gridColumnStart = widget.GridX + 1;
+        int gridRowStart = widget.GridY + 1;
+
+        return $"grid-column: {gridColumnStart} / span {Math.Max(1, widget.GridW)}; grid-row: {gridRowStart} / span {Math.Max(1, widget.GridH)};";
+    }
+}
