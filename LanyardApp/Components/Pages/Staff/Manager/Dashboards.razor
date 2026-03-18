@@ -20,24 +20,20 @@
             <FluentStack Orientation="Orientation.Vertical" Style="height: 100%; min-height: 0;">
                 <FluentToolbar Class="w-100">
                     <FluentLabel slot="start" Typo="Typography.PaneHeader">Dashboards</FluentLabel>
-                    <FluentButton slot="end" Appearance="Appearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateNewDashboard">
+                    <FluentButton slot="end" Appearance="Appearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateNewDashboard">
                         New
                     </FluentButton>
                 </FluentToolbar>
 
                 <div class="dashboard-list-grid-wrap">
-                    <FluentDataGrid ShowHover="true"
-                                    Items="dashboards.AsQueryable()"
-                                    GridTemplateColumns="auto 1fr"
-                                    Class="dashboard-list-grid"
-                                    Pagination="new PaginationState { ItemsPerPage = 12 }">
+                    <FluentDataGrid ShowHover="true" Items="dashboards.AsQueryable()" GridTemplateColumns="auto 1fr"
+                                    Class="dashboard-list-grid" Pagination="new PaginationState { ItemsPerPage = 12 }">
                         <ChildContent>
-                            <SelectColumn SelectAll="true"
-                                          OnSelect="@(x => SelectDashboard(x.Item))"
+                            <SelectColumn SelectAll="true" OnSelect="@(x => SelectDashboard(x.Item))"
                                           Property="@(x => selectedDashboard is not null && x.Id == selectedDashboard.Id)"
-                                          TGridItem="Dashboard"
-                                          SelectMode="DataGridSelectMode.Single"
-                                          SelectFromEntireRow="true"></SelectColumn>
+                                          TGridItem="Dashboard" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true">
+                            </SelectColumn>
                             <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
                         </ChildContent>
                         <EmptyContent>
@@ -51,7 +47,8 @@
         <FluentMultiSplitterPane Size="80%" Class="px-3" Style="height: 100%; min-height: 0;">
             @if (selectedDashboard is null)
             {
-                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
+                             Class="h-100">
                     <FluentLabel>Select or create a dashboard.</FluentLabel>
                 </FluentStack>
             }
@@ -63,17 +60,16 @@
                             @(selectedDashboard.Id == Guid.Empty ? "New Dashboard" : "Edit Dashboard")
                         </FluentLabel>
                         <div slot="end" class="dashboard-edit-actions">
-                            <FluentButton Appearance="Appearance.Accent"
-                                          Disabled="@_isSavingDashboard"
+                            <FluentButton Appearance="Appearance.Accent" Disabled="@_isSavingDashboard"
                                           OnClick="SaveDashboardAsync">
                                 Save
                             </FluentButton>
-                            <FluentButton Appearance="Appearance.Outline"
-                                          Disabled="@(selectedDashboard.Id == Guid.Empty)"
+                            <FluentButton Appearance="Appearance.Outline" Disabled="@(selectedDashboard.Id == Guid.Empty)"
                                           OnClick="OpenPreviewAsync">
                                 Open Preview
                             </FluentButton>
-                            <FluentButton Appearance="Appearance.Outline" Disabled="@(selectedDashboard.Id == Guid.Empty)" OnClick="DeleteDashboardAsync">
+                            <FluentButton Appearance="Appearance.Outline" Disabled="@(selectedDashboard.Id == Guid.Empty)"
+                                          OnClick="DeleteDashboardAsync">
                                 Delete
                             </FluentButton>
                         </div>
@@ -81,28 +77,21 @@
 
                     <FluentGrid Class="mb-2">
                         <FluentGridItem xs="4">
-                            <FluentTextField Class="w-100"
-                                             @bind-Value="selectedDashboard.Name"
-                                             Label="Name"
-                                             Appearance="FluentInputAppearance.Outline"
-                                             Immediate="true"
-                                             Required />
+                            <FluentTextField Class="w-100" @bind-Value="selectedDashboard.Name" Label="Name"
+                                             Appearance="FluentInputAppearance.Outline" Immediate="true" Required />
                         </FluentGridItem>
                         <FluentGridItem xs="8">
-                            <FluentTextArea Class="w-100"
-                                            @bind-Value="selectedDashboard.Description"
-                                            Label="Description"
-                                            Appearance="FluentInputAppearance.Outline"
-                                            Immediate="true" />
+                            <FluentTextArea Class="w-100" @bind-Value="selectedDashboard.Description" Label="Description"
+                                            Appearance="FluentInputAppearance.Outline" Immediate="true" />
                         </FluentGridItem>
                     </FluentGrid>
 
-                    <FluentStack Orientation="Orientation.Vertical" Style="gap: 12px; flex: 1; min-height: 0; align-items: stretch; overflow: auto; padding-bottom: 8px;">
+                    <FluentStack Orientation="Orientation.Vertical"
+                                 Style="gap: 12px; flex: 1; min-height: 0; align-items: stretch; overflow: auto; padding-bottom: 8px;">
                         <FluentCard AreaRestricted="false" Style="width: 100%;">
                             <FluentLabel Class="mb-2" Typo="Typography.H6">Widgets</FluentLabel>
                             <div class="widget-picker-row">
-                                <FluentSelect Class="widget-picker-select"
-                                              @bind-Value="selectedWidgetTypeToAdd"
+                                <FluentSelect Class="widget-picker-select" @bind-Value="selectedWidgetTypeToAdd"
                                               TOption="string">
                                     <FluentOption Value="">Select widget...</FluentOption>
                                     @foreach (string widgetType in widgetTypes)
@@ -118,20 +107,16 @@
                             </div>
                         </FluentCard>
 
-                        <div id="@CanvasId"
-                             class="dashboard-canvas"
-                             @ondragover:preventDefault
+                        <div id="@CanvasId" class="dashboard-canvas" @ondragover:preventDefault
                              @ondrop="HandleCanvasDropAsync">
-                            @foreach (DashboardWidget widget in selectedDashboard.Widgets.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+                            @foreach (DashboardWidget widget in selectedDashboard.Widgets.Where(x => x.IsActive).OrderBy(x
+                                                    => x.SortOrder))
                             {
-                                <div class="dashboard-widget h-auto"
-                                     style="@GetWidgetStyle(widget)">
-                                    <div class="dashboard-widget-header"
-                                         draggable="true"
+                                <div class="dashboard-widget h-auto" style="@GetWidgetStyle(widget)">
+                                    <div class="dashboard-widget-header" draggable="true"
                                          @ondragstart="(e) => StartWidgetDrag(widget.Id)">
                                         <span>@(string.IsNullOrWhiteSpace(widget.Title) ? widget.Type : widget.Title)</span>
-                                        <FluentIcon Class="widget-delete"
-                                                    Value="@(new Icons.Regular.Size16.Dismiss())"
+                                        <FluentIcon Class="widget-delete" Value="@(new Icons.Regular.Size16.Dismiss())"
                                                     OnClick="() => RemoveWidget(widget.Id)"></FluentIcon>
                                     </div>
 
@@ -143,9 +128,12 @@
                                                     @if (IsAnalogClock(widget))
                                                     {
                                                         <div class="clock-analog-face">
-                                                            <div class="clock-hand clock-hour-hand" style="@GetClockHandStyle(GetHourHandDegrees(_clockNowLocal))"></div>
-                                                            <div class="clock-hand clock-minute-hand" style="@GetClockHandStyle(GetMinuteHandDegrees(_clockNowLocal))"></div>
-                                                            <div class="clock-hand clock-second-hand" style="@GetClockHandStyle(GetSecondHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-hand clock-hour-hand"
+                                                                 style="@GetClockHandStyle(GetHourHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-hand clock-minute-hand"
+                                                                 style="@GetClockHandStyle(GetMinuteHandDegrees(_clockNowLocal))"></div>
+                                                            <div class="clock-hand clock-second-hand"
+                                                                 style="@GetClockHandStyle(GetSecondHandDegrees(_clockNowLocal))"></div>
                                                             <div class="clock-center-dot"></div>
                                                         </div>
                                                     }
@@ -158,8 +146,7 @@
                                                     }
                                                 </div>
 
-                                                <FluentButton Class="clock-mode-toggle"
-                                                              Appearance="Appearance.Lightweight"
+                                                <FluentButton Class="clock-mode-toggle" Appearance="Appearance.Lightweight"
                                                               OnClick="() => ToggleClockMode(widget)">
                                                     @(IsAnalogClock(widget) ? "Switch to Digital" : "Switch to Analog")
                                                 </FluentButton>
@@ -167,12 +154,11 @@
                                         }
                                         else if (widget.Type == "MusicControls")
                                         {
-                                            DashboardWidgetConfigs.MusicControlsWidgetConfig musicConfig = GetMusicControlsConfig(widget);
+                                            DashboardWidgetConfigs.MusicControlsWidgetConfig musicConfig =
+                                            GetMusicControlsConfig(widget);
 
                                             <div class="widget-config-stack">
-                                                <FluentSelect Class="w-100"
-                                                              TOption="string"
-                                                              Label="Client control mode"
+                                                <FluentSelect Class="w-100" TOption="string" Label="Client control mode"
                                                               @bind-Value:get="musicConfig.ClientMode"
                                                               @bind-Value:set="(value) => SetMusicControlsClientMode(widget, value)">
                                                     <FluentOption Value="fixed">Always one client</FluentOption>
@@ -181,9 +167,7 @@
 
                                                 @if (DashboardWidgetConfigs.IsMusicClientModeFixed(musicConfig.ClientMode))
                                                 {
-                                                    <FluentSelect Class="w-100"
-                                                                  TOption="string"
-                                                                  Label="Fixed client"
+                                                    <FluentSelect Class="w-100" TOption="string" Label="Fixed client"
                                                                   @bind-Value:get="GetMusicControlsFixedClientValue(widget)"
                                                                   @bind-Value:set="(value) => SetMusicControlsFixedClient(widget, value)">
                                                         <FluentOption Value="">Select client...</FluentOption>
@@ -200,9 +184,7 @@
                                         else if (widget.Type == "LaserStats")
                                         {
                                             <FluentStack Orientation="Orientation.Vertical" Class="w-100 h-100">
-                                                <FluentSelect Class="w-100"
-                                                              @bind-Value="widget.ConfigJson"
-                                                              TOption="string"
+                                                <FluentSelect Class="w-100" @bind-Value="widget.ConfigJson" TOption="string"
                                                               Label="Client">
                                                     <FluentOption Value="">Select client...</FluentOption>
                                                     @foreach (ClientConnectedDTO client in clients.OrderBy(x => x.Name))
@@ -218,21 +200,14 @@
                                             DashboardWidgetConfigs.TextAreaWidgetConfig textConfig = GetTextAreaConfig(widget);
 
                                             <div class="widget-config-stack widget-config-stack-fill">
-                                                <FluentTextField Class="w-100"
-                                                                 @bind-Value="widget.Title"
-                                                                 Label="Title"
-                                                                 Appearance="FluentInputAppearance.Outline"
-                                                                 Immediate="true" />
-                                                <FluentCheckbox Class="pt-1"
-                                                                @bind-Value:get="textConfig.SaveToLocalStorage"
+                                                <FluentTextField Class="w-100" @bind-Value="widget.Title" Label="Title"
+                                                                 Appearance="FluentInputAppearance.Outline" Immediate="true" />
+                                                <FluentCheckbox Class="pt-1" @bind-Value:get="textConfig.SaveToLocalStorage"
                                                                 @bind-Value:set="(value) => SetTextAreaSaveToLocalStorage(widget, value)">
                                                     Save text to local storage
                                                 </FluentCheckbox>
-                                                <FluentTextArea Class="w-100 widget-textarea-preview"
-                                                                Value="Text area preview..."
-                                                                Label="Preview"
-                                                                ReadOnly="true"
-                                                                Appearance="FluentInputAppearance.Outline" />
+                                                <FluentTextArea Class="w-100 widget-textarea-preview" Value="Text area preview..."
+                                                                Label="Preview" ReadOnly="true" Appearance="FluentInputAppearance.Outline" />
                                             </div>
                                         }
                                     </div>
@@ -270,7 +245,7 @@
     private DotNetObjectReference<Dashboards>? _dotNetRef;
     private readonly CancellationTokenSource _clockCts = new();
     private Task? _clockTickerTask;
-    private DateTime _clockNowLocal = DateTime.Now;
+    private DateTime _clockNowLocal = DateTime.UtcNow;
 
     protected override async Task OnInitializedAsync()
     {
@@ -396,19 +371,20 @@
         }
 
         int[] gridPosition = await _module.InvokeAsync<int[]>(
-            "getGridCoordinates",
-            CanvasId,
-            eventArgs.ClientX,
-            eventArgs.ClientY,
-            GridColumns,
-            GridRowHeight);
+        "getGridCoordinates",
+        CanvasId,
+        eventArgs.ClientX,
+        eventArgs.ClientY,
+        GridColumns,
+        GridRowHeight);
 
         int x = gridPosition[0];
         int y = gridPosition[1];
 
         if (draggingWidgetId.HasValue)
         {
-            DashboardWidget? widget = selectedDashboard.Widgets.FirstOrDefault(x1 => x1.Id == draggingWidgetId.Value && x1.IsActive);
+            DashboardWidget? widget = selectedDashboard.Widgets.FirstOrDefault(x1 => x1.Id == draggingWidgetId.Value &&
+            x1.IsActive);
             if (widget is not null)
             {
                 int maxX = Math.Max(0, GridColumns - Math.Max(1, widget.GridW));
@@ -428,16 +404,16 @@
         }
 
         await _module.InvokeVoidAsync(
-            "startWidgetResize",
-            _dotNetRef,
-            widget.Id.ToString(),
-            CanvasId,
-            eventArgs.ClientX,
-            eventArgs.ClientY,
-            widget.GridW,
-            widget.GridH,
-            GridColumns,
-            GridRowHeight);
+        "startWidgetResize",
+        _dotNetRef,
+        widget.Id.ToString(),
+        CanvasId,
+        eventArgs.ClientX,
+        eventArgs.ClientY,
+        widget.GridW,
+        widget.GridH,
+        GridColumns,
+        GridRowHeight);
     }
 
     public async ValueTask DisposeAsync()
@@ -463,7 +439,7 @@
             }
             catch (JSDisconnectedException)
             {
-                
+
             }
         }
 
@@ -499,7 +475,7 @@
             using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                _clockNowLocal = DateTime.Now;
+                _clockNowLocal = DateTime.UtcNow;
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -636,7 +612,8 @@
         string configJson = widgetType switch
         {
             "Clock" => ClockModeDigital,
-            "MusicControls" => DashboardWidgetConfigs.SerializeMusicControlsConfig(new DashboardWidgetConfigs.MusicControlsWidgetConfig
+            "MusicControls" => DashboardWidgetConfigs.SerializeMusicControlsConfig(new
+            DashboardWidgetConfigs.MusicControlsWidgetConfig
             {
                 ClientMode = "fixed",
                 FixedClientId = null
@@ -663,15 +640,16 @@
         };
     }
 
-    private static (int X, int Y) FindNextAvailablePosition(IEnumerable<DashboardWidget> widgets, int widgetWidth, int widgetHeight)
+    private static (int X, int Y) FindNextAvailablePosition(IEnumerable<DashboardWidget> widgets, int widgetWidth, int
+    widgetHeight)
     {
         List<DashboardWidget> activeWidgets = widgets.Where(x => x.IsActive).ToList();
         int searchStartY = 0;
         int searchLimitY = Math.Max(
-            24,
-            activeWidgets.Count == 0
-                ? 24
-                : activeWidgets.Max(x => x.GridY + Math.Max(1, x.GridH)) + 24);
+        24,
+        activeWidgets.Count == 0
+        ? 24
+        : activeWidgets.Max(x => x.GridY + Math.Max(1, x.GridH)) + 24);
 
         int maxStartX = Math.Max(0, GridColumns - widgetWidth);
         for (int y = searchStartY; y <= searchLimitY; y++)
@@ -686,12 +664,13 @@
         }
 
         int fallbackY = activeWidgets.Count == 0
-            ? 0
-            : activeWidgets.Max(x => x.GridY + Math.Max(1, x.GridH));
+        ? 0
+        : activeWidgets.Max(x => x.GridY + Math.Max(1, x.GridH));
         return (0, fallbackY);
     }
 
-    private static bool CanPlaceWidgetAt(IEnumerable<DashboardWidget> activeWidgets, int x, int y, int widgetWidth, int widgetHeight)
+    private static bool CanPlaceWidgetAt(IEnumerable<DashboardWidget> activeWidgets, int x, int y, int widgetWidth, int
+    widgetHeight)
     {
         int candidateLeft = x;
         int candidateTop = y;
@@ -706,9 +685,9 @@
             int existingBottom = existingTop + Math.Max(1, existingWidget.GridH);
 
             bool intersects = candidateLeft < existingRight
-                && candidateRight > existingLeft
-                && candidateTop < existingBottom
-                && candidateBottom > existingTop;
+            && candidateRight > existingLeft
+            && candidateTop < existingBottom
+            && candidateBottom > existingTop;
 
             if (intersects)
             {
@@ -771,21 +750,21 @@
             CreateDate = dashboard.CreateDate,
             LastUpdateDate = dashboard.LastUpdateDate,
             Widgets = dashboard.Widgets
-                .Select(x => new DashboardWidget
-                {
-                    Id = x.Id,
-                    DashboardId = x.DashboardId,
-                    Type = x.Type,
-                    Title = x.Title,
-                    GridX = x.GridX,
-                    GridY = x.GridY,
-                    GridW = x.GridW,
-                    GridH = x.GridH,
-                    SortOrder = x.SortOrder,
-                    ConfigJson = x.ConfigJson,
-                    IsActive = x.IsActive
-                })
-                .ToList()
+        .Select(x => new DashboardWidget
+        {
+            Id = x.Id,
+            DashboardId = x.DashboardId,
+            Type = x.Type,
+            Title = x.Title,
+            GridX = x.GridX,
+            GridY = x.GridY,
+            GridW = x.GridW,
+            GridH = x.GridH,
+            SortOrder = x.SortOrder,
+            ConfigJson = x.ConfigJson,
+            IsActive = x.IsActive
+        })
+        .ToList()
         };
     }
 

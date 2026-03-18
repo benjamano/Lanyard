@@ -58,8 +58,8 @@ public class SignalRControlHub(
                 Notes = "",
                 MostRecentConnectionId = Context.ConnectionId,
                 MostRecentIpAddress = clientIp,
-                CreateDate = DateTime.Now,
-                LastLogin = DateTime.Now
+                CreateDate = DateTime.UtcNow,
+                LastLogin = DateTime.UtcNow
             };
 
             Result<Client?> createResult = await _clientService.CreateClientAsync(newClient);
@@ -78,10 +78,10 @@ public class SignalRControlHub(
         {
             client = result.Data!;
 
-            client.LastUpdateDate = DateTime.Now;
+            client.LastUpdateDate = DateTime.UtcNow;
             client.MostRecentConnectionId = Context.ConnectionId;
             client.MostRecentIpAddress = clientIp;
-            client.LastLogin = DateTime.Now;
+            client.LastLogin = DateTime.UtcNow;
 
             Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
 
@@ -152,7 +152,7 @@ public class SignalRControlHub(
 
     public async Task UpdateAvailableScreens(IEnumerable<ClientAvailableScreenDTO> screens)
     {
-        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens.Select(x=> x.Name));
+        _logger.LogInformation("Client {ConnectionId} reported available screens: {Screens}", Context.ConnectionId, screens.Select(x => x.Name));
 
         Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getResult.IsSuccess)
@@ -183,28 +183,28 @@ public class SignalRControlHub(
     public async Task Load(Guid songId)
     {
         _logger.LogInformation("Load command received for song {SongId}", songId);
-        
+
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Load", songId);
     }
 
     public async Task Play()
     {
         _logger.LogInformation("Play command received");
-        
+
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Play");
     }
 
     public async Task Pause()
     {
         _logger.LogInformation("Pause command received");
-        
+
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Pause");
     }
 
     public async Task Stop()
     {
         _logger.LogInformation("Stop command received");
-        
+
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
     }
 

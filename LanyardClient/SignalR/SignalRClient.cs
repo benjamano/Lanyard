@@ -75,16 +75,11 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
                 Id = x.ID,
             });
 
-        await _connection.InvokeAsync("UpdateAvailableAudioDevices", devices);
+        await _connection!.InvokeAsync("UpdateAvailableAudioDevices", devices);
     }
 
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
-        if (_connection == null || _connection.State != HubConnectionState.Connected)
-        {
-            return;
-        }
-
-        await _connection.InvokeAsync("UpdateLaserGameStatus", status);
+        await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
     }
 }

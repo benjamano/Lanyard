@@ -3,15 +3,15 @@
 
 <div class="position-relative d-flex justify-content-center align-items-center mb-3"
      style="width: 220px; height: 220px;">
-    
+
     <div style="position: absolute; z-index: 1;" @onclick="OnClockInButtonClicked">
         <CircularProgressBar Value="@ProgressValue" Max="1" />
     </div>
 
     <div class="position-relative z-0">
-        <button 
-                class="btn btn-outline-primary rounded-circle border-3 fw-bold d-flex justify-content-center align-items-center fs-3"
-                style="width: 200px; height: 200px;">
+        <button
+            class="btn btn-outline-primary rounded-circle border-3 fw-bold d-flex justify-content-center align-items-center fs-3"
+            style="width: 200px; height: 200px;">
             @ClockInButtonText
         </button>
     </div>
@@ -19,7 +19,7 @@
 
 
 @code {
-    private DateTime CurrentTime = DateTime.Now;
+    private DateTime CurrentTime = DateTime.UtcNow;
     private System.Timers.Timer? ClockUiTimer;
     private System.Timers.Timer? ShiftTimer;
     private string ClockInButtonText = "Clock In";
@@ -33,7 +33,7 @@
         ClockUiTimer = new System.Timers.Timer(1000);
         ClockUiTimer.Elapsed += (s, e) =>
         {
-            CurrentTime = DateTime.Now;
+            CurrentTime = DateTime.UtcNow;
             InvokeAsync(StateHasChanged);
         };
         ClockUiTimer.Start();
@@ -44,7 +44,7 @@
         if (!IsClockedIn)
         {
             IsClockedIn = true;
-            ClockInTime = DateTime.Now;
+            ClockInTime = DateTime.UtcNow;
             TimeRemaining = ShiftLength;
             StartShiftTimer();
             UpdateButtonText();
@@ -76,7 +76,7 @@
         if (!ClockInTime.HasValue)
             return;
 
-        var elapsed = DateTime.Now - ClockInTime.Value;
+        var elapsed = DateTime.UtcNow - ClockInTime.Value;
         TimeRemaining = ShiftLength - elapsed;
 
         if (TimeRemaining <= TimeSpan.Zero)

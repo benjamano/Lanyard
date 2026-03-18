@@ -20,26 +20,17 @@
     <EditForm Model="@model" OnValidSubmit="HandleSavePlaylist">
         <DataAnnotationsValidator />
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            <FluentTextField @bind-Value="model.Name"
-                             Label="Playlist Name"
-                             Required
-                             Placeholder="My Awesome Playlist"
-                             Style="width: 100%;"
-                             @oninput="@OnNameChanged">
+            <FluentTextField @bind-Value="model.Name"                             Label="Playlist Name"                             Required                             Placeholder="My Awesome Playlist"
+                             Style="width: 100%;"                             @oninput="@OnNameChanged">
                 <FluentIcon Value="@(new Icons.Regular.Size16.MusicNote2())" Slot="start" />
             </FluentTextField>
             <FluentValidationMessage For="@(() => model.Name)" />
-            <FluentTextArea @bind-Value="model.Description"
-                            Label="Description (Optional)"
-                            Placeholder="Add a description..."
-                            Rows="3"
-                            Style="width: 100%;">
+            <FluentTextArea @bind-Value="model.Description"                            Label="Description (Optional)"
+                            Placeholder="Add a description..."                            Rows="3"                            Style="width: 100%;">
             </FluentTextArea>
             <FluentValidationMessage For="@(() => model.Description)" />
             <FluentDialogFooter>
-                <FluentButton Appearance="Appearance.Accent"
-                              Type="ButtonType.Submit"
-                              Disabled="@isSubmitting"
+                <FluentButton Appearance="Appearance.Accent"                              Type="ButtonType.Submit"                              Disabled="@isSubmitting"
                               IconStart="@(new Icons.Regular.Size20.Add())">
                     @if (isSubmitting)
                     {
@@ -51,9 +42,7 @@
                         <span>Create</span>
                     }
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Neutral"
-                              OnClick="@CancelDialog"
-                              Disabled="@isSubmitting">
+                <FluentButton Appearance="Appearance.Neutral"                              OnClick="@CancelDialog"                              Disabled="@isSubmitting">
                     Cancel
                 </FluentButton>
             </FluentDialogFooter>

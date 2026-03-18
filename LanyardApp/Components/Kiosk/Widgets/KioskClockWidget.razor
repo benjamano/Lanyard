@@ -2,9 +2,11 @@
 @using System.Globalization
 
 <FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
-    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Stretch" VerticalAlignment="VerticalAlignment.Stretch" Class="clock-widget-stack">
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Stretch"
+                 VerticalAlignment="VerticalAlignment.Stretch" Class="clock-widget-stack">
         <div class="clock-widget-header">
-            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)</FluentLabel>
+            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)
+            </FluentLabel>
         </div>
 
         <div class="clock-visual">
@@ -12,8 +14,10 @@
             {
                 <div class="clock-analog-face">
                     <div class="clock-hand clock-hour-hand" style="@GetClockHandStyle(GetHourHandDegrees(_nowLocal))"></div>
-                    <div class="clock-hand clock-minute-hand" style="@GetClockHandStyle(GetMinuteHandDegrees(_nowLocal))"></div>
-                    <div class="clock-hand clock-second-hand" style="@GetClockHandStyle(GetSecondHandDegrees(_nowLocal))"></div>
+                    <div class="clock-hand clock-minute-hand" style="@GetClockHandStyle(GetMinuteHandDegrees(_nowLocal))">
+                    </div>
+                    <div class="clock-hand clock-second-hand" style="@GetClockHandStyle(GetSecondHandDegrees(_nowLocal))">
+                    </div>
                     <div class="clock-center-dot"></div>
                 </div>
             }
@@ -26,8 +30,7 @@
             }
         </div>
 
-        <FluentButton Class="clock-mode-toggle mt-2 w-auto"
-                      Appearance="Appearance.Lightweight"
+        <FluentButton Class="clock-mode-toggle mt-2 w-auto"                      Appearance="Appearance.Lightweight"
                       OnClick="ToggleClockMode">
             @(IsAnalogClock() ? "Switch to Digital" : "Switch to Analog")
         </FluentButton>
@@ -42,9 +45,9 @@
     private const string ClockModeDigital = "digital";
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
-    private DateTime _nowLocal = DateTime.Now;
-    private string _timeString = DateTime.Now.ToString("HH:mm:ss");
-    private string _dateString = DateTime.Now.ToString("dddd, dd MMM yyyy");
+    private DateTime _nowLocal = DateTime.UtcNow;
+    private string _timeString = DateTime.UtcNow.ToString("HH:mm:ss");
+    private string _dateString = DateTime.UtcNow.ToString("dddd, dd MMM yyyy");
 
     protected override void OnInitialized()
     {
@@ -55,7 +58,7 @@
         {
             while (_timer is not null && await _timer.WaitForNextTickAsync(_cts.Token))
             {
-                _nowLocal = DateTime.Now;
+                _nowLocal = DateTime.UtcNow;
                 _timeString = _nowLocal.ToString("HH:mm:ss");
                 _dateString = _nowLocal.ToString("dddd, dd MMM yyyy");
 
