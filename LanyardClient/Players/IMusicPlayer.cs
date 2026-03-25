@@ -8,14 +8,14 @@ public interface IMusicPlayer
 
     Result<bool> Play();
     Result<bool> Pause();
-    Result<bool> PlayNext();
-    Result<bool> PlayPrevious();
+    Task<Result<bool>> PlayNext();
+    Task<Result<bool>> PlayPrevious();
     Result<bool> Seek(double seconds);
     Result<bool> LoadPlaylist(IEnumerable<Guid> songList);
 
     Result<PlaybackState> GetPlaybackStatus();
     Result<Guid> GetCurrentSongId();
 
-    Result<bool> Load(Guid songId);
+    Task<Result<bool>> Load(Guid songId);
     void Stop();
 }

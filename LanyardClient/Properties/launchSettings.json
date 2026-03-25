@@ -4,7 +4,8 @@
       "commandName": "Project",
       "environmentVariables": {
         "SIGNALR_SERVER_URL": "https://localhost:7175/websocket",
-        "KIOSK_SERVER_URL": "https://localhost:7175/staff/kiosk"
+        "KIOSK_SERVER_URL": "https://localhost:7175/staff/kiosk",
+        "API_SERVER_URL": "https://localhost:7175/api"
       }
     }
   }

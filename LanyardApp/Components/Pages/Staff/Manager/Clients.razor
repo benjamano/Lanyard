@@ -44,7 +44,7 @@
                 }
                 else
                 {
-                    <span>00:00:00</span>
+                    <span>--:--:--</span>
                 }
             </TemplateColumn>
         </ChildContent>
@@ -54,8 +54,24 @@
     </FluentDataGrid>
 </FluentCard>
 
-<ClientCapabilities UpdateClientCapabilities="GetClientsAsync" IsShowing="@showClientCapabilitiesCard"
-                    clientId="@updatingClientId"></ClientCapabilities>
+<FluentDivider Class="my-2"></FluentDivider>
+
+<FluentGrid Spacing="2">
+    <FluentGridItem xs="6">
+        <ClientProjectionCapabilities 
+            UpdateClientCapabilities="GetClientsAsync" 
+            IsShowing="@showClientCapabilitiesCard"
+            clientId="@updatingClientId">
+        </ClientProjectionCapabilities>
+    </FluentGridItem>
+
+    <FluentGridItem xs="6">
+        <ClientMusicCapabilities 
+            IsShowing="@showClientCapabilitiesCard"
+            clientId="@updatingClientId">
+        </ClientMusicCapabilities>
+    </FluentGridItem>
+</FluentGrid>
 
 <FluentDialog @ref="updateClientNameDialog" @bind-Hidden="@hideUpdateClientNameDialog">
     <FluentDialogHeader @onclose="CloseUpdateClientNameDialog" ShowDismiss="true" Visible="true">

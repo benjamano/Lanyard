@@ -1,4 +1,4 @@
-﻿using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using System.Net.Http;
@@ -6,19 +6,21 @@ using System.Net.Http;
 public class MusicPlayer : IMusicPlayer, IDisposable
 {
     private readonly ILogger<MusicPlayer> _logger;
+    private readonly ISongCacheService _cacheService;
 
     public event Action<PlaybackState>? PlaybackStateChanged;
     public event Action<Guid>? PlayingSongChanged;
-    
+
     private WaveOutEvent? _player;
     private MediaFoundationReader? _reader;
 
     private List<Guid> SongQueue = [];
     private int QueueIndex = 0;
 
-    public MusicPlayer(ILogger<MusicPlayer> logger, HttpClient httpClient)
+    public MusicPlayer(ILogger<MusicPlayer> logger, ISongCacheService cacheService)
     {
         _logger = logger;
+        _cacheService = cacheService;
 
         _player = new WaveOutEvent();
     }
@@ -31,17 +33,17 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         return Result<bool>.Ok(true);
     }
 
-    public Result<bool> Load(Guid songId)
+    public async Task<Result<bool>> Load(Guid songId)
     {
         try
         {
             Stop();
 
-            string audioUrl = $"{Environment.GetEnvironmentVariable("API_SERVER_URL")}/music/audio/{songId}";
+            string audioSource = await _cacheService.GetAudioSourceAsync(songId);
 
-            _logger.LogInformation("MusicPlayer: Loading audio from {Url}", audioUrl);
+            _logger.LogInformation("MusicPlayer: Loading audio from {Source}", audioSource);
 
-            _reader = new MediaFoundationReader(audioUrl);
+            _reader = new MediaFoundationReader(audioSource);
             _player!.Init(_reader);
 
             return Result<bool>.Ok(true);
@@ -69,6 +71,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             if (SongQueue.Count > 0 && QueueIndex >= 0 && QueueIndex < SongQueue.Count)
             {
                 PlayingSongChanged?.Invoke(SongQueue[QueueIndex]);
+                PreCacheNext();
             }
         }
 
@@ -105,7 +108,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         _reader = null;
     }
 
-    public Result<bool> PlayNext()
+    public async Task<Result<bool>> PlayNext()
     {
         try
         {
@@ -115,7 +118,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             }
 
             QueueIndex = (QueueIndex + 1) % SongQueue.Count;
-            Result<bool> result = Load(SongQueue[QueueIndex]);
+            Result<bool> result = await Load(SongQueue[QueueIndex]);
             if (!result.IsSuccess)
             {
                 return result;
@@ -131,7 +134,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         }
     }
 
-    public Result<bool> PlayPrevious()
+    public async Task<Result<bool>> PlayPrevious()
     {
         try
         {
@@ -142,7 +145,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
             QueueIndex = QueueIndex - 1 < 0 ? SongQueue.Count - 1 : QueueIndex - 1;
 
-            Result<bool> result = Load(SongQueue[QueueIndex]);
+            Result<bool> result = await Load(SongQueue[QueueIndex]);
             if (!result.IsSuccess)
             {
                 return result;
@@ -216,6 +219,14 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
         _reader.CurrentTime = targetTime;
         return Result<bool>.Ok(true);
+    }
+
+    private void PreCacheNext()
+    {
+        if (SongQueue.Count <= 1) return;
+
+        int nextIndex = (QueueIndex + 1) % SongQueue.Count;
+        _cacheService.PreCacheInBackground(SongQueue[nextIndex]);
     }
 
     public void Dispose()

@@ -17,60 +17,59 @@
         @if (Songs is not null && Songs.Any())
         {
             <FluentDataGrid Items="@Songs.AsQueryable()" GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
-                            Style="width: 100%;"                            ShowHover="true">
+                            Style="width: 100%;" ShowHover="@AllowPlaying">
                 <ChildContent>
                     <TemplateColumn Title="#" Align="Align.End">
                         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
                             @if (IsCurrentlyPlaying(context.Song!))
                             {
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Color="Color.Accent"
-                                            Style="cursor: pointer;"                                            @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
+                                            Style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
                             }
 
                             <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
                                 <Authorized>
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())"                                                Color="Color.Accent"
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Accent"
                                                 Style="cursor: pointer;"
                                                 @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
                                 </Authorized>
                             </AuthorizeView>
 
-                            <span style="text-align: right;">@(Songs.ToList().IndexOf(context) + 1 != 0 ?
-                                                            Songs.ToList().IndexOf(context) + 1 : "")</span>
-                            </div>
-                        </TemplateColumn>
+                            <span style="text-align: right;">@(Songs.ToList().IndexOf(context) + 1 != 0 ? Songs.ToList().IndexOf(context) + 1 : "")</span>
+                        </div>
+                    </TemplateColumn>
 
-                        <TemplateColumn Title="Title">
-                            <div style="cursor: pointer; display: flex; align-items: center;"
-                                 @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                                <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
-                                             Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
-                                    @context.Song!.Name
-                                </FluentLabel>
-                            </div>
-                        </TemplateColumn>
+                    <TemplateColumn Title="Title">
+                        <div style="cursor: pointer; display: flex; align-items: center;"
+                                @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                            <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
+                                            Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
+                                @context.Song!.Name
+                            </FluentLabel>
+                        </div>
+                    </TemplateColumn>
 
-                        <TemplateColumn Title="Album">
-                            <div style="cursor: pointer;"                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                                <FluentLabel>@context.Song!.AlbumName</FluentLabel>
-                            </div>
-                        </TemplateColumn>
+                    <TemplateColumn Title="Album">
+                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                            <FluentLabel>@context.Song!.AlbumName</FluentLabel>
+                        </div>
+                    </TemplateColumn>
 
-                        <TemplateColumn Title="Date Added">
-                            <div style="cursor: pointer;"                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                                <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
-                            </div>
-                        </TemplateColumn>
+                    <TemplateColumn Title="Date Added">
+                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                            <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
+                        </div>
+                    </TemplateColumn>
 
-                        <TemplateColumn Title="Length" Align="Align.Start">
-                            <div style="cursor: pointer;"                             @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                                <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
-                                </FluentLabel>
-                            </div>
-                        </TemplateColumn>
-                    </ChildContent>
-                </FluentDataGrid>
-            }
+                    <TemplateColumn Title="Length" Align="Align.Start">
+                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                            <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
+                            </FluentLabel>
+                        </div>
+                    </TemplateColumn>
+                </ChildContent>
+            </FluentDataGrid>
+        }
         else
             {
                 <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
@@ -85,6 +84,7 @@
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
+    [Parameter] public bool AllowPlaying { get; set; } = true;
     [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? CurrentlyPlayingSongId;
@@ -123,6 +123,11 @@
 
     private async Task PlaySong(Song song, Playlist? playlist)
     {
+        if (AllowPlaying == false)
+        {
+            return;
+        }
+
         if (SelectedClientId == null)
         {
             _toastService.ShowWarning("Select a connected client first.");

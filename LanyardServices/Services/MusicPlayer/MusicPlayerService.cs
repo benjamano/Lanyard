@@ -385,7 +385,7 @@ public class MusicPlayerService
             return false;
         }
 
-        await _hubContext.Clients.Client(connectionId).SendAsync(methodName, args);
+        await _hubContext.Clients.Client(connectionId).SendCoreAsync(methodName, args);
         return true;
     }
 
@@ -568,5 +568,10 @@ public class MusicPlayerService
         }
 
         await SendToClientAsync(clientId, "Seek", normalizedSeconds);
+    }
+
+    public async Task GetCachedSongsAsync(Guid clientId)
+    {
+        await SendToClientAsync(clientId, "GetCachedSongs");
     }
 }

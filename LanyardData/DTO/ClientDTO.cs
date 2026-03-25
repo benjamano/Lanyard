@@ -16,3 +16,8 @@ public class ClientConnectedWithCapabilitiesDTO : Client
 
     public bool ProjectionEnabled { get; set; }
 }
+
+public class ClientMusicSettingsDTO
+{
+    public int CacheLimitMb { get; set; }
+}

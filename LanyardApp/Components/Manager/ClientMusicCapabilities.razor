@@ -1,0 +1,113 @@
+﻿@using Lanyard.Application.SignalR
+@using Lanyard.Shared.DTO
+@using Microsoft.AspNetCore.SignalR
+
+@inject IClientService _clientService
+@inject IToastService _toastService
+@inject MusicPlayerService _musicPlayerService
+@inject SignalRProjectionControlHubEvents _signalRProjectionControlHubEvents
+
+@implements IDisposable
+
+@if (client != null)
+{
+    <FluentCard>
+        <FluentLabel Typo="Typography.PaneHeader">Music</FluentLabel>
+
+        <FluentEditForm Model="@client" OnValidSubmit="UpdateClientCapabilitiesAsync" class="mt-2">
+            <FluentStack Orientation="Orientation.Vertical">
+                <div>
+                    <FluentNumberField @bind-Value="client!.MusicCacheLimitMb" Label="Music Cache Limit (MB)" Step="10" Min="0" Max="10240" />
+                </div>
+                <FluentButton Type="ButtonType.Button" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
+                    Get Cached Songs
+                </FluentButton>
+                <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
+                    Save
+                </FluentButton>
+            </FluentStack>
+        </FluentEditForm>
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public bool IsShowing { get; set; }
+
+    [Parameter] 
+    public Guid? clientId { get; set; }
+
+    private Client? client = null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _signalRProjectionControlHubEvents.OnReceiveCachedSongs -= HandleReceiveCachedSongs;
+        _signalRProjectionControlHubEvents.OnReceiveCachedSongs += HandleReceiveCachedSongs;
+
+        if (IsShowing && clientId != null)
+        {
+            await RefreshCapabilities();
+        }
+    }
+
+    private async Task RefreshCapabilities()
+    {
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId!.Value);
+
+        if (result.IsSuccess)
+        {
+            client = result.Data!;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load client capabilities, {result.Error}");
+        }
+    }
+
+    private async Task UpdateClientCapabilitiesAsync()
+    {
+        if (client == null) return;
+
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+
+        if (updateResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Client capabilities updated, changes will propagate to this client on next restart.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to update client capabilities, {updateResult.Error}");
+        }
+    }
+
+    private async Task GetCachedSongs()
+    {
+        if (clientId == null)
+        { 
+            return;
+        }
+
+        await _musicPlayerService.GetCachedSongsAsync(clientId.Value);
+    }
+
+    private void HandleReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongsResult)
+    {
+        if (cachedSongsResult.IsSuccess)
+        {
+            IEnumerable<CachedSongDTO> cachedSongs = cachedSongsResult.Data!;
+
+            string message = "Cached Songs:\n" + string.Join("\n", cachedSongs.Select(x => $"{x.Id}"));
+
+            _toastService.ShowInfo(message);
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to receive cached songs, {cachedSongsResult.Error}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _signalRProjectionControlHubEvents.OnReceiveCachedSongs -= HandleReceiveCachedSongs;
+    }
+}

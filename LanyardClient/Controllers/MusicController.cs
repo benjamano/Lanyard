@@ -1,21 +1,25 @@
-﻿using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Lanyard.Infrastructure.DTO;
 using NAudio.Wave;
+using Lanyard.Shared.DTO;
 
 namespace Lanyard.Client.Controllers;
 
 public class MusicControlHandler
 {
     private readonly IMusicPlayer _musicPlayer;
+    private readonly ISongCacheService _cacheService;
     private readonly ILogger<MusicControlHandler> _logger;
     private HubConnection? _connection;
 
     public MusicControlHandler(
         IMusicPlayer musicPlayer,
+        ISongCacheService cacheService,
         ILogger<MusicControlHandler> logger)
     {
         _musicPlayer = musicPlayer;
+        _cacheService = cacheService;
         _logger = logger;
 
         _musicPlayer.PlaybackStateChanged += OnPlaybackStateChanged;
@@ -26,11 +30,17 @@ public class MusicControlHandler
     {
         _connection = connection;
 
-        connection.On("Load", (Guid songId) =>
+        connection.On<ClientMusicSettingsDTO>("ReceiveMusicSettings", settings =>
+        {
+            _logger.LogInformation("Received music settings: cache limit {CacheLimitMb}MB", settings.CacheLimitMb);
+            _cacheService.UpdateCacheLimit(settings.CacheLimitMb);
+        });
+
+        connection.On("Load", async (Guid songId) =>
         {
             _logger.LogInformation("Received LOAD command for song {SongId}", songId);
-            
-            Result<bool> result = _musicPlayer.Load(songId);
+
+            Result<bool> result = await _musicPlayer.Load(songId);
 
             if (result.IsSuccess)
             {
@@ -45,7 +55,7 @@ public class MusicControlHandler
         connection.On("Play", () =>
         {
             _logger.LogInformation("Received PLAY command");
-            
+
             Result<bool> result = _musicPlayer.Play();
 
             if (result.IsSuccess)
@@ -94,10 +104,10 @@ public class MusicControlHandler
             }
         });
 
-        connection.On("PlayNext", () =>
+        connection.On("PlayNext", async () =>
         {
             _logger.LogInformation("Received PLAYNEXT command");
-            Result<bool> result = _musicPlayer.PlayNext();
+            Result<bool> result = await _musicPlayer.PlayNext();
 
             if (result.IsSuccess)
             {
@@ -109,10 +119,10 @@ public class MusicControlHandler
             }
         });
 
-        connection.On("PlayPrevious", () =>
+        connection.On("PlayPrevious", async () =>
         {
             _logger.LogInformation("Received PLAYPREVIOUS command");
-            Result<bool> result = _musicPlayer.PlayPrevious();
+            Result<bool> result = await _musicPlayer.PlayPrevious();
 
             if (result.IsSuccess)
             {
@@ -136,6 +146,23 @@ public class MusicControlHandler
             else
             {
                 _logger.LogError("Failed to seek: {Error}", result.Error);
+            }
+        });
+
+        connection.On("GetCachedSongs", async () =>
+        {
+            _logger.LogInformation("Received GETCACHEDSONGS command");
+            Result<IEnumerable<CachedSongDTO>> result = _cacheService.GetCachedSongs();
+
+            if (result.IsSuccess && result.Data != null)
+            {
+                _logger.LogInformation("Cached songs retrieved successfully, count: {Count}", result.Data.Count());
+                await connection.InvokeAsync("ReceiveCachedSongs", Result<IEnumerable<CachedSongDTO>>.Ok(result.Data));
+            }
+            else
+            {
+                _logger.LogError("Failed to retrieve cached songs: {Error}", result.Error);
+                await connection.InvokeAsync("ReceiveCachedSongs", Result<IEnumerable<CachedSongDTO>>.Fail(result.Error ?? "Unknown error"));
             }
         });
     }

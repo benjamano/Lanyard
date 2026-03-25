@@ -118,7 +118,7 @@
 </style>
 
 @code {
-    [Parameter] public EventCallback<IEnumerable<PlaylistSongMember>> OnSongsSelected { get; set; }
+    [Parameter] public EventCallback<(IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs)> OnSongsSelected { get; set; }
     [Parameter] public Guid? SelectedClientId { get; set; }
 
     private Guid? selectedPlaylistId;
@@ -256,7 +256,7 @@
             _toastService.ShowError("Failed to load playlist songs: " + playlistSongsResult.Error);
         }
 
-        await OnSongsSelected.InvokeAsync(songs);
+        await OnSongsSelected.InvokeAsync((songs, false));
     }
 
     private async Task ShowAllSongs()
@@ -278,13 +278,16 @@
             return;
         }
 
-        await OnSongsSelected.InvokeAsync(songs.Select(x=> new PlaylistSongMember
-        {
-            PlaylistId = Guid.Empty,
-            Playlist = null,
-            Song = x,
-            SongId = x.Id
-        }));
+        await OnSongsSelected.InvokeAsync(
+            (songs.Select(x=> new PlaylistSongMember
+            {
+                PlaylistId = Guid.Empty,
+                Playlist = null,
+                Song = x,
+                SongId = x.Id
+            }),
+            true)
+        );
     }
 
     private async Task CreateNewPlaylist() 
@@ -350,7 +353,7 @@
 
         if (triggerRender)
         {
-            StateHasChanged();
+            InvokeAsync(StateHasChanged);
         }
     }
 

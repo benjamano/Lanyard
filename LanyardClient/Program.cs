@@ -50,6 +50,7 @@ services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();
 
 services.AddSingleton<ISignalRClient, SignalRClient>();
 
+services.AddSingleton<ISongCacheService, SongCacheService>();
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
 services.AddSingleton<ProjectionProgramController>();

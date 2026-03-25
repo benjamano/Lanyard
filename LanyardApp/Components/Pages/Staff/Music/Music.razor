@@ -28,7 +28,7 @@
             </div>
 
             <div class="w-100">
-                <SongList Songs="currentSongs" SelectedClientId="selectedClientId"></SongList>
+                <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"></SongList>
             </div>
         </div>
     </div>
@@ -120,6 +120,8 @@
     private List<ClientConnectedWithCapabilitiesDTO> clients = [];
     private Guid? selectedClientId;
     private bool firstRenderCompleted;
+
+    private bool allowPlaying = true;
 
     private string selectedClientIdString
     {
@@ -319,9 +321,10 @@
         await _player.Next(selectedClientId.Value);
     }
 
-    private void HandleSongsSelected(IEnumerable<PlaylistSongMember> songs)
+    private void HandleSongsSelected((IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs) args)
     {
-        currentSongs = songs;
+        currentSongs = args.Songs;
+        allowPlaying = !args.IsLocalSongs;
         StateHasChanged();
     }
 

@@ -23,9 +23,6 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
 
-// Music Services
-builder.Services.AddSingleton<MusicPlayerService>();
-
 // Other Business Services
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IFileService, FileService>();
@@ -36,7 +33,11 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
+
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
+builder.Services.AddSingleton<MusicPlayerService>();
+
 builder.Services.AddSignalR();
 
 // Shared drag state service
@@ -139,5 +140,7 @@ app.MapControllers();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+await DatabaseSeeder.SeedAsync(app.Services);
 
 app.Run();

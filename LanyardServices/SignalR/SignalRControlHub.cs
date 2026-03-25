@@ -16,17 +16,21 @@ public class SignalRControlHub(
     ILogger<SignalRControlHub> logger,
     MusicPlayerService playerService,
     IClientService clientService,
-    ILaserGameStatusStore laserGameStatusStore) : Hub, ISignalRProjectionControlHub
+    ILaserGameStatusStore laserGameStatusStore,
+    SignalRProjectionControlHubEvents hubEvents) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
+    private readonly SignalRProjectionControlHubEvents _hubEvents = hubEvents;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
     public static IReadOnlyCollection<string> ConnectedIds => (IReadOnlyCollection<string>)_connections.Keys;
+
+    public event Action<Result<IEnumerable<CachedSongDTO>>>? OnReceiveCachedSongs; 
 
     public override async Task OnConnectedAsync()
     {
@@ -94,6 +98,7 @@ public class SignalRControlHub(
             }
 
             await SendProjectionProgramInfoToClientAsync(client.Id);
+            await SendMusicSettingsToClientAsync(client);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -208,6 +213,13 @@ public class SignalRControlHub(
         await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
     }
 
+    private async Task SendMusicSettingsToClientAsync(Client client)
+    {
+        ClientMusicSettingsDTO settings = new ClientMusicSettingsDTO { CacheLimitMb = client.MusicCacheLimitMb };
+        await Clients.Caller.SendAsync("ReceiveMusicSettings", settings);
+        _logger.LogInformation("Sent music settings to client {ClientId}: cache limit {CacheLimitMb}MB", client.Id, client.MusicCacheLimitMb);
+    }
+
     public async Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId)
     {
         try
@@ -261,5 +273,9 @@ public class SignalRControlHub(
 
             return Result<bool>.Fail("An error occurred while sending projection program info to client.");
         }
+    }
+    public async Task ReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongs)
+    {
+        _hubEvents.RaiseReceiveCachedSongs(cachedSongs);
     }
 }

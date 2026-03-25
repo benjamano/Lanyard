@@ -1,41 +1,34 @@
-﻿@inject IClientService _clientService
+﻿@using Lanyard.Application.SignalR
+@inject IClientService _clientService
 @inject IToastService _toastService
 
 <div hidden="@(IsShowing == false)">
-    <FluentDivider Class="my-2"></FluentDivider>
+    <FluentCard Height="auto">
+        <FluentLabel Typo="Typography.PaneHeader">Projector</FluentLabel>
 
-    <FluentStack Orientation="Orientation.Horizontal">
-        <FluentGrid Class="w-100">
-            <FluentGridItem xs="6">
-                <FluentCard Height="auto">
-                    <FluentLabel Typo="Typography.PaneHeader">Projector</FluentLabel>
+        <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+            <ChildContent>
+                <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
+                <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
+                <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
+                <TemplateColumn Title="Size">
+                    @context.Width x @context.Height px
+                </TemplateColumn>
+                <TemplateColumn Title="Delete">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
+                </TemplateColumn>
+            </ChildContent>
+            <LoadingContent>
+                Loading...
+            </LoadingContent>
+            <EmptyContent>
+                No Projections set for this Client!
+            </EmptyContent>
+        </FluentDataGrid>
 
-                    <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
-                        <ChildContent>
-                            <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
-                            <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
-                            <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
-                            <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
-                            <TemplateColumn Title="Size">
-                                @context.Width x @context.Height px
-                            </TemplateColumn>
-                            <TemplateColumn Title="Delete">
-                                <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
-                            </TemplateColumn>
-                        </ChildContent>
-                        <LoadingContent>
-                            Loading...
-                        </LoadingContent>
-                        <EmptyContent>
-                            No Projections set for this Client!
-                        </EmptyContent>
-                    </FluentDataGrid>
-
-                    <FluentButton class="mt-2 float-end" OnClick="OpenAddProjectionDialog" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ProjectionScreenTextSparkle()">Add Projection</FluentButton>
-                </FluentCard>
-            </FluentGridItem>
-        </FluentGrid>
-    </FluentStack>
+        <FluentButton class="mt-2 float-end" OnClick="OpenAddProjectionDialog" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ProjectionScreenTextSparkle()">Add Projection</FluentButton>
+    </FluentCard>
 </div>
 
 @code {

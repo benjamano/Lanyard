@@ -25,7 +25,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
             {
                 _connection = new HubConnectionBuilder()
                     .WithUrl(serverUrl + $"?clientId={clientId}")
-                    .WithAutomaticReconnect()
+                    .WithAutomaticReconnect(new RetryForeverPolicy())
                     .Build();
 
                 foreach (Action<HubConnection> register in registrations)
@@ -82,4 +82,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
     {
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
     }
+}
+
+public class RetryForeverPolicy : IRetryPolicy
+{
+    public TimeSpan? NextRetryDelay(RetryContext retryContext) => TimeSpan.FromSeconds(5);
 }

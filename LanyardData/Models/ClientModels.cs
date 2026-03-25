@@ -15,6 +15,8 @@ public class Client
     public DateTime? LastUpdateDate { get; set; }
 
     public DateTime CreateDate { get; set; }
+
+    public int MusicCacheLimitMb { get; set; } = 500;
 }
 
 public class ClientProjectionSettings

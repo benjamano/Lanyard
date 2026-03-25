@@ -1,29 +1,49 @@
-﻿using Lanyard.Infrastructure.DataAccess;
-using Lanyard.Infrastructure.DTO;
+﻿using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services;
 
-public class MusicService(IDbContextFactory<ApplicationDbContext> _factory) : IMusicService
+public class MusicService : IMusicService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = _factory;
+    private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
 
-    public async Task<Result<IEnumerable<Song>>> GetSongsAsync()
+    public Task<Result<IEnumerable<Song>>> GetSongsAsync()
     {
         try
         {
-            ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            string musicFolder = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
 
-            IEnumerable<Song> songs = await context.Songs
-                .Where(x=> x.IsActive)
-                .ToListAsync();
+            IEnumerable<Song> songs = Directory
+                .EnumerateFiles(musicFolder, "*.*", SearchOption.AllDirectories)
+                .Where(f => _audioExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .Select(f =>
+                {
+                    double duration = 0;
+                    try
+                    {
+                        using TagLib.File tag = TagLib.File.Create(f);
+                        duration = tag.Properties.Duration.TotalSeconds;
+                    }
+                    catch { }
 
-            return Result<IEnumerable<Song>>.Ok(songs);
+                    return new Song
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = Path.GetFileNameWithoutExtension(f),
+                        AlbumName = Path.GetFileName(Path.GetDirectoryName(f)) ?? string.Empty,
+                        FilePath = f,
+                        DurationSeconds = duration,
+                        CreateDate = File.GetCreationTime(f),
+                        IsDownloaded = true,
+                        IsActive = true
+                    };
+                });
+
+            return Task.FromResult(Result<IEnumerable<Song>>.Ok(songs));
         }
         catch (Exception ex)
         {
-            return Result<IEnumerable<Song>>.Fail($"An error occurred while retrieving songs: {ex.Message}");
+            return Task.FromResult(Result<IEnumerable<Song>>.Fail($"An error occurred while retrieving songs: {ex.Message}"));
         }
     }
 }
