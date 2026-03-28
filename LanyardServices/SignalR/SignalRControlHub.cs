@@ -17,7 +17,8 @@ public class SignalRControlHub(
     MusicPlayerService playerService,
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
-    SignalRProjectionControlHubEvents hubEvents) : Hub, ISignalRProjectionControlHub
+    SignalRProjectionControlHubEvents hubEvents,
+    AutomationEngineService automationEngineService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -25,6 +26,7 @@ public class SignalRControlHub(
     private readonly IClientService _clientService = clientService;
     private readonly SignalRProjectionControlHubEvents _hubEvents = hubEvents;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
+    private readonly AutomationEngineService _automationEngineService = automationEngineService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -183,6 +185,7 @@ public class SignalRControlHub(
         Guid clientId = getResult.Data;
 
         _laserGameStatusStore.UpdateStatus(clientId, status);
+        _automationEngineService.EnqueueTransition(clientId, status.Status);
     }
 
     public async Task Load(Guid songId)
