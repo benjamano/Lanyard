@@ -73,7 +73,12 @@
             No execution log entries found.
         </EmptyContent>
         <ChildContent>
-            <PropertyColumn Title="Rule Name" Property="@(e => e.RuleName)" />
+            <TemplateColumn Title="Rule Name">
+                <span style="cursor: pointer; text-decoration: underline;"
+                      @onclick="@(() => OpenExecutionDetailDialogAsync(context))">
+                    @context.RuleName
+                </span>
+            </TemplateColumn>
             <PropertyColumn Title="Trigger Event" Property="@(e => e.TriggerEvent)" />
             <TemplateColumn Title="Trigger Client">
                 @GetClientName(context.TriggerClientId)
@@ -254,5 +259,22 @@
                 _toastService.ShowError(deleteResult.Error ?? "Delete failed.");
             }
         }
+    }
+
+    private async Task OpenExecutionDetailDialogAsync(AutomationRuleExecution execution)
+    {
+        await _dialogService.ShowDialogAsync<ExecutionLogDetailDialog>(
+            execution,
+            new DialogParameters()
+            {
+                Title = $"Execution: {execution.RuleName}",
+                PrimaryAction = "Close",
+                PrimaryActionEnabled = true,
+                SecondaryAction = string.Empty,
+                Width = "600px",
+                Height = "auto",
+                TrapFocus = true,
+                Modal = true
+            });
     }
 }

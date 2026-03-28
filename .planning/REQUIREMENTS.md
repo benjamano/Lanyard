@@ -7,11 +7,11 @@
 
 ### Rules Management
 
-- [ ] **RULE-01**: Staff can create an automation rule with a name, a specific trigger client (game-monitoring client), and a trigger event (InGame or NotStarted)
-- [ ] **RULE-02**: Staff can add one or more Music Control actions to a rule, each specifying a target music client and an operation (play or pause)
-- [ ] **RULE-03**: Staff can edit an existing rule's name, trigger client, trigger event, and actions
-- [ ] **RULE-04**: Staff can delete a rule
-- [ ] **RULE-05**: Staff can enable or disable the entire automation engine from the dashboard (global kill switch)
+- [x] **RULE-01**: Staff can create an automation rule with a name, a specific trigger client (game-monitoring client), and a trigger event (InGame or NotStarted)
+- [x] **RULE-02**: Staff can add one or more Music Control actions to a rule, each specifying a target music client and an operation (play or pause)
+- [x] **RULE-03**: Staff can edit an existing rule's name, trigger client, trigger event, and actions
+- [x] **RULE-04**: Staff can delete a rule
+- [x] **RULE-05**: Staff can enable or disable the entire automation engine from the dashboard (global kill switch)
 
 ### Engine Behavior
 
@@ -19,12 +19,12 @@
 - [ ] **ENG-02**: When a monitored game client transitions to InGame, all matching rules execute their actions
 - [ ] **ENG-03**: When a monitored game client transitions to NotStarted, all matching rules execute their actions
 - [x] **ENG-04**: Action execution is fault-isolated per-action — one action failing does not abort remaining actions in the same rule
-- [ ] **ENG-05**: Rule evaluation and action dispatch do not block the SignalR hub method (async, non-blocking)
+- [x] **ENG-05**: Rule evaluation and action dispatch do not block the SignalR hub method (async, non-blocking)
 
 ### Execution Logging
 
 - [x] **LOG-01**: Each rule execution is recorded with: timestamp, rule name, trigger event, and per-action outcome (success or failure with reason)
-- [ ] **LOG-02**: Staff can view a list of recent rule execution log entries from the dashboard
+- [x] **LOG-02**: Staff can view a list of recent rule execution log entries from the dashboard
 
 ## v2 Requirements
 
@@ -56,18 +56,18 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RULE-01 | Phase 3 | Pending |
-| RULE-02 | Phase 3 | Pending |
-| RULE-03 | Phase 3 | Pending |
-| RULE-04 | Phase 3 | Pending |
-| RULE-05 | Phase 3 | Pending |
+| RULE-01 | Phase 3 | Complete |
+| RULE-02 | Phase 3 | Complete |
+| RULE-03 | Phase 3 | Complete |
+| RULE-04 | Phase 3 | Complete |
+| RULE-05 | Phase 3 | Complete |
 | ENG-01 | Phase 2 | Pending |
 | ENG-02 | Phase 2 | Pending |
 | ENG-03 | Phase 2 | Pending |
 | ENG-04 | Phase 2 | Complete |
-| ENG-05 | Phase 2 | Pending |
+| ENG-05 | Phase 2 | Complete |
 | LOG-01 | Phase 2 | Complete |
-| LOG-02 | Phase 3 | Pending |
+| LOG-02 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total
@@ -76,4 +76,4 @@
 
 ---
 *Requirements defined: 2026-03-27*
-*Last updated: 2026-03-27 — traceability updated after roadmap creation (RULE-01–05 moved to Phase 3, where staff-facing UI is delivered)*
+*Last updated: 2026-03-28 — ENG-05 marked complete after 02-04 hub wiring and DI registration*
