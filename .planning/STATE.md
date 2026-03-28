@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-28T14:57:21.014Z"
-last_activity: "2026-03-27 — Phase 1 Plan 01 complete: four automation entity classes, migration applied to PostgreSQL"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-03-28T15:26:32.755Z"
+last_activity: "2026-03-28 — Phase 2 Plan 04 complete: hub wired, DI registrations added, LanyardApp builds 0 errors"
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 2
-  percent: 33
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
+  percent: 67
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 ## Current Position
 
-Phase: 1 of 3 (Data Foundation) — COMPLETE
-Plan: 1 of 1 in current phase — COMPLETE
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-03-27 — Phase 1 Plan 01 complete: four automation entity classes, migration applied to PostgreSQL
+Phase: 2 of 3 (Engine Core) — COMPLETE
+Plan: 4 of 4 in current phase — COMPLETE
+Status: Phase 2 complete, all automation engine services built and wired
+Last activity: 2026-03-28 — Phase 2 Plan 04 complete: hub wired, DI registrations added, LanyardApp builds 0 errors
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -51,6 +51,9 @@ Progress: [███░░░░░░░] 33%
 
 *Updated after each plan completion*
 | Phase 02-engine-core P02-02 | 10 | 3 tasks | 3 files |
+| Phase 02-engine-core P02-03 | 10 | 4 tasks | 4 files |
+| Phase 02-engine-core P02-04 | 15 | 3 tasks | 2 files |
+| Phase 02-engine-core P05 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -66,6 +69,12 @@ Recent decisions affecting current work:
 - Roadmap: Engine maintains its own _lastKnownStatus map (not modifying LaserGameStatusStore) — keeps the feature self-contained.
 - [Phase 02-engine-core]: 02-02: SignalRControlHub.ConnectedIds used as static IReadOnlyCollection<string> for connection pre-check — avoids hub injection into singleton executor
 - [Phase 02-engine-core]: 02-02: MusicControlActionExecutor is singleton-safe using IDbContextFactory; returns exact error strings per spec
+- [Phase 02-engine-core]: 02-03: EnqueueTransition is synchronous (TryWrite) — edge-triggered; same status arriving twice does not re-write to channel (ENG-01)
+- [Phase 02-engine-core]: 02-03: InitializeEnabledAsync called via GetAwaiter().GetResult() inside lock on first ProcessTransitionAsync call — one-time cold-start cost
+- [Phase 02-engine-core]: 02-03: AutomationRuleExecution.TriggerEvent stored as ev.NewStatus.ToString() string snapshot — preserves historical accuracy if enum changes
+- [Phase 02-engine-core]: 02-04: status.Status used (not status.GameStatus) in EnqueueTransition call — LaserGameStatusDTO property is named Status, not GameStatus; plan spec had wrong property name
+- [Phase 02-engine-core]: 02-04: AutomationEngineService registered as singleton; IActionExecutor/MusicControlActionExecutor as singleton; IAutomationRuleService/AutomationRuleService as scoped; AutomationEngineHostedService as AddHostedService
+- [Phase 02-engine-core]: 02-05: RuleName is required string (no C# default) — compiler enforces it at every construction site; migration uses defaultValue:'' for existing PostgreSQL rows only
 
 ### Pending Todos
 
@@ -77,6 +86,6 @@ None — the ConfigJson vs TPH decision has been implemented. Schema is live in 
 
 ## Session Continuity
 
-Last session: 2026-03-28T14:57:21.009Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-28T15:26:32.751Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None

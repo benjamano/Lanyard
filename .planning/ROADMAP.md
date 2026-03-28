@@ -13,7 +13,7 @@ Three phases deliver a persistent, real-time automation rules engine on top of t
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Foundation** - EF Core entities, migration, and DbContext registration for AutomationRule and AutomationRuleAction (completed 2026-03-27)
-- [ ] **Phase 2: Engine Core** - AutomationRuleService (CRUD), AutomationEngineService (singleton), IActionExecutor pattern, MusicControlActionExecutor, Channel<T> + IHostedService background consumer, hub wiring, and execution logging persistence (gap closure in progress)
+- [x] **Phase 2: Engine Core** - AutomationRuleService (CRUD), AutomationEngineService (singleton), IActionExecutor pattern, MusicControlActionExecutor, Channel<T> + IHostedService background consumer, hub wiring, and execution logging persistence (gap closure in progress) (completed 2026-03-28)
 - [ ] **Phase 3: Management UI** - Blazor pages for rule CRUD, global engine toggle, and execution log view
 
 ## Phase Details
@@ -62,11 +62,11 @@ Plans:
   3. Staff can delete a rule and it no longer appears in the list or fires during engine evaluation
   4. Staff can toggle the global automation engine on or off from the dashboard and the change takes effect immediately — rules stop firing while disabled without requiring a server restart
   5. Staff can view a list of recent rule execution log entries showing which rule fired, when, what triggered it, and whether each action succeeded or failed
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Build Automation Rules list and create/edit form pages (LanyardApp/Components/Automation/) using Fluent UI — trigger picker, action list, client name resolution via IClientService
-- [ ] 03-02: Add global engine toggle control and execution log view page
+- [ ] 03-01-PLAN.md — IAutomationLogService + AutomationLogService (scoped) + test stubs + DI registration; Automation.razor (/staff/automation) with FluentToolbar engine toggle + rules FluentDataGrid + create/edit/delete; AddEditAutomationRuleDialog.razor two-step IDialogContentComponent
+- [ ] 03-02-PLAN.md — Execution log FluentCard section on Automation.razor (last 50 entries, failures-only filter, row click opens detail); ExecutionLogDetailDialog.razor (read-only per-action breakdown); NavMenu Automation entry (Admin, Manage dropdown)
 
 ## Progress
 
@@ -76,5 +76,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 1/1 | Complete    | 2026-03-27 |
-| 2. Engine Core | 4/5 | Gap closure | 2026-03-28 |
+| 2. Engine Core | 5/5 | Complete    | 2026-03-28 |
 | 3. Management UI | 0/2 | Not started | - |
