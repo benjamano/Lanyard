@@ -44,6 +44,8 @@ public class AutomationRuleExecution
     public Guid AutomationRuleId { get; set; }
     public AutomationRule? AutomationRule { get; set; }
 
+    public required string RuleName { get; set; }
+
     public DateTime ExecutedAt { get; set; }
     public string TriggerEvent { get; set; } = string.Empty;
     public Guid TriggerClientId { get; set; }

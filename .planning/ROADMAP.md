@@ -13,7 +13,7 @@ Three phases deliver a persistent, real-time automation rules engine on top of t
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Foundation** - EF Core entities, migration, and DbContext registration for AutomationRule and AutomationRuleAction (completed 2026-03-27)
-- [ ] **Phase 2: Engine Core** - AutomationRuleService (CRUD), AutomationEngineService (singleton), IActionExecutor pattern, MusicControlActionExecutor, Channel<T> + IHostedService background consumer, hub wiring, and execution logging persistence
+- [ ] **Phase 2: Engine Core** - AutomationRuleService (CRUD), AutomationEngineService (singleton), IActionExecutor pattern, MusicControlActionExecutor, Channel<T> + IHostedService background consumer, hub wiring, and execution logging persistence (gap closure in progress)
 - [ ] **Phase 3: Management UI** - Blazor pages for rule CRUD, global engine toggle, and execution log view
 
 ## Phase Details
@@ -43,13 +43,14 @@ Plans:
   4. If one action's music command fails (e.g. target client disconnected), the remaining actions in the same rule still execute and the failure is recorded
   5. The SignalR hub method returns promptly regardless of how many rules are configured — rule execution happens off the hub thread via a background Channel consumer
   6. Each rule execution creates a log entry in the database recording the rule name, trigger event, timestamp, and per-action outcome (success or error message)
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
 - [ ] 02-01-PLAN.md — AppSetting model + EF migration + IAutomationRuleService CRUD + AutomationRuleService (scoped, Result<T>, cache invalidation signaling) + Wave 0 test stubs
 - [ ] 02-02-PLAN.md — IActionExecutor interface + MusicControlActionExecutor (ParametersJson, ConnectedIds pre-check, named error messages) + Wave 0 test stubs
-- [ ] 02-03-PLAN.md — GameStatusTransitionEvent record + AutomationEngineService singleton (unbounded channel, _lastKnownStatus, volatile toggle, fault isolation, execution log) + AutomationEngineHostedService + Wave 0 test stubs
-- [ ] 02-04-PLAN.md — Hub wiring (EnqueueTransition call in UpdateLaserGameStatus) + DI registrations in Program.cs + full solution build verify
+- [x] 02-03-PLAN.md — GameStatusTransitionEvent record + AutomationEngineService singleton (unbounded channel, _lastKnownStatus, volatile toggle, fault isolation, execution log) + AutomationEngineHostedService + Wave 0 test stubs
+- [x] 02-04-PLAN.md — Hub wiring (EnqueueTransition call in UpdateLaserGameStatus) + DI registrations in Program.cs + full solution build verify
+- [ ] 02-05-PLAN.md (gap closure) — Add RuleName snapshot to AutomationRuleExecution; assign rule.Name in ExecuteRuleAsync; generate and apply EF migration (closes LOG-01)
 
 ### Phase 3: Management UI
 **Goal**: Staff can create, edit, and delete automation rules from the dashboard, toggle the engine on and off with immediate effect, and view recent execution log entries to diagnose what fired and why.
@@ -74,6 +75,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/1 | Complete    | 2026-03-27 |
-| 2. Engine Core | 1/4 | In Progress|  |
+| 1. Data Foundation | 1/1 | Complete    | 2026-03-27 |
+| 2. Engine Core | 4/5 | Gap closure | 2026-03-28 |
 | 3. Management UI | 0/2 | Not started | - |

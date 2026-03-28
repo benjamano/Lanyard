@@ -194,6 +194,7 @@ public class AutomationEngineService(
         {
             Id = Guid.NewGuid(),
             AutomationRuleId = rule.Id,
+            RuleName = rule.Name,
             ExecutedAt = DateTime.UtcNow,
             TriggerEvent = ev.NewStatus.ToString(), // string snapshot per STATE.md decision
             TriggerClientId = ev.ClientId,
