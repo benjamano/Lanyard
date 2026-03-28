@@ -189,6 +189,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("OverallSuccess")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("TriggerClientId")
                         .HasColumnType("uuid");
 
