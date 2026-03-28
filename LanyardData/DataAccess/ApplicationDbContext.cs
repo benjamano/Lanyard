@@ -43,6 +43,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AutomationRuleAction> AutomationRuleActions { get; set; }
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
+        public DbSet<AppSetting> AppSettings { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -64,6 +65,9 @@ namespace Lanyard.Infrastructure.DataAccess
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<AutomationRule>()
                 .HasIndex(r => r.TriggerClientId);
+            modelBuilder.Entity<AppSetting>()
+                .HasIndex(a => a.Key)
+                .IsUnique();
         }
     }
 }
