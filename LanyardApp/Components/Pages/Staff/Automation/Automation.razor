@@ -1,0 +1,258 @@
+@page "/staff/automation"
+@attribute [Authorize(Roles = "Admin")]
+@using Lanyard.Application.Services
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Infrastructure.DataAccess
+@using Lanyard.Shared.Enum
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager
+
+@inject IAutomationRuleService _ruleService
+@inject IAutomationLogService _logService
+@inject AutomationEngineService _engineService
+@inject IClientService _clientService
+@inject IToastService _toastService
+@inject IDialogService _dialogService
+@inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+
+<PageTitle>Automation</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentToolbar class="w-100" id="toolbar-automation">
+        <FluentStack slot="start" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+            <FluentSwitch @bind-Value="_engineEnabled" @bind-Value:after="OnEngineToggleChangedAsync">
+                Engine: @(_engineEnabled ? "Enabled" : "Disabled")
+            </FluentSwitch>
+        </FluentStack>
+        <FluentButton slot="end" Appearance="Appearance.Outline"
+                      IconEnd="new Icons.Regular.Size20.Add()"
+                      OnClick="OpenAddRuleDialogAsync">
+            New Rule
+        </FluentButton>
+    </FluentToolbar>
+
+    <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto" Style="width: 100%;">
+        <EmptyContent>
+            No automation rules configured.
+        </EmptyContent>
+        <ChildContent>
+            <PropertyColumn Title="Name" Property="@(r => r.Name)" />
+            <TemplateColumn Title="Trigger Client">
+                @GetClientName(context.TriggerClientId)
+            </TemplateColumn>
+            <PropertyColumn Title="Trigger Event" Property="@(r => r.TriggerEvent.ToString())" />
+            <TemplateColumn Title="Actions">
+                <div class="d-flex align-items-center">
+                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Accent"
+                                OnClick="@(() => OpenEditRuleDialogAsync(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
+                                OnClick="@(() => ConfirmDeleteRuleAsync(context))" />
+                </div>
+            </TemplateColumn>
+        </ChildContent>
+    </FluentDataGrid>
+</FluentCard>
+
+<FluentDivider Class="my-2" />
+
+<FluentCard Height="auto">
+    <FluentToolbar class="w-100" id="toolbar-log">
+        <FluentLabel slot="start" Typo="Typography.PaneHeader">Execution Log</FluentLabel>
+        <FluentStack slot="end" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+            <FluentSwitch @bind-Value="_showFailuresOnly" @bind-Value:after="StateHasChanged">
+                Failures only
+            </FluentSwitch>
+        </FluentStack>
+    </FluentToolbar>
+
+    <FluentDataGrid Items="@FilteredExecutions.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr auto" Style="width: 100%;">
+        <EmptyContent>
+            No execution log entries found.
+        </EmptyContent>
+        <ChildContent>
+            <PropertyColumn Title="Rule Name" Property="@(e => e.RuleName)" />
+            <PropertyColumn Title="Trigger Event" Property="@(e => e.TriggerEvent)" />
+            <TemplateColumn Title="Trigger Client">
+                @GetClientName(context.TriggerClientId)
+            </TemplateColumn>
+            <PropertyColumn Title="Executed At" Property="@(e => e.ExecutedAt)" />
+            <TemplateColumn Title="Success">
+                @if (context.OverallSuccess)
+                {
+                    <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
+                }
+                else
+                {
+                    <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
+                }
+            </TemplateColumn>
+        </ChildContent>
+    </FluentDataGrid>
+</FluentCard>
+
+@code {
+#nullable enable
+
+    private IEnumerable<AutomationRule> _rules = [];
+    private IEnumerable<ClientConnectedDTO> _clients = [];
+    private IEnumerable<AutomationRuleExecution> _executions = [];
+    private bool _engineEnabled;
+    private bool _showFailuresOnly;
+
+    private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
+        _showFailuresOnly
+            ? _executions.Where(e => !e.OverallSuccess)
+            : _executions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _engineEnabled = _engineService.IsEnabled;
+        await LoadClientsAsync();
+        await LoadRulesAsync();
+        await LoadExecutionsAsync();
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        Result<IEnumerable<AutomationRule>> result = await _ruleService.GetRulesAsync();
+        if (result.IsSuccess)
+        {
+            _rules = result.Data ?? [];
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load rules: {result.Error}");
+        }
+    }
+
+    private async Task LoadClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+        if (result.IsSuccess)
+        {
+            _clients = result.Data ?? [];
+        }
+    }
+
+    private async Task LoadExecutionsAsync()
+    {
+        Result<IEnumerable<AutomationRuleExecution>> result = await _logService.GetRecentExecutionsAsync(50);
+        if (result.IsSuccess)
+        {
+            _executions = result.Data ?? [];
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load execution log: {result.Error}");
+        }
+    }
+
+    private string GetClientName(Guid clientId)
+    {
+        return _clients.FirstOrDefault(c => c.Id == clientId)?.Name ?? clientId.ToString();
+    }
+
+    private async Task OnEngineToggleChangedAsync()
+    {
+        _engineService.SetEnabled(_engineEnabled);
+
+        await using ApplicationDbContext ctx = await _dbContextFactory.CreateDbContextAsync();
+        AppSetting? setting = await ctx.AppSettings
+            .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled");
+        if (setting is null)
+        {
+            ctx.AppSettings.Add(new AppSetting
+            {
+                Id = Guid.NewGuid(),
+                Key = "AutomationEngine.Enabled",
+                Value = _engineEnabled ? "true" : "false",
+                CreateDate = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            setting.Value = _engineEnabled ? "true" : "false";
+        }
+        await ctx.SaveChangesAsync();
+
+        string message = _engineEnabled ? "Automation engine enabled" : "Automation engine disabled";
+        _toastService.ShowSuccess(message);
+    }
+
+    private async Task OpenAddRuleDialogAsync()
+    {
+        IDialogReference dialog = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(
+            (AutomationRule?)null,
+            new DialogParameters()
+            {
+                Width = "650px",
+                Height = "auto",
+                TrapFocus = true,
+                Modal = true
+            });
+
+        DialogResult? result = await dialog.Result;
+        if (result?.Data is true)
+        {
+            await LoadRulesAsync();
+        }
+    }
+
+    private async Task OpenEditRuleDialogAsync(AutomationRule rule)
+    {
+        IDialogReference dialog = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(
+            rule,
+            new DialogParameters()
+            {
+                Width = "650px",
+                Height = "auto",
+                TrapFocus = true,
+                Modal = true
+            });
+
+        DialogResult? result = await dialog.Result;
+        if (result?.Data is true)
+        {
+            await LoadRulesAsync();
+        }
+    }
+
+    private async Task ConfirmDeleteRuleAsync(AutomationRule rule)
+    {
+        DialogParameters parameters = new DialogParameters()
+        {
+            Title = "Are you sure?",
+            OnDialogResult = _dialogService.CreateDialogCallback(this, async result => await HandleDeleteRuleAsync(result)),
+            PrimaryAction = "Yes, Delete",
+            PrimaryActionEnabled = true,
+            SecondaryAction = "Cancel",
+            Width = "500px",
+            Height = "auto",
+            TrapFocus = true,
+            Modal = true,
+        };
+        parameters.Add("Message", $"Delete rule '{rule.Name}'? This cannot be undone.");
+        await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(rule, parameters);
+    }
+
+    private async Task HandleDeleteRuleAsync(DialogResult result)
+    {
+        if (result.Cancelled == false)
+        {
+            AutomationRule rule = (AutomationRule)result.Data!;
+            Result<bool> deleteResult = await _ruleService.DeleteRuleAsync(rule.Id);
+            if (deleteResult.IsSuccess)
+            {
+                await LoadRulesAsync();
+                _toastService.ShowSuccess("Rule deleted.");
+            }
+            else
+            {
+                _toastService.ShowError(deleteResult.Error ?? "Delete failed.");
+            }
+        }
+    }
+}

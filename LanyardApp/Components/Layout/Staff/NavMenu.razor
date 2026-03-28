@@ -99,6 +99,14 @@
                                             </a>
                                         </Authorized>
                                     </AuthorizeView>
+                                    <AuthorizeView Roles="Admin" Context="_context">
+                                        <Authorized>
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="/staff/automation">
+                                                <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" Color="Color.FillInverse" class="me-2" />
+                                                <span>Automation</span>
+                                            </a>
+                                        </Authorized>
+                                    </AuthorizeView>
                                 </div>
                             </div>
                         </li>
