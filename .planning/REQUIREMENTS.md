@@ -15,9 +15,9 @@
 
 ### Engine Behavior
 
-- [ ] **ENG-01**: Rules fire only on game status *transition* (edge-triggered) — not on every status update call
-- [ ] **ENG-02**: When a monitored game client transitions to InGame, all matching rules execute their actions
-- [ ] **ENG-03**: When a monitored game client transitions to NotStarted, all matching rules execute their actions
+- [x] **ENG-01**: Rules fire only on game status *transition* (edge-triggered) — not on every status update call
+- [x] **ENG-02**: When a monitored game client transitions to InGame, all matching rules execute their actions
+- [x] **ENG-03**: When a monitored game client transitions to NotStarted, all matching rules execute their actions
 - [x] **ENG-04**: Action execution is fault-isolated per-action — one action failing does not abort remaining actions in the same rule
 - [x] **ENG-05**: Rule evaluation and action dispatch do not block the SignalR hub method (async, non-blocking)
 
@@ -58,12 +58,12 @@
 |-------------|-------|--------|
 | RULE-01 | Phase 3 | Complete |
 | RULE-02 | Phase 3 | Complete |
-| RULE-03 | Phase 3 | Complete |
+| RULE-03 | Phase 4 | Complete |
 | RULE-04 | Phase 3 | Complete |
-| RULE-05 | Phase 3 | Complete |
-| ENG-01 | Phase 2 | Pending |
-| ENG-02 | Phase 2 | Pending |
-| ENG-03 | Phase 2 | Pending |
+| RULE-05 | Phase 4 | Complete |
+| ENG-01 | Phase 2 | Complete |
+| ENG-02 | Phase 2 | Complete |
+| ENG-03 | Phase 2 | Complete |
 | ENG-04 | Phase 2 | Complete |
 | ENG-05 | Phase 2 | Complete |
 | LOG-01 | Phase 2 | Complete |
@@ -76,4 +76,4 @@
 
 ---
 *Requirements defined: 2026-03-27*
-*Last updated: 2026-03-28 — ENG-05 marked complete after 02-04 hub wiring and DI registration*
+*Last updated: 2026-03-28 — ENG-01/02/03 checkboxes fixed (implemented in Phase 2, checkbox drift); RULE-03 reset to Phase 4 Pending (FK bug found in audit); RULE-05 reassigned to Phase 4 (initial state fix)*

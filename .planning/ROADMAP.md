@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Data Foundation** - EF Core entities, migration, and DbContext registration for AutomationRule and AutomationRuleAction (completed 2026-03-27)
 - [x] **Phase 2: Engine Core** - AutomationRuleService (CRUD), AutomationEngineService (singleton), IActionExecutor pattern, MusicControlActionExecutor, Channel<T> + IHostedService background consumer, hub wiring, and execution logging persistence (gap closure in progress) (completed 2026-03-28)
 - [x] **Phase 3: Management UI** - Blazor pages for rule CRUD, global engine toggle, and execution log view (completed 2026-03-28)
+- [x] **Phase 4: Gap Closure — Edit Rule Fix** - Fix AutomationRuleId FK bug in AddEditAutomationRuleDialog (RULE-03); fix engine toggle showing wrong initial state after restart (RULE-05) (gap_closure: v1.0 audit) (completed 2026-04-05)
 
 ## Phase Details
 
@@ -68,13 +69,27 @@ Plans:
 - [ ] 03-01-PLAN.md — IAutomationLogService + AutomationLogService (scoped) + test stubs + DI registration; Automation.razor (/staff/automation) with FluentToolbar engine toggle + rules FluentDataGrid + create/edit/delete; AddEditAutomationRuleDialog.razor two-step IDialogContentComponent
 - [ ] 03-02-PLAN.md — Execution log FluentCard section on Automation.razor (last 50 entries, failures-only filter, row click opens detail); ExecutionLogDetailDialog.razor (read-only per-action breakdown); NavMenu Automation entry (Admin, Manage dropdown)
 
+### Phase 4: Gap Closure — Edit Rule Fix
+**Goal**: RULE-03 and RULE-05 are fully functional with no data integrity issues or misleading UI state — rule edits persist correctly and the engine toggle reflects the true persisted state on page load.
+**Depends on**: Phase 3
+**Requirements**: RULE-03, RULE-05
+**Gap Closure**: Closes gaps identified in v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. Editing an existing rule and adding a new action row saves successfully — no FK constraint violation, no Guid.Empty in AutomationRuleId column
+  2. The engine toggle displays the correct enabled/disabled state on page load immediately after a server restart (reads from DB, not in-memory state)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md — Fix AutomationRuleId FK assignment in AddEditAutomationRuleDialog.SaveRuleAsync; fix Automation.razor OnInitializedAsync to read engine state from DB (AppSettings) rather than AutomationEngineService.IsEnabled
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 1/1 | Complete    | 2026-03-27 |
 | 2. Engine Core | 5/5 | Complete    | 2026-03-28 |
 | 3. Management UI | 2/2 | Complete   | 2026-03-28 |
+| 4. Gap Closure — Edit Rule Fix | 1/1 | Complete   | 2026-04-05 |
