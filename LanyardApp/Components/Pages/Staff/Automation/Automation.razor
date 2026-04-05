@@ -114,7 +114,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _engineEnabled = _engineService.IsEnabled;
+        await using ApplicationDbContext ctx = await _dbContextFactory.CreateDbContextAsync();
+        AppSetting? engineSetting = await ctx.AppSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled");
+        _engineEnabled = engineSetting?.Value == "true";
         await LoadClientsAsync();
         await LoadRulesAsync();
         await LoadExecutionsAsync();
