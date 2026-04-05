@@ -12,7 +12,7 @@
         "**/TestResults": true,
         "docs": true,
         ".vs": true,
-        ".gitignore": true,
+        // ".gitignore": true,
         ".gitattributes": true,
         "README.md": true,
         "LICENSE": true,
