@@ -12,17 +12,17 @@
 @inject IClientService _clientService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
 
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            @_steps[_currentStepIndex]
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
 @if (_currentStepIndex == 0)
 {
-    <FluentDialogHeader ShowDismiss="true">
-        <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
-            <FluentLabel Typo="Typography.PaneHeader">
-                @_steps[_currentStepIndex]
-            </FluentLabel>
-        </FluentStack>
-    </FluentDialogHeader>
-
     <FluentDialogBody>
         <FluentStack Orientation="Orientation.Vertical" Gap="12">
             <FluentTextField Label="Rule Name"
@@ -60,15 +60,6 @@
 }
 else if (_currentStepIndex == 1)
 {
-    <FluentDialogHeader ShowDismiss="true">
-        <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
-            <FluentLabel Typo="Typography.PaneHeader">
-                @_steps[_currentStepIndex]
-            </FluentLabel>
-        </FluentStack>
-    </FluentDialogHeader>
-
     <FluentDialogBody>
         <FluentStack Orientation="Orientation.Vertical" Gap="8">
             @for (int i = 0; i < _actionRows.Count; i++)
@@ -124,8 +115,6 @@ else if (_currentStepIndex == 1)
 }
 
 @code {
-#nullable enable
-
     [CascadingParameter]
     public FluentDialog? Dialog { get; set; }
 
