@@ -21,9 +21,9 @@
     </FluentStack>
 </FluentDialogHeader>
 
-@if (_currentStepIndex == 0)
-{
-    <FluentDialogBody>
+<FluentDialogBody>
+    @if (_currentStepIndex == 0)
+    {
         <FluentStack Orientation="Orientation.Vertical" Gap="12">
             <FluentTextField Label="Rule Name"
                              @bind-Value="_ruleName"
@@ -47,43 +47,32 @@
                 <FluentOption Value="@GameStatus.NotStarted.ToString()">Not Started</FluentOption>
             </FluentSelect>
         </FluentStack>
-    </FluentDialogBody>
-
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Accent"
-                      Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString))"
-                      OnClick="GoToStep2Async">
-            Next
-        </FluentButton>
-        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
-    </FluentDialogFooter>
-}
-else if (_currentStepIndex == 1)
-{
-    <FluentDialogBody>
+    }
+    else if (_currentStepIndex == 1)
+    {
         <FluentStack Orientation="Orientation.Vertical" Gap="8">
             @for (int i = 0; i < _actionRows.Count; i++)
             {
                 int index = i;
                 <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="8">
                     <FluentSelect TOption="ClientConnectedDTO"
-                                  Items="@_clients"
-                                  OptionText="@(c => c.Name)"
-                                  OptionValue="@(c => c.Id.ToString())"
-                                  SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
-                                  Style="flex: 1;" />
+                        Items="@_clients"
+                        OptionText="@(c => c.Name)"
+                        OptionValue="@(c => c.Id.ToString())"
+                        SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
+                        Style="flex: 1;" />
 
                     <FluentSelect TOption="string"
-                                  Value="@_actionRows[index].Operation"
-                                  ValueChanged="@((string op) => _actionRows[index].Operation = op)"
-                                  Style="width: 120px;">
+                            Value="@_actionRows[index].Operation"
+                            ValueChanged="@((string op) => _actionRows[index].Operation = op)"
+                            Style="width: 120px;">
                         <FluentOption Value="Play">Play</FluentOption>
                         <FluentOption Value="Pause">Pause</FluentOption>
                     </FluentSelect>
 
                     <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                  Disabled="@(_actionRows.Count <= 1)"
-                                  OnClick="@(() => RemoveActionRow(index))" />
+                        Disabled="@(_actionRows.Count <= 1)"
+                        OnClick="@(() => RemoveActionRow(index))" />
                 </FluentStack>
             }
 
@@ -100,9 +89,21 @@ else if (_currentStepIndex == 1)
                 <FluentLabel Color="Color.Error">At least one action is required.</FluentLabel>
             }
         </FluentStack>
-    </FluentDialogBody>
+    }
+</FluentDialogBody>
 
-    <FluentDialogFooter>
+<FluentDialogFooter>
+    @if (_currentStepIndex == 0)
+    {
+        <FluentButton Appearance="Appearance.Accent"
+                      Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString))"
+                      OnClick="GoToStep2Async">
+            Next
+        </FluentButton>
+        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+    }
+    else if (_currentStepIndex == 1)
+    {
         <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
         <FluentButton Appearance="Appearance.Accent"
                       Loading="@_isSaving"
@@ -111,8 +112,8 @@ else if (_currentStepIndex == 1)
             Save Rule
         </FluentButton>
         <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
-    </FluentDialogFooter>
-}
+    }
+</FluentDialogFooter>
 
 @code {
     [CascadingParameter]
@@ -167,7 +168,11 @@ else if (_currentStepIndex == 1)
         }
         else
         {
-            _actionRows.Add(new ActionRow());
+            _triggerClientIdString = _clients.FirstOrDefault()?.Id.ToString() ?? string.Empty;
+            _actionRows.Add(new ActionRow
+            {
+                TargetClientIdString = _clients.FirstOrDefault()?.Id.ToString() ?? string.Empty
+            });
         }
     }
 
