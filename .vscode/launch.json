@@ -1,0 +1,18 @@
+{
+    "requireExactSource": false,
+    "configurations": [
+        {
+            "name": "C#: LanyardClient [https]",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\LanyardClient\\Lanyard.Client.csproj"
+        },  
+        {
+            "name": "C#: LanyardApp [https]",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\LanyardApp\\Lanyard.App.csproj",
+            "launchConfigurationId": "TargetFramework=;https"
+        }
+    ]
+}
