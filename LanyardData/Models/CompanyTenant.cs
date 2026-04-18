@@ -6,5 +6,5 @@ public class CompanyTenant
     public DateTime CreateDate { get; set; }
     public DateTime UpdateDate { get; set; }
 
-    public ICollection<CompanyTenantMember> Members { get; set; }
+    public virtual ICollection<CompanyTenantMember> Members { get; set; } = [];
 }

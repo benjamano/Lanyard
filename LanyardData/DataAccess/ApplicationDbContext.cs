@@ -44,6 +44,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
+        public DbSet<CompanyTenant> CompanyTenants { get; set; }
+        public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
