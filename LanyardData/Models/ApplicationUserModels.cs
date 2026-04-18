@@ -11,7 +11,7 @@ namespace Lanyard.Infrastructure.Models
 
         public string GetName()
         {
-            return this.FirstName + " " + this.LastName;
+            return FirstName + " " + LastName;
         }
     }
 

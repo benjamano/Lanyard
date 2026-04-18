@@ -9,8 +9,7 @@
                 "build",
                 "${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
             ],
-            "problemMatcher": "$msCompile",
-            "group": "build"
+            "problemMatcher": "$msCompile"
         },
         {
             "label": "Build LanyardClient",
@@ -20,8 +19,7 @@
                 "build",
                 "${workspaceFolder}/LanyardClient/Lanyard.Client.csproj"
             ],
-            "problemMatcher": "$msCompile",
-            "group": "build"
+            "problemMatcher": "$msCompile"
         },
     ]
 }
