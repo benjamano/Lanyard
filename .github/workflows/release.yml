@@ -5,19 +5,23 @@ on:
       - main
 jobs:
   release:
-    # runs-on: self-hosted  
-    runs-on: windows-latest
+    runs-on: windows-latest  
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
       - name: Install Velopack CLI
-        run: /home/github-runner/.dotnet/dotnet tool install -g vpk
+        run: dotnet tool install -g vpk
 
       - name: Publish app
-        run: /home/github-runner/.dotnet/dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r linux-x64 --self-contained -o ./publish
+        run: dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
-        run: /home/github-runner/.dotnet/dotnet vpk pack --packId LanyardClient --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe LanyardClient
+        run: dotnet vpk pack --packId LanyardClient --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe LanyardClient.exe
 
       - name: Upload to GitHub Releases
-        run: /home/github-runner/.dotnet/dotnet vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }}
+        run: dotnet vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }}
