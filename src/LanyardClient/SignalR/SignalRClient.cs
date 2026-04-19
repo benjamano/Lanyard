@@ -50,6 +50,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
 
     private async Task SendAvailableScreensToServer()
     {
+        _logger.LogInformation("Sending available screens to server...");
+
         IEnumerable<ClientAvailableScreenDTO> screens = Screen.AllScreens
             .Select(x=> new ClientAvailableScreenDTO()
             {
@@ -65,6 +67,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
 
     private async Task SendAvailableAudioDevicesToServer()
     {
+        _logger.LogInformation("Sending available audio devices to server...");
+
         MMDeviceEnumerator enumerator = new();
 
         IEnumerable<ClientAvailableAudioDeviceDTO> devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
