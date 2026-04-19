@@ -5,7 +5,8 @@ on:
       - main
 jobs:
   release:
-    runs-on: self-hosted  
+    # runs-on: self-hosted  
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 

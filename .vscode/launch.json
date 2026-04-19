@@ -5,14 +5,14 @@
             "name": "C#: LanyardClient [https]",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}\\LanyardClient\\Lanyard.Client.csproj",
+            "projectPath": "${workspaceFolder}\\src\\LanyardClient\\Lanyard.Client.csproj",
             "preLaunchTask": "Build LanyardClient"
         },  
         {
             "name": "C#: LanyardApp [https]",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}\\LanyardApp\\Lanyard.App.csproj",
+            "projectPath": "${workspaceFolder}\\src\\LanyardApp\\Lanyard.App.csproj",
             "launchConfigurationId": "TargetFramework=;https",
             "preLaunchTask": "Build LanyardApp"
         }

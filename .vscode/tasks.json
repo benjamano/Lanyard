@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
+                "${workspaceFolder}/src/LanyardApp/Lanyard.App.csproj"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -17,7 +17,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/LanyardClient/Lanyard.Client.csproj"
+                "${workspaceFolder}/src/LanyardClient/Lanyard.Client.csproj"
             ],
             "problemMatcher": "$msCompile"
         },
