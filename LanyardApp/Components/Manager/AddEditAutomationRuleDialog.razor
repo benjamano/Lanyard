@@ -1,0 +1,337 @@
+@using Lanyard.App.Components.ProjectionPrograms
+@using Lanyard.Application.Services
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Infrastructure.DataAccess
+@using Lanyard.Shared.Enum
+@using System.Text.Json
+@using Microsoft.EntityFrameworkCore
+@implements IDialogContentComponent<AutomationRule?>
+
+@inject IToastService _toastService
+@inject IAutomationRuleService _ruleService
+@inject IClientService _clientService
+@inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+@inject IPlaylistService _playlistService
+@inject ILogger<AddEditAutomationRuleDialog> _logger
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            @_steps[_currentStepIndex]
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    @if (_currentStepIndex == 0)
+    {
+        <FluentStack Orientation="Orientation.Vertical" Gap="12">
+            <FluentTextField Label="Rule Name"
+                             @bind-Value="_ruleName"
+                             Required="true"
+                             Appearance="FluentInputAppearance.Outline"
+                             Style="width: 100%;" />
+
+            <FluentSelect Label="Trigger Client"
+                          TOption="ClientConnectedDTO"
+                          Items="@_clients"
+                          OptionText="@(c => c.Name)"
+                          OptionValue="@(c => c.Id.ToString())"
+                          SelectedOptionChanged="@((ClientConnectedDTO? c) => _triggerClientIdString = c?.Id.ToString() ?? string.Empty)"
+                          Style="width: 100%;" />
+
+            <FluentSelect Label="Trigger Event"
+                          TOption="string"
+                          @bind-Value="_triggerEventString"
+                          Style="width: 100%;">
+                <FluentOption Value="@GameStatus.InGame.ToString()">In Game</FluentOption>
+                <FluentOption Value="@GameStatus.NotStarted.ToString()">Not Started</FluentOption>
+            </FluentSelect>
+        </FluentStack>
+    }
+    else if (_currentStepIndex == 1)
+    {
+        <FluentStack Orientation="Orientation.Vertical" Gap="8">
+            @for (int i = 0; i < _actionRows.Count; i++)
+            {
+                int index = i;
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="8">
+                    <div>
+                        <FluentSelect TOption="ClientConnectedDTO"
+                            Label="Target Client"
+                            Items="@_clients"
+                            OptionText="@(c => c.Name)"
+                            OptionValue="@(c => c.Id.ToString())"
+                            SelectedOption="@(_clients.FirstOrDefault(c => c.Id.ToString() == _actionRows[index].TargetClientIdString))"
+                            SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
+                            Style="flex: 1;" />
+                    </div>
+                    <div>
+                        <FluentSelect TOption="string"
+                            Label="Operation"
+                            Value="@_actionRows[index].Operation"
+                            ValueChanged="@((string op) => _actionRows[index].Operation = op)"
+                            Style="width: 120px;">
+                            <FluentOption Value="Play">Play</FluentOption>
+                            <FluentOption Value="Pause">Pause</FluentOption>
+                        </FluentSelect>
+                    </div>
+                    <div>
+                        <FluentSelect TOption="Playlist"
+                            Label="Playlist"
+                            Placeholder="Select Playlist"
+                            Items="@_playlists"
+                            OptionText="@(p => p.Name)"
+                            OptionValue="@(p => p.Id.ToString())"
+                            SelectedOption="@(_playlists.FirstOrDefault(p => p.Id == _actionRows[index].PlaylistId))"
+                            SelectedOptionChanged="@((Playlist? p) => _actionRows[index].PlaylistId = p?.Id)"
+                            Style="flex: 1;" />
+                    </div>
+                    <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                        Disabled="@(_actionRows.Count <= 1)"
+                        OnClick="@(() => RemoveActionRow(index))" />
+                </FluentStack>
+            }
+
+            <div>
+                <FluentButton Appearance="Appearance.Outline"
+                              IconStart="new Icons.Regular.Size20.Add()"
+                              OnClick="AddActionRow">
+                    Add Action
+                </FluentButton>
+            </div>
+
+            @if (_actionRows.Count == 0)
+            {
+                <FluentLabel Color="Color.Error">At least one action is required.</FluentLabel>
+            }
+        </FluentStack>
+    }
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    @if (_currentStepIndex == 0)
+    {
+        <FluentButton Appearance="Appearance.Accent"
+                      Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString))"
+                      OnClick="GoToStep2Async">
+            Next
+        </FluentButton>
+        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+    }
+    else if (_currentStepIndex == 1)
+    {
+        <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
+        <FluentButton Appearance="Appearance.Accent"
+                      Loading="@_isSaving"
+                      Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => string.IsNullOrEmpty(r.TargetClientIdString)))"
+                      OnClick="SaveRuleAsync">
+            Save Rule
+        </FluentButton>
+        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+    }
+</FluentDialogFooter>
+
+@code {
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    [Parameter]
+    public AutomationRule? Content { get; set; }
+
+    private sealed class ActionRow
+    {
+        public Guid? ExistingActionId { get; set; }
+        public string TargetClientIdString { get; set; } = string.Empty;
+        public string Operation { get; set; } = "Play";
+        public Guid? PlaylistId { get; set; }
+    }
+
+    private int _currentStepIndex = 0;
+    private List<string> _steps = ["Rule Details", "Actions"];
+
+    private string _ruleName = string.Empty;
+    private string _triggerClientIdString = string.Empty;
+    private string _triggerEventString = GameStatus.InGame.ToString();
+    private List<ActionRow> _actionRows = [];
+    private IEnumerable<ClientConnectedDTO> _clients = [];
+    private bool _isSaving = false;
+
+    private IEnumerable<Playlist> _playlists { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ClientConnectedDTO>> clientResult = await _clientService.GetClientsAsync();
+        _clients = clientResult.Data ?? [];
+
+        if (Content != null)
+        {
+            _ruleName = Content.Name;
+            _triggerClientIdString = Content.TriggerClientId.ToString();
+            _triggerEventString = Content.TriggerEvent.ToString();
+
+            foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
+            {
+                JsonDocument doc = JsonDocument.Parse(action.ParametersJson);
+                Guid targetId = doc.RootElement.GetProperty("TargetClientId").GetGuid();
+                string op = doc.RootElement.GetProperty("Operation").GetString() ?? "Play";
+                _actionRows.Add(new ActionRow
+                {
+                    ExistingActionId = action.Id,
+                    TargetClientIdString = targetId.ToString(),
+                    Operation = op
+                });
+            }
+        }
+        else
+        {
+            _triggerClientIdString = _clients.FirstOrDefault()?.Id.ToString() ?? string.Empty;
+            _actionRows.Add(new ActionRow
+            {
+                TargetClientIdString = _clients.FirstOrDefault()?.Id.ToString() ?? string.Empty
+            });
+        }
+
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
+        
+        if (playlistResult.IsSuccess)
+        {
+            _playlists = playlistResult.Data ?? [];
+        }
+        else
+        {
+            _toastService.ShowError(playlistResult.Error ?? "Failed to load playlists.");
+            _logger.LogError("Failed to load playlists: {Error}", playlistResult.Error);
+        }
+    }
+
+    private async Task GoToStep2Async()
+    {
+        _currentStepIndex = 1;
+        await Task.CompletedTask;
+    }
+
+    private async Task GoToStep1Async()
+    {
+        _currentStepIndex = 0;
+        await Task.CompletedTask;
+    }
+
+    private void AddActionRow()
+    {
+        _actionRows.Add(new ActionRow());
+    }
+
+    private void RemoveActionRow(int index)
+    {
+        if (_actionRows.Count > 1)
+        {
+            _actionRows.RemoveAt(index);
+        }
+    }
+
+    private async Task SaveRuleAsync()
+    {
+        _isSaving = true;
+
+        Guid triggerClientId = Guid.Parse(_triggerClientIdString);
+        GameStatus triggerEvent = Enum.Parse<GameStatus>(_triggerEventString);
+
+        List<AutomationRuleAction> newActions = [];
+        for (int i = 0; i < _actionRows.Count; i++)
+        {
+            ActionRow row = _actionRows[i];
+            Guid targetClientId = Guid.Parse(row.TargetClientIdString);
+
+            string parametersJson = JsonSerializer.Serialize(new
+            {
+                TargetClientId = targetClientId,
+                Operation = row.Operation,
+                PlaylistId = row.PlaylistId
+            });
+
+            newActions.Add(new AutomationRuleAction
+            {
+                Id = row.ExistingActionId ?? Guid.NewGuid(),
+                ActionType = "MusicControl",
+                ParametersJson = parametersJson,
+                SortOrder = i,
+                IsActive = true
+            });
+        }
+
+        Result<AutomationRule> saveResult;
+
+        if (Content != null)
+        {
+            // Soft-delete removed actions
+            List<Guid> removedActionIds = Content.Actions
+                .Where(a => a.IsActive)
+                .Select(a => a.Id)
+                .Where(id => !_actionRows.Select(r => r.ExistingActionId).Contains(id))
+                .ToList();
+
+            if (removedActionIds.Count > 0)
+            {
+                await using ApplicationDbContext ctx = await _dbContextFactory.CreateDbContextAsync();
+                List<AutomationRuleAction> actionsToRemove = await ctx.AutomationRuleActions
+                    .Where(a => removedActionIds.Contains(a.Id))
+                    .ToListAsync();
+                foreach (AutomationRuleAction action in actionsToRemove)
+                {
+                    action.IsActive = false;
+                }
+                await ctx.SaveChangesAsync();
+            }
+
+            AutomationRule updatedRule = new AutomationRule
+            {
+                Id = Content.Id,
+                Name = _ruleName,
+                TriggerClientId = triggerClientId,
+                TriggerEvent = triggerEvent,
+                IsActive = true,
+                CreateDate = Content.CreateDate,
+                Actions = newActions
+            };
+            foreach (AutomationRuleAction action in newActions)
+            {
+                action.AutomationRuleId = updatedRule.Id;
+            }
+            saveResult = await _ruleService.UpdateRuleAsync(updatedRule);
+        }
+        else
+        {
+            AutomationRule newRule = new AutomationRule
+            {
+                Id = Guid.NewGuid(),
+                Name = _ruleName,
+                TriggerClientId = triggerClientId,
+                TriggerEvent = triggerEvent,
+                Actions = newActions
+            };
+            saveResult = await _ruleService.CreateRuleAsync(newRule);
+        }
+
+        if (saveResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Rule saved.");
+            await Dialog!.CloseAsync(true);
+        }
+        else
+        {
+            _toastService.ShowError(saveResult.Error ?? "Save failed.");
+            _isSaving = false;
+        }
+    }
+
+    private async Task CancelDialogAsync()
+    {
+        await Dialog!.CancelAsync();
+    }
+}

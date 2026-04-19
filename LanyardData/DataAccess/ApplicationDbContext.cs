@@ -39,6 +39,13 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DashboardWidget> DashboardWidgets { get; set; }
         public DbSet<FileMetadata> FileMetadata { get; set; }
         public DbSet<Folder> Folders { get; set; }
+        public DbSet<AutomationRule> AutomationRules { get; set; }
+        public DbSet<AutomationRuleAction> AutomationRuleActions { get; set; }
+        public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
+        public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
+        public DbSet<AppSetting> AppSettings { get; set; }
+        public DbSet<CompanyTenant> CompanyTenants { get; set; }
+        public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -58,6 +65,11 @@ namespace Lanyard.Infrastructure.DataAccess
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<AutomationRule>()
+                .HasIndex(r => r.TriggerClientId);
+            modelBuilder.Entity<AppSetting>()
+                .HasIndex(a => a.Key)
+                .IsUnique();
         }
     }
 }

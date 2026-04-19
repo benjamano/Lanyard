@@ -1,6 +1,9 @@
 ﻿@inherits LayoutComponentBase
 
 @using Lanyard.App.Components.Layout
+@using Microsoft.AspNetCore.Mvc.RazorPages
+
+@inject NavigationManager NavigationManager
 
 <loading-theme storage-name="theme"></loading-theme>
 
@@ -9,14 +12,28 @@
         <NavMenu />
     </div>
 
-    <main style="flex: 1; overflow-y: auto;">
-        <article class="content position-relative h-auto px-2 m-0">
+    <main style="flex: 1;" class="@(addPadding ? "px-2 py-2" : "")">
+        <article class="content position-relative h-auto m-0">
             @Body
         </article>
     </main>
 
     <Footer />
 </div>
+
+@code {
+    public bool addPadding = true;
+
+    protected override void OnInitialized()
+    {
+        if (NavigationManager.Uri.Contains("/staff/music", StringComparison.OrdinalIgnoreCase))
+        {
+            addPadding = false;
+        }
+
+        base.OnInitialized();
+    }
+}
 
 <FluentDialogProvider />
 <FluentTooltipProvider />

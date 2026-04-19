@@ -38,6 +38,13 @@ builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<MusicPlayerService>();
 
+// Automation Engine
+builder.Services.AddSingleton<AutomationEngineService>();
+builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
+builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
+builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
+builder.Services.AddHostedService<AutomationEngineHostedService>();
+
 builder.Services.AddSignalR();
 
 // Shared drag state service

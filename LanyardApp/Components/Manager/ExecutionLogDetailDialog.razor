@@ -1,0 +1,119 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Application.Services
+@using System.Text.Json
+@implements IDialogContentComponent<AutomationRuleExecution>
+
+@inject IClientService _clientService
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
+        <FluentLabel Typo="Typography.PaneHeader">Execution Detail</FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <FluentStack Orientation="Orientation.Vertical" Gap="8">
+        <FluentLabel><strong>Rule:</strong> @Content.RuleName</FluentLabel>
+        <FluentLabel><strong>Trigger Event:</strong> @Content.TriggerEvent</FluentLabel>
+        <FluentLabel><strong>Executed At:</strong> @Content.ExecutedAt.ToLocalTime().ToString("g")</FluentLabel>
+        <FluentLabel>
+            <strong>Overall:</strong>
+            @if (Content.OverallSuccess)
+            {
+                <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
+                <span> Success</span>
+            }
+            else
+            {
+                <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
+                <span> Failed</span>
+            }
+        </FluentLabel>
+
+        <FluentDivider />
+
+        <FluentLabel Typo="Typography.H6">Actions</FluentLabel>
+
+        @foreach (AutomationRuleActionExecution ae in Content.ActionExecutions)
+        {
+            <FluentCard MinimalStyle="true">
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="16">
+                    @if (ae.Success)
+                    {
+                        <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
+                    }
+                    else
+                    {
+                        <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
+                    }
+                    <FluentStack Orientation="Orientation.Vertical">
+                        <FluentLabel><strong>Type:</strong> @(ae.AutomationRuleAction?.ActionType ?? "Unknown")</FluentLabel>
+                        <FluentLabel><strong>Target:</strong> @ResolveTargetClient(ae)</FluentLabel>
+                        @if (!string.IsNullOrEmpty(ae.ErrorMessage))
+                        {
+                            <FluentLabel Color="Color.Error"><strong>Error:</strong> @ae.ErrorMessage</FluentLabel>
+                        }
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        }
+
+        @if (Content.ActionExecutions.Count == 0)
+        {
+            <FluentLabel>No action execution records.</FluentLabel>
+        }
+    </FluentStack>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton OnClick="CloseAsync" Appearance="Appearance.Outline">Close</FluentButton>
+</FluentDialogFooter>
+
+@code {
+#nullable enable
+
+    [CascadingParameter]
+    public FluentDialog? Dialog { get; set; }
+
+    [Parameter]
+    public DialogParameters Parameters { get; set; } = default!;
+
+    [Parameter]
+    public AutomationRuleExecution Content { get; set; } = default!;
+
+    private IEnumerable<ClientConnectedDTO> _clients = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ClientConnectedDTO>> result = await _clientService.GetClientsAsync();
+        if (result.IsSuccess)
+        {
+            _clients = result.Data ?? [];
+        }
+    }
+
+    private string ResolveTargetClient(AutomationRuleActionExecution ae)
+    {
+        if (ae.AutomationRuleAction is null)
+        {
+            return "Unknown";
+        }
+        try
+        {
+            JsonDocument doc = JsonDocument.Parse(ae.AutomationRuleAction.ParametersJson);
+            Guid targetId = doc.RootElement.GetProperty("TargetClientId").GetGuid();
+            return _clients.FirstOrDefault(c => c.Id == targetId)?.Name ?? targetId.ToString();
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog!.CancelAsync();
+    }
+}

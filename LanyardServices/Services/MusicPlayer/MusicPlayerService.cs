@@ -1,5 +1,6 @@
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -198,9 +199,13 @@ public class MusicPlayerService
         }
     }
 
-    private void SetQueue(Guid clientId, List<Song> songs, Playlist? playlist, int startIndex = 0)
+    private async Task SetQueue(Guid clientId, List<Song> songs, Guid? playlistId, int startIndex = 0)
     {
         ClientMusicState state = GetOrCreateState(clientId);
+
+        ApplicationDbContext _context = await _contextFactory.CreateDbContextAsync();
+
+        Playlist? playlist = await _context.Playlists.Where(x=> x.Id == playlistId).FirstOrDefaultAsync();
 
         lock (_lock)
         {
@@ -389,6 +394,33 @@ public class MusicPlayerService
         return true;
     }
 
+    public async Task LoadSongsIntoQueue(Guid clientId, Guid playlistId, Song? song = null)
+    {
+        List<Song> queueToSet;
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        List<Song> playlistSongs = await context.PlaylistSongMembers
+            .Where(x => x.PlaylistId == playlistId)
+            .Select(x => x.Song!)
+            .ToListAsync();
+
+        playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
+
+        if (song == null)
+        {
+            queueToSet = [.. playlistSongs];
+        }
+        else
+        {
+            queueToSet = [song, .. playlistSongs.Where(x => x.Id != song.Id)];
+        }
+
+        await SetQueue(clientId, queueToSet, playlistId, 0);
+
+        await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.Select(x => x.Id));
+    }
+
     public async Task Play(Guid clientId)
     {
         ClientMusicState state = GetOrCreateState(clientId);
@@ -400,6 +432,20 @@ public class MusicPlayerService
         await SendToClientAsync(clientId, "Play");
     }
 
+    public async Task Play(Guid clientId, Guid playlistId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
+        await LoadSongsIntoQueue(clientId, playlistId);
+
+        await SendToClientAsync(clientId, "Play");
+    }
+
+
     public async Task Play(Guid clientId, Song song, Playlist? playlist = null)
     {
         Song? currentSong = GetCurrentSong(clientId);
@@ -410,32 +456,12 @@ public class MusicPlayerService
             return;
         }
 
-        List<Song> queueToSet;
-
-        if (playlist is not null)
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            List<Song> playlistSongs = await context.PlaylistSongMembers
-                .Where(x => x.PlaylistId == playlist.Id)
-                .Select(x => x.Song!)
-                .ToListAsync();
-
-            playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
-
-            queueToSet = [song, .. playlistSongs.Where(x => x.Id != song.Id)];
-
-            await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.Select(x => x.Id));
-        }
-        else
-        {
-            queueToSet = [song];
-        }
-
-        SetQueue(clientId, queueToSet, playlist, 0);
+        await LoadSongsIntoQueue(clientId, playlist?.Id ?? Guid.Empty, song);
 
         await SendToClientAsync(clientId, "Load", song.Id);
+
         ClientMusicState state = GetOrCreateState(clientId);
+
         lock (_lock)
         {
             state.LastKnownPositionSeconds = 0;

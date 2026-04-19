@@ -9,4 +9,5 @@ namespace Lanyard.Application.Services;
 public interface IMusicService
 {
     Task<Result<IEnumerable<Song>>> GetSongsAsync();
+    Task<Result<Song>> GetSongAsync(Guid songId);
 }

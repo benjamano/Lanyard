@@ -3,6 +3,7 @@ using System;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,94 +12,18 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260327235207_AddAutomationRules")]
+    partial class AddAutomationRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("CompanyTenant", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CompanyTenants");
-                });
-
-            modelBuilder.Entity("CompanyTenantMember", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyTenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyTenantId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("CompanyTenantMembers");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.AppSetting", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("AppSettings");
-                });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ApplicationRole", b =>
                 {
@@ -241,10 +166,6 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<bool>("OverallSuccess")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("RuleName")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<Guid>("TriggerClientId")
                         .HasColumnType("uuid");
@@ -938,25 +859,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("CompanyTenantMember", b =>
-                {
-                    b.HasOne("CompanyTenant", "CompanyTenant")
-                        .WithMany("Members")
-                        .HasForeignKey("CompanyTenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CompanyTenant");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ApplicationRole", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreatedByUser")
@@ -1223,11 +1125,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("CompanyTenant", b =>
-                {
-                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRule", b =>

@@ -6,20 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.IO;
 using Lanyard.Client.SignalR;
-
-//ManualResetEvent wpfReady = new(false);
-
-//Thread wpfThread = new(() =>
-//{
-//    var app = new Application();
-//    wpfReady.Set(); 
-//    app.Run();
-//});
-//wpfThread.SetApartmentState(ApartmentState.STA);
-//wpfThread.IsBackground = true;
-//wpfThread.Start();
-
-//wpfReady.WaitOne();
+using Velopack;
+using Lanyard.Client.AutoUpdate;
 
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");
@@ -54,6 +42,10 @@ services.AddSingleton<ISongCacheService, SongCacheService>();
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
 services.AddSingleton<ProjectionProgramController>();
+
+VelopackApp.Build().Run();
+
+await AutoUpdate.CheckForUpdatesAsync();
 
 ServiceProvider provider = services.BuildServiceProvider();
 

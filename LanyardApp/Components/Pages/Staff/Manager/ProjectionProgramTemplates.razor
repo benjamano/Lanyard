@@ -69,7 +69,6 @@
                         <FluentButton slot="end"
                                       Appearance="Appearance.Accent"
                                       IconStart="@(new Icons.Regular.Size20.Save())"
-                                      Disabled="@isSaving"
                                       Loading="@isSaving"
                                       OnClick="SaveTemplateAsync"
                                       Class="me-2">
@@ -154,7 +153,7 @@
                         }
                     }
 
-                    <FluentCard MinimalStyle="true" Class="mt-2">
+                    <FluentCard MinimalStyle="true" Height="auto" AreaRestricted="false" Class="mt-2">
                         <FluentGrid>
                             <FluentGridItem xs="3">
                                 <FluentTextField Class="w-100"

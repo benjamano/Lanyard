@@ -9,37 +9,5 @@
 		"files.exclude": {
 			"LanyardClient": true,
 		},
-		"editor.fontFamily": "'Monocraft', monospace",
-		"editor.fontLigatures": true,
-		"workbench.colorTheme": "One Dark Pro Night Flat",
-		"launch": {
-			"configurations": [
-				{
-					"name": "Debug LanyardApp",
-					"type": "coreclr",
-					"preLaunchTask": "build",
-					"request": "launch",
-					"program": "${workspaceFolder}/LanyardApp/bin/Debug/net10.0/Lanyard.App.exe",
-					"cwd": "${workspaceFolder}/LanyardApp",
-					"stopAtEntry": false,
-					"justMyCode": true,
-					"requireExactSource": false,
-					"env": {
-						"ASPNETCORE_URLS": "https://localhost:7175"
-					}
-				}
-			]
-		},
-	},
-	"tasks": {
-		"version": "2.0.0",
-		"tasks": [
-			{
-				"label": "build",
-				"type": "shell",
-				"command": "dotnet build ${workspaceFolder}/LanyardApp/Lanyard.App.csproj",
-				"problemMatcher": "$msCompile"
-			},
-		]
 	}
 }

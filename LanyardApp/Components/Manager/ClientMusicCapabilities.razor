@@ -96,7 +96,7 @@
         {
             IEnumerable<CachedSongDTO> cachedSongs = cachedSongsResult.Data!;
 
-            string message = "Cached Songs:\n" + string.Join("\n", cachedSongs.Select(x => $"{x.Id}"));
+            string message = "Cached Songs:\n" + string.Join("\n", cachedSongs.Select(x => $"{x.Name}"));
 
             _toastService.ShowInfo(message);
         }

@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build LanyardApp",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/LanyardApp/Lanyard.App.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build LanyardClient",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/LanyardClient/Lanyard.Client.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+    ]
+}

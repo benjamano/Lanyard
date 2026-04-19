@@ -399,3 +399,9 @@ FodyWeavers.xsd
 
 # Lanyard uploaded file storage
 /LanyardApp/UploadedFiles/
+.planning/
+**/.planning
+.planning
+.planning/REQUIREMENTS.md
+.planning/**
+.planning/*
