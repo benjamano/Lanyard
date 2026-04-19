@@ -9,19 +9,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # - name: Setup .NET
-      #   uses: actions/setup-dotnet@v4
-      #   with:
-      #     dotnet-version: '8.x'
-
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+        run: /home/github-runner/.dotnet/dotnet tool install -g vpk
 
       - name: Publish app
-        run: dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r linux-x64 --self-contained -o ./publish
+        run: /home/github-runner/.dotnet/dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r linux-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
-        run: dotnet vpk pack --packId LanyardClient --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe LanyardClient
+        run: /home/github-runner/.dotnet/dotnet vpk pack --packId LanyardClient --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe LanyardClient
 
       - name: Upload to GitHub Releases
-        run: dotnet vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }}
+        run: /home/github-runner/.dotnet/dotnet vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }}
