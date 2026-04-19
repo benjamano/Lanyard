@@ -5,7 +5,8 @@
       "environmentVariables": {
         "SIGNALR_SERVER_URL": "https://localhost:7175/websocket",
         "KIOSK_SERVER_URL": "https://localhost:7175/staff/kiosk",
-        "API_SERVER_URL": "https://localhost:7175/api"
+        "API_SERVER_URL": "https://localhost:7175/api",
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }
   }

@@ -43,9 +43,12 @@ services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
 services.AddSingleton<ProjectionProgramController>();
 
-VelopackApp.Build().Run();
+if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
+{
+    VelopackApp.Build().Run();
 
-await AutoUpdate.CheckForUpdatesAsync();
+    await AutoUpdate.CheckForUpdatesAsync();
+}
 
 ServiceProvider provider = services.BuildServiceProvider();
 

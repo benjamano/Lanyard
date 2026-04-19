@@ -9,6 +9,12 @@ internal class AutoUpdate
     {
         UpdateManager mgr = new UpdateManager(new GithubSource("https://github.com/benjamano/Lanyard", null, false));
 
+        if (mgr.IsInstalled == false)
+        {
+            Console.WriteLine("Application is not installed. Skipping update check.");
+            return;
+        }
+
         UpdateInfo? update = await mgr.CheckForUpdatesAsync();
         if (update == null) return;
 
