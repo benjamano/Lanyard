@@ -22,6 +22,7 @@ public class MusicControlActionExecutor(
     {
         public Guid TargetClientId { get; init; }
         public string Operation { get; init; } = string.Empty;
+        public Guid? PlaylistId { get; set; }
     }
 
     public bool CanHandle(string actionType) => actionType == "MusicControl";
@@ -57,7 +58,14 @@ public class MusicControlActionExecutor(
             switch (parameters.Operation)
             {
                 case "Play":
-                    await _musicPlayerService.Play(parameters.TargetClientId);
+                    if (parameters.PlaylistId == null)
+                    {
+                        await _musicPlayerService.Play(parameters.TargetClientId);
+                    }
+                    else
+                    {
+                        await _musicPlayerService.Play(parameters.TargetClientId, playlistId: parameters.PlaylistId ?? Guid.Empty);
+                    }
                     break;
                 case "Pause":
                     await _musicPlayerService.Pause(parameters.TargetClientId);

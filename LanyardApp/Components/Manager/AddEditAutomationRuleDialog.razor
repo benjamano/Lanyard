@@ -1,3 +1,4 @@
+@using Lanyard.App.Components.ProjectionPrograms
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.DTO
@@ -11,6 +12,8 @@
 @inject IAutomationRuleService _ruleService
 @inject IClientService _clientService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
+@inject IPlaylistService _playlistService
+@inject ILogger<AddEditAutomationRuleDialog> _logger
 
 <FluentDialogHeader ShowDismiss="true">
     <FluentStack VerticalAlignment="VerticalAlignment.Center">
@@ -55,21 +58,37 @@
             {
                 int index = i;
                 <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="8">
-                    <FluentSelect TOption="ClientConnectedDTO"
-                        Items="@_clients"
-                        OptionText="@(c => c.Name)"
-                        OptionValue="@(c => c.Id.ToString())"
-                        SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
-                        Style="flex: 1;" />
-
-                    <FluentSelect TOption="string"
+                    <div>
+                        <FluentSelect TOption="ClientConnectedDTO"
+                            Label="Target Client"
+                            Items="@_clients"
+                            OptionText="@(c => c.Name)"
+                            OptionValue="@(c => c.Id.ToString())"
+                            SelectedOption="@(_clients.FirstOrDefault(c => c.Id.ToString() == _actionRows[index].TargetClientIdString))"
+                            SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
+                            Style="flex: 1;" />
+                    </div>
+                    <div>
+                        <FluentSelect TOption="string"
+                            Label="Operation"
                             Value="@_actionRows[index].Operation"
                             ValueChanged="@((string op) => _actionRows[index].Operation = op)"
                             Style="width: 120px;">
-                        <FluentOption Value="Play">Play</FluentOption>
-                        <FluentOption Value="Pause">Pause</FluentOption>
-                    </FluentSelect>
-
+                            <FluentOption Value="Play">Play</FluentOption>
+                            <FluentOption Value="Pause">Pause</FluentOption>
+                        </FluentSelect>
+                    </div>
+                    <div>
+                        <FluentSelect TOption="Playlist"
+                            Label="Playlist"
+                            Placeholder="Select Playlist"
+                            Items="@_playlists"
+                            OptionText="@(p => p.Name)"
+                            OptionValue="@(p => p.Id.ToString())"
+                            SelectedOption="@(_playlists.FirstOrDefault(p => p.Id == _actionRows[index].PlaylistId))"
+                            SelectedOptionChanged="@((Playlist? p) => _actionRows[index].PlaylistId = p?.Id)"
+                            Style="flex: 1;" />
+                    </div>
                     <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
                         Disabled="@(_actionRows.Count <= 1)"
                         OnClick="@(() => RemoveActionRow(index))" />
@@ -130,6 +149,7 @@
         public Guid? ExistingActionId { get; set; }
         public string TargetClientIdString { get; set; } = string.Empty;
         public string Operation { get; set; } = "Play";
+        public Guid? PlaylistId { get; set; }
     }
 
     private int _currentStepIndex = 0;
@@ -141,6 +161,8 @@
     private List<ActionRow> _actionRows = [];
     private IEnumerable<ClientConnectedDTO> _clients = [];
     private bool _isSaving = false;
+
+    private IEnumerable<Playlist> _playlists { get; set; } = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -173,6 +195,18 @@
             {
                 TargetClientIdString = _clients.FirstOrDefault()?.Id.ToString() ?? string.Empty
             });
+        }
+
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
+        
+        if (playlistResult.IsSuccess)
+        {
+            _playlists = playlistResult.Data ?? [];
+        }
+        else
+        {
+            _toastService.ShowError(playlistResult.Error ?? "Failed to load playlists.");
+            _logger.LogError("Failed to load playlists: {Error}", playlistResult.Error);
         }
     }
 
@@ -213,11 +247,14 @@
         {
             ActionRow row = _actionRows[i];
             Guid targetClientId = Guid.Parse(row.TargetClientIdString);
+
             string parametersJson = JsonSerializer.Serialize(new
             {
                 TargetClientId = targetClientId,
-                Operation = row.Operation
+                Operation = row.Operation,
+                PlaylistId = row.PlaylistId
             });
+
             newActions.Add(new AutomationRuleAction
             {
                 Id = row.ExistingActionId ?? Guid.NewGuid(),

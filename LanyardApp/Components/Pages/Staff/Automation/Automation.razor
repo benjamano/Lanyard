@@ -197,10 +197,10 @@
             (AutomationRule?)null,
             new DialogParameters()
             {
-                Width = "650px",
+                Width = "auto",
                 Height = "auto",
                 TrapFocus = true,
-                Modal = true
+                Modal = true,
             });
 
         DialogResult? result = await dialog.Result;
@@ -216,7 +216,7 @@
             rule,
             new DialogParameters()
             {
-                Width = "650px",
+                Width = "auto",
                 Height = "auto",
                 TrapFocus = true,
                 Modal = true

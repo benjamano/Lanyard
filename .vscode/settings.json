@@ -20,7 +20,7 @@
         ".dockerignore": true,
         "AGENTS.md": true,
         "COPILOT_INSTRUCTIONS.md": true,
-        ".github": true,
+        // ".github": true,
         "*.VisualStudio.json": true,
         "*/artifacts": true,
         "**/*.csproj.user": true,
