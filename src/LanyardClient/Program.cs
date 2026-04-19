@@ -4,19 +4,15 @@ using Lanyard.Client.ProjectionPrograms;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.IO;
 using Lanyard.Client.SignalR;
 using Velopack;
 using Lanyard.Client.AutoUpdate;
+using System.Text.Json;
 
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");
 
-string? serverUrl = Environment.GetEnvironmentVariable("SIGNALR_SERVER_URL");
-if (string.IsNullOrWhiteSpace(serverUrl))
-{
-    throw new Exception("SIGNALR_SERVER_URL is not set.");
-}
+VerifyEnvironmentVariables.Check();
 
 ServiceCollection services = new ServiceCollection();
 
@@ -82,14 +78,14 @@ ISignalRClient signalRClient = provider.GetRequiredService<ISignalRClient>();
 ILaserGameStatePublisher laserGameStatePublisher = provider.GetRequiredService<ILaserGameStatePublisher>();
 laserGameStatePublisher.Register();
 
-await signalRClient.Connect(serverUrl, clientId, registrations);
+await signalRClient.Connect(Environment.GetEnvironmentVariable("SIGNALR_SERVER_URL")!, clientId, registrations);
 await laserGameStatePublisher.PublishAsync();
 
 IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
 
 await sniffer.StartSniffingAsync();
 
-Console.WriteLine("Client running. Press Enter to exit or type 'show' to display window.");
+Console.WriteLine("Client running.");
 
 bool stop = false;
 
@@ -99,10 +95,7 @@ while (stop == false)
 
     if (string.IsNullOrWhiteSpace(message) == false)
     {
-        if (message.Equals("show", StringComparison.OrdinalIgnoreCase))
-        {
-        }
-        else if (int.TryParse(message, out int actionType))
+        if (int.TryParse(message, out int actionType))
         {
             switch (actionType)
             {
