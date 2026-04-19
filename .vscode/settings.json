@@ -14,7 +14,7 @@
         "**/*.vs": true,
         // "**/.gitignore": true,
         "**/.gitattributes": true,
-        "**/README.md": true,
+        // "**/README.md": true,
         "**/LICENSE": true,
         "**/*.slnLaunch": true,
         "**/.dockerignore": true,
