@@ -1,3 +1,4 @@
+using Microsoft.Build.Framework;
 using Velopack;
 using Velopack.Sources;
 
@@ -11,12 +12,15 @@ internal class AutoUpdate
 
         if (mgr.IsInstalled == false)
         {
-            Console.WriteLine("Application is not installed. Skipping update check.");
             return;
         }
 
         UpdateInfo? update = await mgr.CheckForUpdatesAsync();
-        if (update == null) return;
+
+        if (update == null) 
+        {
+            return; 
+        }
 
         await mgr.DownloadUpdatesAsync(update);
         mgr.ApplyUpdatesAndRestart(update);

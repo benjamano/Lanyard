@@ -57,6 +57,8 @@ public class VerifyEnvironmentVariables
             }
 
             config[envVar] = variable!;
+
+            Environment.SetEnvironmentVariable(envVar, variable);
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);

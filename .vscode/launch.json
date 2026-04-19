@@ -15,6 +15,16 @@
             "projectPath": "${workspaceFolder}\\src\\LanyardApp\\Lanyard.App.csproj",
             "launchConfigurationId": "TargetFramework=;https",
             "preLaunchTask": "Build LanyardApp"
+        },
+        {
+            "name": "Run Velopack Release",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "Launch Setup (Velopack)",
+            "program": "%LocalAppData%\\LanyardClient\\current\\Lanyard.Client.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
         }
     ]
 }

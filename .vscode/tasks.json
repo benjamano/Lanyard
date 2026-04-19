@@ -21,5 +21,53 @@
             ],
             "problemMatcher": "$msCompile"
         },
+        {
+            "label": "Publish & Package (Velopack)",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "publish",
+                "src/LanyardClient/Lanyard.Client.csproj",
+                "-c", "Release",
+                "-r", "win-x64",
+                "--self-contained",
+                "-o", "./publish"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Pack (Velopack)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "$version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version; vpk pack --packId LanyardClient --packVersion $version --packDir ./publish --mainExe Lanyard.Client.exe"
+            ],
+            "dependsOn": "Publish & Package (Velopack)",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Launch Setup (Velopack)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "Start-Process Releases/LanyardClient-win-Setup.exe"
+            ],
+            "dependsOn": "Pack (Velopack)",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
     ]
 }

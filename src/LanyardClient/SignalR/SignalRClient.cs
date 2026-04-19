@@ -15,7 +15,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
 
     public async Task Connect(string serverUrl, Guid clientId, List<Action<HubConnection>> registrations)
     {
-        Console.WriteLine("Waiting 5 seconds to start the Signal R connection.");
+        _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
+
+        _logger.LogInformation("Connecting to SignalR server at {ServerUrl} with client ID {ClientId}", serverUrl, clientId);
 
         await Task.Delay(5000);
         
