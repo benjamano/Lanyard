@@ -26,5 +26,7 @@
         "**/*.csproj.user": true,
         "**/.dotnet-home": true,
         "**/libman.json": true,
+        "**/Releases": true,
+        "**/publish": true
     }
 }
