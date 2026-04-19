@@ -45,7 +45,7 @@
             "command": "powershell",
             "args": [
                 "-Command",
-                "$version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version; vpk pack --packId LanyardClient --packVersion $version --packDir ./publish --mainExe Lanyard.Client.exe"
+                "$version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version; vpk pack --packId LanyardClient --packVersion $version --packDir ./publish --mainExe Lanyard.Client.exe -y"
             ],
             "dependsOn": "Publish & Package (Velopack)",
             "group": "build",
@@ -63,6 +63,21 @@
                 "Start-Process Releases/LanyardClient-win-Setup.exe"
             ],
             "dependsOn": "Pack (Velopack)",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Pack Only (Velopack)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-Command",
+                "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ./Releases; $version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version; vpk pack --packId LanyardClient --packVersion $version --packDir ./publish --mainExe Lanyard.Client.exe"
+            ],
+            "dependsOn": "Publish & Package (Velopack)",
             "group": "build",
             "presentation": {
                 "reveal": "always",

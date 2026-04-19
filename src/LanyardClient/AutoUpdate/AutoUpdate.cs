@@ -22,6 +22,8 @@ internal class AutoUpdate
             return; 
         }
 
+        Console.WriteLine($"Update available: {update.BaseRelease}. Downloading and applying update...");
+
         await mgr.DownloadUpdatesAsync(update);
         mgr.ApplyUpdatesAndRestart(update);
     }

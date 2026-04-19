@@ -20,11 +20,11 @@
             "name": "Run Velopack Release",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "Launch Setup (Velopack)",
-            "program": "%LocalAppData%\\LanyardClient\\current\\Lanyard.Client.exe",
+            "preLaunchTask": "Pack Only (Velopack)",
+            "program": "${env:LOCALAPPDATA}\\LanyardClient\\current\\Lanyard.Client.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "console": "externalTerminal"
         }
     ]
 }

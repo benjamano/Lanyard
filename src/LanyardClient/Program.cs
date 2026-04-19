@@ -9,6 +9,13 @@ using Velopack;
 using Lanyard.Client.AutoUpdate;
 using System.Text.Json;
 
+VelopackApp.Build().Run();
+
+if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
+{
+    await AutoUpdate.CheckForUpdatesAsync();
+}
+
 Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 Console.WriteLine("Starting...");
 
@@ -20,8 +27,18 @@ services.AddLogging(config =>
 {
     config.ClearProviders();
     config.SetMinimumLevel(LogLevel.Information);
-    config.AddConsole();
-    config.AddDebug();
+    config.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.TimestampFormat = "HH:mm:ss ";
+        options.IncludeScopes = false;
+        options.ColorBehavior = Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Disabled;
+    });
+});
+
+services.Configure<Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>(options =>
+{
+    options.TimestampFormat = "HH:mm:ss ";
 });
 
 services.AddHttpClient();
@@ -38,13 +55,6 @@ services.AddSingleton<ISongCacheService, SongCacheService>();
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
 services.AddSingleton<ProjectionProgramController>();
-
-if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
-{
-    VelopackApp.Build().Run();
-
-    await AutoUpdate.CheckForUpdatesAsync();
-}
 
 ServiceProvider provider = services.BuildServiceProvider();
 
