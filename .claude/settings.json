@@ -4,5 +4,9 @@
       "Bash(ls \"C:/Users/benme/source/repos/LanyardApp/.planning/phases/01-data-foundation/\"*-VALIDATION.md)",
       "Bash(node \"C:/Users/benme/.claude/get-shit-done/bin/gsd-tools.cjs\" config-set workflow._auto_chain_active false)"
     ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }
