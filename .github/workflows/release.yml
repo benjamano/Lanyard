@@ -18,10 +18,10 @@ jobs:
         run: dotnet tool install -g vpk
 
       - name: Publish app
-        run: dotnet publish src/YourApp/YourApp.csproj -c Release -r linux-x64 --self-contained -o ./publish
+        run: dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r linux-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
-        run: dotnet vpk pack --packId YourAppId --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe YourApp
+        run: dotnet vpk pack --packId LanyardClient --packVersion ${{ github.ref_name }} --packDir ./publish --mainExe LanyardClient
 
       - name: Upload to GitHub Releases
         run: dotnet vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag ${{ github.ref_name }}
