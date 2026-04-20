@@ -37,5 +37,12 @@ jobs:
       - name: Package with Velopack
         run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe
 
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "LanyardClient-${{ steps.version.outputs.VERSION }}"
+          git push origin "LanyardClient-${{ steps.version.outputs.VERSION }}"
+
       - name: Upload to GitHub Releases
         run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag "LanyardClient-${{ steps.version.outputs.VERSION }}" --releaseName "Lanyard Client ${{ steps.version.outputs.VERSION }}" --publish
