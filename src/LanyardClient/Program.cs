@@ -24,6 +24,7 @@ Console.WriteLine($"Lanyard Client V{version}");
 Console.WriteLine("Starting...");
 
 VerifyEnvironmentVariables.Check();
+StartupScheduler.EnsureStartupTaskExists();
 
 ServiceCollection services = new ServiceCollection();
 

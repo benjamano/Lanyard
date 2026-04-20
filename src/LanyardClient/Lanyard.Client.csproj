@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UserSecretsId>a8d53c09-546c-4be3-aeb3-3d9d95c7a9c0</UserSecretsId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +16,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="PacketDotNet" Version="1.4.8" />
     <PackageReference Include="SharpPcap" Version="6.3.1" />
+    <PackageReference Include="TaskScheduler" Version="2.12.2" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
   </ItemGroup>
 
