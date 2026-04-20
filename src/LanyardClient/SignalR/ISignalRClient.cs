@@ -5,6 +5,6 @@ namespace Lanyard.Client.SignalR;
 
 public interface ISignalRClient
 {
-    Task Connect(string serverUrl, Guid clientId, List<Action<HubConnection>> registrations);
+    Task Connect(List<Action<HubConnection>> registrations);
     Task SendLaserGameStatusAsync(LaserGameStatusDTO status);
 }

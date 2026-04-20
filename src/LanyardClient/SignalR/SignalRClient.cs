@@ -13,8 +13,11 @@ public class SignalRClient(ILogger<ISignalRClient> logger) : ISignalRClient
 
     private bool _isConnected = false;
 
-    public async Task Connect(string serverUrl, Guid clientId, List<Action<HubConnection>> registrations)
+    public async Task Connect(List<Action<HubConnection>> registrations)
     {
+        string serverUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/websocket";
+        string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
+
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
         _logger.LogInformation("Connecting to SignalR server at {ServerUrl} with client ID {ClientId}", serverUrl, clientId);

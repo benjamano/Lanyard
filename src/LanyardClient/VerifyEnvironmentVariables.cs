@@ -4,11 +4,9 @@ public class VerifyEnvironmentVariables
 {
     public static void Check()
     {
-        string[] environmentVariables = new[]
+        List<(string, string)> environmentVariables = new List<(string, string)>
         {
-            "SIGNALR_SERVER_URL",
-            "KIOSK_SERVER_URL",
-            "API_SERVER_URL",
+            ("LANYARD_SERVER_URL", "https://localhost:7175")
         };
 
         string configPath = Path.Combine(
@@ -16,6 +14,8 @@ public class VerifyEnvironmentVariables
             "LanyardClient",
             "config.json"
         );
+
+        Console.WriteLine("Reading config from " + configPath);
 
         Dictionary<string, string> config = new Dictionary<string, string>();
 
@@ -39,11 +39,9 @@ public class VerifyEnvironmentVariables
             }
         }
 
-        foreach (string envVar in environmentVariables)
+        foreach ((string envVar, string defaultValue) in environmentVariables)
         {
-            string? variable = null;
-
-            config.TryGetValue(envVar, out variable);
+            config.TryGetValue(envVar, out string? variable);
 
             if (string.IsNullOrWhiteSpace(variable))
             {
@@ -52,8 +50,16 @@ public class VerifyEnvironmentVariables
 
             while (string.IsNullOrWhiteSpace(variable))
             {
-                Console.WriteLine($"Please set the {envVar}: ");
+                Console.WriteLine($"Please set the {envVar} (Press enter for the default: {defaultValue}): ");
+
                 variable = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(variable))
+                {
+                    Console.WriteLine($"Using default value for {envVar}: {defaultValue}");
+
+                    variable = defaultValue;
+                }
             }
 
             config[envVar] = variable!;
@@ -64,5 +70,44 @@ public class VerifyEnvironmentVariables
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         File.WriteAllText(configPath, JsonSerializer.Serialize(config, 
             new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    public static void ResetClientId()
+    {
+        string path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "LanyardClient",
+            "client_id.txt"
+        );
+
+        Guid newClientId = Guid.NewGuid();
+
+        File.WriteAllText(path, newClientId.ToString());
+        Environment.SetEnvironmentVariable("LANYARD_CLIENT_ID", newClientId.ToString());
+
+        Console.WriteLine($"Client ID reset to {newClientId}. Please restart the application for changes to take effect.");
+
+        throw new Exception("Client ID reset. Please restart the application.");
+    }
+
+    public static void ResetConfig()
+    {
+        string configPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "LanyardClient",
+            "config.json"
+        );
+
+        if (File.Exists(configPath))
+        {
+            File.Delete(configPath);
+            Console.WriteLine("Config reset. All saved environment variables have been cleared. Please restart the application and set the required environment variables.");
+
+            throw new Exception("Config reset. Please restart the application.");
+        }
+        else
+        {
+            Console.WriteLine("No config file found to reset.");
+        }
     }
 }

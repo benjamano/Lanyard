@@ -27,4 +27,10 @@ internal class AutoUpdate
         await mgr.DownloadUpdatesAsync(update);
         mgr.ApplyUpdatesAndRestart(update);
     }
+
+    internal static string? GetCurrentVersion()
+    {
+        UpdateManager mgr = new UpdateManager(new GithubSource("https://github.com/benjamano/Lanyard", null, false));
+        return mgr.CurrentVersion?.ToString();
+    }
 }

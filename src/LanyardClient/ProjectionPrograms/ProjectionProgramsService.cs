@@ -82,7 +82,7 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         int x = screen.Bounds.Left;
         int y = screen.Bounds.Top;
 
-        string url = $"{Environment.GetEnvironmentVariable("KIOSK_SERVER_URL")}/{clientId}/{projectionProgramId}";
+        string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/staff/kiosk/{clientId}/{projectionProgramId}";
 
         string userDataDir = Path.Combine(
             Path.GetTempPath(),

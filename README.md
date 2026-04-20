@@ -20,7 +20,8 @@ The Lanyard Client is a Windows desktop application that runs on kiosk machines,
 
 ### Configuration
 
-During the first launch, you will be prompted to set the Environment Variables for the server.
+During the first launch, you will be prompted to set the Environment Variables for the Server URL.
+If you are running Lanyard Server on the same PC, the URL should be `https://localhost:7175`.
 
 ### Auto-Updates
 

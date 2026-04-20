@@ -181,7 +181,7 @@ public class SongCacheService : ISongCacheService, IDisposable
 
     private static string BuildApiUrl(Guid songId)
     {
-        string apiUrl = Environment.GetEnvironmentVariable("API_SERVER_URL")!;
+        string apiUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/api";
         return $"{apiUrl}/music/audio/{songId}";
     }
 
