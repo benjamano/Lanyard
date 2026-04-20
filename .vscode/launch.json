@@ -9,6 +9,13 @@
             "preLaunchTask": "Build LanyardClient"
         },  
         {
+            "name": "C#: LanyardClient.Watchdog [https]",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\src\\LanyardClient.Watchdog\\LanyardClient.Watchdog.csproj",
+            "preLaunchTask": "Build LanyardClient.Watchdog"
+        },
+        {
             "name": "C#: LanyardApp [https]",
             "type": "dotnet",
             "request": "launch",

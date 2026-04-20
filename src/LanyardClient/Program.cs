@@ -228,8 +228,7 @@ async Task<bool> CountdownWithInterrupt()
 
         if (!Console.IsInputRedirected)
         {
-            Console.WriteLine("Press any key to interrupt startup...");
-            var deadline = DateTime.UtcNow.AddSeconds(3);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(3);
             while (DateTime.UtcNow < deadline)
             {
                 if (Console.KeyAvailable)

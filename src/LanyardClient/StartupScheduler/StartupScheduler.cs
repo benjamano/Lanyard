@@ -11,7 +11,7 @@ public static class StartupScheduler
             return;
         }
 
-        if (Environment.GetEnvironmentVariable("LANYARD_CLIENT_SKIP_ADDING_STARTUP_TASK") == "true" || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+        if (Environment.GetEnvironmentVariable("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK") == "true" || Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
         {
             // DELETE THE STARTUP TASK TOO
 
@@ -35,7 +35,13 @@ public static class StartupScheduler
         
         td.Triggers.Add(new LogonTrigger { UserId = Environment.UserName });
         
-        td.Actions.Add(new ExecAction(Environment.ProcessPath!, null, Path.GetDirectoryName(Environment.ProcessPath)));
+        string watchdogPath = Path.Combine(AppContext.BaseDirectory, "Lanyard.Client.Watchdog.exe");
+
+        td.Actions.Add(new ExecAction(
+            watchdogPath,
+            null,
+            AppContext.BaseDirectory
+        ));
 
         td.Principal.RunLevel = TaskRunLevel.LUA;
 

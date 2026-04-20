@@ -7,7 +7,7 @@ public class VerifyEnvironmentVariables
         List<(string, string)> environmentVariables = new List<(string, string)>
         {
             ("LANYARD_SERVER_URL", "https://localhost:7175"),
-            ("LANYARD_CLIENT_SKIP_ADDING_STARTUP_TASK", "false")
+            ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false")
         };
 
         string configPath = Path.Combine(

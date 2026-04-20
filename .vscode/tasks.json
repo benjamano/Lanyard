@@ -22,6 +22,19 @@
             "problemMatcher": "$msCompile"
         },
         {
+            "label": "Build LanyardClient.Watchdog",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/LanyardClient.Watchdog/LanyardClient.Watchdog.csproj"
+            ],
+            "problemMatcher": "$msCompile",
+            "dependsOn": [
+                "Build LanyardClient"
+            ]
+        },
+        {
             "label": "Publish & Package (Velopack)",
             "type": "shell",
             "command": "dotnet",

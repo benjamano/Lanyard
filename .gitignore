@@ -405,3 +405,5 @@ FodyWeavers.xsd
 .planning/REQUIREMENTS.md
 .planning/**
 .planning/*
+
+**/build/
