@@ -8,6 +8,7 @@ on:
       - 'src/Lanyard.Shared/**'
       - 'src/LanyardData/**'
       - 'src/LanyardTests/Client/**'
+      - 'src/LanyardClient.Watchdog/**'
 jobs:
   release:
     runs-on: windows-latest
