@@ -16,12 +16,15 @@ The Lanyard Client is a Windows desktop application that runs on kiosk machines,
 
 1. Go to the [Releases](../../releases) tab on GitHub.
 2. Download the latest release installer for Windows.
-3. Run the installer, it will then install the client and set up automatic updates.
+3. Run the installer named `LanyardClient-win-Setup.exe`, it will then install the client and enable automatic updates.
 
 ### Configuration
 
 During the first launch, you will be prompted to set the Environment Variables for the Server URL.
 If you are running Lanyard Server on the same PC, the URL should be `https://localhost:7175`.
+
+The first launch will also as if you would like to set the `LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK` Envrionment Variable.
+This variable, if set to `true` will automatically enable the "Watchdog" system, which will automatically start at logon, and will automatically start Lanyard Client, incase of power loss or any PC restarts.
 
 ### Auto-Updates
 
