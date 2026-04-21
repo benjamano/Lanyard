@@ -63,7 +63,8 @@ public class SecurityService : ISecurityService
             return Result<UserProfile>.Fail("User ID is not available");
         }
 
-        UserProfile? user = await _userManager.FindByIdAsync(getResult.Data);
+        using ApplicationDbContext ctx = _factory.CreateDbContext();
+        UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
 
         if (user is null)
         {
@@ -72,7 +73,7 @@ public class SecurityService : ISecurityService
 
         return Result<UserProfile>.Ok(user);
     }
-
+    
     public async Task<string?> GetCurrentUserName()
     {
         Result<UserProfile> getResult = await GetCurrentUserProfileAsync();

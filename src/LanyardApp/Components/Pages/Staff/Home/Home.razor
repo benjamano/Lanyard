@@ -2,11 +2,73 @@
 
 @attribute [Authorize]
 
+@using Lanyard.App.Components.ClockIn
+@using Lanyard.App.Components.Home
 @using Lanyard.Application.Services.Authentication
 @using Microsoft.AspNetCore.Authorization
 
+@inject ISecurityService _securityService
+
 <PageTitle>Staff Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="px-1">
+    <FluentGrid AdaptiveRendering="true">
+        <FluentGridItem lg="4" md="6" sm="12" xs="12">
+            <FluentCard MinimalStyle="true">
+                <FluentStack Orientation="Orientation.Vertical">
+                    <FluentLabel Typo="Typography.H2">
+                        @GetGreeting(), <b>@_currentUserName!</b>
+                    </FluentLabel>
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.MdAndDown">
+        </FluentGridItem>
+        <FluentGridItem lg="4" md="6" sm="12" xs="12">
+            <DigitalClock />
+        </FluentGridItem>
+    </FluentGrid>
 
-Welcome to your new app.
+    <FluentGrid>
+        <FluentGridItem lg="7" md="7" sm="12" xs="12">
+            <FluentCard MinimalStyle="true">
+                <ClockinPortable />
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem lg="5" md="5" sm="12" xs="12">
+            <FluentCard MinimalStyle="true">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                    <FluentStack Orientation="Orientation.Vertical">
+                        <div>
+                            Future Shift info could show here
+                        </div>
+                        <FluentLabel Typo="Typography.Body">
+                            You have no future shifts scheduled!
+                        </FluentLabel>
+                    </FluentStack>
+                    <ShiftCalendar />
+                </FluentStack>
+            </FluentCard>
+        </FluentGridItem>
+    </FluentGrid>
+</div>
+
+@code {
+    private string? _currentUserName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentUserName = await _securityService.GetCurrentUserName();
+    }
+
+    private string GetGreeting()
+    {
+        int hour = DateTime.Now.Hour;
+        if (hour < 12)
+            return "Good morning";
+        else if (hour < 18)
+            return "Good afternoon";
+        else
+            return "Good evening";
+    }
+}

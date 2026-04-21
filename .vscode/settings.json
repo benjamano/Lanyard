@@ -27,6 +27,7 @@
         "**/.dotnet-home": true,
         "**/libman.json": true,
         "**/Releases": true,
-        "**/publish": true
+        "**/publish": true,
+        "**/build": true,
     }
 }

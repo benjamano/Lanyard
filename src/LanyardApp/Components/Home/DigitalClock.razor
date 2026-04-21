@@ -1,0 +1,44 @@
+
+<FluentCard MinimalStyle="true">
+    <div class="digitalClock" style="">
+        <span>@_currentTime</span>
+        <span class="dateText">@DateTime.Now.ToString("dddd, MMMM dd, yyyy")</span>
+    </div>
+</FluentCard>
+
+@code {
+    private string _currentTime = string.Empty;
+    private Timer? _timer;
+    private string _timeFormat = "HH:mm:ss";
+
+    protected override async Task OnInitializedAsync()
+    {
+        DetectTimeFormat();
+        _currentTime = DateTime.Now.ToString(_timeFormat);
+        _timer = new Timer(UpdateClock, null, 0, 1000);
+    }
+
+    private void DetectTimeFormat()
+    {
+        string? shortTimePattern = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern;
+        if (shortTimePattern.Contains("tt"))
+        {
+            _timeFormat = "hh:mm:ss tt";
+        }
+        else
+        {
+            _timeFormat = "HH:mm:ss";
+        }
+    }
+
+    private void UpdateClock(object? state)
+    {
+        _currentTime = DateTime.Now.ToString(_timeFormat);
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

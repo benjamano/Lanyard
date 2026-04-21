@@ -4,6 +4,7 @@ using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Application.Services.Time;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -23,7 +24,6 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
 
-// Other Business Services
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
@@ -33,6 +33,7 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
+builder.Services.AddScoped<ITimeService, TimeService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();

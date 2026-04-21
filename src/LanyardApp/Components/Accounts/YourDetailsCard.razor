@@ -33,6 +33,8 @@
                     <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                 </FluentTextField>
                 <FluentValidationMessage For="@(() => model.LastName)" />
+
+                <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
             </FluentStack>
         </EditForm>
     </FluentStack>
@@ -50,6 +52,8 @@
             model.UserName = getResult.Data.UserName!;
             model.FirstName = getResult.Data.FirstName;
             model.LastName = getResult.Data.LastName;
+
+            model.Use24HourFormat = getResult.Data.PreferredCulture == "en-GB";
         }
     }
 
@@ -61,6 +65,8 @@
         {
             getResult.Data.FirstName = model.FirstName;
             getResult.Data.LastName = model.LastName;
+            
+            getResult.Data.PreferredCulture = model.Use24HourFormat ? "en-GB" : "en-US";
 
             await _securityService.UpdateUserProfileAsync(getResult.Data);
 
@@ -77,5 +83,7 @@
         
         [Required(ErrorMessage = "Last name is required.")]
         public string? LastName { get; set; }
+
+        public bool Use24HourFormat { get; set; } = false;
     }
 }

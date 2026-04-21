@@ -1,0 +1,102 @@
+@using System.Globalization
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Class="h-100">
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+        <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" VerticalGap="0">
+            <FluentLabel Typo="Typography.H5">Current Shift</FluentLabel>
+            <FluentLabel Typo="Typography.H4" Color="Color.Accent">Customer Service Assistant</FluentLabel>
+        </FluentStack>
+        <FluentBadge Appearance="Appearance.Neutral">
+            <FluentLabel Typo="Typography.Body" Color="Color.Accent" class="p-1">
+                @_shiftStartTime.ToString("t") - @_shiftEndTime.ToString("t")
+            </FluentLabel>
+        </FluentBadge>
+    </FluentStack>
+
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" />
+                <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center" VerticalGap="0">
+                    <FluentLabel Typo="Typography.Subject">Clocked in</FluentLabel>
+                    <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                        5 minutes late
+                    </FluentLabel>
+                </FluentStack>
+            </FluentStack>
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Right" VerticalAlignment="VerticalAlignment.Bottom">
+                <FluentButton Appearance="Appearance.Outline" Class="my-auto">
+                    Clock out
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+
+    <FluentStack Orientation="Orientation.Vertical">
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+                <FluentLabel Typo="Typography.Body" Color="Color.Info">Time worked</FluentLabel>
+                <FluentLabel Typo="Typography.Subject" Color="Color.Accent">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalGap="0">
+                        @FormatElapsed(_currentTime - _shiftStartTime)
+                        <FluentLabel Typo="Typography.Subject" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentLabel>
+                    </FluentStack>
+                </FluentLabel>
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Bottom" HorizontalAlignment="HorizontalAlignment.Right" VerticalGap="0">
+                <FluentLabel Typo="Typography.Body" Color="Color.Info">Shift progress</FluentLabel>
+                <FluentLabel Typo="Typography.Subject" Color="Color.Accent" Class="">
+                    @(Math.Round(GetShiftProgress(), 2))%
+                </FluentLabel>
+            </FluentStack>
+        </FluentStack>
+        <FluentProgress Width="100%" Stroke="ProgressStroke.Large" Value="@((int)GetShiftProgress())" />
+    </FluentStack>
+</FluentStack>
+
+@code {
+    private Timer? _timer;
+
+    private DateTime _currentTime = DateTime.Now;
+    private DateTime _shiftStartTime = DateTime.Now;
+    private DateTime _shiftEndTime => _shiftStartTime.AddHours(8);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _timer = new Timer(UpdateTimings, null, 0, 1000);
+    }
+
+    private void UpdateTimings(object? state)
+    {
+        _currentTime = DateTime.Now.AddSeconds(1);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private double GetShiftProgress()
+    {
+        double totalShiftDuration = (_shiftEndTime - _shiftStartTime).TotalSeconds;
+        double elapsedTime = (_currentTime - _shiftStartTime).TotalSeconds;
+        return (elapsedTime / totalShiftDuration) * 100;
+    }
+
+    private string FormatElapsed(TimeSpan ts)
+    {
+        int hours = (int)ts.TotalHours;
+        int minutes = ts.Minutes;
+        int seconds = ts.Seconds;
+
+        string hourPart = hours > 0 ? $"{hours} {(hours == 1 ? "hour" : "hours")}" : "";
+        string minutePart = minutes > 0 ? $"{minutes} {(minutes == 1 ? "minute" : "minutes")}" : "";
+        string secondPart = seconds > 0 ? $"{seconds} {(seconds == 1 ? "second" : "seconds")}" : "";
+
+        string[] parts = new[] { hourPart, minutePart, secondPart }
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToArray();
+
+        return parts.Length > 0 ? string.Join(" ", parts) : "0 seconds";
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

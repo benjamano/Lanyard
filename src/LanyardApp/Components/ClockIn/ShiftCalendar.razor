@@ -1,0 +1,36 @@
+@inject IToastService _toastService
+
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Right">
+    <FluentCalendar DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">
+        <DaysTemplate>
+            @if (context.IsInactive == false && AmIOnShift(context.Date))
+            {
+                <FluentLabel class="pt-1" Color="Color.Accent" Typo="Typography.Body" @onclick="() => ShowShiftDetails(context.Date)">
+                    @context.DayNumber
+                </FluentLabel>
+            }
+            else{
+                <FluentLabel class="pt-1" Color="Color.Info" Typo="Typography.Body">
+                    @context.DayNumber
+                </FluentLabel>
+            }
+        </DaysTemplate>
+    </FluentCalendar>
+    <FluentLabel Typo="Typography.Body" Color="Color.Info">Click on a Day to view Shift Details</FluentLabel>
+</FluentStack>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+    }
+
+    private bool AmIOnShift(DateTime date)
+    {
+        return date.Day % 2 == 0;
+    }
+
+    private void ShowShiftDetails(DateTime date)
+    {
+        _toastService.ShowInfo($"Shift details for {date.ToShortDateString()}");   
+    }
+}
