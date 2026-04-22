@@ -1,16 +1,22 @@
 @inject IToastService _toastService
 
-<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Right">
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center">
     <FluentCalendar DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">
         <DaysTemplate>
             @if (context.IsInactive == false && AmIOnShift(context.Date))
             {
-                <FluentLabel class="pt-1" Color="Color.Accent" Typo="Typography.Body" @onclick="() => ShowShiftDetails(context.Date)">
+                <FluentLabel class="pt-1"
+                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Fill : Color.Accent)"
+                            Typo="Typography.Body"
+                            @onclick="() => ShowShiftDetails(context.Date)">
                     @context.DayNumber
                 </FluentLabel>
             }
-            else{
-                <FluentLabel class="pt-1" Color="Color.Info" Typo="Typography.Body">
+            else
+            {
+                <FluentLabel class="pt-1"
+                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Fill : Color.Info)"
+                            Typo="Typography.Body">
                     @context.DayNumber
                 </FluentLabel>
             }

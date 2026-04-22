@@ -1,0 +1,74 @@
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start">
+    <FluentLabel Typo="Typography.H5">
+        Upcoming Shifts
+    </FluentLabel>
+    <FluentStack Class="mt-2">
+        @if (_upcomingShifts == null)
+        {
+            <FluentStack Orientation="Orientation.Horizontal">
+                Loading your upcoming shifts...
+                <FluentProgressRing Width="20px" />
+            </FluentStack>
+        }
+        else
+        {
+            <FluentStack Orientation="Orientation.Vertical">
+                @foreach (ShiftIntervalDTO shift in _upcomingShifts)
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                        @if (shift.Id == _currentShift.Id)
+                        {
+                            <FluentIcon Icon="Icons.Filled.Size20.ClockAlarm" Class="pt-1"/>
+                        }
+                        else if (shift.Start.Hour < 12)
+                        {
+                            <FluentIcon Icon="Icons.Filled.Size20.WeatherSunny" Class="pt-1"/>
+                        }
+                        else
+                        {
+                            <FluentIcon Icon="Icons.Filled.Size20.WeatherMoon" Class="pt-1"/>
+                        }
+                        <FluentStack Orientation="Orientation.Vertical" Class="mb-1 mt-1" VerticalGap="0">
+                            <FluentLabel Typo="Typography.Body" Color="Color.Accent">
+                                @shift.Title
+                            </FluentLabel>
+                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                                @shift.Start.ToString("ddd, MMM d, h:mm tt") - @shift.End.ToString("h:mm tt")
+                            </FluentLabel>
+                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                                Location: @shift.Location
+                            </FluentLabel>
+                        </FluentStack>
+                    </FluentStack>
+
+                    <FluentDivider Style="width: 100%;" Role="DividerRole.Separator"></FluentDivider>
+                }
+            </FluentStack>
+        }
+    </FluentStack>
+</FluentStack>
+
+@code {
+    private ShiftIntervalDTO _currentShift = new ShiftIntervalDTO 
+        { 
+            Index = 1, 
+            Id = 1, 
+            Title = "Morning Shift", 
+            Start = DateTime.Today.AddHours(9), 
+            End = DateTime.Today.AddHours(12), 
+            Location = "Ipswich" 
+        };
+
+    private List<ShiftIntervalDTO>? _upcomingShifts = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _upcomingShifts = await Task.FromResult(new List<ShiftIntervalDTO>
+        {
+            _currentShift,
+            new ShiftIntervalDTO { Index = 2, Id = 2, Title = "Evening Shift", Start = DateTime.Today.AddDays(1).AddHours(13), End = DateTime.Today.AddDays(1).AddHours(21), Location = "Ipswich" },
+            new ShiftIntervalDTO { Index = 3, Id = 3, Title = "Morning Shift", Start = DateTime.Today.AddDays(2).AddHours(9), End = DateTime.Today.AddDays(2).AddHours(21), Location = "Ipswich" },
+            new ShiftIntervalDTO { Index = 4, Id = 4, Title = "Evening Shift", Start = DateTime.Today.AddDays(3).AddHours(13), End = DateTime.Today.AddDays(3).AddHours(21), Location = "Ipswich" }
+        });
+    }
+}

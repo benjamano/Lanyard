@@ -1,4 +1,3 @@
-@using System.Globalization
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Class="h-100">
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
         <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" VerticalGap="0">
@@ -36,7 +35,7 @@
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
                 <FluentLabel Typo="Typography.Body" Color="Color.Info">Time worked</FluentLabel>
                 <FluentLabel Typo="Typography.Subject" Color="Color.Accent">
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalGap="0">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalGap="0" Style="font-variant-numeric: tabular-nums;">
                         @FormatElapsed(_currentTime - _shiftStartTime)
                         <FluentLabel Typo="Typography.Subject" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentLabel>
                     </FluentStack>
@@ -44,7 +43,7 @@
             </FluentStack>
             <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Bottom" HorizontalAlignment="HorizontalAlignment.Right" VerticalGap="0">
                 <FluentLabel Typo="Typography.Body" Color="Color.Info">Shift progress</FluentLabel>
-                <FluentLabel Typo="Typography.Subject" Color="Color.Accent" Class="">
+                <FluentLabel Typo="Typography.Subject" Color="Color.Accent" Class="" Style="font-variant-numeric: tabular-nums;">
                     @(Math.Round(GetShiftProgress(), 2))%
                 </FluentLabel>
             </FluentStack>

@@ -1,9 +1,13 @@
 
 <FluentCard MinimalStyle="true">
-    <div class="digitalClock" style="">
-        <span>@_currentTime</span>
-        <span class="dateText">@DateTime.Now.ToString("dddd, MMMM dd, yyyy")</span>
-    </div>
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" VerticalGap="4">
+        <FluentLabel Typo="Typography.H2" Style="font-variant-numeric: tabular-nums;">
+            @_currentTime
+        </FluentLabel>
+        <FluentLabel Typo="Typography.Body" Color="Color.Info">
+            @DateTime.Now.ToString("dddd, MMMM dd, yyyy")
+        </FluentLabel>
+    </FluentStack>
 </FluentCard>
 
 @code {

@@ -1,0 +1,24 @@
+<FluentCard MinimalStyle="true" Class="rounded-0 position-fixed bottom-0 start-0 end-0 z-100 py-2 px-2" Height="auto">
+    <FluentAppBar Orientation="Orientation.Horizontal" Class="w-100" PopoverShowSearch="true">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="0">
+            <FluentAppBarItem Href="/staff" 
+                Match="NavLinkMatch.All"
+                IconRest="new Icons.Regular.Size28.Home()"
+                IconActive="new Icons.Filled.Size28.Home()"
+                Text="Home" />
+
+            <FluentAppBarItem Href="/staff/rota/clockin" 
+                Match="NavLinkMatch.All"
+                IconRest="new Icons.Regular.Size28.Clock()"
+                IconActive="new Icons.Filled.Size28.Clock()"
+                Text="Clock In" />
+
+            <FluentAppBarItem Href="/staff/messages" 
+                Match="NavLinkMatch.All"
+                Count="3"
+                IconRest="new Icons.Regular.Size28.Mail()"
+                IconActive="new Icons.Filled.Size28.Mail()"
+                Text="Messages" />
+        </FluentStack>
+    </FluentAppBar>
+</FluentCard>

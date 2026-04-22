@@ -24,7 +24,7 @@
         </FluentGridItem>
         <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.MdAndDown">
         </FluentGridItem>
-        <FluentGridItem lg="4" md="6" sm="12" xs="12">
+        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.SmAndDown">
             <DigitalClock />
         </FluentGridItem>
     </FluentGrid>
@@ -35,19 +35,14 @@
                 <ClockinPortable />
             </FluentCard>
         </FluentGridItem>
-        <FluentGridItem lg="5" md="5" sm="12" xs="12">
+        <FluentGridItem lg="3" md="5" sm="12" xs="12">
             <FluentCard MinimalStyle="true">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
-                    <FluentStack Orientation="Orientation.Vertical">
-                        <div>
-                            Future Shift info could show here
-                        </div>
-                        <FluentLabel Typo="Typography.Body">
-                            You have no future shifts scheduled!
-                        </FluentLabel>
-                    </FluentStack>
-                    <ShiftCalendar />
-                </FluentStack>
+                <UpcomingShifts />
+            </FluentCard>
+        </FluentGridItem>
+        <FluentGridItem lg="2" md="12" sm="12" xs="12">
+            <FluentCard MinimalStyle="true">
+                <ShiftCalendar />
             </FluentCard>
         </FluentGridItem>
     </FluentGrid>
