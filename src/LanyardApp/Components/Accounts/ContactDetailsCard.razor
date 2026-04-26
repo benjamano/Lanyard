@@ -5,31 +5,37 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentLabel Typo="Typography.H5">Other Details</FluentLabel>
         
-        <EditForm class="w-50" Model="@model">
+        <FluentEditForm class="w-100" Model="@model">
             <DataAnnotationsValidator />
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                <FluentTextField @bind-Value="model.Email"
-                                 Label="Email Address"
-                                 TextFieldType="TextFieldType.Email"
-                                 Style="width: 100%;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
-                </FluentTextField>
-                <FluentValidationMessage For="@(() => model.Email)" />
-                <FluentTextField @bind-Value="model.PhoneNumber"
-                                 Label="Phone Number"
-                                 TextFieldType="TextFieldType.Tel"
-                                 Style="width: 100%;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-                </FluentTextField>
-                <FluentValidationMessage For="@(() => model.PhoneNumber)" />
-                <FluentDatePicker @bind-Value="model.DateOfBirth"
-                                  Label="Date of Birth"
-                                  Style="width: 100%;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
-                </FluentDatePicker>
-                <FluentValidationMessage For="@(() => model.DateOfBirth)" />
+                <div class="w-100">
+                    <FluentTextField @bind-Value="model.Email"
+                                    Label="Email Address"
+                                    TextFieldType="TextFieldType.Email"
+                                    Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
+                    </FluentTextField>
+                    <FluentValidationMessage For="@(() => model.Email)" />
+                </div>
+                <div class="w-100">
+                    <FluentTextField @bind-Value="model.PhoneNumber"
+                                    Label="Phone Number"
+                                    TextFieldType="TextFieldType.Tel"
+                                    Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                    </FluentTextField>
+                    <FluentValidationMessage For="@(() => model.PhoneNumber)" />
+                </div>
+                <div class="w-100">
+                    <FluentDatePicker @bind-Value="model.DateOfBirth"
+                                    Label="Date of Birth"
+                                    Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
+                    </FluentDatePicker>
+                    <FluentValidationMessage For="@(() => model.DateOfBirth)" />
+                </div>
             </FluentStack>
-        </EditForm>
+        </FluentEditForm>
     </FluentStack>
 </FluentCard>
 

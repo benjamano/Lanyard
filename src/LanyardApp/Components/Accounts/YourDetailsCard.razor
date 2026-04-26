@@ -6,25 +6,30 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentLabel Typo="Typography.H5">Your Details</FluentLabel>
         
-        <EditForm Model="@model" class="w-50">
+        <FluentEditForm Model="@model" class="w-100">
             <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                <FluentTextField @bind-Value="model.UserName"
-                                 Label="User Name"
-                                 ReadOnly="true"
-                                 Disabled="true"
-                                 Style="width: 100%;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextField>
-                <FluentValidationMessage For="@(() => model.UserName)" />
-                <FluentTextField @bind-Value="model.FirstName"
-                                 Label="First Name"
-                                 Required
-                                 Placeholder="Enter your first name"
-                                 Style="width: 100%;">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextField>
-                <FluentValidationMessage For="@(() => model.FirstName)" />
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="16">
+                <div class="w-100">
+                    <FluentTextField @bind-Value="model.UserName"
+                                    Label="User Name"
+                                    ReadOnly="true"
+                                    Disabled="true"
+                                    Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextField>
+                    <FluentValidationMessage For="@(() => model.UserName)" />
+                </div>
+                <div class="w-100">
+                    <FluentTextField @bind-Value="model.FirstName"
+                                    Label="First Name"
+                                    Required
+                                    Placeholder="Enter your first name"
+                                    Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextField>
+                    <FluentValidationMessage For="@(() => model.FirstName)" />
+                </div>
+                <div class="w-100">
                 <FluentTextField @bind-Value="model.LastName"
                                  Label="Last Name"
                                  Required
@@ -33,10 +38,12 @@
                     <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                 </FluentTextField>
                 <FluentValidationMessage For="@(() => model.LastName)" />
-
-                <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
+                </div>
+                <div class="w-100">
+                    <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
+                </div>
             </FluentStack>
-        </EditForm>
+        </FluentEditForm>
     </FluentStack>
 </FluentCard>
 
