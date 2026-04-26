@@ -70,6 +70,27 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         }
     }
 
+    public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, Func<Task> onCompleted)
+    {
+        HideWindow();
+
+        ClientProjectionSettingsDTO? displaySettings = loadedProjectionPrograms.FirstOrDefault();
+
+        int displayIndex = displaySettings?.DisplayIndex ?? 0;
+        int width = displaySettings?.Width ?? 1920;
+        int height = displaySettings?.Height ?? 1080;
+        bool isFullScreen = displaySettings?.IsFullScreen ?? true;
+
+        ShowWindow(displayIndex, width, height, isFullScreen, projectionProgramId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+
+        if (_kioskProcess != null)
+        {
+            await _kioskProcess.WaitForExitAsync();
+        }
+
+        await onCompleted();
+    }
+
     void ShowWindow(int displayIndex, int width, int height, bool isFullScreen, Guid projectionProgramId, Guid clientId)
     {
         Screen[] screens = Screen.AllScreens;

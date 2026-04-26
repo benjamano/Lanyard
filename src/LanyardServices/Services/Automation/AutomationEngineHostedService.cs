@@ -14,23 +14,30 @@ public class AutomationEngineHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("AutomationEngineHostedService started");
-
-        await foreach (GameStatusTransitionEvent transitionEvent in
-            _engineService.Reader.ReadAllAsync(stoppingToken))
+        try
         {
-            try
-            {
-                await _engineService.ProcessTransitionAsync(transitionEvent, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "Unhandled error processing transition event for client {ClientId} — new status {NewStatus}",
-                    transitionEvent.ClientId, transitionEvent.NewStatus);
-            }
-        }
+            _logger.LogInformation("AutomationEngineHostedService started");
 
-        _logger.LogInformation("AutomationEngineHostedService stopped");
+            await foreach (GameStatusTransitionEvent transitionEvent in
+                _engineService.Reader.ReadAllAsync(stoppingToken))
+            {
+                try
+                {
+                    await _engineService.ProcessTransitionAsync(transitionEvent, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Unhandled error processing transition event for client {ClientId} — new status {NewStatus}",
+                        transitionEvent.ClientId, transitionEvent.NewStatus);
+                }
+            }
+
+            _logger.LogInformation("AutomationEngineHostedService stopped");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AutomationEngineHostedService terminated with an unhandled exception");
+        }
     }
 }

@@ -12,6 +12,8 @@
 @inject IToastService _toastService
 @inject IJSRuntime JS
 
+@inject IProjectionProgramService _projectionProgramService
+
 <PageTitle>Dashboards</PageTitle>
 
 <FluentCard AreaRestricted="false" Style="height: calc(100vh - 120px); min-height: 680px; overflow: hidden;">
@@ -210,6 +212,48 @@
                                                                 Label="Preview" ReadOnly="true" Appearance="FluentInputAppearance.Outline" />
                                             </div>
                                         }
+                                        else if (widget.Type == "ActionButton")
+                                        {
+                                            DashboardWidgetConfigs.ActionButtonWidgetConfig actionButtonConfig = GetActionButtonConfig(widget);
+
+                                            <div class="widget-config-stack">
+                                                <FluentTextField Class="w-100" Label="Button label"
+                                                                 Value="@(actionButtonConfig.ButtonLabel ?? string.Empty)"
+                                                                 ValueChanged="@((string value) => SetActionButtonLabel(widget, value))"
+                                                                 Immediate="true" />
+                                                <FluentSelect Class="w-100" TOption="string" Label="Projection program"
+                                                              @bind-Value:get="GetActionButtonProgramValue(widget)"
+                                                              @bind-Value:set="(value) => SetActionButtonProgram(widget, value)">
+                                                    <FluentOption Value="">None</FluentOption>
+                                                    @foreach (ProjectionProgram program in projectionPrograms.OrderBy(x => x.Name))
+                                                    {
+                                                        <FluentOption Value="@program.Id.ToString()">@program.Name</FluentOption>
+                                                    }
+                                                </FluentSelect>
+                                                <FluentSelect Class="w-100" TOption="string" Label="Target client"
+                                                              @bind-Value:get="GetActionButtonClientValue(widget)"
+                                                              @bind-Value:set="(value) => SetActionButtonClient(widget, value)">
+                                                    <FluentOption Value="">Select client...</FluentOption>
+                                                    @foreach (ClientConnectedDTO client in clients.OrderBy(x => x.Name))
+                                                    {
+                                                        <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
+                                                    }
+                                                </FluentSelect>
+                                                @if (actionButtonConfig.ProjectionProgramIdToTrigger.HasValue && actionButtonConfig.TargetClientId.HasValue)
+                                                {
+                                                    <FluentButton Class="w-100" Appearance="@actionButtonConfig.Appearance"
+                                                                  OnClick="() => TriggerProjectionProgram(actionButtonConfig.ProjectionProgramIdToTrigger.Value, actionButtonConfig.TargetClientId.Value)">
+                                                        @actionButtonConfig.ButtonLabel
+                                                    </FluentButton>
+                                                }
+                                                else
+                                                {
+                                                    <FluentButton Class="w-100" Appearance="@actionButtonConfig.Appearance" Disabled="true">
+                                                        @actionButtonConfig.ButtonLabel
+                                                    </FluentButton>
+                                                }
+                                            </div>
+                                        }
                                     </div>
 
                                     <div class="widget-resize-handle" @onmousedown="(e) => BeginResizeAsync(widget, e)"></div>
@@ -226,6 +270,7 @@
 @code {
     private List<Dashboard> dashboards = [];
     private List<ClientConnectedDTO> clients = [];
+    private List<ProjectionProgram> projectionPrograms = [];
     private Dashboard? selectedDashboard;
 
     private Guid? draggingWidgetId;
@@ -233,7 +278,7 @@
     private bool _isSavingDashboard;
 
     private readonly string CanvasId = "dashboard-editor-canvas";
-    private readonly string[] widgetTypes = ["Clock", "MusicControls", "LaserStats", "TextArea"];
+    private readonly string[] widgetTypes = ["Clock", "MusicControls", "LaserStats", "TextArea", "ActionButton"];
     private const string ClockModeAnalog = "analog";
     private const string ClockModeDigital = "digital";
     private const int GridColumns = 12;
@@ -251,6 +296,7 @@
     {
         _clockTickerTask = RunClockTickerAsync(_clockCts.Token);
         await LoadClientsAsync();
+        await LoadProjectionProgramsAsync();
         await LoadDashboardsAsync();
     }
 
@@ -570,6 +616,11 @@
         widget.IsActive = false;
     }
 
+    private static DashboardWidgetConfigs.ActionButtonWidgetConfig GetActionButtonConfig(DashboardWidget widget)
+    {
+        return DashboardWidgetConfigs.ParseActionButtonConfig(widget.ConfigJson);
+    }
+
     private static DashboardWidgetConfigs.TextAreaWidgetConfig GetTextAreaConfig(DashboardWidget widget)
     {
         return DashboardWidgetConfigs.ParseTextAreaConfig(widget.ConfigJson);
@@ -791,5 +842,61 @@
         int gridRowStart = widget.GridY + 1;
 
         return $"grid-column: {gridColumnStart} / span {widget.GridW}; grid-row: {gridRowStart} / span {widget.GridH};";
+    }
+
+    private async Task LoadProjectionProgramsAsync()
+    {
+        Result<IEnumerable<ProjectionProgram>> result = await _projectionProgramService.GetProjectionProgramsAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            projectionPrograms = [];
+            return;
+        }
+
+        projectionPrograms = result.Data.ToList();
+    }
+
+    private static string GetActionButtonProgramValue(DashboardWidget widget)
+    {
+        DashboardWidgetConfigs.ActionButtonWidgetConfig config = GetActionButtonConfig(widget);
+        return config.ProjectionProgramIdToTrigger?.ToString() ?? string.Empty;
+    }
+
+    private static void SetActionButtonProgram(DashboardWidget widget, string? value)
+    {
+        DashboardWidgetConfigs.ActionButtonWidgetConfig config = GetActionButtonConfig(widget);
+        config.ProjectionProgramIdToTrigger = Guid.TryParse(value, out Guid id) ? id : null;
+        widget.ConfigJson = DashboardWidgetConfigs.SerializeActionButtonConfig(config);
+    }
+
+    private static string GetActionButtonClientValue(DashboardWidget widget)
+    {
+        DashboardWidgetConfigs.ActionButtonWidgetConfig config = GetActionButtonConfig(widget);
+        return config.TargetClientId?.ToString() ?? string.Empty;
+    }
+
+    private static void SetActionButtonClient(DashboardWidget widget, string? value)
+    {
+        DashboardWidgetConfigs.ActionButtonWidgetConfig config = GetActionButtonConfig(widget);
+        config.TargetClientId = Guid.TryParse(value, out Guid id) ? id : null;
+        widget.ConfigJson = DashboardWidgetConfigs.SerializeActionButtonConfig(config);
+    }
+
+    private static void SetActionButtonLabel(DashboardWidget widget, string value)
+    {
+        DashboardWidgetConfigs.ActionButtonWidgetConfig config = GetActionButtonConfig(widget);
+        config.ButtonLabel = value;
+        widget.ConfigJson = DashboardWidgetConfigs.SerializeActionButtonConfig(config);
+    }
+
+    private async Task TriggerProjectionProgram(Guid projectionProgramId, Guid targetClientId)
+    {
+        Result<bool> result = await _projectionProgramService.TriggerProjectionProgramAsync(projectionProgramId, targetClientId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to trigger projection program: {result.Error}");
+        }
     }
 }

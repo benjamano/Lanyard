@@ -402,4 +402,30 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
             return Result<bool>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<bool>> TriggerProjectionProgramAsync(Guid projectionProgramId, Guid selectedClientId)
+    {
+        try
+        {
+            Result<ProjectionProgram> programResult = await GetProjectionProgramAsync(projectionProgramId);
+
+            if (!programResult.IsSuccess || programResult.Data == null)
+            {
+                return Result<bool>.Fail($"Projection program not found: {projectionProgramId}");
+            }
+
+            Result<bool> triggerResult = await _clientService.TriggerProjectionProgramOnClientAsync(selectedClientId, projectionProgramId);
+
+            if (!triggerResult.IsSuccess)
+            {
+                return Result<bool>.Fail(triggerResult.Error ?? "Failed to trigger projection program on client.");
+            }
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
 }

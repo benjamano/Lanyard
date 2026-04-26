@@ -80,5 +80,12 @@ namespace Lanyard.App.Controllers
             await _signInManager.SignOutAsync();
             return Ok(new { message = "Logout successful" });
         }
+
+        [HttpGet("logout")]
+        public async Task<IActionResult> LogoutGet()
+        {
+            await _signInManager.SignOutAsync();
+            return Redirect("/staff/login");
+        }
     }
 }

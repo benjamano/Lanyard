@@ -55,15 +55,4 @@
         
         return typeof(CustomerNotFound);
     }
-
-    private class RedirectToLogin : ComponentBase
-    {
-        [Inject] private NavigationManager Navigation { get; set; } = default!;
-
-        protected override void OnInitialized()
-        {
-            var returnUrl = Uri.EscapeDataString(Navigation.Uri);
-            Navigation.NavigateTo($"/staff/login?returnUrl={returnUrl}");
-        }
-    }
 }

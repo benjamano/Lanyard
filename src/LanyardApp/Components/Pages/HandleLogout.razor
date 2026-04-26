@@ -1,0 +1,22 @@
+@page "/HandleLogout"
+
+@inject NavigationManager NavigationManager
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ReturnUrl?.Contains("/staff", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            NavigationManager.NavigateTo("/staff/logout");
+        }
+        else{
+            NavigationManager.NavigateTo("/logout");
+        }
+    }
+}

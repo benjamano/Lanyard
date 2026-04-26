@@ -277,6 +277,21 @@ public class SignalRControlHub(
             return Result<bool>.Fail("An error occurred while sending projection program info to client.");
         }
     }
+    public async Task ProjectionProgramCompleted()
+    {
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("ProjectionProgramCompleted: failed to resolve client ID for connection {ConnectionId}", Context.ConnectionId);
+            return;
+        }
+
+        _logger.LogInformation("Client {ClientId} completed triggered projection program, restoring original settings", getClientResult.Data);
+
+        await SendProjectionProgramInfoToClientAsync(getClientResult.Data);
+    }
+
     public async Task ReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongs)
     {
         _hubEvents.RaiseReceiveCachedSongs(cachedSongs);

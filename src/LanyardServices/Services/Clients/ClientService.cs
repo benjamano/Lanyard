@@ -482,6 +482,34 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
         }
     }
 
+    public async Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client has no active connection.");
+            }
+
+            await _hubContext.Clients.Client(connectionId).SendAsync("TriggerProjectionProgram", projectionProgramId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId)
     {
         try

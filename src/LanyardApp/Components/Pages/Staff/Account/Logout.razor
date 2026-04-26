@@ -1,39 +1,12 @@
 @page "/staff/logout"
-@rendermode InteractiveServer
-
-@using Lanyard.Application.Services
-@using Lanyard.App.Components.Layout.Staff
 
 @inject NavigationManager Navigation
-@inject HttpClient Http
-
-<FluentStack Orientation="Orientation.Vertical" 
-              VerticalAlignment="VerticalAlignment.Center"
-              HorizontalAlignment="HorizontalAlignment.Center"
-              Style="min-height: 70vh; padding: 16px;">
-    
-    <FluentCard Style="width: 400px; max-width: 90vw; padding: 32px; text-align: center;">
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24">
-            <FluentProgressRing />
-            <FluentLabel Typo="Typography.Body">Logging you out...</FluentLabel>
-        </FluentStack>
-    </FluentCard>
-</FluentStack>
 
 @code {
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        try
-        {
-            // Call logout API
-            await Http.PostAsync("api/auth/logout", null);
-        }
-        catch
-        {
-            // Ignore errors during logout
-        }
-        
-        // Force full page reload to clear Blazor Server circuit
-        Navigation.NavigateTo("/staff/login", forceLoad: true);
+        // Navigate to the API logout endpoint, which calls SignOutAsync() in a real
+        // HTTP request/response cycle so the auth cookie is properly cleared.
+        Navigation.NavigateTo("/api/auth/logout", forceLoad: true);
     }
 }

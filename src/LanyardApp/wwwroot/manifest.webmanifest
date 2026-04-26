@@ -1,0 +1,15 @@
+{
+  "name": "Lanyard",
+  "short_name": "Lanyard",
+  "start_url": "/staff",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#171717",
+  "icons": [
+    {
+      "src": "favicon-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    }
+  ]
+}

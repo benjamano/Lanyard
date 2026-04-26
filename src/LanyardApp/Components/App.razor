@@ -1,5 +1,8 @@
 ﻿@using Lanyard.Application.Services.Authentication
 @using System.Globalization
+
+@inject NavigationManager NavigationManager
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -18,6 +21,12 @@
     <script src="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js" type="module" async></script>
     <script src="@Assets["app.js"]"></script>
     <HeadOutlet @rendermode="PageRenderMode" />
+
+    @if (NavigationManager.Uri.Contains("/staff", StringComparison.OrdinalIgnoreCase))
+    {
+        <link rel="manifest" href="manifest.webmanifest" />
+        <meta name="theme-color" content="#0d6efd" />
+    }
 </head>
 
 <body>
@@ -28,11 +37,21 @@
     <ReconnectModal />
 
     <Routes @rendermode="PageRenderMode" />
-    @* <ReconnectModal /> *@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
-    @* <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script> *@
     <script src="https://kit.fontawesome.com/9d35a24d36.js" crossorigin="anonymous"></script>
     <script src="/_framework/aspnetcore-browser-refresh.js"></script>
+
+    
+    @if (NavigationManager.Uri.Contains("/staff", StringComparison.OrdinalIgnoreCase))
+    {
+        <text>
+            <script>
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('/service-worker.js');
+                }
+            </script>
+        </text>
+    }
 
     <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.

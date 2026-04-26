@@ -85,11 +85,11 @@ builder.Services.AddAuthorization();
 // Configure cookie to persist login across sessions
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+    options.ExpireTimeSpan = TimeSpan.FromDays(180);
     options.SlidingExpiration = true;
-    options.LoginPath = "/login";
-    options.LogoutPath = "/logout";
-    options.AccessDeniedPath = "/login";
+    options.LoginPath = "/HandleLogin";
+    options.LogoutPath = "/HandleLogout";
+    options.AccessDeniedPath = "/HandleLogin";
 });
 
 // Add custom authentication state provider

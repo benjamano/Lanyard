@@ -23,4 +23,5 @@ public interface IClientService
     Task<Result<bool>> DeleteClientProjectionSettingsAsync(Guid clientProjectionSettingsId);
     Result<IEnumerable<ClientProjectionSettingsDTO>> ConvertIntoClientProjectionSettingsDTO(IEnumerable<ClientProjectionSettings> settings);
     Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId);
+    Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId);
 }

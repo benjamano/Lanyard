@@ -24,5 +24,16 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
 
             await _projectionProgramsService.StartProjectingAsync(programs);
         });
+
+        connection.On<Guid>("TriggerProjectionProgram", async (projectionProgramId) =>
+        {
+            _logger.LogInformation("Received command to trigger projection program {ProgramId}", projectionProgramId);
+
+            await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, async () =>
+            {
+                _logger.LogInformation("Triggered projection program {ProgramId} completed, notifying server", projectionProgramId);
+                await _connection!.InvokeAsync("ProjectionProgramCompleted");
+            });
+        });
     }
 }

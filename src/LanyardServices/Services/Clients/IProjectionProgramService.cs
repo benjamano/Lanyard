@@ -18,4 +18,5 @@ public interface IProjectionProgramService
     Task<Result<bool>> DeleteProjectionProgramStepAsync(Guid Id);
     Task<Result<ProjectionProgram>> GetProjectionProgramAsync(Guid projectionProgramId);
     Task<Result<bool>> DeleteProjectionProgramAsync(Guid projectionProgramId);
+    Task<Result<bool>> TriggerProjectionProgramAsync(Guid projectionProgramId, Guid selectedClientId);
 }

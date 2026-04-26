@@ -11,7 +11,6 @@
     flex-direction: column;
 }
 
-
 main {
     flex: 1;
     /* background: #560c69; */
@@ -27,7 +26,7 @@ main {
     background: var(--neutral-layer-2);
 }
 
-    main::before {
+    /* main::before {
         content: "";
         position: absolute;
         top: 0;
@@ -36,7 +35,7 @@ main {
         height: 100%;
         background: rgba(0, 0, 0, var(--dark-overlay));
         pointer-events: none;
-    }
+    } */
 
 .sidebar {
     border-right: 1px solid var(--bs-gray-500);

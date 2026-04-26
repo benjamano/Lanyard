@@ -11,45 +11,66 @@
 
 <PageTitle>Staff Home</PageTitle>
 
+
 <div class="px-1">
     <FluentGrid AdaptiveRendering="true">
         <FluentGridItem lg="4" md="6" sm="12" xs="12">
-            <FluentCard MinimalStyle="true">
-                <FluentStack Orientation="Orientation.Vertical">
-                    <FluentLabel Typo="Typography.H2">
+            <FluentCard MinimalStyle="true" Class="h-100">
+                <FluentStack Orientation="Orientation.Vertical" Class="h-100">
+                    <FluentLabel Typo="Typography.H2" Class="my-auto">
                         @GetGreeting(), <b>@_currentUserName!</b>
+                        @if (_showPreviewContent)
+                        {
+                            <FluentLabel Typo="Typography.H5" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentLabel>
+                        }
                     </FluentLabel>
                 </FluentStack>
             </FluentCard>
         </FluentGridItem>
-        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.MdAndDown">
+        <FluentGridItem lg="4" md="6" sm="12" xs="12">
+            @if (_showPreviewContent)
+            {
+                <MyTasksToday />
+            }
+            else
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100 gap-3">
+                    <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="Appearance.Accent" @onclick="() => _showPreviewContent = true">
+                        Show Preview Content
+                    </FluentButton>
+                </FluentStack>
+            }
         </FluentGridItem>
-        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.SmAndDown">
+        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.MdAndDown">
             <DigitalClock />
         </FluentGridItem>
     </FluentGrid>
-
-    <FluentGrid>
-        <FluentGridItem lg="7" md="7" sm="12" xs="12">
-            <FluentCard MinimalStyle="true">
-                <ClockinPortable />
-            </FluentCard>
-        </FluentGridItem>
-        <FluentGridItem lg="3" md="5" sm="12" xs="12">
-            <FluentCard MinimalStyle="true">
-                <UpcomingShifts />
-            </FluentCard>
-        </FluentGridItem>
-        <FluentGridItem lg="2" md="12" sm="12" xs="12">
-            <FluentCard MinimalStyle="true">
-                <ShiftCalendar />
-            </FluentCard>
-        </FluentGridItem>
-    </FluentGrid>
+    @if (_showPreviewContent)
+    {
+        <FluentGrid>
+            <FluentGridItem lg="7" md="7" sm="12" xs="12">
+                <FluentCard MinimalStyle="true">
+                    <ClockinPortable />
+                </FluentCard>
+            </FluentGridItem>
+            <FluentGridItem lg="3" md="5" sm="12" xs="12">
+                <FluentCard MinimalStyle="true">
+                    <UpcomingShifts />
+                </FluentCard>
+            </FluentGridItem>
+            <FluentGridItem lg="2" md="12" sm="12" xs="12">
+                <FluentCard MinimalStyle="true">
+                    <ShiftCalendar />
+                </FluentCard>
+            </FluentGridItem>
+        </FluentGrid>
+    }
 </div>
 
 @code {
     private string? _currentUserName;
+
+    private bool _showPreviewContent = false;
 
     protected override async Task OnInitializedAsync()
     {

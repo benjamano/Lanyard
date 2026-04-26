@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace Lanyard.App.Components.Kiosk.Widgets;
 
@@ -12,6 +13,14 @@ public static class DashboardWidgetConfigs
     private const string MusicClientModeFixed = "fixed";
     private const string MusicClientModeUser = "user";
 
+    public sealed class ActionButtonWidgetConfig
+    {
+        public Guid? ProjectionProgramIdToTrigger { get; set; }
+        public Guid? TargetClientId { get; set; }
+        public string? ButtonLabel { get; set; }
+        public Appearance Appearance { get; set; }
+    }
+
     public sealed class TextAreaWidgetConfig
     {
         public bool SaveToLocalStorage { get; set; }
@@ -21,6 +30,33 @@ public static class DashboardWidgetConfigs
     {
         public string ClientMode { get; set; } = MusicClientModeFixed;
         public Guid? FixedClientId { get; set; }
+    }
+
+    public static ActionButtonWidgetConfig ParseActionButtonConfig(string? configJson)
+    {
+        if (TryDeserialize<ActionButtonWidgetConfig>(configJson, out ActionButtonWidgetConfig? parsed) && parsed is not null)
+        {
+            return new ActionButtonWidgetConfig
+            {
+                ProjectionProgramIdToTrigger = parsed.ProjectionProgramIdToTrigger,
+                TargetClientId = parsed.TargetClientId,
+                Appearance = parsed.Appearance,
+                ButtonLabel = parsed.ButtonLabel
+            };
+        }
+
+        return new ActionButtonWidgetConfig
+        {
+            ProjectionProgramIdToTrigger = null,
+            TargetClientId = null,
+            Appearance = Appearance.Neutral,
+            ButtonLabel = "Run Action"
+        };
+    }
+
+    public static string SerializeActionButtonConfig(ActionButtonWidgetConfig config)
+    {
+        return JsonSerializer.Serialize(config, JsonOptions);
     }
 
     public static TextAreaWidgetConfig ParseTextAreaConfig(string? configJson)

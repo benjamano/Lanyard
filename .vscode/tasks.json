@@ -9,7 +9,12 @@
                 "build",
                 "${workspaceFolder}/src/LanyardApp/Lanyard.App.csproj"
             ],
-            "problemMatcher": "$msCompile"
+            "group": "build",
+            "problemMatcher": "$msCompile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
         },
         {
             "label": "Build LanyardClient",

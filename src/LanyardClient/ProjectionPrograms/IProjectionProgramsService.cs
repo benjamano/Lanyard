@@ -8,4 +8,5 @@ namespace Lanyard.Client.ProjectionPrograms;
 public interface IProjectionProgramsService
 {
     Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms);
+    Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, Func<Task> onCompleted);
 }
