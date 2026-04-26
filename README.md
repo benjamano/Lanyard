@@ -8,6 +8,29 @@ Written in C# Blazor, it will allow for quicker development as well as a higher 
 
 This project is currently maintained by the two contributers [Ben Mercer](https://github.com/benjamano) and [Cadan Arnold](https://github.com/TheTinyGiant240)
 
+## Project Structure
+
+### Lanyard Server
+
+Lanyard Server is in charge of the Staff and Managment side of Lanyard.
+It handles internal messaging such as Staff Announcments, Tracking centre statistics, and co-ordinates all Lanyard Clients connected to it. 
+
+### Lanyard Customer Server (Working Title, Coming Soon)
+
+Lanyard Customer Server will be responsible for hosting the Customer facing site, it will handle bookings and any other customer interactions as well as giving the customers the ability to learn more about your company.
+
+### Lanyard Client
+
+Lanyard Client is an internal system designed to be used as a single control point for many aspects:
+
+- Laser Tag Game Managment and Control
+- Point Of Sales (POS) Support (Coming Soon)
+- Kitchen Managment including QR Code and online food odering Support (Coming Soon)
+- Dynamic Dashboards for Static Kiosks which can include all kinds of information
+- Central Music Centre Music Control.
+
+One-Time setup per Client, all customisable via [Lanyard Server](#LanyardServer).
+
 ## Running the Lanyard Client
 
 The Lanyard Client is a Windows desktop application that runs on kiosk machines, handling local music playback, projection programs, and laser game packet sniffing.
