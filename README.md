@@ -6,6 +6,8 @@ For any questions about this system, contact [Ben Mercer](mailto:benmercer76@bti
 Lanyard is the [Zone Laser Scoreboard's](https://github.com/benjamano/Zone-Laser-Scoreboard) replacement.
 Written in C# Blazor, it will allow for quicker development as well as a higher quality UI experience.
 
+It uses [Blazor FluentUI V4](https://www.fluentui-blazor.net/) as the main Component library.
+
 This project is currently maintained by the two contributers [Ben Mercer](https://github.com/benjamano) and [Cadan Arnold](https://github.com/TheTinyGiant240)
 
 ## Project Structure
