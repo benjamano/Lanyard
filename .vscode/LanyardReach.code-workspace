@@ -7,9 +7,9 @@
 	],
 	"settings": {
 		"files.exclude": {
-			"**/Lanyard.Client": true,
-			"**/Lanyard.Client.Watchdog": true,
-			"**/Lanyard.Reach": true,
+			// "**/Lanyard.Client": true,
+			// "**/Lanyard.Client.Watchdog": true,
+			// "**/Lanyard.Server": true,
 		}
 	}
 }

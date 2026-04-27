@@ -2,33 +2,46 @@
     "requireExactSource": false,
     "configurations": [
         {
-            "name": "C#: LanyardClient [https]",
+            "name": "Debug LanyardClient",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}\\src\\LanyardClient\\Lanyard.Client.csproj",
-            "preLaunchTask": "Build LanyardClient"
+            "projectPath": "${workspaceFolder}\\src\\Lanyard.Client\\Lanyard.Client.csproj",
+            // "preLaunchTask": "Build LanyardClient"
         },  
         {
-            "name": "C#: LanyardClient.Watchdog [https]",
+            "name": "Debug LanyardClient.Watchdog",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}\\src\\LanyardClient.Watchdog\\LanyardClient.Watchdog.csproj",
-            "preLaunchTask": "Build LanyardClient.Watchdog"
+            "projectPath": "${workspaceFolder}\\src\\Lanyard.Client.Watchdog\\LanyardClient.Watchdog.csproj",
+            // "preLaunchTask": "Build LanyardClient.Watchdog"
         },
         {
-            "name": "C#: LanyardApp [https]",
+            "name": "Debug LanyardApp",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}\\src\\LanyardApp\\Lanyard.App.csproj",
+            "projectPath": "${workspaceFolder}\\src\\Lanyard.Server\\LanyardApp\\Lanyard.App.csproj",
             "launchConfigurationId": "TargetFramework=;https",
-            "preLaunchTask": "Build LanyardApp"
+            // "preLaunchTask": "Build LanyardApp"
+        },
+        {
+            "name": "Debug LanyardReach (Web)",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\src\\Lanyard.Reach\\Lanyard.Reach.Web\\Lanyard.Reach.Web.csproj",
+            "launchConfigurationId": "TargetFramework=;https"
+        },
+        {
+            "name": "Debug LanyardReach (Android)",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\src\\Lanyard.Reach\\Lanyard.Reach\\Lanyard.Reach.csproj"
         },
         {
             "name": "Run Velopack Release",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "Pack Only (Velopack)",
-            "program": "${env:LOCALAPPDATA}\\LanyardClient\\current\\Lanyard.Client.exe",
+            "program": "${env:LOCALAPPDATA}\\Lanyard.Client\\current\\Lanyard.Client.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
             "console": "externalTerminal"

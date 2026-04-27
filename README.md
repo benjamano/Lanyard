@@ -17,9 +17,9 @@ This project is currently maintained by the two contributers [Ben Mercer](https:
 Lanyard Server is in charge of the Staff and Managment side of Lanyard.
 It handles internal messaging such as Staff Announcments, Tracking centre statistics, and co-ordinates all Lanyard Clients connected to it. 
 
-### Lanyard Customer Server (Working Title, Coming Soon)
+### Lanyard Reach
 
-Lanyard Customer Server will be responsible for hosting the Customer facing site, it will handle bookings and any other customer interactions as well as giving the customers the ability to learn more about your company.
+Lanyard Reach will be responsible for hosting the Customer facing site, it will handle bookings and any other customer interactions as well as giving the customers the ability to learn more about your company.
 
 ### Lanyard Client
 
