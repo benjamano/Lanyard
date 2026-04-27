@@ -1,30 +1,41 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Lanyard.Reach</a>
-    </div>
-</div>
+﻿@inject NavigationManager NavigationManager
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+<div class="nav-bar">
+    <nav class="nav">
+        <div class="nav-logo-container">
+            <NavLink href="/" class="nav-logo">
+                <img src="_content/Lanyard.Reach.Shared/RedLogo.png" alt="Play2Day Logo" />
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+        <div class="d-flex flex-row">
+            <div class="nav-dropdown">
+                <span class="nav-link nav-dropdown-toggle">
+                    Locations
+                </span>
+                <div class="nav-dropdown-menu rounded-top-0">
+                    <NavLink href="/locations/ipswich" class="nav-dropdown-item">
+                        Ipswich
+                    </NavLink>
+                    <NavLink href="/locations/wisbech" class="nav-dropdown-item">
+                        Wisbech
+                    </NavLink>
+                </div>
+            </div>
+
+            <NavLink href="/book" class="nav-link">
+                Make a Booking
+            </NavLink>
+        
+            <NavLink href="/about" class="nav-link">
+                About
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+        <div>
+            <NavLink href="/redirect-to-lanyard-server" class="nav-link">
+                Staff Portal
             </NavLink>
         </div>
     </nav>
 </div>
-

@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.13.2" />
+    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.13.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Lanyard.Reach.Shared\Lanyard.Reach.Shared.csproj" />
   </ItemGroup>
 

@@ -35,7 +35,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.App", "src\Lanyard.
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LanyardServices", "LanyardServices", "{FC41CF55-D702-3925-5855-6937F356EC42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Application", "src\Lanyard.Server\LanyardServices\Lanyard.Application.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Application", "src\Lanyard.Server\LanyardServices\Lanyard.Services.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
 EndProject

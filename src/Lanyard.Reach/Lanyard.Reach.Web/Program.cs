@@ -1,6 +1,7 @@
 using Lanyard.Reach.Web.Components;
 using Lanyard.Reach.Shared.Services;
 using Lanyard.Reach.Web.Services;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,13 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+builder.Services.AddFluentUIComponents(options =>
+{
+    options.ValidateClassNames = true;
+    options.UseTooltipServiceProvider = true;
+    options.HideTooltipOnCursorLeave = true;
+});
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Lanyard.Reach.Shared.Services;
 using Lanyard.Reach.Services;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace Lanyard.Reach;
 
@@ -25,6 +26,13 @@ public static class MauiProgram
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
 #endif
+
+        builder.Services.AddFluentUIComponents(options =>
+        {
+            options.ValidateClassNames = true;
+            options.UseTooltipServiceProvider = true;
+            options.HideTooltipOnCursorLeave = true;
+        });
 
         return builder.Build();
     }

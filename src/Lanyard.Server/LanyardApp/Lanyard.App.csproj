@@ -29,13 +29,13 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-	<PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.13.2" />
+	  <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" Version="4.13.2" />
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.13.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LanyardAPI\Lanyard.API.csproj" />
     <ProjectReference Include="..\..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
-    <ProjectReference Include="..\LanyardServices\Lanyard.Application.csproj" />
+    <ProjectReference Include="..\LanyardServices\Lanyard.Services.csproj" />
   </ItemGroup>
 </Project>

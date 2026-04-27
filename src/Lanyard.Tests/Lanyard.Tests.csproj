@@ -14,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LanyardAPI\Lanyard.API.csproj" />
+    <ProjectReference Include="..\Lanyard.Server\LanyardAPI\Lanyard.API.csproj" />
     <ProjectReference Include="..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
-    <ProjectReference Include="..\Lanyard.Server\LanyardServices\Lanyard.Application.csproj" />
+    <ProjectReference Include="..\Lanyard.Server\LanyardServices\Lanyard.Services.csproj" />
   </ItemGroup>
 
 </Project>

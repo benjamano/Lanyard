@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
-    <ProjectReference Include="..\LanyardServices\Lanyard.Application.csproj" />
+    <ProjectReference Include="..\LanyardServices\Lanyard.Services.csproj" />
   </ItemGroup>
 
 </Project>
