@@ -1,4 +1,4 @@
-@page "/staff/manage/dashboards"
+@page "/manage/dashboards"
 @attribute [Authorize(Roles = "Admin,Manager")]
 @implements IAsyncDisposable
 
@@ -596,7 +596,7 @@
             return;
         }
 
-        string previewUrl = $"/staff/manage/dashboards/preview/{selectedDashboard.Id}";
+        string previewUrl = $"//manage/dashboards/preview/{selectedDashboard.Id}";
         await JS.InvokeVoidAsync("open", previewUrl, "_blank");
     }
 

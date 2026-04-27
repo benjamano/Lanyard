@@ -11,9 +11,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (ReturnUrl?.Contains("/staff", StringComparison.OrdinalIgnoreCase) == true)
+        if (ReturnUrl?.Contains("/", StringComparison.OrdinalIgnoreCase) == true)
         {
-            NavigationManager.NavigateTo("/staff/login");
+            NavigationManager.NavigateTo("//login");
         }
         else{
             NavigationManager.NavigateTo("/login");

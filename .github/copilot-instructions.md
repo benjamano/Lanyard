@@ -64,7 +64,7 @@ LanyardApp is a .NET 10 Blazor Server application for managing digital signage/k
 - **Key Components**:
   - `Components/Kiosk/KioskDisplay.razor` - Renders projection programs on kiosk displays
   - `Components/Manager/ProjectionPrograms/` - Program management UI
-  - `Components/Pages/Staff/` - Staff portal pages
+  - `Components/Pages//` - Staff portal pages
   - `Components/Music/` - Music player and playlist components
   - `Services/DragStateService.cs` - Shared state for drag-and-drop operations
 - **Place new UI components** in the appropriate `Components` subfolder

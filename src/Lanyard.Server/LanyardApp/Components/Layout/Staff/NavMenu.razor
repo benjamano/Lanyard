@@ -1,4 +1,4 @@
-﻿@using Lanyard.Application.Services.Authentication
+﻿@using Lanyard..Services.Authentication
 @implements IDisposable
 
 @inject NavigationManager NavigationManager
@@ -6,7 +6,7 @@
 
 <nav class="navbar navbar-expand-lg border-bottom shadow-sm">
     <div class="container-fluid px-4">
-        <a class="navbar-brand d-flex align-items-center" href="/staff">
+        <a class="navbar-brand d-flex align-items-center" href="/">
             <FluentIcon Value="@(new Icons.Regular.Size24.Apps())" Color="Color.FillInverse" class="me-2" />
             <span style="font-size: 1.5rem; font-weight: 700;">Lanyard</span>
         </a>
@@ -14,7 +14,7 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mx-auto me-0">
                 <li class="nav-item">
-                    <a class="nav-link d-flex align-items-center px-3" href="/staff">
+                    <a class="nav-link d-flex align-items-center px-3" href="/">
                         <FluentIcon Value="@(new Icons.Regular.Size20.Home())" Color="Color.FillInverse" class="me-2" />
                         <span>Home</span>
                     </a>
@@ -23,7 +23,7 @@
                 <AuthorizeView Roles="Admin,CanControlMusic">
                     <Authorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/staff/music">
+                            <a class="nav-link d-flex align-items-center px-3" href="//music">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.MusicNote2())" Color="Color.FillInverse" class="me-2" />
                                 <span>Music</span>
                             </a>
@@ -40,11 +40,11 @@
                                     <span>Rota</span>
                                 </span>
                                 <div class="nav-dropdown-menu">
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota/clockin">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//rota/clockin">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" Color="Color.FillInverse" class="me-2" />
                                         <span>Clock In</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/rota">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//rota">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.CalendarLtr())" Color="Color.FillInverse" class="me-2" />
                                         <span>Rota</span>
                                     </a>
@@ -63,25 +63,25 @@
                                     <span>Manage</span>
                                 </span>
                                 <div class="nav-dropdown-menu">
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/roles">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//manage/roles">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.ShieldTask())" Color="Color.FillInverse" class="me-2" />
                                         <span>Roles</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/users">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//manage/users">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.FillInverse" class="me-2" />
                                         <span>Users</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/dashboards">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//manage/dashboards">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.GridDots())" Color="Color.FillInverse" class="me-2" />
                                         <span>Dashboards</span>
                                     </a>
-                                    <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/projectionprograms">
+                                    <a class="nav-dropdown-item d-flex align-items-center" href="//manage/projectionprograms">
                                         <FluentIcon Value="@(new Icons.Regular.Size20.ProjectionScreenText())" Color="Color.FillInverse" class="me-2" />
                                         <span>Projection</span>
                                     </a>
                                     <AuthorizeView Roles="Admin" Context="_context">
                                     <Authorized>
-                                            <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/clients">
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="//manage/clients">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.Tv())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Clients</span>
                                             </a>
@@ -89,7 +89,7 @@
                                 </AuthorizeView>
                                     <AuthorizeView Roles="Admin" Context="_context">
                                         <Authorized>
-                                            <a class="nav-dropdown-item d-flex align-items-center" href="/staff/manage/projectiontemplates">
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="//manage/projectiontemplates">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.ProjectionScreenText())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Projection Templates</span>
                                             </a>
@@ -97,7 +97,7 @@
                                     </AuthorizeView>
                                     <AuthorizeView Roles="Admin" Context="_context">
                                         <Authorized>
-                                            <a class="nav-dropdown-item d-flex align-items-center" href="/staff/automation">
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="//automation">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Automation</span>
                                             </a>
@@ -112,7 +112,7 @@
                 <AuthorizeView Roles="Admin,CanClockIn">
                     <Authorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/staff/files">
+                            <a class="nav-link d-flex align-items-center px-3" href="//files">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.Folder())" Color="Color.FillInverse" class="me-2" />
                                 <span>File Manager</span>
                             </a>
@@ -132,7 +132,7 @@
                 <AuthorizeView>
                     <Authorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/staff/account/manage">
+                            <a class="nav-link d-flex align-items-center px-3" href="//account/manage">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.Person())" Color="Color.FillInverse" class="me-2" />
                                 <span>@(userName?.Length > 20 ? userName.Substring(0, 20) + "..." : userName)</span>
                             </a>
@@ -146,7 +146,7 @@
                     </Authorized>
                     <NotAuthorized>
                         <li class="nav-item">
-                            <a class="nav-link d-flex align-items-center px-3" href="/staff/login">
+                            <a class="nav-link d-flex align-items-center px-3" href="//login">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.ArrowEnter())" Color="Color.FillInverse" class="me-2" />
                                 <span>Login</span>
                             </a>

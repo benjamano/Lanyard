@@ -22,7 +22,7 @@
     <script src="@Assets["app.js"]"></script>
     <HeadOutlet @rendermode="PageRenderMode" />
 
-    @if (NavigationManager.Uri.Contains("/staff", StringComparison.OrdinalIgnoreCase))
+    @if (NavigationManager.Uri.Contains("/", StringComparison.OrdinalIgnoreCase))
     {
         <link rel="manifest" href="manifest.webmanifest" />
         <meta name="theme-color" content="#0d6efd" />
@@ -42,7 +42,7 @@
     <script src="/_framework/aspnetcore-browser-refresh.js"></script>
 
     
-    @if (NavigationManager.Uri.Contains("/staff", StringComparison.OrdinalIgnoreCase))
+    @if (NavigationManager.Uri.Contains("/", StringComparison.OrdinalIgnoreCase))
     {
         <text>
             <script>

@@ -1,4 +1,4 @@
-@page "/staff/manage/dashboards/preview/{dashboardId:guid}"
+@page "/manage/dashboards/preview/{dashboardId:guid}"
 @attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
@@ -12,7 +12,7 @@
 <FluentStack Orientation="Orientation.Vertical" Style="height: calc(100vh - 120px); min-height: 680px;">
     <FluentToolbar Class="w-100">
         <FluentLabel slot="start" Typo="Typography.PaneHeader">Dashboard Preview</FluentLabel>
-        <FluentButton slot="end" Appearance="Appearance.Outline" Href="/staff/manage/dashboards">
+        <FluentButton slot="end" Appearance="Appearance.Outline" Href="//manage/dashboards">
             Back to Dashboards
         </FluentButton>
     </FluentToolbar>
