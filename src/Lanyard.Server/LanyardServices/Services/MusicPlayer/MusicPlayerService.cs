@@ -47,6 +47,7 @@ public class MusicPlayerService
         public bool IsRepeatEnabled { get; set; } = true;
         public double LastKnownPositionSeconds { get; set; }
         public DateTime LastPositionUpdateUtc { get; set; } = DateTime.UtcNow;
+        public int CurrentVolume { get; set; }
     }
 
     private ClientMusicState GetOrCreateState(Guid clientId)
@@ -264,6 +265,11 @@ public class MusicPlayerService
                 return false;
             }
 
+            if (state.IsRepeatEnabled)
+            {
+                state.IsRepeatEnabled = false;
+            }
+
             int? previousIndex = GetPreviousQueueIndex(state);
 
             if (!previousIndex.HasValue)
@@ -287,6 +293,12 @@ public class MusicPlayerService
         if (state.Queue.Count == 0)
         {
             return null;
+        }
+
+        if (state.IsRepeatEnabled)
+        {
+            // Just return the current song
+            return state.QueueIndex;
         }
 
         if (state.IsShuffleEnabled)
@@ -507,6 +519,13 @@ public class MusicPlayerService
             return;
         }
 
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        if (state.IsRepeatEnabled)
+        {
+            state.IsRepeatEnabled = false;
+        }
+
         if (MoveToNext(clientId))
         {
             Song? nextSong = GetCurrentSong(clientId);
@@ -599,5 +618,45 @@ public class MusicPlayerService
     public async Task GetCachedSongsAsync(Guid clientId)
     {
         await SendToClientAsync(clientId, "GetCachedSongs");
+    }
+
+    public async Task SetVolume(Guid clientId, int volume)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        int normalizedVolume = Math.Clamp(volume, 0, 100);
+
+        lock (_lock)
+        {
+            state.CurrentVolume = normalizedVolume;
+        }
+
+        await SendToClientAsync(clientId, "SetVolume", normalizedVolume);
+    }
+
+    public int GetCurrentVolume(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return state.CurrentVolume;
+        }
+    }
+
+    public bool GetCurrentShuffleState(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return state.IsShuffleEnabled;
+        }
+    }
+
+    public bool GetCurrentRepeatState(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return state.IsRepeatEnabled;
+        }
     }
 }

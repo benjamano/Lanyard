@@ -165,6 +165,21 @@ public class MusicControlHandler
                 await connection.InvokeAsync("ReceiveCachedSongs", Result<IEnumerable<CachedSongDTO>>.Fail(result.Error ?? "Unknown error"));
             }
         });
+
+        connection.On("SetVolume", async (int volume) =>
+        {
+            _logger.LogInformation("Received SETVOLUME command: {Volume}", volume);
+            Result<bool> result = await _musicPlayer.SetVolumeAsync(volume);
+
+            if (result.IsSuccess)
+            {
+                _logger.LogInformation("Volume set successfully");
+            }
+            else
+            {
+                _logger.LogError("Failed to set volume: {Error}", result.Error);
+            }
+        });
     }
 
     /// <summary>

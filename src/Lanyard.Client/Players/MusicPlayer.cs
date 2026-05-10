@@ -229,6 +229,49 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         _cacheService.PreCacheInBackground(SongQueue[nextIndex]);
     }
 
+    public async Task<Result<bool>> SetVolumeAsync(int volume)
+    {
+        if (_player == null)
+        {
+            return Result<bool>.Fail("Player not initialised");
+        }
+
+        try
+        {
+            float volumeFloat = Math.Clamp(volume / 100f, 0f, 1f);
+
+            _player.Volume = volumeFloat;
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MusicPlayer: Failed to set volume");
+
+            return Result<bool>.Fail($"Failed to set volume: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<int>> GetVolumeAsync()
+    {
+        if (_player == null)
+        {
+            return Result<int>.Fail("Player not initialised");
+        }
+
+        try
+        {
+            int volumeInt = (int)Math.Round(_player.Volume * 100);
+            return Result<int>.Ok(volumeInt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MusicPlayer: Failed to get volume");
+
+            return Result<int>.Fail($"Failed to get volume: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
         Stop();

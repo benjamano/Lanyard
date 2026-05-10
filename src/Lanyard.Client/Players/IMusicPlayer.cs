@@ -18,4 +18,7 @@ public interface IMusicPlayer
 
     Task<Result<bool>> Load(Guid songId);
     void Stop();
+
+    Task<Result<bool>> SetVolumeAsync(int volume);
+    Task<Result<int>> GetVolumeAsync();
 }
