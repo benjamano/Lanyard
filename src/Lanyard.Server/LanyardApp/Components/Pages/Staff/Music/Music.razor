@@ -14,6 +14,7 @@
 @inject MusicPlayerService _player
 @inject IClientService _clientService
 @inject IToastService _toastService
+@inject IPlaylistService _playlistService
 @inject IJSRuntime JS
 
 @implements IDisposable
@@ -24,7 +25,7 @@
     <div class="music-content p-2">
         <div class="music-panes">
             <div class="music-pane music-playlists-pane">
-                <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"></Playlists>
+                <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId" InitialPlaylistId="initialPlaylistId"></Playlists>
             </div>
 
             <div class="w-100">
@@ -170,6 +171,8 @@
     private bool isShuffleEnabled = false;
     private bool isRepeatEnabled = false;
 
+    private Guid? initialPlaylistId;
+
     private string selectedClientIdString
     {
         get => selectedClientId?.ToString() ?? string.Empty;
@@ -191,7 +194,38 @@
     protected override async Task OnInitializedAsync()
     {
         _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+
         await LoadConnectedClientsAsync();
+
+        await LoadFirstPlaylistAsync();
+    }
+
+    private async Task LoadFirstPlaylistAsync()
+    {
+        Result<IEnumerable<Playlist>> playlistsResult = await _playlistService.GetActivePlaylistsAsync();
+
+        if (!playlistsResult.IsSuccess || playlistsResult.Data == null)
+        {
+            _toastService.ShowError($"Failed to load playlists: {playlistsResult.Error}");
+            return;
+        }
+
+        Playlist? firstPlaylist = playlistsResult.Data.FirstOrDefault();
+
+        if (firstPlaylist != null)
+        {
+            currentSongs = firstPlaylist.Members?.Select(x=> new PlaylistSongMember
+            {
+                SongId = x.SongId,
+                Song = x.Song,
+                PlaylistId = firstPlaylist.Id,
+                Playlist = firstPlaylist
+            }).ToList();
+
+            initialPlaylistId = firstPlaylist.Id;
+
+            StateHasChanged();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -120,6 +120,7 @@
 @code {
     [Parameter] public EventCallback<(IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs)> OnSongsSelected { get; set; }
     [Parameter] public Guid? SelectedClientId { get; set; }
+    [Parameter] public Guid? InitialPlaylistId { get; set; }
 
     private Guid? selectedPlaylistId;
     private Guid? currentlyPlayingPlaylistId;
@@ -159,6 +160,11 @@
 
     protected override void OnParametersSet()
     {
+        if (InitialPlaylistId.HasValue && selectedPlaylistId == null)
+        {
+            selectedPlaylistId = InitialPlaylistId.Value;
+        }
+
         UpdateCurrentPlaylist(triggerRender: false);
     }
 
@@ -169,6 +175,7 @@
         if (selectedPlaylistId == playlistId)
         {
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
+            styles.Add("border-left:2px solid var(--accent-fill-rest)");
         }
 
         if (currentlyPlayingPlaylistId == playlistId)
@@ -203,6 +210,7 @@
         if (allSongsSelected)
         {
             styles.Add("background-color: var(--neutral-fill-stealth-active)");
+            styles.Add("border-left:2px solid var(--accent-fill-rest)");
         }
 
         if (SelectedClientId != null &&

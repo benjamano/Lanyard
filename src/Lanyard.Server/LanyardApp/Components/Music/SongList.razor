@@ -44,7 +44,7 @@
                                 @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
                                             Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
-                                @context.Song!.Name
+                                @context.Song?.Name
                             </FluentLabel>
                         </div>
                     </TemplateColumn>

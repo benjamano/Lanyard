@@ -18,6 +18,8 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
             IEnumerable<Playlist> playlists = await context.Playlists
                 .AsNoTracking()
                 .Where(playlist => playlist.DeleteDate == null)
+                .Include(x=> x.Members!)
+                .ThenInclude(x=> x.Song)
                 .ToListAsync();
 
             return Result<IEnumerable<Playlist>>.Ok(playlists);
