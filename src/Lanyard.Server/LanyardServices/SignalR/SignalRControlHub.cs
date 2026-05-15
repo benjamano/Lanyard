@@ -32,8 +32,6 @@ public class SignalRControlHub(
 
     public static IReadOnlyCollection<string> ConnectedIds => (IReadOnlyCollection<string>)_connections.Keys;
 
-    public event Action<Result<IEnumerable<CachedSongDTO>>>? OnReceiveCachedSongs; 
-
     public override async Task OnConnectedAsync()
     {
         HttpContext? httpContext = Context.GetHttpContext();
@@ -294,6 +292,50 @@ public class SignalRControlHub(
 
     public async Task ReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongs)
     {
-        _hubEvents.RaiseReceiveCachedSongs(cachedSongs);
+        await _hubEvents.RaiseReceiveCachedSongs(cachedSongs);
+    }
+
+    public async Task UpdateAvailableDmxDevices(IEnumerable<string> devices)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available DMX devices: {Devices}", Context.ConnectionId, devices);
+
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogError("Failed to get client ID from connection ID {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return;
+        }
+
+        Guid clientId = getResult.Data!;
+
+        await _clientService.SetClientAvailableDmxDevicesAsync(clientId, devices);
+    }
+
+    public async Task PlayerVolumeChanged(int volume)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported volume change: {Volume}", Context.ConnectionId, volume);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        await _playerService.SetVolume(getClientResult.Data, volume);
+    }
+
+    public async Task PlaylistChanged(Guid playlistId)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported playlist change: {PlaylistId}", Context.ConnectionId, playlistId);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        await _playerService.SetCurrentPlaylist(getClientResult.Data, playlistId);
     }
 }

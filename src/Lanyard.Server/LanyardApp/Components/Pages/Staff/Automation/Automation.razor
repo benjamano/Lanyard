@@ -194,7 +194,7 @@
     private async Task OpenAddRuleDialogAsync()
     {
         IDialogReference dialog = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(
-            (AutomationRule?)null,
+            null!,
             new DialogParameters()
             {
                 Width = "auto",

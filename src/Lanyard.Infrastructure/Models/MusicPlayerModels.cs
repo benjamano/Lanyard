@@ -39,6 +39,8 @@ namespace Lanyard.Infrastructure.Models
         public UserProfile? DeleteByUser { get; set; }
         public string? DeleteByUserId { get; set; }
         public DateTime? DeleteDate { get; set; }
+
+        public ICollection<PlaylistSongMember>? Members { get; set; }
     }
 
     [PrimaryKey(nameof(SongId), nameof(PlaylistId))]

@@ -46,7 +46,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppSetting> AppSettings { get; set; }
         public DbSet<CompanyTenant> CompanyTenants { get; set; }
         public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
-
+        public DbSet<ClientDmxConfiguration> ClientDmxConfigurations { get; set; }
+        public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
+        
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -65,11 +67,6 @@ namespace Lanyard.Infrastructure.DataAccess
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            modelBuilder.Entity<AutomationRule>()
-                .HasIndex(r => r.TriggerClientId);
-            modelBuilder.Entity<AppSetting>()
-                .HasIndex(a => a.Key)
-                .IsUnique();
         }
     }
 }

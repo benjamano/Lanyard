@@ -24,6 +24,8 @@ public class MusicControlHandler
 
         _musicPlayer.PlaybackStateChanged += OnPlaybackStateChanged;
         _musicPlayer.PlayingSongChanged += OnPlayingSongChanged;
+        _musicPlayer.PlayerVolumeChanged += OnPlayerVolumeChanged;
+        _musicPlayer.PlaylistChanged += OnPlaylistChanged;
     }
 
     public void Register(HubConnection connection)
@@ -36,11 +38,11 @@ public class MusicControlHandler
             _cacheService.UpdateCacheLimit(settings.CacheLimitMb);
         });
 
-        connection.On("Load", async (Guid songId) =>
+        connection.On("Load", async (Guid songId, Guid playlistId) =>
         {
-            _logger.LogInformation("Received LOAD command for song {SongId}", songId);
+            _logger.LogInformation("Received LOAD command for song {SongId} in playlist {PlaylistId}", songId, playlistId);
 
-            Result<bool> result = await _musicPlayer.Load(songId);
+            Result<bool> result = await _musicPlayer.Load(songId, playlistId);
 
             if (result.IsSuccess)
             {
@@ -52,11 +54,11 @@ public class MusicControlHandler
             }
         });
 
-        connection.On("Play", () =>
+        connection.On("Play", async () =>
         {
             _logger.LogInformation("Received PLAY command");
 
-            Result<bool> result = _musicPlayer.Play();
+            Result<bool> result = await _musicPlayer.Play();
 
             if (result.IsSuccess)
             {
@@ -68,10 +70,10 @@ public class MusicControlHandler
             }
         });
 
-        connection.On("Pause", () =>
+        connection.On("Pause", async () =>
         {
             _logger.LogInformation("Received PAUSE command");
-            Result<bool> result = _musicPlayer.Pause();
+            Result<bool> result = await _musicPlayer.Pause();
 
             if (result.IsSuccess)
             {
@@ -89,10 +91,10 @@ public class MusicControlHandler
             _musicPlayer.Stop();
         });
 
-        connection.On("LoadPlaylist", (IEnumerable<Guid> songList) =>
+        connection.On("LoadPlaylist", async (Dictionary<Guid, Guid> songList) =>
         {
             _logger.LogInformation("Received LOADPLAYLIST command");
-            Result<bool> result = _musicPlayer.LoadPlaylist(songList);
+            Result<bool> result = await _musicPlayer.LoadPlaylist(songList);
 
             if (result.IsSuccess)
             {
@@ -221,6 +223,44 @@ public class MusicControlHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send playing song change to server");
+        }
+    }
+
+    private async void OnPlayerVolumeChanged(int volume)
+    {
+        if (_connection == null || _connection.State != HubConnectionState.Connected)
+        {
+            _logger.LogWarning("Cannot send player volume change - connection not established");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Sending player volume change: {Volume}", volume);
+            await _connection.InvokeAsync("PlayerVolumeChanged", volume);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send player volume change to server");
+        }
+    }
+
+    private async void OnPlaylistChanged(Guid playlistId)
+    {
+        if (_connection == null || _connection.State != HubConnectionState.Connected)
+        {
+            _logger.LogWarning("Cannot send playlist change - connection not established");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Sending playlist change: {PlaylistId}", playlistId);
+            await _connection.InvokeAsync("PlaylistChanged", playlistId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send playlist change to server");
         }
     }
 }

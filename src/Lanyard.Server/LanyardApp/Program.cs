@@ -92,6 +92,8 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/HandleLogin";
 });
 
+builder.Services.AddMemoryCache();
+
 // Add custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityAuthenticationStateProvider>();
 builder.Services.AddCascadingAuthenticationState();

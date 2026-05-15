@@ -9,7 +9,5 @@ namespace Lanyard.Application.SignalR
     public interface ISignalRProjectionControlHub
     {
         Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId);
-
-        event Action<Result<IEnumerable<CachedSongDTO>>>? OnReceiveCachedSongs; 
     }
 }

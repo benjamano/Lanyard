@@ -51,15 +51,15 @@
                             Icon volumeIcon = currentVolume switch
                             {
                                 0 => new Icons.Regular.Size24.SpeakerMute(),
-                                > 0 and <= 30 => new Icons.Regular.Size24.Speaker0(),
-                                > 30 and <= 69 => new Icons.Regular.Size24.Speaker1(),
-                                > 69 => new Icons.Regular.Size24.Speaker2(),
+                                > 0 and <= 20 => new Icons.Regular.Size24.Speaker0(),
+                                > 20 and <= 70 => new Icons.Regular.Size24.Speaker1(),
+                                > 70 => new Icons.Regular.Size24.Speaker2(),
                                 _ => new Icons.Regular.Size24.SpeakerMute()
                             };
                         }
 
-                        <FluentButton IconStart="volumeIcon" Appearance="Appearance.Lightweight" Disabled="@(selectedClientId == null)" OnClick="MuteVolume"></FluentButton>
-                        <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" @onchange="HandleVolumeChange" @bind-Value="currentVolume" Orientation="Orientation.Horizontal" Class="w-100 mt-3"></FluentSlider>
+                        <FluentButton IconStart="volumeIcon" Appearance="Appearance.Lightweight" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
+                        <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100 mt-3"></FluentSlider>
                     </FluentStack>
                 </FluentGridItem>
             </FluentGrid>
@@ -382,7 +382,7 @@
             return;
         }
 
-        await _player.Restart(selectedClientId.Value);
+        await _player.RestartOrPrevious(selectedClientId.Value);
     }
 
     private async Task PreviousSong()
@@ -414,7 +414,7 @@
         StateHasChanged();
     }
 
-    private async Task HandleVolumeChange(ChangeEventArgs e)
+    private async Task HandleVolumeChange(int newVolume)
     {
         if (selectedClientId == null)
         {
@@ -422,14 +422,12 @@
             return;
         }
 
-        if (int.TryParse(e.Value?.ToString(), out int newVolume))
-        {
-            currentVolume = newVolume;
-            await _player.SetVolume(selectedClientId.Value, newVolume);
-        }
+        currentVolume = newVolume;
+        
+        await _player.SetVolume(selectedClientId.Value, newVolume);
     }
     
-    private async Task MuteVolume()
+    private async Task ToggleMuteVolume()
     {
         if (selectedClientId == null)
         {
@@ -437,9 +435,9 @@
             return;
         }
 
-        currentVolume = 0;
+        currentVolume = currentVolume == 0 ? 25 : 0;
 
-        await _player.SetVolume(selectedClientId.Value, 0);
+        await _player.SetVolume(selectedClientId.Value, currentVolume);
     }
 
     private async Task ToggleShuffle()

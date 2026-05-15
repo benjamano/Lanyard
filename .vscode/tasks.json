@@ -3,11 +3,11 @@
     "tasks": [
         {
             "label": "Build LanyardApp",
-            "command": "dotnet",
             "type": "process",
+            "command": "dotnet",
             "args": [
                 "build",
-                "${workspaceFolder}/src/LanyardApp/Lanyard.App.csproj"
+                "${workspaceFolder}/src/Lanyard.Server/LanyardApp/Lanyard.App.csproj"
             ],
             "group": "build",
             "problemMatcher": "$msCompile",
@@ -22,7 +22,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/src/LanyardClient/Lanyard.Client.csproj"
+                "${workspaceFolder}/src/Lanyard.Client/Lanyard.Client.csproj"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -101,6 +101,12 @@
                 "reveal": "always",
                 "panel": "shared"
             }
+        },
+        {
+            "label": "Build Client and App (sequential)",
+            "dependsOn": ["Build LanyardClient", "Build LanyardApp"],
+            "dependsOrder": "sequence",
+            "problemMatcher": "$msCompile"
         }
     ]
 }

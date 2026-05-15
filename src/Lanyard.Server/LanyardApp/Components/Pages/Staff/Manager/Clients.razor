@@ -1,6 +1,7 @@
 ﻿@page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
+@using Lanyard.App.Components.Clients
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
 
@@ -70,6 +71,10 @@
             IsShowing="@showClientCapabilitiesCard"
             clientId="@updatingClientId">
         </ClientMusicCapabilities>
+    </FluentGridItem>
+
+    <FluentGridItem xs="6">
+        <ClientDmxConfig ClientId="@updatingClientId" />
     </FluentGridItem>
 </FluentGrid>
 
@@ -181,7 +186,7 @@
     {
         if (updatingClientId == null) return;
 
-        Result<Client?> getResult = await _clientService.GetClientFromIdAsync(updatingClientId ?? new Guid());
+        Result<Client?> getResult = await _clientService.GetClientFromIdAsync(updatingClientId ?? Guid.Empty);
 
         if (!getResult.IsSuccess || getResult.Data == null)
         {

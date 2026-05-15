@@ -91,6 +91,25 @@ public class MusicPlayerService
         }
     }
 
+    public async Task<Result<bool>> SetCurrentPlaylist(Guid clientId, Guid playlistId)
+    {
+        ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
+
+        Playlist? playlist = await context.Playlists
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.Id == playlistId)
+            .FirstOrDefaultAsync();
+
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            state.CurrentPlaylist = playlist;
+        }
+
+        return Result<bool>.Ok(true);
+    }
+
     public bool GetShuffleEnabled(Guid clientId)
     {
         ClientMusicState state = GetOrCreateState(clientId);
@@ -430,7 +449,7 @@ public class MusicPlayerService
 
         await SetQueue(clientId, queueToSet, playlistId, 0);
 
-        await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.Select(x => x.Id));
+        await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.ToDictionary(x => x.Id, _ => playlistId));
     }
 
     public async Task Play(Guid clientId)
@@ -470,7 +489,7 @@ public class MusicPlayerService
 
         await LoadSongsIntoQueue(clientId, playlist?.Id ?? Guid.Empty, song);
 
-        await SendToClientAsync(clientId, "Load", song.Id);
+        await SendToClientAsync(clientId, "Load", song.Id, playlist?.Id ?? Guid.Empty);
 
         ClientMusicState state = GetOrCreateState(clientId);
 
@@ -529,12 +548,13 @@ public class MusicPlayerService
         if (MoveToNext(clientId))
         {
             Song? nextSong = GetCurrentSong(clientId);
+            Guid currentPlaylistId = state.CurrentPlaylist?.Id ?? Guid.Empty;
             if (nextSong is null)
             {
                 return;
             }
 
-            await SendToClientAsync(clientId, "Load", nextSong.Id);
+            await SendToClientAsync(clientId, "Load", nextSong.Id, currentPlaylistId);
             await SendToClientAsync(clientId, "Play");
         }
     }
@@ -544,12 +564,13 @@ public class MusicPlayerService
         if (MoveToPrevious(clientId))
         {
             Song? previousSong = GetCurrentSong(clientId);
+            Guid currentPlaylistId = GetOrCreateState(clientId).CurrentPlaylist?.Id ?? Guid.Empty;
             if (previousSong is null)
             {
                 return;
             }
 
-            await SendToClientAsync(clientId, "Load", previousSong.Id);
+            await SendToClientAsync(clientId, "Load", previousSong.Id, currentPlaylistId);
             await SendToClientAsync(clientId, "Play");
         }
     }
@@ -559,16 +580,39 @@ public class MusicPlayerService
         Song? currentSong = GetCurrentSong(clientId);
         if (currentSong != null)
         {
+            Guid currentPlaylistId = Guid.Empty;
+
             ClientMusicState state = GetOrCreateState(clientId);
             lock (_lock)
             {
                 state.LastKnownPositionSeconds = 0;
                 state.LastPositionUpdateUtc = DateTime.UtcNow;
+                currentPlaylistId = state.CurrentPlaylist?.Id ?? Guid.Empty;
             }
 
-            await SendToClientAsync(clientId, "Load", currentSong.Id);
+            await SendToClientAsync(clientId, "Load", currentSong.Id, currentPlaylistId);
             await SendToClientAsync(clientId, "Play");
         }
+    }
+
+    public async Task RestartOrPrevious(Guid clientId)
+    {
+        Song? currentSong = GetCurrentSong(clientId);
+        
+        if (currentSong != null)
+        {
+            ClientMusicState state = GetOrCreateState(clientId);
+            double positionSeconds = EstimatePositionSeconds(state, DateTime.UtcNow);
+
+            if (positionSeconds > 10)
+            {
+                await Restart(clientId);
+
+                return;
+            }
+        }
+
+        await Previous(clientId);
     }
 
     public Task<bool> ToggleShuffle(Guid clientId)

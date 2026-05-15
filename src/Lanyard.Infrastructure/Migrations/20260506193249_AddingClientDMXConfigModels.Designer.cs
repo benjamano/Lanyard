@@ -3,6 +3,7 @@ using System;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260506193249_AddingClientDMXConfigModels")]
+    partial class AddingClientDMXConfigModels
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,36 +25,7 @@ namespace Lanyard.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("ClientAvailableDmxDevice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DeviceIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPrimaryDevice")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("ClientAvailableDmxDevices");
-                });
-
-            modelBuilder.Entity("ClientDmxConfiguration", b =>
+            modelBuilder.Entity("ClientDMXConfiguration", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -91,7 +65,7 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("UpdatedByUserId");
 
-                    b.ToTable("ClientDmxConfigurations");
+                    b.ToTable("ClientDMXConfigurations");
                 });
 
             modelBuilder.Entity("CompanyTenant", b =>
@@ -1010,18 +984,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("ClientAvailableDmxDevice", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("ClientDmxConfiguration", b =>
+            modelBuilder.Entity("ClientDMXConfiguration", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
                         .WithMany()
@@ -1213,7 +1176,7 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("DeleteByUserId");
 
                     b.HasOne("Lanyard.Infrastructure.Models.Playlist", "Playlist")
-                        .WithMany("Members")
+                        .WithMany()
                         .HasForeignKey("PlaylistId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1360,11 +1323,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Files");
 
                     b.Navigation("SubFolders");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
-                {
-                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgram", b =>

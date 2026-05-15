@@ -5,7 +5,9 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -13,10 +15,12 @@ using System.Text;
 
 namespace Lanyard.Application.Services;
 
-public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<SignalRControlHub> hubContext) : IClientService
+public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<SignalRControlHub> hubContext, ILogger<ClientService> logger, IMemoryCache cache) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
+    private readonly ILogger<ClientService> _logger = logger;
+    private readonly IMemoryCache _cache = cache;
 
     public async Task<Result<Client?>> GetClientFromIdAsync(Guid clientId)
     {
@@ -32,6 +36,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
 
         } catch (Exception ex)
         {
+            _logger.LogError("Error getting client from ID: {Message}", ex.Message);
             return Result<Client?>.Fail(ex.Message);
         }
     }
@@ -205,6 +210,11 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
 
     public async Task<Result<Guid>> GetClientIdFromConnectionIdAsync(string connectionId)
     {
+        if (_cache.TryGetValue(connectionId, out Guid cachedClientId))
+        {
+            return Result<Guid>.Ok(cachedClientId);
+        }
+
         try
         {
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -218,6 +228,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
             {
                 return Result<Guid>.Fail("Client not found for the given connection ID.");
             }
+
+            _cache.Set(connectionId, client.Id, TimeSpan.FromMinutes(10));
 
             return Result<Guid>.Ok(client.Id);
         }
@@ -548,6 +560,151 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
             }
 
             return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .AsNoTracking()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            { 
+                return;
+            }
+
+            List<ClientAvailableDmxDevice> existingDevices = await ctx.ClientAvailableDmxDevices
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId)
+                .ToListAsync();
+
+            foreach (ClientAvailableDmxDevice deviceFound in existingDevices)
+            {
+                if (!dmxDevices.Any(s => s.Equals(deviceFound.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    deviceFound.IsActive = false;
+                }
+            }
+
+            int deviceIndex = 0;
+
+            foreach (string incoming in dmxDevices)
+            {
+                ClientAvailableDmxDevice? match = existingDevices.FirstOrDefault(x => x.Name.Equals(incoming, StringComparison.OrdinalIgnoreCase));
+
+                bool shouldBePrimary = !existingDevices.Any(x => x.IsPrimaryDevice) && deviceIndex == 0;
+
+                if (match == null)
+                {
+                    ClientAvailableDmxDevice newDevice = new()
+                    {
+                        ClientId = clientId,
+                        Name = incoming,
+                        DeviceIndex = deviceIndex,
+                        IsPrimaryDevice = shouldBePrimary,
+                        IsActive = true
+                    };
+
+                    ctx.ClientAvailableDmxDevices.Add(newDevice);
+                }
+                else
+                {
+                    match.IsActive = true;
+                    match.DeviceIndex = deviceIndex;
+                    match.IsPrimaryDevice = shouldBePrimary;
+                }
+
+                deviceIndex++;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Updated available DMX devices for client {ClientId}: {Devices}", clientId, string.Join(", ", dmxDevices));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error setting client available DMX devices: {Message}", ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
+                .AsNoTracking()
+                .Where(x => x.ClientId == clientId)
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DeviceIndex)
+                .ToListAsync();
+
+            return Result<IEnumerable<ClientAvailableDmxDevice>>.Ok(devices);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ClientAvailableDmxDevice>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
+                .Where(x => x.ClientId == clientId)
+                .ToListAsync();
+
+            foreach (ClientAvailableDmxDevice device in devices)
+            {
+                device.IsPrimaryDevice = device.Id == deviceId;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> RemoveClientPrimaryDevice(Guid clientId, Guid deviceId)
+    {
+        try
+        {
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
+                .Where(x => x.ClientId == clientId)
+                .ToListAsync();
+
+            ClientAvailableDmxDevice? device = devices.FirstOrDefault(x => x.Id == deviceId);
+
+            if (device != null)
+            {
+                device.IsPrimaryDevice = false;
+                
+                await ctx.SaveChangesAsync();
+
+                return Result<bool>.Ok(true);
+            }
+
+            return Result<bool>.Fail("Device not found.");
         }
         catch (Exception ex)
         {

@@ -1,0 +1,105 @@
+@inject IClientService _clientService
+@inject ILogger<ClientDmxConfig> _logger
+@inject IToastService _toastService
+
+@if (ClientId != null)
+{
+    <FluentCard>
+        <FluentLabel Typo="Typography.H4">DMX Configuration</FluentLabel>
+
+        <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">
+            <ChildContent>
+                <PropertyColumn Property="x=> x.DeviceIndex" Title="Device Index" />
+                <PropertyColumn Property="x => x.Name" Title="Device Name" />
+                <TemplateColumn Title="Use this Device">
+                    <FluentStack>
+                        <FluentSwitch Value="@(context.IsPrimaryDevice)" ValueChanged="@(e => OnPrimaryDeviceChanged(context, e))" />
+                    </FluentStack>
+                </TemplateColumn>
+            </ChildContent>
+            <LoadingContent>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                    Loading... <FluentProgressRing Stroke="ProgressStroke.Small"></FluentProgressRing>
+                </FluentStack>
+            </LoadingContent>
+            <EmptyContent>
+                No DMX devices found.
+            </EmptyContent>
+        </FluentDataGrid>
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    private List<ClientAvailableDmxDevice>? _availableDevices = null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAvailableDevices();
+    }
+
+    private async Task LoadAvailableDevices()
+    {
+        try
+        {
+            _availableDevices = null;
+
+            if (ClientId != null)
+            {
+                Result<IEnumerable<ClientAvailableDmxDevice>> result = await _clientService.GetClientAvailableDmxDevicesAsync(ClientId ?? Guid.Empty);
+
+                if (result.IsSuccess && result.Data != null)
+                {
+                    _availableDevices = result.Data.ToList();
+                }
+                else
+                {
+                    _logger.LogError("Error loading available DMX devices for client {ClientId}: {Message}", ClientId, result.Error);
+                    _toastService.ShowError("Failed to load available DMX devices for this client.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error loading available DMX devices for client {ClientId}: {Message}", ClientId, ex.Message);
+            _toastService.ShowError("An unexpected error occurred while loading available DMX devices for this client.");
+        }
+    }
+
+    private async Task OnPrimaryDeviceChanged(ClientAvailableDmxDevice device, bool value)
+    {
+        bool isPrimary = value;
+
+        device.IsPrimaryDevice = isPrimary;
+
+        if (!isPrimary)
+        {
+            Result<bool> result = await _clientService.RemoveClientPrimaryDevice(ClientId ?? Guid.Empty, device.Id);
+
+            if (!result.IsSuccess)
+            {
+                _logger.LogError("Error removing primary DMX device for client {ClientId}: {Message}", ClientId, result.Error);
+                _toastService.ShowError("Failed to remove primary DMX device for this client.");
+            }
+        }
+        else
+        {
+            Result<bool> result = await _clientService.SetClientPrimaryDmxDeviceAsync(ClientId ?? Guid.Empty, device.Id);
+
+            if (!result.IsSuccess)
+            {
+                _logger.LogError("Error setting primary DMX device for client {ClientId}: {Message}", ClientId, result.Error);
+                _toastService.ShowError("Failed to update primary DMX device for this client.");
+            }
+            else
+            {
+                foreach (ClientAvailableDmxDevice d in _availableDevices ?? Enumerable.Empty<ClientAvailableDmxDevice>())
+                {
+                    d.IsPrimaryDevice = d.Id == device.Id;
+                }
+            }
+        }
+    }
+}
