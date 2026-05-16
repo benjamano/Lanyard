@@ -338,4 +338,20 @@ public class SignalRControlHub(
 
         await _playerService.SetCurrentPlaylist(getClientResult.Data, playlistId);
     }
+
+    public async Task QueueChanged(List<Guid> queue)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported queue change: {Queue}", Context.ConnectionId, queue);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid playlistId = _playerService.GetCurrentPlaylist(getClientResult.Data)?.Id ?? Guid.Empty;
+
+        await _playerService.SetQueue(getClientResult.Data, queue, playlistId);
+    }
 }

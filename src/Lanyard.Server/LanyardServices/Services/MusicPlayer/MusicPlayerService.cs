@@ -240,6 +240,20 @@ public class MusicPlayerService
         OnSongChanged?.Invoke(clientId, state.CurrentSong?.Id);
     }
 
+    public async Task SetQueue(Guid clientId, List<Guid> songIds, Guid? playlistId)
+    {
+        List<Song> songs;
+
+        await using ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
+
+        songs = await context.Songs
+            .AsNoTracking()
+            .Where(x => songIds.Contains(x.Id))
+            .ToListAsync();
+
+        await SetQueue(clientId, songs, playlistId);
+    }
+
     private bool MoveToNext(Guid clientId)
     {
         Song? nextSong;
@@ -701,6 +715,26 @@ public class MusicPlayerService
         lock (_lock)
         {
             return state.IsRepeatEnabled;
+        }
+    }
+
+    public int GetCurrentSongTime(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        DateTime nowUtc = DateTime.UtcNow;
+
+        lock (_lock)
+        {
+            return (int)EstimatePositionSeconds(state, nowUtc);
+        }
+    }
+
+    public int GetCurrentSongLength(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+        lock (_lock)
+        {
+            return (int)(state.CurrentSong?.DurationSeconds ?? 0);
         }
     }
 }

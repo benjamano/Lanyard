@@ -26,6 +26,7 @@ public class MusicControlHandler
         _musicPlayer.PlayingSongChanged += OnPlayingSongChanged;
         _musicPlayer.PlayerVolumeChanged += OnPlayerVolumeChanged;
         _musicPlayer.PlaylistChanged += OnPlaylistChanged;
+        _musicPlayer.QueueChanged += OnQueueChanged;
     }
 
     public void Register(HubConnection connection)
@@ -261,6 +262,25 @@ public class MusicControlHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send playlist change to server");
+        }
+    }
+
+    private async void OnQueueChanged(List<Guid>? songIds)
+    {
+        if (_connection == null || _connection.State != HubConnectionState.Connected)
+        {
+            _logger.LogWarning("Cannot send queue change - connection not established");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Sending queue change: {SongIds}", songIds != null ? string.Join(", ", songIds) : "null");
+            await _connection.InvokeAsync("QueueChanged", songIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send queue change to server");
         }
     }
 }

@@ -12,6 +12,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     public event Action<Guid>? PlayingSongChanged;
     public event Action<int>? PlayerVolumeChanged;
     public event Action<Guid>? PlaylistChanged;
+    public event Action<List<Guid>?>? QueueChanged;
 
     private WaveOutEvent? _player;
     private MediaFoundationReader? _reader;
@@ -333,6 +334,21 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         PlaylistChanged?.Invoke(currentPlaylistId ?? Guid.Empty);
 
         return Task.CompletedTask;
+    }
+
+    public async Task SendServerCurrentQueue()
+    {
+        if (SongAndPlaylistQueue.Count == 0)
+        {
+            _logger.LogInformation("No songs in queue to send to server.");
+            return;
+        }
+
+        List<Guid> songIds = SongAndPlaylistQueue.Keys.ToList();
+
+        QueueChanged?.Invoke(songIds);
+
+        _logger.LogInformation("Sending current song queue to server: {SongIds}", string.Join(", ", songIds));
     }
 
     public void Dispose()

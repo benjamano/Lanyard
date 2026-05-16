@@ -135,8 +135,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         _logger.LogInformation("Sending music player status to server...");
 
         await _musicPlayer.UpdateServerPlaybackStatus();
-        await _musicPlayer.UpdateServerCurrentPlayingSong();
+        await _musicPlayer.SendServerCurrentQueue();
         await _musicPlayer.SendServerCurrentVolume();
+        await _musicPlayer.UpdateServerCurrentPlayingSong();
         await _musicPlayer.SendServerCurrentPlaylist();
     }
 

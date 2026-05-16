@@ -7,6 +7,7 @@ public interface IMusicPlayer
     event Action<Guid>? PlayingSongChanged;
     event Action<int>? PlayerVolumeChanged;
     event Action<Guid>? PlaylistChanged;
+    event Action<List<Guid>?>? QueueChanged;
 
     Task<Result<bool>> Play();
     Task<Result<bool>> Pause();
@@ -28,4 +29,5 @@ public interface IMusicPlayer
     Task UpdateServerCurrentPlayingSong();
     Task SendServerCurrentVolume();
     Task SendServerCurrentPlaylist();
+    Task SendServerCurrentQueue();
 }
