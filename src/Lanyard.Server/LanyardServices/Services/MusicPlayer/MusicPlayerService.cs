@@ -35,6 +35,7 @@ public class MusicPlayerService
 
     public event Action<Guid, PlaybackState>? OnPlaybackStatusChanged;
     public event Action<Guid, Guid?>? OnSongChanged;
+    public event Action<Guid, bool>? OnShuffleStateChanged;
 
     private sealed class ClientMusicState
     {
@@ -225,7 +226,9 @@ public class MusicPlayerService
 
         ApplicationDbContext _context = await _contextFactory.CreateDbContextAsync();
 
-        Playlist? playlist = await _context.Playlists.Where(x=> x.Id == playlistId).FirstOrDefaultAsync();
+        Playlist? playlist = await _context.Playlists
+            .Where(x=> x.Id == playlistId)
+            .FirstOrDefaultAsync();
 
         lock (_lock)
         {
@@ -249,6 +252,7 @@ public class MusicPlayerService
         songs = await context.Songs
             .AsNoTracking()
             .Where(x => songIds.Contains(x.Id))
+            .OrderByDescending(x=> x.CreateDate)
             .ToListAsync();
 
         await SetQueue(clientId, songs, playlistId);
@@ -448,9 +452,13 @@ public class MusicPlayerService
         List<Song> playlistSongs = await context.PlaylistSongMembers
             .Where(x => x.PlaylistId == playlistId)
             .Select(x => x.Song!)
+            .OrderByDescending(x=> x.CreateDate)
             .ToListAsync();
 
-        playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
+        if (GetShuffleEnabled(clientId))
+        {
+            playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
+        }
 
         if (song == null)
         {
@@ -556,7 +564,7 @@ public class MusicPlayerService
 
         if (state.IsRepeatEnabled)
         {
-            state.IsRepeatEnabled = false;
+            await ToggleShuffle(clientId);
         }
 
         if (MoveToNext(clientId))
@@ -639,6 +647,8 @@ public class MusicPlayerService
             state.IsShuffleEnabled = !state.IsShuffleEnabled;
             isEnabled = state.IsShuffleEnabled;
         }
+
+        OnShuffleStateChanged?.Invoke(clientId, isEnabled);
 
         return Task.FromResult(isEnabled);
     }

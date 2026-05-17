@@ -215,6 +215,7 @@
     protected override async Task OnInitializedAsync()
     {
         _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        _player.OnShuffleStateChanged += HandleShuffleStateChanged;
 
         await LoadConnectedClientsAsync();
 
@@ -241,7 +242,9 @@
                 Song = x.Song,
                 PlaylistId = firstPlaylist.Id,
                 Playlist = firstPlaylist
-            }).ToList();
+            })
+            .OrderByDescending(x=> x.Song?.CreateDate)
+            .ToList();
 
             initialPlaylistId = firstPlaylist.Id;
 
@@ -284,6 +287,9 @@
 
         isPlaying = state == PlaybackState.Playing;
 
+        currentSongTime = selectedClientId.HasValue ? _player.GetCurrentSongTime(selectedClientId.Value) : 0;
+        currentSongLength = selectedClientId.HasValue ? _player.GetCurrentSongLength(selectedClientId.Value) : 0;
+
         if (isPlaying)
         {
             startSongTimeTimer();
@@ -292,6 +298,18 @@
         {
             stopSongTimeTimer();
         }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleShuffleStateChanged(Guid clientId, bool isEnabled)
+    {
+        if (selectedClientId != clientId)
+        {
+            return;
+        }
+
+        isShuffleEnabled = isEnabled;
 
         InvokeAsync(StateHasChanged);
     }
@@ -387,11 +405,15 @@
         {
             if (selectedClientId.HasValue)
             {
-                currentSongTime += 0.5f;
+                currentSongTime += 0.1f;
 
                 await InvokeAsync(StateHasChanged);
             }
-        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
+            else
+            {
+                stopSongTimeTimer();
+            }
+        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
     }
 
     private async Task<Guid?> GetPersistedSelectedClientIdAsync()
@@ -536,6 +558,8 @@
             return;
         }
 
+        if (Math.Abs(newTime - currentSongTime) < 0.5) return;
+
         currentSongTime = (float)newTime;
 
         await _player.Seek(selectedClientId.Value, currentSongTime);
@@ -544,6 +568,8 @@
     public void Dispose()
     {
         _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
+        _player.OnShuffleStateChanged -= HandleShuffleStateChanged;
+        
         stopSongTimeTimer();
     }
 }
