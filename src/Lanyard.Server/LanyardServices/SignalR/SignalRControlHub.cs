@@ -18,7 +18,8 @@ public class SignalRControlHub(
     IClientService clientService,
     ILaserGameStatusStore laserGameStatusStore,
     SignalRProjectionControlHubEvents hubEvents,
-    AutomationEngineService automationEngineService) : Hub, ISignalRProjectionControlHub
+    AutomationEngineService automationEngineService,
+    IDmxClientService dmxClientService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -27,6 +28,7 @@ public class SignalRControlHub(
     private readonly SignalRProjectionControlHubEvents _hubEvents = hubEvents;
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
     private readonly AutomationEngineService _automationEngineService = automationEngineService;
+    private readonly IDmxClientService _dmxClientService = dmxClientService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -99,6 +101,7 @@ public class SignalRControlHub(
 
             await SendProjectionProgramInfoToClientAsync(client.Id);
             await SendMusicSettingsToClientAsync(client);
+            await SendDmxSettingsToClientAsync(client);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -353,5 +356,40 @@ public class SignalRControlHub(
         Guid playlistId = _playerService.GetCurrentPlaylist(getClientResult.Data)?.Id ?? Guid.Empty;
 
         await _playerService.SetQueue(getClientResult.Data, queue, playlistId);
+    }
+
+    public async Task UpdateDmxChannelValue(int channelAddress, byte value)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported DMX channel update: Address {ChannelAddress}, Value {Value}", Context.ConnectionId, channelAddress, value);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        _dmxClientService.SetChannelValue(clientId, channelAddress, value);
+    }
+
+    public async Task SendDmxSettingsToClientAsync(Client client)
+    {
+        Result<ClientDmxSettingsDTO?> settingsResult = await _clientService.GetClientDmxSettings(client.Id);
+
+        if (!settingsResult.IsSuccess)
+        {
+            _logger.LogError("Failed to get DMX settings for client {ClientId}: {Error}", client.Id, settingsResult.Error);
+            return;
+        }
+
+        if (settingsResult.Data == null)
+        {
+            _logger.LogWarning("No DMX settings found for client {ClientId}", client.Id);
+            return;
+        }
+
+        await Clients.Caller.SendAsync("ReceiveDmxSettings", settingsResult.Data);
     }
 }

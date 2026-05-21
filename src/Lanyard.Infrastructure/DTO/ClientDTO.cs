@@ -15,6 +15,7 @@ public class ClientConnectedWithCapabilitiesDTO : Client
     public bool IsCurrentlyConnected { get; set; }
 
     public bool ProjectionEnabled { get; set; }
+    public bool DmxEnabled { get; set; }
 }
 
 public class ClientMusicSettingsDTO

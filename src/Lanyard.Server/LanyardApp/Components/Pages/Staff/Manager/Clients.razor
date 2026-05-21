@@ -1,7 +1,7 @@
 ﻿@page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
-@using Lanyard.App.Components.Clients
+@using Lanyard.App.Components.Dmx
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
 
@@ -14,22 +14,26 @@
     <FluentLabel Typo="Typography.PaneHeader">
         Clients
     </FluentLabel>
-    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()"
-                    GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <ChildContent>
-            <PropertyColumn Property="x => x.Id" Title="Client ID" />
+            <PropertyColumn Property="x => x.Id" Title="Client ID"/>
             <TemplateColumn Sortable="true" Title="Name">
                 @context.Name
                 <FluentIcon OnClick="() => ShowUpdateClientNameDialog(context.Id)" Icon="Icons.Regular.Size20.Edit"
                             Class="ms-1" role="button"></FluentIcon>
             </TemplateColumn>
-            <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" />
+            <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address"/>
             <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" Sortable="true"
                             Property="x => x.LastLogin" Title="Last Login" />
             <TemplateColumn Title="Capabilities">
                 @if (context.ProjectionEnabled)
                 {
                     <FluentBadge Appearance="Appearance.Accent" Class="me-1">Projection</FluentBadge>
+                }
+
+                @if (context.DmxEnabled)
+                {
+                    <FluentBadge Appearance="Appearance.Accent" Class="me-1">DMX</FluentBadge>
                 }
 
                 <FluentIcon OnClick="() => OpenUpdateClientCapabilitiesCard(context.Id)"
@@ -58,7 +62,7 @@
 <FluentDivider Class="my-2"></FluentDivider>
 
 <FluentGrid Spacing="2">
-    <FluentGridItem xs="6">
+    <FluentGridItem xs="12" sm="12" md="6">
         <ClientProjectionCapabilities 
             UpdateClientCapabilities="GetClientsAsync" 
             IsShowing="@showClientCapabilitiesCard"
@@ -66,14 +70,14 @@
         </ClientProjectionCapabilities>
     </FluentGridItem>
 
-    <FluentGridItem xs="6">
+    <FluentGridItem xs="12" sm="12" md="6">
         <ClientMusicCapabilities 
             IsShowing="@showClientCapabilitiesCard"
             clientId="@updatingClientId">
         </ClientMusicCapabilities>
     </FluentGridItem>
 
-    <FluentGridItem xs="6">
+    <FluentGridItem xs="12" sm="12" md="6">
         <ClientDmxConfig ClientId="@updatingClientId" />
     </FluentGridItem>
 </FluentGrid>

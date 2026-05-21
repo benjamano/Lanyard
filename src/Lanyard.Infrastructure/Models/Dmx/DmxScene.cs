@@ -1,13 +1,13 @@
-using Lanyard.Infrastructure.Models;
+namespace Lanyard.Infrastructure.Models.Dmx;
 
-public class ClientDmxConfiguration : CreateAndUpdateBase
-{
+public class DmxScene : CreateAndUpdateBase
+{    
     public Guid Id { get; set; }
 
     public Guid ClientId { get; set; }
     public Client? Client { get; set; }
 
-    public uint? DMXInterfaceDeviceId { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
-} 
+}

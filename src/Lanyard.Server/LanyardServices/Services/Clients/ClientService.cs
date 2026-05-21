@@ -2,6 +2,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,10 @@ using System.Text;
 
 namespace Lanyard.Application.Services;
 
-public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHubContext<SignalRControlHub> hubContext, ILogger<ClientService> logger, IMemoryCache cache) : IClientService
+public class ClientService(IDbContextFactory<ApplicationDbContext> factory, 
+    IHubContext<SignalRControlHub> hubContext, 
+    ILogger<ClientService> logger, 
+    IMemoryCache cache) : IClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
@@ -38,6 +42,54 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
         {
             _logger.LogError("Error getting client from ID: {Message}", ex.Message);
             return Result<Client?>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<string?>> GetClientCurrentConnectionIdAsync(Guid clientId)
+    {
+        try
+        {
+            if (_cache.TryGetValue(clientId, out string? cachedConnectionId))
+            {
+                return Result<string?>.Ok(cachedConnectionId);
+            }
+
+            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            string? connectionId = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .Select(x => x.MostRecentConnectionId)
+                .FirstOrDefaultAsync();
+
+            if (connectionId != null)
+            {
+                _cache.Set(clientId, connectionId, TimeSpan.FromMinutes(10));
+            }
+
+            return Result<string?>.Ok(connectionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error getting client connection ID: {Message}", ex.Message);
+            return Result<string?>.Fail(ex.Message);
+        }
+    } 
+
+    public async Task<Result<bool>> IsClientConnectedAsync(Guid clientId)
+    {
+        Result<IEnumerable<Client>> connectedClientsResult = await GetConnectedClientsAsync();
+
+        if (connectedClientsResult.IsSuccess)
+        {
+            bool isConnected = connectedClientsResult.Data!.Any(x => x.Id == clientId);
+
+            return Result<bool>.Ok(isConnected);
+        }
+        else
+        {
+            return Result<bool>.Fail(connectedClientsResult.Error!);
         }
     }
 
@@ -149,6 +201,10 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
                     CreateDate = x.CreateDate,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
+                        .AsNoTracking()
+                        .Where(y => y.IsActive && x.Id == y.ClientId)
+                        .Any(),
+                    DmxEnabled = ctx.ClientAvailableDmxDevices
                         .AsNoTracking()
                         .Where(y => y.IsActive && x.Id == y.ClientId)
                         .Any()
@@ -596,13 +652,13 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
                 }
             }
 
-            int deviceIndex = 0;
+            uint deviceIndex = 0;
 
             foreach (string incoming in dmxDevices)
             {
                 ClientAvailableDmxDevice? match = existingDevices.FirstOrDefault(x => x.Name.Equals(incoming, StringComparison.OrdinalIgnoreCase));
 
-                bool shouldBePrimary = !existingDevices.Any(x => x.IsPrimaryDevice) && deviceIndex == 0;
+                bool shouldBePrimary = !existingDevices.Any(x => x.IsPrimaryDevice && x.DeviceIndex != deviceIndex) && deviceIndex == 0;
 
                 if (match == null)
                 {
@@ -709,6 +765,35 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory, IHub
         catch (Exception ex)
         {
             return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<ClientDmxSettingsDTO?>> GetClientDmxSettings(Guid clientId)
+    {
+        try
+        {
+            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            ClientDmxSettingsDTO? settings = await context.ClientAvailableDmxDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(s => s.ClientId == clientId)
+                .Where(x=> x.IsPrimaryDevice == true || context.ClientAvailableDmxDevices
+                    .Any(y=> y.ClientId == clientId && y.IsPrimaryDevice == true) == false)
+                .Select(s => new ClientDmxSettingsDTO
+                {
+                    DmxUsbDeviceIndex = s.DeviceIndex,
+                    IsActive = s.IsActive
+                })
+                .Where(x=> x.IsActive == true)
+                .FirstOrDefaultAsync();
+
+            return Result<ClientDmxSettingsDTO?>.Ok(settings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving DMX settings for client {ClientId}", clientId);
+            return Result<ClientDmxSettingsDTO?>.Fail("An error occurred while retrieving DMX settings.");
         }
     }
 }

@@ -92,6 +92,16 @@ public static class DatabaseSeeder
                 CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
                 CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
                 IsActive = true
+            },
+            new ApplicationRole
+            {
+                Id = ApplicationDbContext.SeedCanManageDmxSystemsRoleId,
+                Name = "CanManageDmxSystems",
+                NormalizedName = "CANMANAGEDMXSYSTEMS",
+                ConcurrencyStamp = "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS",
+                CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
+                CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+                IsActive = true
             }
         );
 

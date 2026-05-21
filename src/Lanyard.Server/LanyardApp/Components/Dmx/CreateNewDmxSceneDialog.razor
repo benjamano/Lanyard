@@ -1,0 +1,69 @@
+@using System.ComponentModel.DataAnnotations
+@implements IDialogContentComponent
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.WindowApps())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            Create new DMX scene
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <EditForm EditContext="@_editContext">
+        <DataAnnotationsValidator />
+
+        <FluentTextField Label="Scene name" Value="@Content.SceneName" ValueChanged="@(value => Content.SceneName = value)" />
+
+        <div style="color: var(--error);">
+            <FluentValidationSummary />
+        </div>
+    </EditForm>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Accent"
+                  Disabled="@(!_editContext.Validate())"
+                  OnClick="@SaveAsync">
+        Save
+    </FluentButton>
+    <FluentButton Appearance="Appearance.Neutral"
+                  OnClick="@CancelAsync">
+        Cancel
+    </FluentButton>
+</FluentDialogFooter>
+
+@code
+{
+    private EditContext _editContext = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    public required CreateNewDmxSceneDialogModel Content { get; set; } = default!;
+
+    public class CreateNewDmxSceneDialogModel
+    {
+        [Required(ErrorMessage = "Scene name is required.")]
+        public string SceneName { get; set; } = default!;
+    }
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(Content);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editContext.Validate())
+        {
+            await Dialog.CloseAsync(Content.SceneName);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

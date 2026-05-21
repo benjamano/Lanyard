@@ -57,9 +57,8 @@ services.AddSingleton<ILaserGameStatePublisher, LaserGameStatePublisher>();
 services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();
 services.AddSingleton<DmxController, DmxController>();
 services.AddSingleton<OpenDmxDevice, OpenDmxDevice>();
-
 services.AddSingleton<ISignalRClient, SignalRClient>();
-
+services.AddSingleton<DmxSignalRController, DmxSignalRController>();
 services.AddSingleton<ISongCacheService, SongCacheService>();
 services.AddSingleton<IMusicPlayer, MusicPlayer>();
 services.AddSingleton<MusicControlHandler>();
@@ -70,7 +69,8 @@ ServiceProvider provider = services.BuildServiceProvider();
 List<Action<HubConnection>> registrations =
 [
     provider.GetRequiredService<MusicControlHandler>().Register,
-    provider.GetRequiredService<ProjectionProgramController>().Register
+    provider.GetRequiredService<ProjectionProgramController>().Register,
+    provider.GetRequiredService<DmxSignalRController>().Register
 ];
 
 string? baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "lanyardClient");

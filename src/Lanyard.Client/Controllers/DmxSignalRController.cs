@@ -5,6 +5,7 @@ using NAudio.Wave;
 using Lanyard.Shared.DTO;
 using FTD2XX_NET;
 using System.Text;
+using Lanyard.Infrastructure.Models.Dmx;
 
 namespace Lanyard.Client.Controllers;
 
@@ -18,14 +19,21 @@ public class DmxSignalRController(ILogger<DmxSignalRController> logger, DmxContr
     {
         _connection = connection;
 
-        connection.On<ClientDmxSettingsDTO>("RecieveDmxSettings", settings =>
+        connection.On<ClientDmxSettingsDTO>("ReceiveDmxSettings", settings =>
         {
             _logger.LogInformation("Received dmx settings: USB device index {DmxUsbDeviceIndex}, IsActive {IsActive}", settings.DmxUsbDeviceIndex, settings.IsActive);
 
-            if (settings.IsActive && settings.DmxUsbDeviceIndex > 0)
+            if (settings.IsActive && settings.DmxUsbDeviceIndex >= 0)
             {
                 _dmxController.Open(settings.DmxUsbDeviceIndex);
             }
+        });
+
+        connection.On<DmxChannel>("ReceiveDmxChannelValue", channel =>
+        {
+            _logger.LogInformation("Received DMX channel value: Channel {Channel}, Value {Value}", channel.Address, channel.Value);
+            
+            _dmxController.SetChannel(channel.Address, (byte)channel.Value);
         });
     }
 }

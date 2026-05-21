@@ -19,7 +19,7 @@
                 <div>
                     <FluentNumberField @bind-Value="client!.MusicCacheLimitMb" Label="Music Cache Limit (MB)" Step="10" Min="0" Max="10240" />
                 </div>
-                <FluentButton Type="ButtonType.Button" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
+                <FluentButton Type="ButtonType.Button" Appearance="Appearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
                     Get Cached Songs
                 </FluentButton>
                 <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
@@ -38,6 +38,7 @@
     public Guid? clientId { get; set; }
 
     private Client? client = null;
+    private bool isClientConnected = false;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -53,7 +54,6 @@
     private async Task RefreshCapabilities()
     {
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId!.Value);
-
         if (result.IsSuccess)
         {
             client = result.Data!;
@@ -61,6 +61,16 @@
         else
         {
             _toastService.ShowError($"Failed to load client capabilities, {result.Error}");
+        }
+
+        Result<bool> connectionResult = await _clientService.IsClientConnectedAsync(clientId!.Value);
+        if (connectionResult.IsSuccess)
+        {
+            isClientConnected = connectionResult.Data!;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to determine if client is connected, {connectionResult.Error}");
         }
     }
 

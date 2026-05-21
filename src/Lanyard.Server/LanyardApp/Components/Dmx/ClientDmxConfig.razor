@@ -2,9 +2,11 @@
 @inject ILogger<ClientDmxConfig> _logger
 @inject IToastService _toastService
 
+@using Lanyard.Infrastructure.Models.Dmx;
+
 @if (ClientId != null)
 {
-    <FluentCard>
+    <FluentCard Height="auto">
         <FluentLabel Typo="Typography.H4">DMX Configuration</FluentLabel>
 
         <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">
@@ -23,7 +25,7 @@
                 </FluentStack>
             </LoadingContent>
             <EmptyContent>
-                No DMX devices found.
+                No DMX devices found!
             </EmptyContent>
         </FluentDataGrid>
     </FluentCard>

@@ -3,19 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Client", "src/Lanyard.Client/Lanyard.Client.csproj", "{9B897D2E-C2EA-A8E0-EE79-399534FFA886}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Client", "src\Lanyard.Client\Lanyard.Client.csproj", "{9B897D2E-C2EA-A8E0-EE79-399534FFA886}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanyardClient.Watchdog", "src/Lanyard.Client.Watchdog/LanyardClient.Watchdog.csproj", "{DFF2F438-587F-407A-409B-16DF04887458}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lanyard.Client.Watchdog", "Lanyard.Client.Watchdog", "{40DA1E92-DE31-ED37-2718-1B5B173967B4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Shared", "src/Lanyard.Shared/Lanyard.Shared.csproj", "{4B05BA0D-197A-6895-FD82-DE6E03EE24F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanyardClient.Watchdog", "src\Lanyard.Client.Watchdog\LanyardClient.Watchdog.csproj", "{DFF2F438-587F-407A-409B-16DF04887458}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Shared", "src\Lanyard.Shared\Lanyard.Shared.csproj", "{4B05BA0D-197A-6895-FD82-DE6E03EE24F5}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Tests", "src\Lanyard.Tests\Lanyard.Tests.csproj", "{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lanyard.Reach", "Lanyard.Reach", "{F5084326-307E-4835-5EA0-4FD8E1067E7E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Tests", "src/Lanyard.Tests/Lanyard.Tests.csproj", "{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach", "src\Lanyard.Reach\Lanyard.Reach\Lanyard.Reach.csproj", "{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}"
 EndProject
@@ -23,21 +17,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Shared", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Web", "src\Lanyard.Reach\Lanyard.Reach.Web\Lanyard.Reach.Web.csproj", "{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lanyard.Server", "Lanyard.Server", "{7A1CF841-FFE9-1553-6E8C-48AACF99DAD2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.API", "src/Lanyard.Server/LanyardAPI/Lanyard.API.csproj", "{3FECAE9D-5B48-7038-1A3A-5B4D421E0EF1}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LanyardAPI", "LanyardAPI", "{CE394B10-1738-AE80-CFC9-9D1A44617834}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.App", "src/Lanyard.Server/LanyardApp/Lanyard.App.csproj", "{9BA112D8-14F7-93CE-2382-7DA3546EF82E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.API", "src\Lanyard.Server\LanyardAPI\Lanyard.API.csproj", "{3FECAE9D-5B48-7038-1A3A-5B4D421E0EF1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Application", "src/Lanyard.Server/LanyardServices/Lanyard.Services.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LanyardApp", "LanyardApp", "{06E5138B-775C-1019-2CA8-738C3A0070C1}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.App", "src\Lanyard.Server\LanyardApp\Lanyard.App.csproj", "{9BA112D8-14F7-93CE-2382-7DA3546EF82E}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "LanyardServices", "LanyardServices", "{FC41CF55-D702-3925-5855-6937F356EC42}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Application", "src\Lanyard.Server\LanyardServices\Lanyard.Services.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src/Lanyard.Infrastructure/Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -184,25 +170,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{9B897D2E-C2EA-A8E0-EE79-399534FFA886} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{40DA1E92-DE31-ED37-2718-1B5B173967B4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{DFF2F438-587F-407A-409B-16DF04887458} = {40DA1E92-DE31-ED37-2718-1B5B173967B4}
-		{4B05BA0D-197A-6895-FD82-DE6E03EE24F5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{0EFF70F4-A84E-7071-5FE9-52F2B90C7660} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{F5084326-307E-4835-5EA0-4FD8E1067E7E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92} = {F5084326-307E-4835-5EA0-4FD8E1067E7E}
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC} = {F5084326-307E-4835-5EA0-4FD8E1067E7E}
-		{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F} = {F5084326-307E-4835-5EA0-4FD8E1067E7E}
-		{7A1CF841-FFE9-1553-6E8C-48AACF99DAD2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
-		{CE394B10-1738-AE80-CFC9-9D1A44617834} = {7A1CF841-FFE9-1553-6E8C-48AACF99DAD2}
-		{3FECAE9D-5B48-7038-1A3A-5B4D421E0EF1} = {CE394B10-1738-AE80-CFC9-9D1A44617834}
-		{06E5138B-775C-1019-2CA8-738C3A0070C1} = {7A1CF841-FFE9-1553-6E8C-48AACF99DAD2}
-		{9BA112D8-14F7-93CE-2382-7DA3546EF82E} = {06E5138B-775C-1019-2CA8-738C3A0070C1}
-		{FC41CF55-D702-3925-5855-6937F356EC42} = {7A1CF841-FFE9-1553-6E8C-48AACF99DAD2}
-		{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E} = {FC41CF55-D702-3925-5855-6937F356EC42}
-		{AE030D02-F260-4310-BDE9-CBD5CEDE0228} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {85BB633E-F82D-4FA8-BA47-44765A2C07CF}

@@ -1,5 +1,6 @@
 ﻿using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ namespace Lanyard.Application.Services;
 public interface IClientService
 {
     Task<Result<Client?>> GetClientFromIdAsync(Guid clientId);
+    Task<Result<string?>> GetClientCurrentConnectionIdAsync(Guid clientId);
     Task<Result<Client?>> CreateClientAsync(Client newClient);
     Task<Result<Client?>> UpdateClientAsync(Client updatedClient);
     Task<Result<IEnumerable<Client>>> GetConnectedClientsAsync();
@@ -28,4 +30,6 @@ public interface IClientService
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);
     Task<Result<bool>> RemoveClientPrimaryDevice(Guid clientId, Guid deviceId);
+    Task<Result<bool>> IsClientConnectedAsync(Guid clientId);
+    Task<Result<ClientDmxSettingsDTO?>> GetClientDmxSettings(Guid clientId);
 }

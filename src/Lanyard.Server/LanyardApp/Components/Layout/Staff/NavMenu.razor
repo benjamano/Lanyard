@@ -79,26 +79,26 @@
                                         <span>Projection</span>
                                     </a>
                                     <AuthorizeView Roles="Admin" Context="_context">
-                                    <Authorized>
+                                        <Authorized>
                                             <a class="nav-dropdown-item d-flex align-items-center" href="/manage/clients">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.Tv())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Clients</span>
                                             </a>
-                                    </Authorized>
-                                </AuthorizeView>
-                                    <AuthorizeView Roles="Admin" Context="_context">
-                                        <Authorized>
                                             <a class="nav-dropdown-item d-flex align-items-center" href="/manage/projectiontemplates">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.ProjectionScreenText())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Projection Templates</span>
                                             </a>
-                                        </Authorized>
-                                    </AuthorizeView>
-                                    <AuthorizeView Roles="Admin" Context="_context">
-                                        <Authorized>
                                             <a class="nav-dropdown-item d-flex align-items-center" href="/automation">
                                                 <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" Color="Color.FillInverse" class="me-2" />
                                                 <span>Automation</span>
+                                            </a>
+                                        </Authorized>
+                                    </AuthorizeView>
+                                    <AuthorizeView Roles="Admin, CanManageDmxSystems" Context="_context">
+                                        <Authorized>
+                                            <a class="nav-dropdown-item d-flex align-items-center" href="/manage/dmxdesk">
+                                                <FluentIcon Value="@(new Icons.Regular.Size20.Lightbulb())" Color="Color.FillInverse" class="me-2" />
+                                                <span>DMX Desk</span>
                                             </a>
                                         </Authorized>
                                     </AuthorizeView>

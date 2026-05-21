@@ -123,11 +123,17 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
     private async Task SendAvailableDmxDevicesToServer()
     {
-        _logger.LogInformation("Sending available DMX devices to server...");
+        try{
+            _logger.LogInformation("Sending available DMX devices to server...");
 
-        List<string> devices = _dmxController.GetAvailableDevices();
+            List<string> devices = _dmxController.GetAvailableDevices();
 
-        await _connection!.InvokeAsync("UpdateAvailableDmxDevices", devices);
+            await _connection!.InvokeAsync("UpdateAvailableDmxDevices", devices);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending available DMX devices to server: {Message}", ex.Message);
+        }
     }
 
     private async Task SendMusicPlayerStatusToServer()
@@ -143,19 +149,26 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
     private async Task SendAvailableScreensToServer()
     {
-        _logger.LogInformation("Sending available screens to server...");
+        try
+        {
+            _logger.LogInformation("Sending available screens to server...");
 
-        IEnumerable<ClientAvailableScreenDTO> screens = Screen.AllScreens
-            .Select(x=> new ClientAvailableScreenDTO()
-            {
-                ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
-                Name = x.DeviceName,
-                Width = x.Bounds.Width,
-                Height = x.Bounds.Height,
-                Index = Array.IndexOf(Screen.AllScreens, x)
-            });
+            IEnumerable<ClientAvailableScreenDTO> screens = Screen.AllScreens
+                .Select(x=> new ClientAvailableScreenDTO()
+                {
+                    ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
+                    Name = x.DeviceName,
+                    Width = x.Bounds.Width,
+                    Height = x.Bounds.Height,
+                    Index = Array.IndexOf(Screen.AllScreens, x)
+                });
 
-        await _connection!.InvokeAsync("UpdateAvailableScreens", screens);
+            await _connection!.InvokeAsync("UpdateAvailableScreens", screens);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending available screens to server: {Message}", ex.Message);
+        }
     }
 
     private async Task SendAvailableAudioDevicesToServer()
@@ -178,6 +191,11 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
+    }
+
+    public async Task SendDmxChannelValueAsync(int channel, byte value)
+    {
+        await _connection!.InvokeAsync("UpdateDmxChannelValue", channel, value);
     }
 }
 

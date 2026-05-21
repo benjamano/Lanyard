@@ -1,0 +1,143 @@
+@using Lanyard.Infrastructure.DTO.Dmx
+@using Lanyard.Infrastructure.Models.Dmx
+@implements IDisposable
+
+@inject IDmxSceneService _dmxSceneService
+@inject IDialogService _dialogService
+@inject IToastService _toastService
+
+<FluentCard Class="mt-2">
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+        <FluentLabel Typo="Typography.Header">Scenes</FluentLabel>
+        <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
+                      Appearance="Appearance.Neutral"
+                      Disabled="@(ClientId == null)"
+                      OnClick="CreateNewScene"
+                      Class="ms-2"> Add Scene
+        </FluentButton>
+    </FluentStack>
+    <FluentDivider Class="my-3" />
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" Style="min-height: 50px;">
+        @if (scenes == null || !scenes.Any())
+        {
+            <FluentLabel Typo="Typography.Body">No scenes found for this client.</FluentLabel>
+        }
+        else
+        {
+            @foreach (DmxScene scene in scenes)
+            {
+                bool isRunning = runningSceneIds.Contains(scene.Id);
+
+                Icon sceneIcon = isRunning ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play();
+
+                <FluentCard Height="auto" MinimalStyle="true" Class="mx-1 w-auto">
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentLabel>Scene</FluentLabel>
+                        <FluentButton Appearance="Appearance.Neutral" IconStart="sceneIcon" Class="mt-2" Style="width: 100%;" />
+                    </FluentStack>
+                </FluentCard>
+            }
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    private List<DmxScene> scenes = [];
+
+    private List<Guid> runningSceneIds = [];
+
+    protected override void OnInitialized()
+    {
+        _dmxSceneService.OnSceneStarted += HandleSceneStarted;
+        _dmxSceneService.OnSceneStopped += HandleSceneStopped;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ClientId != null)
+        {
+            await LoadScenes(ClientId.Value);
+        }
+        else
+        {
+            scenes = [];
+            runningSceneIds = [];
+        }
+    }
+
+    private async Task LoadScenes(Guid clientId)
+    {
+        Result<IEnumerable<DmxSceneDTO>>? scenesResult = await _dmxSceneService.GetScenesForClientAsync(clientId);    
+
+        if (scenesResult.IsSuccess && scenesResult.Data != null)
+        {
+            scenes = scenesResult.Data.Cast<DmxScene>().ToList();
+
+            runningSceneIds = scenesResult.Data.Where(s => s.IsRunning).Select(s => s.Id).ToList();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load scenes: {scenesResult.Error}");
+        }
+    }
+
+    private void HandleSceneStarted(Guid clientId, Guid sceneId)
+    {
+        if (clientId != ClientId) {
+            return;
+        }
+
+        runningSceneIds.Add(sceneId);
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSceneStopped(Guid clientId, Guid sceneId)
+    {
+        if (clientId != ClientId) {
+            return;
+        }
+
+        runningSceneIds.Remove(sceneId);
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async Task CreateNewScene()
+    {
+        IDialogReference? dialog = await _dialogService.ShowDialogAsync<CreateNewDmxSceneDialog>(new DialogParameters()
+        {
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,   
+        });
+
+        DialogResult? result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is string sceneName)
+        {
+            Result<DmxScene>? createResult = await _dmxSceneService.CreateSceneAsync(ClientId!.Value, sceneName);
+
+            if (createResult.IsSuccess && createResult.Data != null)
+            {
+                _toastService.ShowSuccess($"Scene '{sceneName}' created successfully.");
+
+                scenes.Add(createResult.Data);
+
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to create scene: {createResult.Error}");
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _dmxSceneService.OnSceneStarted -= HandleSceneStarted;
+        _dmxSceneService.OnSceneStopped -= HandleSceneStopped;
+    }
+}

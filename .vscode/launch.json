@@ -6,7 +6,7 @@
             "type": "dotnet",
             "request": "launch",
             "projectPath": "${workspaceFolder}\\src\\Lanyard.Client\\Lanyard.Client.csproj",
-            "preLaunchTask": "Build LanyardClient"
+            // "preLaunchTask": "Build LanyardClient"
         },  
         {
             "name": "Debug LanyardClient.Watchdog",
@@ -21,7 +21,7 @@
             "request": "launch",
             "projectPath": "${workspaceFolder}\\src\\Lanyard.Server\\LanyardApp\\Lanyard.App.csproj",
             "launchConfigurationId": "TargetFramework=;https",
-            "preLaunchTask": "Build LanyardApp"
+            // "preLaunchTask": "Build LanyardApp",
         },
         {
             "name": "Debug LanyardReach (Web)",

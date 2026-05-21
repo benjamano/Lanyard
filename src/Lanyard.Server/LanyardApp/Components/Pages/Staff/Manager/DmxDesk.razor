@@ -1,0 +1,43 @@
+@page "/manage/dmxdesk"
+
+@using Lanyard.App.Components.Clients
+@using Lanyard.App.Components.Dmx
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Admin, CanManageDmxSystems")]
+
+<PageTitle>DMX Desk</PageTitle>
+
+<VirtualDmxDesk ClientId="@selectedClientId" IsEditModeEnabled="@isEditModeEnabled" IsBlindModeEnabled="@isBlindModeEnabled" />
+
+<DmxSceneSelector ClientId="@selectedClientId" />
+
+<FluentCard Class="mt-2" AreaRestricted="false">
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
+                <FluentLabel>Edit Mode</FluentLabel>
+                <FluentLabel>Blind Mode</FluentLabel>
+            </FluentStack>
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
+                <FluentSwitch Value="@isEditModeEnabled" ValueChanged="@(value => isEditModeEnabled = value)"/>
+                <FluentSwitch Value="@isBlindModeEnabled" ValueChanged="@(value => isBlindModeEnabled = value)"/>
+            </FluentStack>
+        </FluentStack>
+
+        <ClientSelector OnClientSelected="SetSelectedClient" />
+    </FluentStack>
+</FluentCard>
+
+@code{
+    private Guid? selectedClientId = null;
+
+    private bool isEditModeEnabled = false;
+
+    private bool isBlindModeEnabled = false;
+
+    private void SetSelectedClient(Guid? clientId)
+    {
+        selectedClientId = clientId;
+    }
+}

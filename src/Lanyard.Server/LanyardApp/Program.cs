@@ -34,12 +34,15 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
+builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<MusicPlayerService>();
+builder.Services.AddSingleton<DmxService>();
+builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
+builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 
-// Automation Engine
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
@@ -48,7 +51,6 @@ builder.Services.AddHostedService<AutomationEngineHostedService>();
 
 builder.Services.AddSignalR();
 
-// Shared drag state service
 builder.Services.AddScoped<DragStateService>();
 
 string? informationalVersion = Assembly

@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.Models;
+using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedStaffRoleId = "dev-role-staff";
         public const string SeedCanControlMusicRoleId = "dev-role-can-control-music";
         public const string SeedCanClockInRoleId = "dev-role-can-clock-in";
+        public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedAdminPasswordHash = "AQAAAAIAAYagAAAAEJ1AhlJOAablYfFpSBJmkOkqLkqidbamfdrRwkTGjXCnkD30AqM6PNAcAh96mQgYXg==";
         public static readonly DateTime SeedRoleCreateDateUtc = new DateTime(2026, 03, 11, 0, 0, 0, DateTimeKind.Utc);
 
@@ -46,8 +48,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppSetting> AppSettings { get; set; }
         public DbSet<CompanyTenant> CompanyTenants { get; set; }
         public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
-        public DbSet<ClientDmxConfiguration> ClientDmxConfigurations { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
+        public DbSet<DmxScene> DmxScenes { get; set; }
         
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
