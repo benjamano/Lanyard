@@ -60,11 +60,14 @@ public class TimeService : ITimeService
 
         try
         {
-            CultureInfo culture = new CultureInfo(cultureCode);
+            CultureInfo culture = new(cultureCode);
+            
             user.PreferredCulture = cultureCode;
 
             using ApplicationDbContext context = _factory.CreateDbContext();
+
             context.Users.Update(user);
+            
             await context.SaveChangesAsync();
 
             return Result<bool>.Ok(true);

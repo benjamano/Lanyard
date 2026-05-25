@@ -62,7 +62,6 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
         if (clientConnectionIdGetResult.IsSuccess && clientConnectionIdGetResult.Data != null && !string.IsNullOrEmpty(clientConnectionIdGetResult.Data))
         {
             string connectionId = clientConnectionIdGetResult.Data;
-            
             await _hubContext.Clients.Client(connectionId).SendAsync("ReceiveDmxChannelValue", new DmxChannel { Address = channelAddress, Value = value });
         }
     }
@@ -91,7 +90,7 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
             }
         }
     }
-
+    
     public async Task<Result<IEnumerable<DmxChannel>>> GetDmxChannelsAsync(Guid clientId)
     {
         try
