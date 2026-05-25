@@ -393,3 +393,7 @@ fluent-icon {
 nav {
     z-index: 99 !important;
 }
+
+body[data-theme="dark"] img.adapt-to-theme{
+    filter: invert(1);
+}
