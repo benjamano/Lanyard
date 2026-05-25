@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
 using Lanyard.App.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -99,6 +100,16 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/HandleLogin";
 });
 
+if (builder.Environment.IsDevelopment() == false)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
+
 builder.Services.AddMemoryCache();
 
 // Add custom authentication state provider
@@ -143,6 +154,11 @@ else
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
+if (builder.Environment.IsDevelopment() == false)
+{
+    app.UseForwardedHeaders();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
