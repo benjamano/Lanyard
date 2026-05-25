@@ -17,6 +17,11 @@ using Lanyard.App.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment() == false)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
+}
+
 // Add Razor Components with Interactive Server
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
     .AddInteractiveServerComponents();
@@ -153,13 +158,16 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-using (IServiceScope scope = app.Services.CreateScope())
+if (builder.Environment.IsDevelopment() == false)
 {
-    IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-    
-    await using ApplicationDbContext db = await factory.CreateDbContextAsync();
+    using (IServiceScope scope = app.Services.CreateScope())
+    {
+        IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
 
-    await db.Database.MigrateAsync();
+        await using ApplicationDbContext db = await factory.CreateDbContextAsync();
+
+        await db.Database.MigrateAsync();
+    }
 }
 
 await DatabaseSeeder.SeedAsync(app.Services);
