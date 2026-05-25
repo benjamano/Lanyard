@@ -153,6 +153,15 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+    
+    await using ApplicationDbContext db = await factory.CreateDbContextAsync();
+
+    await db.Database.MigrateAsync();
+}
+
 await DatabaseSeeder.SeedAsync(app.Services);
 
 app.Run();
