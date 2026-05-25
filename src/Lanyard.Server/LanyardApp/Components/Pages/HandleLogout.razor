@@ -1,5 +1,7 @@
 @page "/HandleLogout"
 
+<PageTitle>Redirecting you...</PageTitle>
+
 @inject NavigationManager NavigationManager
 
 @code {
@@ -11,12 +13,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (ReturnUrl?.Contains("/", StringComparison.OrdinalIgnoreCase) == true)
+        NavigationManager.NavigateTo("/logout");
+
+        @* if (ReturnUrl?.Contains("/", StringComparison.OrdinalIgnoreCase) == true)
         {
             NavigationManager.NavigateTo("//logout");
         }
         else{
-            NavigationManager.NavigateTo("/logout");
-        }
+            
+        } *@
     }
 }

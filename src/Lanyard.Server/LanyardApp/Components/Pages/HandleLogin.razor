@@ -1,5 +1,7 @@
 @page "/HandleLogin"
 
+<PageTitle>Redirecting you...</PageTitle>
+
 @inject NavigationManager NavigationManager
 
 @code {
@@ -11,12 +13,14 @@
 
     protected override async Task OnInitializedAsync()
     {
+        NavigationManager.NavigateTo("/login");
+@* 
         if (ReturnUrl?.Contains("/", StringComparison.OrdinalIgnoreCase) == true)
         {
-            NavigationManager.NavigateTo("//login");
+            
         }
         else{
             NavigationManager.NavigateTo("/login");
-        }
+        } *@
     }
 }
