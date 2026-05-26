@@ -6,8 +6,12 @@
 
 @code {
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(30);
+
     private static readonly TimeSpan MaxSessionDuration = TimeSpan.FromHours(2);
+    @* private static readonly TimeSpan MaxSessionDuration = TimeSpan.FromSeconds(10); *@
+
     private static readonly TimeSpan WarningLeadTime = TimeSpan.FromMinutes(1);
+    @* private static readonly TimeSpan WarningLeadTime = TimeSpan.FromHours(2); *@
     private static readonly string[] ExemptPrefixes = ["/kiosk", "/HandleLogin", "/HandleLogout", "/login"];
 
     private DateTime _sessionStart;
@@ -32,13 +36,14 @@
         _lastActivity = DateTime.UtcNow;
 
         _selfRef = DotNetObjectReference.Create(this);
+        
         await JS.InvokeVoidAsync("autoLogout.init", _selfRef);
 
         _ticker = new System.Threading.Timer(
             _ => InvokeAsync(CheckTimers),
             null,
-            TimeSpan.FromSeconds(15),
-            TimeSpan.FromSeconds(15));
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(2));
     }
 
     [JSInvokable]
@@ -51,8 +56,8 @@
 
         DateTime now = DateTime.UtcNow;
         TimeSpan inactivityRemaining = InactivityTimeout - (now - _lastActivity);
-        TimeSpan sessionRemaining    = MaxSessionDuration - (now - _sessionStart);
-        TimeSpan timeUntilLogout     = TimeSpan.FromTicks(Math.Min(inactivityRemaining.Ticks, sessionRemaining.Ticks));
+        TimeSpan sessionRemaining = MaxSessionDuration - (now - _sessionStart);
+        TimeSpan timeUntilLogout = TimeSpan.FromTicks(Math.Min(inactivityRemaining.Ticks, sessionRemaining.Ticks));
 
         if (timeUntilLogout <= TimeSpan.Zero)
             await PerformLogoutAsync();
@@ -99,7 +104,11 @@
     {
         _disposed = true;
         _ticker?.Dispose();
-        await JS.InvokeVoidAsync("autoLogout.dispose");
+        try
+        {
+            await JS.InvokeVoidAsync("autoLogout.dispose");
+        }
+        catch { }
         Nav.NavigateTo("/HandleLogout", forceLoad: true);
     }
 

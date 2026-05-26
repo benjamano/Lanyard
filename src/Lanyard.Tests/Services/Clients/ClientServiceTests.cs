@@ -36,7 +36,11 @@ namespace Lanyard.Tests.Services.Clients
 
             var hubContextMock = new Mock<IHubContext<SignalRControlHub>>();
 
-            return new ClientService(factoryMock.Object, hubContextMock.Object);
+            var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
+
+            var cacheMock = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+
+            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock.Object);
         }
 
         private static ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
