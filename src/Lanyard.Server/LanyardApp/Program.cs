@@ -137,7 +137,6 @@ builder.Services.AddFluentUIComponents(options =>
     options.HideTooltipOnCursorLeave = true;
 });
 
-// Add SignalR for real-time music control
 builder.Services.AddSignalR();
 
 builder.Services.AddRateLimiter(options =>

@@ -1,0 +1,51 @@
+@implements IDialogContentComponent<int>
+@implements IAsyncDisposable
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <FluentIcon Value="@(new Icons.Regular.Size24.Timer())" Color="@Color.Warning" />
+
+    <FluentLabel Typo="Typography.Body">
+        Your session will expire due to inactivity or reaching the maximum session length.
+        You will be logged out in <strong>@_secondsLeft second@(_secondsLeft == 1 ? "" : "s")</strong>.
+    </FluentLabel>
+</FluentStack>
+
+@code {
+    [Parameter]
+    public int Content { get; set; }
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    private int _secondsLeft;
+    private System.Threading.Timer? _ticker;
+
+    protected override void OnInitialized()
+    {
+        _secondsLeft = Math.Max(Content, 1);
+
+        _ticker = new System.Threading.Timer(
+            _ => InvokeAsync(TickAsync),
+            null,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(1));
+    }
+
+    private async Task TickAsync()
+    {
+        _secondsLeft--;
+        StateHasChanged();
+
+        if (_secondsLeft <= 0)
+        {
+            _ticker?.Dispose();
+            await Dialog.CancelAsync();
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _ticker?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

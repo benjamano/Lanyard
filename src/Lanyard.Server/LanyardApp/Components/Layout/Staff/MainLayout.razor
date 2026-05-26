@@ -1,8 +1,5 @@
 ﻿@inherits LayoutComponentBase
 
-@using Lanyard.App.Components.Layout
-@using Microsoft.AspNetCore.Mvc.RazorPages
-
 @inject NavigationManager NavigationManager
 
 <loading-theme storage-name="theme"></loading-theme>
@@ -13,6 +10,7 @@
     </div>
 
     <main style="flex: 1;" class="@(addPadding ? "px-2 py-2" : "")">
+        <AutoLogoutManager />
         <article class="content position-relative h-auto m-0">
             @Body
         </article>
