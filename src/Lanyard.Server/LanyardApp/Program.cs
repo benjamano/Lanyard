@@ -15,6 +15,8 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
 using Lanyard.App.Services;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -138,6 +140,29 @@ builder.Services.AddFluentUIComponents(options =>
 // Add SignalR for real-time music control
 builder.Services.AddSignalR();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("ip-fixed", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 50,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = 429;
+
+        await context.HttpContext.Response.WriteAsync("Too many requests.", token);
+    };
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment() == false)
@@ -145,6 +170,7 @@ if (app.Environment.IsDevelopment() == false)
     app.UseForwardedHeaders();
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseMigrationsEndPoint();
+    app.UseRateLimiter();
 }
 
 // app.UseHsts();
@@ -161,7 +187,7 @@ app.UseAntiforgery();
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers();
+app.MapControllers().RequireRateLimiting("ip-fixed");
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
