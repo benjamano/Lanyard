@@ -4,20 +4,10 @@
 @inject IJSRuntime JS
 @inject IDialogService DialogService
 
-<AuthorizeView>
-    <Authorized>
-    </Authorized>
-</AuthorizeView>
-
 @code {
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan MaxSessionDuration = TimeSpan.FromHours(2);
-    private static readonly TimeSpan WarningLeadTime   = TimeSpan.FromMinutes(1);
-
-    /// <summary>
-    /// URL path prefixes on which auto-logout is suppressed.
-    /// The kiosk page and the login/logout handlers are exempt.
-    /// </summary>
+    private static readonly TimeSpan WarningLeadTime = TimeSpan.FromMinutes(1);
     private static readonly string[] ExemptPrefixes = ["/kiosk", "/HandleLogin", "/HandleLogout", "/login"];
 
     private DateTime _sessionStart;
@@ -26,13 +16,18 @@
     private DotNetObjectReference<AutoLogoutManager>? _selfRef;
     private bool _warningShown;
     private bool _disposed;
+    private bool _initialized;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        AuthenticationState? auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!firstRender || _initialized)
+            return;
+
+        AuthenticationState auth = await AuthStateProvider.GetAuthenticationStateAsync();
         if (auth.User.Identity?.IsAuthenticated != true)
             return;
 
+        _initialized  = true;
         _sessionStart = DateTime.UtcNow;
         _lastActivity = DateTime.UtcNow;
 
@@ -42,8 +37,8 @@
         _ticker = new System.Threading.Timer(
             _ => InvokeAsync(CheckTimers),
             null,
-            TimeSpan.FromMinutes(1),
-            TimeSpan.FromMinutes(1));
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(15));
     }
 
     [JSInvokable]
@@ -51,56 +46,42 @@
 
     private async Task CheckTimers()
     {
-        if (_disposed || _warningShown)
-            return;
-
-        if (IsExemptPage())
+        if (_disposed || _warningShown || IsExemptPage())
             return;
 
         DateTime now = DateTime.UtcNow;
-        TimeSpan sinceActivity = now - _lastActivity;
-        TimeSpan sinceSession  = now - _sessionStart;
-
-        TimeSpan inactivityRemaining = InactivityTimeout - sinceActivity;
-        TimeSpan sessionRemaining = MaxSessionDuration - sinceSession;
-
-        TimeSpan timeUntilLogout = TimeSpan.FromTicks(Math.Min(
-            inactivityRemaining.Ticks,
-            sessionRemaining.Ticks));
+        TimeSpan inactivityRemaining = InactivityTimeout - (now - _lastActivity);
+        TimeSpan sessionRemaining    = MaxSessionDuration - (now - _sessionStart);
+        TimeSpan timeUntilLogout     = TimeSpan.FromTicks(Math.Min(inactivityRemaining.Ticks, sessionRemaining.Ticks));
 
         if (timeUntilLogout <= TimeSpan.Zero)
-        {
             await PerformLogoutAsync();
-        }
         else if (timeUntilLogout <= WarningLeadTime)
-        {
             await ShowWarningAsync((int)timeUntilLogout.TotalSeconds);
-        }
     }
 
     private bool IsExemptPage()
     {
-        string? path = new Uri(Nav.Uri).AbsolutePath;
-        return ExemptPrefixes.Any(prefix =>
-            path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        string path = new Uri(Nav.Uri).AbsolutePath;
+        return ExemptPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task ShowWarningAsync(int secondsRemaining)
     {
         _warningShown = true;
 
-        IDialogReference? dialogRef = await DialogService.ShowDialogAsync<AutoLogoutWarningDialog, int>(
+        IDialogReference dialogRef = await DialogService.ShowDialogAsync<AutoLogoutWarningDialog, int>(
             secondsRemaining,
             new DialogParameters
             {
                 Title = "Session expiring",
-                PrimaryAction  = "Stay logged in",
+                PrimaryAction = "Stay logged in",
                 SecondaryAction = "Logout now",
                 PreventDismissOnOverlayClick = true,
                 Width = "380px",
             });
 
-        DialogResult? result = await dialogRef.Result;
+        DialogResult result = await dialogRef.Result;
 
         if (result.Cancelled)
         {
@@ -118,9 +99,7 @@
     {
         _disposed = true;
         _ticker?.Dispose();
-
         await JS.InvokeVoidAsync("autoLogout.dispose");
-
         Nav.NavigateTo("/HandleLogout", forceLoad: true);
     }
 
@@ -134,8 +113,6 @@
         {
             await JS.InvokeVoidAsync("autoLogout.dispose");
         }
-        catch
-        {
-        }
+        catch { }
     }
 }
