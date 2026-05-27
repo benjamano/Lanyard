@@ -1,5 +1,6 @@
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Lanyard.Infrastructure.DataAccess
 {
-    public class ApplicationDbContext
-        : IdentityDbContext<UserProfile, ApplicationRole, string>
+    public class ApplicationDbContext : IdentityDbContext<UserProfile, ApplicationRole, string>, IDataProtectionKeyContext
     {
         public const string SeedAdminUserId = "dev-admin-user";
         public const string SeedAdminRoleId = "dev-role-admin";
@@ -50,6 +50,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
+        public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
         
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
