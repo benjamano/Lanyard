@@ -11,6 +11,8 @@ using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace Lanyard.Tests.Services.Files;
 
@@ -20,6 +22,7 @@ public class FileServiceTests
 {
     private Mock<IDbContextFactory<ApplicationDbContext>> _dbFactoryMock = null!;
     private Mock<ISecurityService> _securityServiceMock = null!;
+    private Mock<IWebHostEnvironment> _environmentMock = null!;
     private FileService _fileService = null!;
     private ApplicationDbContext _dbContext = null!;
 
@@ -28,13 +31,15 @@ public class FileServiceTests
     {
         _dbFactoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
         _securityServiceMock = new Mock<ISecurityService>();
+        _environmentMock = new Mock<IWebHostEnvironment>();
+        _environmentMock.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _dbContext = new ApplicationDbContext(options);
         _dbFactoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(_dbContext);
-        _fileService = new FileService(_dbFactoryMock.Object, _securityServiceMock.Object);
+        _fileService = new FileService(_dbFactoryMock.Object, _securityServiceMock.Object, _environmentMock.Object);
     }
 
     [TestMethod]

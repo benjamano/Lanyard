@@ -1,6 +1,11 @@
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
+using Amazon.S3;
+using Amazon.S3.Model;
+using Amazon;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -16,15 +21,69 @@ namespace Lanyard.Application.Services;
 
 public class FileService : IFileService
 {
+    private const string DefaultBucketName = "lanyard-prod-files";
+
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly ISecurityService _securityService;
     private readonly string _storageRoot;
+    private readonly bool _isDevelopment;
+    private readonly string? _bucketName;
+    private readonly IAmazonS3? _s3Client;
 
-    public FileService(IDbContextFactory<ApplicationDbContext> dbFactory, ISecurityService securityService)
+    public FileService(
+        IDbContextFactory<ApplicationDbContext> dbFactory,
+        ISecurityService securityService,
+        IWebHostEnvironment environment)
     {
         _dbFactory = dbFactory;
         _storageRoot = Path.Combine(Directory.GetCurrentDirectory(), "UploadedFiles");
         _securityService = securityService;
+        _isDevelopment = environment.IsDevelopment();
+
+        if (_isDevelopment)
+        {
+            return;
+        }
+
+        string? accountId = Environment.GetEnvironmentVariable("R2_ACCOUNT_ID");
+        string? accessKey = Environment.GetEnvironmentVariable("R2_ACCESS_KEY");
+        string? secretKey = Environment.GetEnvironmentVariable("R2_SECRET_KEY");
+
+        if (string.IsNullOrWhiteSpace(accountId))
+            throw new InvalidOperationException("R2_ACCOUNT_ID is required in production.");
+
+        if (string.IsNullOrWhiteSpace(accessKey))
+            throw new InvalidOperationException("R2_ACCESS_KEY is required in production.");
+
+        if (string.IsNullOrWhiteSpace(secretKey))
+            throw new InvalidOperationException("R2_SECRET_KEY is required in production.");
+
+        _bucketName = Environment.GetEnvironmentVariable("R2_BUCKET_NAME");
+        
+        if (string.IsNullOrWhiteSpace(_bucketName))
+            _bucketName = DefaultBucketName;
+
+        AmazonS3Config config = new()
+        {
+            ServiceURL = $"https://{accountId}.r2.cloudflarestorage.com",
+            ForcePathStyle = true,
+            AuthenticationRegion = "auto",
+            UseHttp = false
+        };
+
+        _s3Client = new AmazonS3Client(accessKey, secretKey, config);
+    }
+
+    private void EnsureS3Configured()
+    {
+        if (_s3Client == null || string.IsNullOrWhiteSpace(_bucketName))
+            throw new InvalidOperationException("R2 storage is not configured.");
+    }
+
+    private static string BuildR2Key(Guid? folderId, Guid fileId, string fileName)
+    {
+        string prefix = folderId.HasValue ? folderId.Value.ToString() : "root";
+        return $"{prefix}/{fileId}{fileName}";
     }
 
     public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken)
@@ -48,26 +107,48 @@ public class FileService : IFileService
                 return Result<FileMetadata>.Fail("UploadedBy is required.");
 
             string fileName = Path.GetFileName(file.FileName);
-            string fileId = Guid.NewGuid().ToString();
+            Guid fileId = Guid.NewGuid();
+            string filePath;
 
-            string folderPath = folderId.HasValue
-                ? Path.Combine(_storageRoot, folderId.Value.ToString())
-                : _storageRoot;
-
-            Directory.CreateDirectory(folderPath);
-
-            string filePath = Path.Combine(folderPath, fileId + "_" + fileName);
-
-            using (FileStream stream = new FileStream(filePath, FileMode.Create))
+            if (_isDevelopment)
             {
-                await file.CopyToAsync(stream, cancellationToken);
+                string folderPath = folderId.HasValue
+                    ? Path.Combine(_storageRoot, folderId.Value.ToString())
+                    : _storageRoot;
+
+                Directory.CreateDirectory(folderPath);
+
+                filePath = Path.Combine(folderPath, fileId + "_" + fileName);
+
+                using (FileStream stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream, cancellationToken);
+                }
+            }
+            else
+            {
+                EnsureS3Configured();
+
+                string key = BuildR2Key(folderId, fileId, fileName);
+
+                PutObjectRequest putRequest = new()
+                {
+                    BucketName = _bucketName,
+                    Key = key,
+                    InputStream = file.OpenReadStream(),
+                    ContentType = file.ContentType,
+                    AutoCloseStream = true
+                };
+
+                await _s3Client!.PutObjectAsync(putRequest, cancellationToken);
+                filePath = key;
             }
 
             ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata metadata = new()
             {
-                Id = Guid.Parse(fileId),
+                Id = fileId,
                 FileName = fileName,
                 FilePath = filePath,
                 FileSize = file.Length,
@@ -127,8 +208,23 @@ public class FileService : IFileService
             if (file == null)
                 return Result<bool>.Fail("File not found.");
 
-            if (File.Exists(file.FilePath))
-                File.Delete(file.FilePath);
+            if (_isDevelopment)
+            {
+                if (File.Exists(file.FilePath))
+                    File.Delete(file.FilePath);
+            }
+            else
+            {
+                EnsureS3Configured();
+
+                DeleteObjectRequest deleteRequest = new()
+                {
+                    BucketName = _bucketName,
+                    Key = file.FilePath
+                };
+
+                await _s3Client!.DeleteObjectAsync(deleteRequest, cancellationToken);
+            }
 
             db.FileMetadata.Remove(file);
 
@@ -202,7 +298,10 @@ public class FileService : IFileService
 
             await db.SaveChangesAsync(cancellationToken);
 
-            Directory.CreateDirectory(Path.Combine(_storageRoot, folder.Id.ToString()));
+            if (_isDevelopment)
+            {
+                Directory.CreateDirectory(Path.Combine(_storageRoot, folder.Id.ToString()));
+            }
 
             return Result<Folder>.Ok(folder);
         }
@@ -249,14 +348,54 @@ public class FileService : IFileService
             if (folder == null)
                 return Result<bool>.Fail("Folder not found.");
 
-            db.Folders.Remove(folder);
+            if (_isDevelopment)
+            {
+                db.Folders.Remove(folder);
 
-            await db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
 
-            string folderPath = Path.Combine(_storageRoot, folderId.ToString());
+                string folderPath = Path.Combine(_storageRoot, folderId.ToString());
 
-            if (Directory.Exists(folderPath))
-                Directory.Delete(folderPath, true);
+                if (Directory.Exists(folderPath))
+                    Directory.Delete(folderPath, true);
+            }
+            else
+            {
+                EnsureS3Configured();
+
+                string prefix = folderId + "/";
+                string? continuationToken = null;
+
+                do
+                {
+                    ListObjectsV2Request listRequest = new()
+                    {
+                        BucketName = _bucketName,
+                        Prefix = prefix,
+                        ContinuationToken = continuationToken
+                    };
+
+                    ListObjectsV2Response listResponse = await _s3Client!.ListObjectsV2Async(listRequest, cancellationToken);
+
+                    if (listResponse.S3Objects.Count > 0)
+                    {
+                        DeleteObjectsRequest deleteRequest = new()
+                        {
+                            BucketName = _bucketName,
+                            Objects = listResponse.S3Objects.Select(o => new KeyVersion { Key = o.Key }).ToList()
+                        };
+
+                        await _s3Client.DeleteObjectsAsync(deleteRequest, cancellationToken);
+                    }
+
+                    continuationToken = listResponse.IsTruncated == true ? listResponse.NextContinuationToken : null;
+                }
+                while (!string.IsNullOrWhiteSpace(continuationToken));
+
+                db.Folders.Remove(folder);
+
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             return Result<bool>.Ok(true);
         }
@@ -292,12 +431,30 @@ public class FileService : IFileService
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
-            if (file == null || !File.Exists(file.FilePath))
+            if (_isDevelopment)
+            {
+                if (file == null || !File.Exists(file.FilePath))
+                    return Result<Stream>.Fail("File not found.");
+
+                FileStream stream = new(file.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                return Result<Stream>.Ok(stream);
+            }
+
+            if (file == null)
                 return Result<Stream>.Fail("File not found.");
 
-            FileStream stream = new(file.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            EnsureS3Configured();
 
-            return Result<Stream>.Ok(stream);
+            GetObjectRequest request = new()
+            {
+                BucketName = _bucketName,
+                Key = file.FilePath
+            };
+
+            GetObjectResponse response = await _s3Client!.GetObjectAsync(request, cancellationToken);
+
+            return Result<Stream>.Ok(response.ResponseStream);
         }
         catch (Exception ex)
         {
