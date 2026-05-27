@@ -21,8 +21,6 @@ namespace Lanyard.Application.Services;
 
 public class FileService : IFileService
 {
-    private const string DefaultBucketName = "lanyard-prod-files";
-
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly ISecurityService _securityService;
     private readonly string _storageRoot;
@@ -45,29 +43,27 @@ public class FileService : IFileService
             return;
         }
 
-        string? accountId = Environment.GetEnvironmentVariable("R2_ACCOUNT_ID");
-        string? accessKey = Environment.GetEnvironmentVariable("R2_ACCESS_KEY");
-        string? secretKey = Environment.GetEnvironmentVariable("R2_SECRET_KEY");
+        string? endpointUrl = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_ENDPOINT_URL");
+        string? accessKey = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_ACCESS_KEY_ID");
+        string? secretKey = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_SECRET_ACCESS_KEY");
+        string? region = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_REGION");
 
-        if (string.IsNullOrWhiteSpace(accountId))
-            throw new InvalidOperationException("R2_ACCOUNT_ID is required in production.");
+        if (string.IsNullOrWhiteSpace(endpointUrl))
+            throw new InvalidOperationException("RAILWAY_BUCKET_ENDPOINT_URL is required in production.");
 
         if (string.IsNullOrWhiteSpace(accessKey))
-            throw new InvalidOperationException("R2_ACCESS_KEY is required in production.");
+            throw new InvalidOperationException("RAILWAY_BUCKET_ACCESS_KEY_ID is required in production.");
 
         if (string.IsNullOrWhiteSpace(secretKey))
-            throw new InvalidOperationException("R2_SECRET_KEY is required in production.");
+            throw new InvalidOperationException("RAILWAY_BUCKET_SECRET_ACCESS_KEY is required in production.");
 
-        _bucketName = Environment.GetEnvironmentVariable("R2_BUCKET_NAME");
-        
-        if (string.IsNullOrWhiteSpace(_bucketName))
-            _bucketName = DefaultBucketName;
+        _bucketName = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_NAME");
 
         AmazonS3Config config = new()
         {
-            ServiceURL = $"https://{accountId}.r2.cloudflarestorage.com",
+            ServiceURL = endpointUrl,
             ForcePathStyle = true,
-            AuthenticationRegion = "auto",
+            AuthenticationRegion = region ?? "auto",
             UseHttp = false
         };
 
