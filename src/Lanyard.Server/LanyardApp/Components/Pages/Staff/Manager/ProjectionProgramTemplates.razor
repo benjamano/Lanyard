@@ -9,21 +9,21 @@
 
 <PageTitle>Projection Templates</PageTitle>
 
-<FluentCard AreaRestricted="false">
+<FluentCard>
     <FluentMultiSplitter Class="h-100">
         <FluentMultiSplitterPane Size="25%">
             <FluentStack Orientation="Orientation.Vertical" Class="h-100">
-                <FluentToolbar Class="w-100">
-                    <FluentLabel slot="start" Typo="Typography.PaneHeader">Projection Templates</FluentLabel>
-                    <FluentButton slot="end" Appearance="Appearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewTemplate">
+                <FluentStack Orientation="Orientation.Horizontal" Class="w-100">
+                    <FluentText Typo="Typography.PaneHeader">Projection Templates</FluentText>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewTemplate">
                         New Template
                     </FluentButton>
-                </FluentToolbar>
+                </FluentStack>
 
                 @if (isLoading)
                 {
                     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
-                        <FluentProgressRing />
+                        <FluentSpinner />
                     </FluentStack>
                 }
                 else
@@ -56,80 +56,81 @@
             @if (selectedTemplate is null)
             {
                 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
-                    <FluentLabel>Select a template or create a new one.</FluentLabel>
+                    <FluentText>Select a template or create a new one.</FluentText>
                 </FluentStack>
             }
             else
             {
                 <FluentStack Orientation="Orientation.Vertical" Class="pe-3 h-100 overflow-y-auto" Style="gap: 12px;">
-                    <FluentToolbar Class="w-75">
-                        <FluentLabel slot="start" Typo="Typography.PaneHeader">
+                    <FluentStack Orientation="Orientation.Horizontal" Class="w-75">
+                        <FluentText Typo="Typography.PaneHeader">
                             @(selectedTemplate.Id == Guid.Empty ? "New Template" : "Edit Template")
-                        </FluentLabel>
-                        <FluentButton slot="end"
-                                      Appearance="Appearance.Accent"
+                        </FluentText>
+                        <FluentButton
+                                      Appearance="ButtonAppearance.Primary"
                                       IconStart="@(new Icons.Regular.Size20.Save())"
                                       Loading="@isSaving"
                                       OnClick="SaveTemplateAsync"
                                       Class="me-2">
                             Save Template
                         </FluentButton>
-                        <FluentButton slot="end"
-                                      Appearance="Appearance.Outline"
+                        <FluentButton
+                                      Appearance="ButtonAppearance.Outline"
                                       IconStart="@(new Icons.Regular.Size20.BinRecycle())"
                                       Disabled="@(isSaving || selectedTemplate.Id == Guid.Empty)"
                                       OnClick="DeleteSelectedTemplateAsync">
                             Delete Template
                         </FluentButton>
-                    </FluentToolbar>
+                    </FluentStack>
 
                     <FluentGrid Class="w-100">
-                        <FluentGridItem xs="6">
-                            <FluentTextField Class="w-100"
+                        <FluentGridItem Xs="6">
+                            <FluentTextInput Class="w-100"
                                              @bind-Value="selectedTemplate.Name"
                                              Label="Template Name"
-                                             Appearance="FluentInputAppearance.Outline"
-                                             Required />
+                                             Appearance="TextInputAppearance.Outline"
+                                             Required="true" />
                         </FluentGridItem>
-                        <FluentGridItem xs="6">
+                        <FluentGridItem Xs="6">
                             <FluentTextArea Class="w-100"
                                             @bind-Value="selectedTemplate.Description"
                                             Label="Description"
-                                            Appearance="FluentInputAppearance.Outline" />
+                                            Appearance="TextAreaAppearance.Outline" />
                         </FluentGridItem>
                     </FluentGrid>
 
                     <FluentDivider class="my-3"></FluentDivider>
 
-                    <FluentLabel Typo="Typography.PaneHeader">Parameters</FluentLabel>
+                    <FluentText Typo="Typography.PaneHeader">Parameters</FluentText>
 
                     @if (selectedTemplate.Parameters.Count == 0)
                     {
-                        <FluentLabel>No parameters configured.</FluentLabel>
+                        <FluentText>No parameters configured.</FluentText>
                     }
                     else
                     {
                         @foreach (ProjectionProgramStepTemplateParameter parameter in selectedTemplate.Parameters)
                         {
-                            <FluentCard AreaRestricted="false" MinimalStyle="true" Class="mb-2">
-                                <FluentGrid>
-                                    <FluentGridItem xs="3">
-                                        <FluentTextField Class="w-100"
+                            <FluentCard Appearance="CardAppearance.Subtle" Class="mb-2">
+                                <FluentGrid Spacing="3">
+                                    <FluentGridItem Xs="3">
+                                        <FluentTextInput Class="w-100"
                                                          @bind-Value="parameter.Name"
                                                          Label="Name"
-                                                         Appearance="FluentInputAppearance.Outline"
-                                                         Required />
+                                                         Appearance="TextInputAppearance.Outline"
+                                                         Required="true" />
                                     </FluentGridItem>
-                                    <FluentGridItem xs="3">
+                                    <FluentGridItem Xs="3">
                                         <FluentTextArea Class="w-100"
                                                         @bind-Value="parameter.Description"
                                                         Label="Description"
-                                                        Appearance="FluentInputAppearance.Outline" />
+                                                        Appearance="TextAreaAppearance.Outline" />
                                     </FluentGridItem>
-                                    <FluentGridItem xs="3">
+                                    <FluentGridItem Xs="3">
                                         <FluentSelect Class="w-100"
                                                       @bind-Value="parameter.DataType"
                                                       TOption="string"
+                                                      TValue="string"
                                                       Label="Data Type">
                                             @foreach (string dataType in dataTypeOptions)
                                             {
@@ -138,11 +139,11 @@
                                         </FluentSelect>
 
                                         <FluentCheckbox Class="pt-2" @bind-Value="parameter.IsRequired">
-                                            Required
+                                            Required="true"
                                         </FluentCheckbox>
                                     </FluentGridItem>
-                                    <FluentGridItem xs="1" Class="d-flex align-items-start justify-content-end mt-4">
-                                        <FluentButton Appearance="Appearance.Outline"
+                                    <FluentGridItem Xs="1" Class="d-flex align-items-start justify-content-end mt-4">
+                                        <FluentButton Appearance="ButtonAppearance.Outline"
                                                       IconStart="@(new Icons.Regular.Size20.BinRecycle())"
                                                       OnClick="() => RemoveParameter(parameter.Id)">
                                             Remove
@@ -153,24 +154,25 @@
                         }
                     }
 
-                    <FluentCard MinimalStyle="true" Height="auto" AreaRestricted="false" Class="mt-2">
-                        <FluentGrid>
-                            <FluentGridItem xs="3">
-                                <FluentTextField Class="w-100"
+                    <FluentCard Appearance="CardAppearance.Subtle" Height="auto" Class="mt-2">
+                        <FluentGrid Spacing="3">
+                            <FluentGridItem Xs="3">
+                                <FluentTextInput Class="w-100"
                                                  @bind-Value="newParameter.Name"
                                                  Label="Name"
-                                                 Appearance="FluentInputAppearance.Outline" />
+                                                 Appearance="TextInputAppearance.Outline" />
                             </FluentGridItem>
-                            <FluentGridItem xs="3">
+                            <FluentGridItem Xs="3">
                                 <FluentTextArea Class="w-100"
                                                 @bind-Value="newParameter.Description"
                                                 Label="Description"
-                                                Appearance="FluentInputAppearance.Outline" />
+                                                Appearance="TextAreaAppearance.Outline" />
                             </FluentGridItem>
-                            <FluentGridItem xs="3">
+                            <FluentGridItem Xs="3">
                                 <FluentSelect Class="w-100"
                                               @bind-Value="newParameter.DataType"
                                               TOption="string"
+                                              TValue="string"
                                               Label="Data Type">
                                     @foreach (string dataType in dataTypeOptions)
                                     {
@@ -179,11 +181,11 @@
                                 </FluentSelect>
 
                                 <FluentCheckbox Class="pt-2" @bind-Value="newParameter.IsRequired">
-                                    Required
+                                    Required="true"
                                 </FluentCheckbox>
                             </FluentGridItem>
-                            <FluentGridItem xs="1" Class="d-flex align-items-start justify-content-end mt-4">
-                                <FluentButton Appearance="Appearance.Accent"
+                            <FluentGridItem Xs="1" Class="d-flex align-items-start justify-content-end mt-4">
+                                <FluentButton Appearance="ButtonAppearance.Primary"
                                               IconStart="@(new Icons.Regular.Size20.FormNew())"
                                               OnClick="AddParameter">
                                     Add

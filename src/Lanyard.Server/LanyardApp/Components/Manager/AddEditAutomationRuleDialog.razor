@@ -6,7 +6,6 @@
 @using Lanyard.Shared.Enum
 @using System.Text.Json
 @using Microsoft.EntityFrameworkCore
-@implements IDialogContentComponent<AutomationRule?>
 
 @inject IToastService _toastService
 @inject IAutomationRuleService _ruleService
@@ -15,131 +14,131 @@
 @inject IPlaylistService _playlistService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
 
-<FluentDialogHeader ShowDismiss="true">
-    <FluentStack VerticalAlignment="VerticalAlignment.Center">
-        <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
-        <FluentLabel Typo="Typography.PaneHeader">
-            @_steps[_currentStepIndex]
-        </FluentLabel>
-    </FluentStack>
-</FluentDialogHeader>
-
 <FluentDialogBody>
-    @if (_currentStepIndex == 0)
-    {
-        <FluentStack Orientation="Orientation.Vertical" Gap="12">
-            <FluentTextField Label="Rule Name"
-                             @bind-Value="_ruleName"
-                             Required="true"
-                             Appearance="FluentInputAppearance.Outline"
-                             Style="width: 100%;" />
-
-            <FluentSelect Label="Trigger Client"
-                          TOption="ClientConnectedDTO"
-                          Items="@_clients"
-                          OptionText="@(c => c.Name)"
-                          OptionValue="@(c => c.Id.ToString())"
-                          SelectedOptionChanged="@((ClientConnectedDTO? c) => _triggerClientIdString = c?.Id.ToString() ?? string.Empty)"
-                          Style="width: 100%;" />
-
-            <FluentSelect Label="Trigger Event"
-                          TOption="string"
-                          @bind-Value="_triggerEventString"
-                          Style="width: 100%;">
-                <FluentOption Value="@GameStatus.InGame.ToString()">In Game</FluentOption>
-                <FluentOption Value="@GameStatus.NotStarted.ToString()">Not Started</FluentOption>
-            </FluentSelect>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
+            <FluentText Typo="Typography.PaneHeader">@_steps[_currentStepIndex]</FluentText>
         </FluentStack>
-    }
-    else if (_currentStepIndex == 1)
-    {
-        <FluentStack Orientation="Orientation.Vertical" Gap="8">
-            @for (int i = 0; i < _actionRows.Count; i++)
-            {
-                int index = i;
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="8">
-                    <div>
-                        <FluentSelect TOption="ClientConnectedDTO"
-                            Label="Target Client"
-                            Items="@_clients"
-                            OptionText="@(c => c.Name)"
-                            OptionValue="@(c => c.Id.ToString())"
-                            SelectedOption="@(_clients.FirstOrDefault(c => c.Id.ToString() == _actionRows[index].TargetClientIdString))"
-                            SelectedOptionChanged="@((ClientConnectedDTO? c) => _actionRows[index].TargetClientIdString = c?.Id.ToString() ?? string.Empty)"
-                            Style="flex: 1;" />
-                    </div>
-                    <div>
-                        <FluentSelect TOption="string"
-                            Label="Operation"
-                            Value="@_actionRows[index].Operation"
-                            ValueChanged="@((string op) => _actionRows[index].Operation = op)"
-                            Style="width: 120px;">
-                            <FluentOption Value="Play">Play</FluentOption>
-                            <FluentOption Value="Pause">Pause</FluentOption>
-                        </FluentSelect>
-                    </div>
-                    <div>
-                        <FluentSelect TOption="Playlist"
-                            Label="Playlist"
-                            Placeholder="Select Playlist"
-                            Items="@_playlists"
-                            OptionText="@(p => p.Name)"
-                            OptionValue="@(p => p.Id.ToString())"
-                            SelectedOption="@(_playlists.FirstOrDefault(p => p.Id == _actionRows[index].PlaylistId))"
-                            SelectedOptionChanged="@((Playlist? p) => _actionRows[index].PlaylistId = p?.Id)"
-                            Style="flex: 1;" />
-                    </div>
-                    <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                        Disabled="@(_actionRows.Count <= 1)"
-                        OnClick="@(() => RemoveActionRow(index))" />
-                </FluentStack>
-            }
+    </TitleTemplate>
+    <ChildContent>
+        @if (_currentStepIndex == 0)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentTextInput Label="Rule Name"
+                                 @bind-Value="_ruleName"
+                                 Required="true"
+                                 Appearance="TextInputAppearance.Outline"
+                                 Style="width: 100%;" />
 
-            <div>
-                <FluentButton Appearance="Appearance.Outline"
-                              IconStart="new Icons.Regular.Size20.Add()"
-                              OnClick="AddActionRow">
-                    Add Action
-                </FluentButton>
-            </div>
+                <FluentSelect Label="Trigger Client"
+                              TOption="ClientConnectedDTO"
+                              TValue="string"
+                              Items="@_clients"
+                              OptionText="@(c => c?.Name ?? string.Empty)"
+                              OptionValue="@(c => c?.Id.ToString())"
+                              @bind-Value="_triggerClientIdString"
+                              Style="width: 100%;" />
 
-            @if (_actionRows.Count == 0)
-            {
-                <FluentLabel Color="Color.Error">At least one action is required.</FluentLabel>
-            }
-        </FluentStack>
-    }
+                <FluentSelect Label="Trigger Event"
+                              TOption="string"
+                              TValue="string"
+                              @bind-Value="_triggerEventString"
+                              Style="width: 100%;">
+                    <FluentOption Value="@GameStatus.InGame.ToString()">In Game</FluentOption>
+                    <FluentOption Value="@GameStatus.NotStarted.ToString()">Not Started</FluentOption>
+                </FluentSelect>
+            </FluentStack>
+        }
+        else if (_currentStepIndex == 1)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                @for (int i = 0; i < _actionRows.Count; i++)
+                {
+                    int index = i;
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                        <div>
+                            <FluentSelect TOption="ClientConnectedDTO"
+                                TValue="string"
+                                Label="Target Client"
+                                Items="@_clients"
+                                OptionText="@(c => c?.Name ?? string.Empty)"
+                                OptionValue="@(c => c?.Id.ToString())"
+                                Value="@_actionRows[index].TargetClientIdString"
+                                ValueChanged="@((string? id) => _actionRows[index].TargetClientIdString = id ?? string.Empty)"
+                                Style="flex: 1;" />
+                        </div>
+                        <div>
+                            <FluentSelect TOption="string"
+                                TValue="string"
+                                Label="Operation"
+                                Value="@_actionRows[index].Operation"
+                                ValueChanged="@((string? op) => _actionRows[index].Operation = op ?? "Play")"
+                                Style="width: 120px;">
+                                <FluentOption Value="@("Play")">Play</FluentOption>
+                                <FluentOption Value="@("Pause")">Pause</FluentOption>
+                            </FluentSelect>
+                        </div>
+                        <div>
+                            <FluentSelect TOption="Playlist"
+                                TValue="string"
+                                Label="Playlist"
+                                Placeholder="Select Playlist"
+                                Items="@_playlists"
+                                OptionText="@(p => p?.Name ?? string.Empty)"
+                                OptionValue="@(p => p?.Id.ToString())"
+                                Value="@(_actionRows[index].PlaylistId?.ToString() ?? string.Empty)"
+                                ValueChanged="@((string? id) => _actionRows[index].PlaylistId = Guid.TryParse(id, out Guid playlistId) ? playlistId : (Guid?)null)"
+                                Style="flex: 1;" />
+                        </div>
+                        <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                            Disabled="@(_actionRows.Count <= 1)"
+                            OnClick="@(() => RemoveActionRow(index))" />
+                    </FluentStack>
+                }
+
+                <div>
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="new Icons.Regular.Size20.Add()"
+                                  OnClick="AddActionRow">
+                        Add Action
+                    </FluentButton>
+                </div>
+
+                @if (_actionRows.Count == 0)
+                {
+                    <FluentText Color="Color.Error">At least one action is required.</FluentText>
+                }
+            </FluentStack>
+        }
+    </ChildContent>
+    <ActionTemplate>
+        @if (_currentStepIndex == 0)
+        {
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString))"
+                          OnClick="GoToStep2Async">
+                Next
+            </FluentButton>
+            <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+        }
+        else if (_currentStepIndex == 1)
+        {
+            <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          Loading="@_isSaving"
+                          Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => string.IsNullOrEmpty(r.TargetClientIdString)))"
+                          OnClick="SaveRuleAsync">
+                Save Rule
+            </FluentButton>
+            <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+        }
+    </ActionTemplate>
 </FluentDialogBody>
-
-<FluentDialogFooter>
-    @if (_currentStepIndex == 0)
-    {
-        <FluentButton Appearance="Appearance.Accent"
-                      Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString))"
-                      OnClick="GoToStep2Async">
-            Next
-        </FluentButton>
-        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
-    }
-    else if (_currentStepIndex == 1)
-    {
-        <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
-        <FluentButton Appearance="Appearance.Accent"
-                      Loading="@_isSaving"
-                      Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => string.IsNullOrEmpty(r.TargetClientIdString)))"
-                      OnClick="SaveRuleAsync">
-            Save Rule
-        </FluentButton>
-        <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
-    }
-</FluentDialogFooter>
 
 @code {
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
-
-    [Parameter]
-    public DialogParameters Parameters { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     [Parameter]
     public AutomationRule? Content { get; set; }
@@ -198,7 +197,7 @@
         }
 
         Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
-        
+
         if (playlistResult.IsSuccess)
         {
             _playlists = playlistResult.Data ?? [];
@@ -269,7 +268,6 @@
 
         if (Content != null)
         {
-            // Soft-delete removed actions
             List<Guid> removedActionIds = Content.Actions
                 .Where(a => a.IsActive)
                 .Select(a => a.Id)
@@ -321,7 +319,7 @@
         if (saveResult.IsSuccess)
         {
             _toastService.ShowSuccess("Rule saved.");
-            await Dialog!.CloseAsync(true);
+            await Dialog.CloseAsync(true);
         }
         else
         {
@@ -332,6 +330,6 @@
 
     private async Task CancelDialogAsync()
     {
-        await Dialog!.CancelAsync();
+        await Dialog.CancelAsync();
     }
 }

@@ -1,12 +1,12 @@
 
-<FluentCard MinimalStyle="true">
+<FluentCard Appearance="CardAppearance.Subtle">
     <FluentStack Class="h-100" Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" VerticalGap="4">
-        <FluentLabel Typo="Typography.H2" Style="font-variant-numeric: tabular-nums;">
+        <FluentText Typo="Typography.H2" Style="font-variant-numeric: tabular-nums;">
             @_currentTime
-        </FluentLabel>
-        <FluentLabel Typo="Typography.Body" Color="Color.Info">
+        </FluentText>
+        <FluentText Typo="Typography.Body" Color="Color.Info">
             @DateTime.Now.ToString("dddd, MMMM dd, yyyy")
-        </FluentLabel>
+        </FluentText>
     </FluentStack>
 </FluentCard>
 

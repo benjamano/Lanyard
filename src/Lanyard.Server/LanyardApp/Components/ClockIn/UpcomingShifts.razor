@@ -1,13 +1,13 @@
 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start">
-    <FluentLabel Typo="Typography.H5">
+    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">
         Upcoming Shifts
-    </FluentLabel>
+    </FluentText>
     <FluentStack Class="mt-2">
         @if (_upcomingShifts == null)
         {
             <FluentStack Orientation="Orientation.Horizontal">
-                Loading your upcoming shifts...
-                <FluentProgressRing Width="20px" />
+                <FluentText Typo="Typography.Body" Color="Color.Info">Loading your upcoming shifts...</FluentText>
+                <FluentSpinner Size="SpinnerSize.Tiny" />
             </FluentStack>
         }
         else
@@ -29,19 +29,19 @@
                             <FluentIcon Icon="Icons.Filled.Size20.WeatherMoon" Class="pt-1"/>
                         }
                         <FluentStack Orientation="Orientation.Vertical" Class="mb-1 mt-1" VerticalGap="0">
-                            <FluentLabel Typo="Typography.Body" Color="Color.Accent">
+                            <FluentText Typo="Typography.Body" Color="Color.Primary">
                                 @shift.Title
-                            </FluentLabel>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                            </FluentText>
+                            <FluentText Typo="Typography.Body" Color="Color.Info">
                                 @shift.Start.ToString("ddd, MMM d, h:mm tt") - @shift.End.ToString("h:mm tt")
-                            </FluentLabel>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                            </FluentText>
+                            <FluentText Typo="Typography.Body" Color="Color.Info">
                                 Location: @shift.Location
-                            </FluentLabel>
+                            </FluentText>
                         </FluentStack>
                     </FluentStack>
 
-                    <FluentDivider Style="width: 100%;" Role="DividerRole.Separator"></FluentDivider>
+                    <FluentDivider Style="width: 100%;"></FluentDivider>
                 }
             </FluentStack>
         }

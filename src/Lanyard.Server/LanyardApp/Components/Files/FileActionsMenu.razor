@@ -4,15 +4,20 @@
 @inject IFileService _fileService
 @inject IToastService _toastService
 
-<FluentButton IconEnd="@(new Icons.Regular.Size20.Rename())" OnClick="ShowRenameDialog"></FluentButton>
+<FluentButton IconEnd="@(new Icons.Regular.Size20.Rename())" OnClick="ShowRenameDialogAsync"></FluentButton>
 <FluentButton IconEnd="@(new Icons.Regular.Size20.BinRecycle())" OnClick="DeleteFile"></FluentButton>
 
-<FluentDialog Hidden="!showRenameDialog" OnDialogResult="CloseRenameDialog">
-    <FluentTextField @bind-Value="renameValue" Label="New Name" />
-    <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Accent" OnClick="ConfirmRename">Rename</FluentButton>
-        <FluentButton Appearance="Appearance.Outline" OnClick="CloseRenameDialog">Cancel</FluentButton>
-    </FluentDialogFooter>
+<FluentDialog @ref="_renameDialog" Modal="true">
+    <FluentDialogBody>
+        <TitleTemplate>Rename File</TitleTemplate>
+        <ChildContent>
+            <FluentTextInput @bind-Value="renameValue" Label="New Name" Style="width: 100%;" />
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ConfirmRenameAsync">Rename</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CloseRenameDialogAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
 </FluentDialog>
 
 @code {
@@ -20,7 +25,7 @@
     [Parameter] public EventCallback<Guid> OnFileDeleted { get; set; }
     [Parameter] public EventCallback<FileMetadata> OnFileRenamed { get; set; }
 
-    private bool showRenameDialog = false;
+    private FluentDialog? _renameDialog;
     private string renameValue = string.Empty;
     private string renameValueExtensions = string.Empty;
 
@@ -34,32 +39,30 @@
         }
     }
 
-    private void ShowRenameDialog()
+    private async Task ShowRenameDialogAsync()
     {
         renameValueExtensions = Path.GetExtension(File.FileName);
         renameValue = Path.GetFileNameWithoutExtension(File.FileName);
-
-        showRenameDialog = true;
+        await _renameDialog!.ShowAsync();
     }
 
-    private void CloseRenameDialog()
+    private async Task CloseRenameDialogAsync()
     {
-        showRenameDialog = false;
+        await _renameDialog!.HideAsync();
     }
 
-    private async Task ConfirmRename()
+    private async Task ConfirmRenameAsync()
     {
         if (!string.IsNullOrWhiteSpace(renameValue))
         {
-            renameValue = renameValue + renameValueExtensions;
+            string fullName = renameValue + renameValueExtensions;
 
-            Result<FileMetadata> result = await _fileService.RenameFileAsync(File.Id, renameValue, CancellationToken.None);
+            Result<FileMetadata> result = await _fileService.RenameFileAsync(File.Id, fullName, CancellationToken.None);
 
             if (result?.Success == true && result.Data != null)
             {
                 await OnFileRenamed.InvokeAsync(result.Data);
-
-                CloseRenameDialog();
+                await CloseRenameDialogAsync();
             }
             else
             {

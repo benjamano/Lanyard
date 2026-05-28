@@ -1,6 +1,6 @@
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DTO
-@using Mono.TextTemplating
+@using Lanyard.Infrastructure.Models
 
 @inject IToastService _toastService
 @inject IClientService _clientService
@@ -11,31 +11,18 @@
             HorizontalGap="8"
             Class="music-client-controls"
             Width="auto">
-    <FluentSelect Value="@(selectedClientId?.ToString() ?? string.Empty)"
-                ValueChanged="(newValue) => OnSelectedClientChanged(newValue)"
-                TOption="Guid"
-                Class="music-client-select"
-                Disabled="@(!(clients.Count() > 0))">
-        @if (!clients.Any())
-        {
-            <FluentOption Value="">No connected clients</FluentOption>
-        }
-        else if (clients.Count() == 1)
-        {
-            <FluentOption Value="@clients.First().Id.ToString()">@clients.First().Name</FluentOption>
-        }
-        else
-        {
-            <FluentOption Value="">Select a client</FluentOption>
+    <FluentSelect TOption="Client"
+                  TValue="string"
+                  Items="@clients"
+                  OptionText="@(client => client?.Name ?? string.Empty)"
+                  OptionValue="@(client => client?.Id.ToString())"
+                  Placeholder="@ClientPlaceholder"
+                  Value="@(selectedClientId?.ToString() ?? string.Empty)"
+                  ValueChanged="@OnSelectedClientChanged"
+                  Class="music-client-select"
+                  Disabled="@(!clients.Any())" />
 
-            @foreach (Client client in clients)
-            {
-                <FluentOption Value="@client.Id.ToString()">@client.Name</FluentOption>
-            }
-        }
-    </FluentSelect>
-
-    <FluentButton Appearance="Appearance.Outline" OnClick="RefreshClientsAsync">
+    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">
         Refresh
     </FluentButton>
 </FluentStack>
@@ -47,6 +34,7 @@
     private IEnumerable<Client> clients = [];
 
     private Guid? selectedClientId;
+    private string ClientPlaceholder => clients.Any() ? "Select a client" : "No connected clients";
 
     protected override async Task OnInitializedAsync()
     {
@@ -75,7 +63,7 @@
         }
     }
 
-    private async Task OnSelectedClientChanged(string newValue)
+    private async Task OnSelectedClientChanged(string? newValue)
     {
         selectedClientId = Guid.TryParse(newValue, out Guid clientId) ? clientId : (Guid?)null;
 

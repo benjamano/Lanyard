@@ -1,28 +1,28 @@
 @inject IToastService _toastService
 
 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center">
-    <FluentCalendar DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">
+    <FluentCalendar TValue="DateTime" DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">
         <DaysTemplate>
             @if (context.IsInactive == false && AmIOnShift(context.Date))
             {
-                <FluentLabel class="pt-1"
-                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Fill : Color.Accent)"
+                <FluentText class="pt-1"
+                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Default : Color.Primary)"
                             Typo="Typography.Body"
                             @onclick="() => ShowShiftDetails(context.Date)">
                     @context.DayNumber
-                </FluentLabel>
+                </FluentText>
             }
             else
             {
-                <FluentLabel class="pt-1"
-                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Fill : Color.Info)"
+                <FluentText class="pt-1"
+                            Color="@(context.Date.Date == DateTime.Today && context.IsSelected == false ? Color.Default : Color.Info)"
                             Typo="Typography.Body">
                     @context.DayNumber
-                </FluentLabel>
+                </FluentText>
             }
         </DaysTemplate>
     </FluentCalendar>
-    <FluentLabel Typo="Typography.Body" Color="Color.Info">Click on a Day to view Shift Details</FluentLabel>
+    <FluentText Typo="Typography.Body" Color="Color.Info">Click on a Day to view Shift Details</FluentText>
 </FluentStack>
 
 @code {

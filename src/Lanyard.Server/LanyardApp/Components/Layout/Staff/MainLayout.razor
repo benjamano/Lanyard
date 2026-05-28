@@ -1,23 +1,37 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 @inject NavigationManager NavigationManager
 
 <loading-theme storage-name="theme"></loading-theme>
 
-<div class="page staff-layout" style="display: flex; flex-direction: column; height: 100vh;">
-    <div class="top-bar">
+<FluentProviders />
+
+<FluentLayout>
+    <FluentLayoutItem Area="LayoutArea.Header">
+        <FluentStack VerticalAlignment="VerticalAlignment.Top">
+            <FluentLayoutHamburger Visible="true"/>
+            <FluentSpacer Width="10px"></FluentSpacer>
+            <FluentLink Href="/" Class="nav-brand">
+                <FluentText Color="Color.Default" Weight="TextWeight.Bold" Size="TextSize.Size500">
+                    Lan<span class="nav-brand-flip">y</span>ard
+                </FluentText>
+            </FluentLink>
+        </FluentStack>
+    </FluentLayoutItem>
+
+    <FluentLayoutItem Area="LayoutArea.Navigation" Height="auto">
         <NavMenu />
-    </div>
+    </FluentLayoutItem>
 
-    <main style="flex: 1;" class="@(addPadding ? "px-2 py-2" : "")">
+    <FluentLayoutItem Area="LayoutArea.Content" Padding="@(addPadding ? Padding.All3 : Padding.All0)">
         <AutoLogoutManager />
-        <article class="content position-relative h-auto m-0">
-            @Body
-        </article>
-    </main>
+        @Body
+    </FluentLayoutItem>
 
-    <Footer />
-</div>
+    <FluentLayoutItem Area="LayoutArea.Footer" Height="auto">
+        <Footer />
+    </FluentLayoutItem>
+</FluentLayout>
 
 @code {
     public bool addPadding = true;
@@ -32,9 +46,3 @@
         base.OnInitialized();
     }
 }
-
-<FluentDialogProvider />
-<FluentTooltipProvider />
-<FluentMessageBarProvider />
-<FluentMenuProvider />
-<FluentToastProvider />

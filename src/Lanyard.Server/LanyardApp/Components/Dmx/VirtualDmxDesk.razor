@@ -6,8 +6,8 @@
     @if (_isLoading)
     {
         <div class="p-4">
-            <FluentLabel>Loading channels...</FluentLabel>
-            <FluentProgress />
+            <FluentText>Loading channels...</FluentText>
+            <FluentProgressBar />
         </div>
     }
     else
@@ -18,33 +18,34 @@
                          VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Class="p-3"
                          Style="border-bottom: 1px solid var(--neutral-stroke-rest);">
                 <FluentButton IconStart="new Icons.Regular.Size20.ChevronDoubleLeft()"
-                              Appearance="Appearance.Neutral"
+                              Appearance="ButtonAppearance.Primary"
                               Disabled="@(_currentPage == 1)"
                               OnClick="() => GoToPage(1)" />
                 <FluentButton IconStart="new Icons.Regular.Size20.ChevronLeft()"
-                              Appearance="Appearance.Neutral"
+                              Appearance="ButtonAppearance.Primary"
                               Disabled="@(_currentPage == 1)"
                               OnClick="() => GoToPage(_currentPage - 1)" />
 
-                <FluentLabel Style="min-width: 140px; text-align: center;">
+                <FluentText Style="min-width: 140px; text-align: center;">
                     Ch @PageFirstChannel-@PageLastChannel &nbsp;/&nbsp; Page @_currentPage of @TotalPages
-                </FluentLabel>
+                </FluentText>
 
                 <FluentButton IconStart="new Icons.Regular.Size20.ChevronRight()"
-                              Appearance="Appearance.Neutral"
+                              Appearance="ButtonAppearance.Primary"
                               Disabled="@(_currentPage == TotalPages)"
                               OnClick="() => GoToPage(_currentPage + 1)" />
                 <FluentButton IconStart="new Icons.Regular.Size20.ChevronDoubleRight()"
-                              Appearance="Appearance.Neutral"
+                              Appearance="ButtonAppearance.Primary"
                               Disabled="@(_currentPage == TotalPages)"
                               OnClick="() => GoToPage(TotalPages)" />
 
                 <FluentSelect TOption="int"
+                              TValue="int"
                               Items="@_pageSizeOptions"
                               OptionText="@(n => $"{n} / page")"
-                              OptionValue="@(n => n.ToString())"
-                              SelectedOption="@_pageSize"
-                              SelectedOptionChanged="@OnPageSizeChanged"
+                              OptionValue="@(n => n)"
+                              Value="@_pageSize"
+                              ValueChanged="@OnPageSizeChanged"
                               Style="width: 120px;" />
             </FluentStack>
 
@@ -53,11 +54,11 @@
                          Class="p-4">
                 @foreach (KeyValuePair<int, int> channel in PagedChannels)
                 {
-                    <FluentCard @key="channel.Key" Height="auto" MinimalStyle="true">
+                    <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle">
                         <FluentStack Orientation="Orientation.Vertical"
                                      HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="2">
                             <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
-                                         Class="mb-2" Appearance="Appearance.Neutral">
+                                         Class="mb-2" Appearance="BadgeAppearance.Filled">
                                 @channel.Key
                             </FluentBadge>
                             <FluentSlider @key="channel.Key"
@@ -77,11 +78,11 @@
                                 }
                             </FluentSlider>
                             <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
-                                         Class="mt-2" Appearance="Appearance.Neutral">
+                                         Class="mt-2" Appearance="BadgeAppearance.Filled">
                                 @channel.Value
                             </FluentBadge>
                             <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                          Appearance="Appearance.Neutral"
+                                          Appearance="ButtonAppearance.Primary"
                                           OnClick="() => UpdateChannelValue(0, channel.Key)"
                                           Disabled="@(ClientId == null || !IsEditModeEnabled)"
                                           Class="mt-2" />

@@ -1,4 +1,4 @@
-﻿@using System.Threading.Tasks
+@using System.Threading.Tasks
 @using Lanyard.Application.Services.ApplicationRoles
 @using Lanyard.Application.Services.Authentication
 
@@ -10,37 +10,39 @@
 
 <FluentCard Height="auto" Style="min-height:30vh;">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H4">User Roles</FluentLabel>
+        <FluentText Typo="Typography.H4">User Roles</FluentText>
 
         <FluentGrid Class="w-100">
-            <FluentGridItem xs="12" sm="2">
+            <FluentGridItem Xs="12" Sm="2">
                 <FluentSelect TOption="UserProfile"
+                              TValue="string"
                               Items="@userProfiles.OrderBy(x=> x.GetName())"
-                              OptionText="@(i => i.GetName())"
-                              OptionValue="@(i => i.Id)"
+                              OptionText="@(i => i?.GetName() ?? string.Empty)"
+                              OptionValue="@(i => i?.Id)"
                               Placeholder="Select a User..."
                               Label="Select User"
-                              SelectedOptionChanged="SetUserAndLoadRoles"
+                              Value="@selectedUser"
+                              ValueChanged="SetUserAndLoadRolesById"
                               Width="100%">
                 </FluentSelect>
             </FluentGridItem>
 
-            <FluentGridItem xs="12" sm="6">
+            <FluentGridItem Xs="12" Sm="6">
                 @if (selectedUser != null)
                 {
                     <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
-                                <FluentLabel Typo="Typography.H6">Assigned Roles</FluentLabel>
+                            <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
+                                <FluentText Typo="Typography.H6">Assigned Roles</FluentText>
 
-                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRolesAlreadyAssignedValue" @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
-                            </FluentToolbar>
+                                <FluentTextInput Placeholder="Filter..." AutoComplete="off" @bind-Value="@searchForRolesAlreadyAssignedValue" @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
+                            </FluentStack>
                             
                             @if (!filteredUserRoles.Any())
                             {
-                                <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
                                     No Roles Exist for this User with those filters!
-                                </FluentLabel>
+                                </FluentText>
                             }
                             else
                             {
@@ -63,16 +65,16 @@
                 }
             </FluentGridItem>
 
-            <FluentGridItem xs="12" sm="4">
+            <FluentGridItem Xs="12" Sm="4">
                 @if (selectedUser != null)
                 {
                     <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentToolbar class="w-100" id="toolbar-fluent-components">
-                                <FluentLabel Typo="Typography.H6">Assign New Roles</FluentLabel>
+                            <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
+                                <FluentText Typo="Typography.H6">Assign New Roles</FluentText>
 
-                                <FluentSearch Placeholder="Filter..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchForRoleToAddValue" @bind-Value:after=HandleSearchForRoleToAddInput />
-                            </FluentToolbar>
+                                <FluentTextInput Placeholder="Filter..." AutoComplete="off" @bind-Value="@searchForRoleToAddValue" @bind-Value:after=HandleSearchForRoleToAddInput />
+                            </FluentStack>
                             
                             @if (roles is not null)
                             {
@@ -92,16 +94,16 @@
                                 }
                                 else
                                 {
-                                    <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                    <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
                                         No Roles left to Assign!
-                                    </FluentLabel>
+                                    </FluentText>
                                 }
                             }
                             else
                             {
                                 <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
-                                    <FluentProgressRing />
-                                    <FluentLabel>Loading...</FluentLabel>
+                                    <FluentSpinner />
+                                    <FluentText>Loading...</FluentText>
                                 </FluentStack>
                             }
                         </FluentStack>
@@ -142,10 +144,9 @@
         }
     }
 
-    private async Task SetUserAndLoadRoles(UserProfile user)
+    private async Task SetUserAndLoadRolesById(string? userId)
     {
-        selectedUser = user.Id;
-
+        selectedUser = userId;
         await LoadUsersRoles();
     }
 

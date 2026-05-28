@@ -12,12 +12,12 @@
 
 <DmxSceneSelector ClientId="@selectedClientId" />
 
-<FluentCard Class="mt-2" AreaRestricted="false">
+<FluentCard Class="mt-2">
     <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
         <FluentStack HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
             <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
-                <FluentLabel>Edit Mode</FluentLabel>
-                <FluentLabel>Blind Mode</FluentLabel>
+                <FluentText>Edit Mode</FluentText>
+                <FluentText>Blind Mode</FluentText>
             </FluentStack>
             <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
                 <FluentSwitch Value="@isEditModeEnabled" ValueChanged="@(value => isEditModeEnabled = value)"/>

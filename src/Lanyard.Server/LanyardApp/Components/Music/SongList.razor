@@ -1,4 +1,4 @@
-﻿@using System.Threading.Tasks
+@using System.Threading.Tasks
 @using Lanyard.App.Components.Music;
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
@@ -19,17 +19,17 @@
             <FluentDataGrid Items="@Songs.AsQueryable()" GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
                             Style="width: 100%;" ShowHover="@AllowPlaying">
                 <ChildContent>
-                    <TemplateColumn Title="#" Align="Align.End">
+                    <TemplateColumn Title="#" Align="DataGridCellAlignment.End">
                         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
                             @if (IsCurrentlyPlaying(context.Song!))
                             {
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Color="Color.Accent"
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Color="Color.Primary"
                                             Style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
                             }
 
                             <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
                                 <Authorized>
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Accent"
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Primary"
                                                 Style="cursor: pointer;"
                                                 @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
                                 </Authorized>
@@ -42,29 +42,29 @@
                     <TemplateColumn Title="Title">
                         <div style="cursor: pointer; display: flex; align-items: center;"
                                 @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentLabel Weight="@(IsCurrentlyPlaying(context.Song!) ? FontWeight.Bold : FontWeight.Normal)"
+                            <FluentText Weight="@(IsCurrentlyPlaying(context.Song!) ? TextWeight.Bold : TextWeight.Regular)"
                                             Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
                                 @context.Song?.Name
-                            </FluentLabel>
+                            </FluentText>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Album">
                         <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentLabel>@context.Song!.AlbumName</FluentLabel>
+                            <FluentText>@context.Song!.AlbumName</FluentText>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Date Added">
                         <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentLabel>@context.Song!.CreateDate.ToString("d")</FluentLabel>
+                            <FluentText>@context.Song!.CreateDate.ToString("d")</FluentText>
                         </div>
                     </TemplateColumn>
 
-                    <TemplateColumn Title="Length" Align="Align.Start">
+                    <TemplateColumn Title="Length" Align="DataGridCellAlignment.Start">
                         <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentLabel>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
-                            </FluentLabel>
+                            <FluentText>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
+                            </FluentText>
                         </div>
                     </TemplateColumn>
                 </ChildContent>
@@ -74,9 +74,9 @@
             {
                 <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
                              Style="height: 200px;">
-                    <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
+                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint);">
                         No songs available
-                    </FluentLabel>
+                    </FluentText>
                 </FluentStack>
             }
         </FluentStack>
@@ -142,34 +142,26 @@
         SongPlaylistSelection selection = new SongPlaylistSelection
         {
             Song = song,
-            Playlist = null! // Will be set by the dialog
+            Playlist = null!
         };
 
-        DialogParameters parameters = new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<AddSongToPlaylistModal>(options =>
         {
-            Title = $"Add {song.Name} To Playlist",
-            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddSongToPlaylist),
-            PrimaryAction = "Add",
-            PrimaryActionEnabled = false,
-            SecondaryAction = "Cancel",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
+            options.Header.Title = $"Add {song.Name} To Playlist";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddSongToPlaylistModal.Content), selection);
+        });
 
-        await _dialogService.ShowDialogAsync<AddSongToPlaylistModal>(selection, parameters);
+        await HandleAddSongToPlaylist(song, result);
     }
 
-    private async Task HandleAddSongToPlaylist(DialogResult result)
+    private async Task HandleAddSongToPlaylist(Song song, DialogResult result)
     {
-        if (result.Cancelled || result.Data is not SongPlaylistSelection selection)
+        if (result.Cancelled || result.Value is not Playlist selectedPlaylist)
         {
             return;
         }
-
-        Song song = selection.Song;
-        Playlist selectedPlaylist = selection.Playlist;
 
         if (selectedPlaylist is null)
         {

@@ -1,4 +1,7 @@
-﻿<FluentButton IconStart="new Icons.Regular.Size20.TabDesktopNewPage()" OnClick="() => OpenCreateNewProgramStepTemplateDialog()" Class="mx-auto">Add New Template</FluentButton>
+<FluentButton IconStart="new Icons.Regular.Size20.TabDesktopNewPage()"
+    OnClick="() => OpenCreateNewProgramStepTemplateDialog()"
+    Class="mx-auto">Add New Template
+</FluentButton>
 
 @code {
     [Parameter]
@@ -6,20 +9,12 @@
 
     private async Task OpenCreateNewProgramStepTemplateDialog()
     {
-        DialogParameters parameters = new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<AddNewProgramStepTemplateDialog>(options =>
         {
-            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjection),
-            Width = "50%",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
+            options.Width = "50%";
+            options.Modal = true;
+        });
 
-        await _dialogService.ShowDialogAsync<AddNewProgramStepTemplateDialog>(parameters);
-    }
-
-    private async Task HandleAddProjection(DialogResult result)
-    {
-        await OnTemplateCreated.InvokeAsync(result.Data as ProjectionProgramStepTemplate);
+        await OnTemplateCreated.InvokeAsync(result.Value as ProjectionProgramStepTemplate);
     }
 }

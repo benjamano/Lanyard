@@ -75,18 +75,13 @@
     {
         _warningShown = true;
 
-        IDialogReference dialogRef = await DialogService.ShowDialogAsync<AutoLogoutWarningDialog, int>(
-            secondsRemaining,
-            new DialogParameters
-            {
-                Title = "Session expiring",
-                PrimaryAction = "Stay logged in",
-                SecondaryAction = "Logout now",
-                PreventDismissOnOverlayClick = true,
-                Width = "380px",
-            });
-
-        DialogResult result = await dialogRef.Result;
+        DialogResult result = await DialogService.ShowDialogAsync<AutoLogoutWarningDialog>(options =>
+        {
+            options.Header.Title = "Session expiring";
+            options.Width = "380px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AutoLogoutWarningDialog.Content), secondsRemaining);
+        });
 
         if (result.Cancelled)
         {

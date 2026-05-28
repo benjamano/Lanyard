@@ -1,12 +1,12 @@
 @implements IDisposable
 @using System.Globalization
 
-<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+<FluentCard Class="kiosk-widget-card" Style="height: auto; width: 100%;">
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Stretch"
                  VerticalAlignment="VerticalAlignment.Stretch" Class="clock-widget-stack">
         <div class="clock-widget-header">
-            <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)
-            </FluentLabel>
+            <FluentText Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "" : Widget.Title)
+            </FluentText>
         </div>
 
         <div class="clock-visual">
@@ -24,14 +24,15 @@
             else
             {
                 <div class="clock-digital">
-                    <FluentLabel Typo="Typography.H1" Class="clock-time">@_timeString</FluentLabel>
-                    <FluentLabel Typo="Typography.Body" Class="clock-date">@_dateString</FluentLabel>
+                    <FluentText Typo="Typography.H1" Class="clock-time">@_timeString</FluentText>
+                    <FluentText Typo="Typography.Body" Class="clock-date">@_dateString</FluentText>
                 </div>
             }
         </div>
 
-        <FluentButton Class="clock-mode-toggle mt-2 w-auto"                      Appearance="Appearance.Lightweight"
-                      OnClick="ToggleClockMode">
+        <FluentButton Class="clock-mode-toggle mt-2 w-auto"                      
+                    Appearance="ButtonAppearance.Subtle"
+                    OnClick="ToggleClockMode">
             @(IsAnalogClock() ? "Switch to Digital" : "Switch to Analog")
         </FluentButton>
     </FluentStack>

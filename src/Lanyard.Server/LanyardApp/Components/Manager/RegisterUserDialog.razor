@@ -1,91 +1,92 @@
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
-@implements IDialogContentComponent
+@using System.Linq.Expressions
 
 @inject IToastService ToastService
 
-<FluentDialogHeader ShowDismiss="true">
-    <FluentStack VerticalAlignment="VerticalAlignment.Center">
-        <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
-        <FluentLabel Typo="Typography.PaneHeader">
-            Register a New User
-        </FluentLabel>
-    </FluentStack>
-</FluentDialogHeader>
-
 <FluentDialogBody>
-    <EditForm Model="@model" OnValidSubmit="HandleRegisterUser">
-        <DataAnnotationsValidator />
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            <FluentTextField @bind-Value="model.FirstName"
-                                Label="First Name"
-                                Required
-                                Placeholder="Ben"
-                                Style="width: 100%;">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-            </FluentTextField>
-            <FluentValidationMessage For="@(() => model.FirstName)" />
-
-            <FluentTextField @bind-Value="model.LastName"
-                                Label="Last Name"
-                                Required
-                                Placeholder="Mercer"
-                                Style="width: 100%;">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-            </FluentTextField>
-            <FluentValidationMessage For="@(() => model.LastName)" />
-
-            <FluentTextField @bind-Value="model.Email"
-                                Label="Email"
-                                Placeholder="ben.mercer@lanyard.com"
-                                Style="width: 100%;">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
-            </FluentTextField>
-            <FluentValidationMessage For="@(() => model.Email)" />
-
-            <FluentTextField @bind-Value="model.PhoneNumber"
-                                Label="Phone Number"
-                                Placeholder="07860603962"
-                                TextFieldType="TextFieldType.Tel"
-                                Style="width: 100%;">
-                <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-            </FluentTextField>
-            <FluentValidationMessage For="@(() => model.PhoneNumber)" />
-
-            <FluentDialogFooter>
-                <FluentButton Appearance="Appearance.Accent"
-                              Type="ButtonType.Submit"
-                              Disabled="@isSubmitting"
-                              IconStart="@(new Icons.Regular.Size20.PersonAdd())">
-                    @if (isSubmitting)
-                    {
-                        <FluentProgressRing Style="width: 16px; height: 16px;" />
-                        <span class="ms-2">Creating...</span>
-                    }
-                    else
-                    {
-                        <span>Create User</span>
-                    }
-                </FluentButton>
-                <FluentButton Appearance="Appearance.Neutral"
-                              OnClick="@CancelDialog"
-                              Disabled="@isSubmitting">
-                    Cancel
-                </FluentButton>
-            </FluentDialogFooter>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
+            <FluentText Typo="Typography.PaneHeader">Register a New User</FluentText>
         </FluentStack>
-    </EditForm>
+    </TitleTemplate>
+    <ChildContent>
+        <EditForm EditContext="@_editContext" OnValidSubmit="HandleRegisterUser">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentTextInput @bind-Value="model.FirstName"
+                                 Label="First Name"
+                                 Required="true"
+                                 Placeholder="Ben"
+                                 Style="width: 100%;"
+                                 Message="@GetValidationMessage(() => model.FirstName)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                 MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextInput @bind-Value="model.LastName"
+                                 Label="Last Name"
+                                 Required="true"
+                                 Placeholder="Mercer"
+                                 Style="width: 100%;"
+                                 Message="@GetValidationMessage(() => model.LastName)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                 MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextInput @bind-Value="model.Email"
+                                 Label="Email"
+                                 Placeholder="ben.mercer@lanyard.com"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextInput @bind-Value="model.PhoneNumber"
+                                 Label="Phone Number"
+                                 Placeholder="07860603962"
+                                 TextInputType="TextInputType.Telephone"
+                                 Style="width: 100%;">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                </FluentTextInput>
+
+                <FluentStack Orientation="Orientation.Horizontal">
+                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                  Type="ButtonType.Submit"
+                                  Disabled="@isSubmitting"
+                                  IconStart="@(new Icons.Regular.Size20.PersonAdd())">
+                        @if (isSubmitting)
+                        {
+                            <FluentSpinner Style="width: 16px; height: 16px;" />
+                            <span class="ms-2">Creating...</span>
+                        }
+                        else
+                        {
+                            <span>Create User</span>
+                        }
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Default"
+                                  OnClick="@CancelDialog"
+                                  Disabled="@isSubmitting">
+                        Cancel
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        </EditForm>
+    </ChildContent>
 </FluentDialogBody>
 
 @code {
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
-
-    [Parameter]
-    public DialogParameters Parameters { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     private bool isSubmitting;
     private RegisterUserModel model = new();
+    private EditContext _editContext = default!;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
 
     private async Task HandleRegisterUser()
     {
@@ -107,7 +108,7 @@
             if (result.IsSuccess)
             {
                 ToastService.ShowSuccess($"User '{result.Data!.UserName}' created successfully with a generated password!");
-                await Dialog!.CloseAsync(true);
+                await Dialog.CloseAsync(true);
             }
             else
             {
@@ -127,7 +128,13 @@
 
     private async Task CancelDialog()
     {
-        await Dialog!.CancelAsync();
+        await Dialog.CancelAsync();
+    }
+
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
+    {
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class RegisterUserModel

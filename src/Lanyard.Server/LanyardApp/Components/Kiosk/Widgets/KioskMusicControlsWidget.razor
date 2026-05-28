@@ -5,9 +5,9 @@
 @inject MusicPlayerService _player
 @inject IClientService _clientService
 
-<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+<FluentCard Class="kiosk-widget-card" Style="height: auto; width: 100%;">
     <FluentStack Orientation="Orientation.Vertical" Class="music-widget-stack">
-        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Music Controls" : Widget.Title)</FluentLabel>
+        <FluentText Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Music Controls" : Widget.Title)</FluentText>
 
         @if (DashboardWidgetConfigs.IsMusicClientModeUser(_config.ClientMode))
         {
@@ -28,25 +28,25 @@
                     }
                 </select>
 
-                <FluentButton Appearance="Appearance.Outline" OnClick="RefreshClientsAsync">Refresh</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">Refresh</FluentButton>
             </div>
         }
         else
         {
-            <FluentLabel Typo="Typography.Body" Class="music-widget-client-label">
+            <FluentText Typo="Typography.Body" Class="music-widget-client-label">
                 Client: @_selectedClientName
-            </FluentLabel>
+            </FluentText>
         }
 
         @if (_currentSong is null)
         {
-            <FluentLabel Typo="Typography.Body" Class="music-widget-subtle">No song loaded.</FluentLabel>
+            <FluentText Typo="Typography.Body" Class="music-widget-subtle">No song loaded.</FluentText>
         }
         else
         {
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="2">
-                <FluentLabel Typo="Typography.Body" Class="music-widget-song-title">@_currentSong.Name</FluentLabel>
-                <FluentLabel Typo="Typography.Body" Class="music-widget-subtle">@_currentSong.AlbumName</FluentLabel>
+                <FluentText Typo="Typography.Body" Class="music-widget-song-title">@_currentSong.Name</FluentText>
+                <FluentText Typo="Typography.Body" Class="music-widget-subtle">@_currentSong.AlbumName</FluentText>
             </FluentStack>
         }
 
@@ -55,7 +55,7 @@
                 Shuffle
             </button>
 
-            <FluentButton Appearance="Appearance.Outline"
+            <FluentButton Appearance="ButtonAppearance.Outline"
                           IconOnly="true"
                           Title="Previous"
                           OnClick="PreviousAsync"
@@ -63,22 +63,22 @@
                 <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
             </FluentButton>
 
-            <FluentButton Appearance="Appearance.Accent"
+            <FluentButton Appearance="ButtonAppearance.Primary"
                           IconOnly="true"
                           Title="@(_isPlaying ? "Pause" : "Play")"
                           OnClick="TogglePlayAsync"
                           Disabled="@(!_selectedClientId.HasValue)">
                 @if (_isPlaying)
                 {
-                    <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+                    <FluentIcon Color="Color.Default" Icon="Icons.Filled.Size20.Pause" />
                 }
                 else
                 {
-                    <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+                    <FluentIcon Color="Color.Default" Icon="Icons.Filled.Size20.Play" />
                 }
             </FluentButton>
 
-            <FluentButton Appearance="Appearance.Outline"
+            <FluentButton Appearance="ButtonAppearance.Outline"
                           IconOnly="true"
                           Title="Next"
                           OnClick="NextAsync"

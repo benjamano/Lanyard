@@ -2,20 +2,19 @@
 
 @inject IJSRuntime JS
 
-<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: 100%; width: 100%;">
+<FluentCard Class="kiosk-widget-card" Style="height: 100%; width: 100%;">
     <FluentStack Orientation="Orientation.Vertical" Class="text-area-widget-stack">
-        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Notes" : Widget.Title)</FluentLabel>
+        <FluentText Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Notes" : Widget.Title)</FluentText>
 
-        <FluentTextArea Rows="8"
-                        Value="@_textValue"
+        <FluentTextArea Value="@_textValue"
                         @oninput="HandleTextInput"
                         Class="text-area-widget-input"></FluentTextArea>
 
         @* @if (_saveToLocalStorage)
         {
-            <FluentLabel Typo="Typography.Body" Class="text-area-widget-caption">
+            <FluentText Typo="Typography.Body" Class="text-area-widget-caption">
                 Saved locally in this browser.
-            </FluentLabel>
+            </FluentText>
         } *@
     </FluentStack>
 </FluentCard>

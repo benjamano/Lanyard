@@ -10,29 +10,29 @@
 <PageTitle>Dashboard Preview</PageTitle>
 
 <FluentStack Orientation="Orientation.Vertical" Style="height: calc(100vh - 120px); min-height: 680px;">
-    <FluentToolbar Class="w-100">
-        <FluentLabel slot="start" Typo="Typography.PaneHeader">Dashboard Preview</FluentLabel>
-        <FluentButton slot="end" Appearance="Appearance.Outline" Href="//manage/dashboards">
+    <FluentStack Orientation="Orientation.Horizontal" Class="w-100">
+        <FluentText Typo="Typography.PaneHeader">Dashboard Preview</FluentText>
+        <FluentButton Appearance="ButtonAppearance.Outline" Href="//manage/dashboards">
             Back to Dashboards
         </FluentButton>
-    </FluentToolbar>
+    </FluentStack>
 
     @if (isLoading)
     {
         <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
-            <FluentProgressRing />
+            <FluentSpinner />
         </FluentStack>
     }
     else if (dashboard is null)
     {
-        <FluentCard AreaRestricted="false" Class="w-100">
-            <FluentLabel>Dashboard not found.</FluentLabel>
+        <FluentCard Class="w-100">
+            <FluentText>Dashboard not found.</FluentText>
         </FluentCard>
     }
     else if (!dashboard.Widgets.Any(x => x.IsActive))
     {
-        <FluentCard AreaRestricted="false" Class="w-100">
-            <FluentLabel>This dashboard has no active widgets.</FluentLabel>
+        <FluentCard Class="w-100">
+            <FluentText>This dashboard has no active widgets.</FluentText>
         </FluentCard>
     }
     else

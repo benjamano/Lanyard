@@ -1,4 +1,4 @@
-﻿@page "/account/manage"
+@page "/account/manage"
 
 @using Lanyard.App.Components.Accounts
 @using Lanyard.Application.Services.Authentication
@@ -8,19 +8,19 @@
 <PageTitle>Account Management</PageTitle>
 
 <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Style="max-width: 800px; margin: 16px auto;">
-    @* <FluentLabel Typo="Typography.PageTitle">Account Management</FluentLabel> *@
+    @* <FluentText Typo="Typography.PageTitle">Account Management</FluentText> *@
 
     <YourDetailsCard @ref="yourDetailsCard" />
 
     <ContactDetailsCard @ref="contactDetailsCard" />
 
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8">
-        <FluentButton Appearance="Appearance.Neutral" 
+        <FluentButton Appearance="ButtonAppearance.Default" 
                       IconStart="@(new Icons.Regular.Size20.Key())"
                       OnClick="OpenChangePasswordDialog">
             Change Password
         </FluentButton>
-        <FluentButton Appearance="Appearance.Accent" 
+        <FluentButton Appearance="ButtonAppearance.Primary" 
                       IconStart="@(new Icons.Regular.Size20.Save())"
                       OnClick="SaveDetails">
             Save Changes
@@ -55,18 +55,12 @@
             return;
         }
 
-        DialogParameters parameters = new DialogParameters()
+        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(options =>
         {
-            Title = "Change Password",
-            PrimaryAction = "Change Password",
-            PrimaryActionEnabled = true,
-            SecondaryAction = "Cancel",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
-
-        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(getResult.Data, parameters);
+            options.Header.Title = "Change Password";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ChangePasswordDialog.Content), getResult.Data);
+        });
     }
 }

@@ -7,7 +7,7 @@
 @if (ClientId != null)
 {
     <FluentCard Height="auto">
-        <FluentLabel Typo="Typography.H4">DMX Configuration</FluentLabel>
+        <FluentText Typo="Typography.H4">DMX Configuration</FluentText>
 
         <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">
             <ChildContent>
@@ -21,7 +21,7 @@
             </ChildContent>
             <LoadingContent>
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
-                    Loading... <FluentProgressRing Stroke="ProgressStroke.Small"></FluentProgressRing>
+                    Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
                 </FluentStack>
             </LoadingContent>
             <EmptyContent>

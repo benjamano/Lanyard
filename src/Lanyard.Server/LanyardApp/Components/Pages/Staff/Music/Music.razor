@@ -1,4 +1,4 @@
-﻿@page "/music"
+@page "/music"
 
 @attribute [Authorize]
 
@@ -43,7 +43,7 @@
 
             <div style="flex: 1;">
                 <FluentGrid Style="width: 200px;">
-                    <FluentGridItem xs="12">
+                    <FluentGridItem Xs="12">
                         <FluentStack Orientation="Orientation.Horizontal"
                                     VerticalAlignment="VerticalAlignment.Center"
                                     HorizontalGap="8"
@@ -59,7 +59,7 @@
                                 };
                             }
 
-                            <FluentButton IconStart="volumeIcon" Appearance="Appearance.Lightweight" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
+                            <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
                             <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100 mt-3"></FluentSlider>
                         </FluentStack>
                     </FluentGridItem>
@@ -76,14 +76,14 @@
                         Icon shuffleIcon = isShuffleEnabled ? new Icons.Regular.Size24.ArrowShuffle() : new Icons.Regular.Size24.ArrowShuffleOff();
                     }
 
-                    <FluentButton Appearance="Appearance.Stealth"
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
                                 Title="Shuffle"
                                 OnClick='ToggleShuffle'
                                 Disabled="@(selectedClientId == null)"
                                 IconStart="shuffleIcon">
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Outline"
+                    <FluentButton Appearance="ButtonAppearance.Outline"
                                 Title="Previous (Double-click) / Restart (Single-click)"
                                 OnClick="RestartSong"
                                 @ondblclick="PreviousSong"
@@ -92,22 +92,22 @@
                         <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Accent"
+                    <FluentButton Appearance="ButtonAppearance.Primary"
                                 Title="@(isPlaying ? "Pause" : "Play")"
                                 OnClick="TogglePlay"
                                 Disabled="@(selectedClientId == null)"
                                 Style="border-radius: 50%; width: 40px; height: 40px;">
                         @if (isPlaying)
                         {
-                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
+                            <FluentIcon Color="Color.Primary" Icon="Icons.Filled.Size20.Pause" />
                         }
                         else
                         {
-                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
+                            <FluentIcon Color="Color.Primary" Icon="Icons.Filled.Size20.Play" />
                         }
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Outline"
+                    <FluentButton Appearance="ButtonAppearance.Outline"
                                 Title="Next"
                                 OnClick="NextSong"
                                 Disabled="@(selectedClientId == null)"
@@ -119,7 +119,7 @@
                         Icon repeatIcon = isRepeatEnabled ? new Icons.Regular.Size20.ArrowRepeatAll() : new Icons.Regular.Size20.ArrowRepeatAllOff();
                     }
 
-                    <FluentButton Appearance="Appearance.Stealth"
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
                                 Title="Repeat"
                                 OnClick="ToggleRepeat"
                                 Disabled="@(selectedClientId == null)"
@@ -131,15 +131,15 @@
                     <div @onclick="() => showTimeLeftInsteadOfElapsed = !showTimeLeftInsteadOfElapsed" role="button">
                         @if (showTimeLeftInsteadOfElapsed)
                         {
-                            <FluentLabel>-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentLabel>
+                            <FluentText>-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                         else
                         {
-                            <FluentLabel>@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentLabel>
+                            <FluentText>@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                     </div>
                     <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" Class="mt-3"></FluentSlider>
-                    <FluentLabel>@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentLabel>
+                    <FluentText>@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
                 </FluentStack>
             </FluentStack>
 

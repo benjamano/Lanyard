@@ -1,4 +1,4 @@
-﻿@page "/manage/projectionprograms"
+@page "/manage/projectionprograms"
 @attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
@@ -12,15 +12,15 @@
 
 <PageTitle>Projection Programs</PageTitle>
 
-<FluentCard AreaRestricted="false">
+<FluentCard>
     <FluentMultiSplitter Class="h-100">
         <FluentMultiSplitterPane Size="25%">
             <div class="me-3">
                 @if (isLoading)
                 {
                     <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="mt-4">
-                        <FluentProgressRing />
-                        <FluentLabel>Loading programs...</FluentLabel>
+                        <FluentSpinner />
+                        <FluentText>Loading programs...</FluentText>
                     </FluentStack>
                 }
                 else
@@ -38,7 +38,7 @@
                         </EmptyContent>
                     </FluentDataGrid>
                 }
-                <FluentButton Class="float-end mt-2" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()" OnClick="HandleCreateNewProjectionProgram" Disabled="@isLoading">New</FluentButton>
+                <FluentButton Class="float-end mt-2" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()" OnClick="HandleCreateNewProjectionProgram" Disabled="@isLoading">New</FluentButton>
             </div>
         </FluentMultiSplitterPane>
 
@@ -95,21 +95,18 @@
 
     private async Task HandleCreateNewProjectionProgram()
     {
-        DialogParameters parameters = new()
+        DialogResult result = await _dialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(options =>
         {
-            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjectionProgram),
-            Width = "30%",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
+            options.Width = "30%";
+            options.Modal = true;
+        });
 
-        await _dialogService.ShowDialogAsync<AddNewProjectionProgramDialog>(parameters);
+        await HandleAddProjectionProgram(result);
     }
 
     private async Task HandleAddProjectionProgram(DialogResult result)
     {
-        if (result.Cancelled == true || result.Data is not ProjectionProgram newProgram)
+        if (result.Cancelled == true || result.Value is not ProjectionProgram newProgram)
         {
             return;
         }
