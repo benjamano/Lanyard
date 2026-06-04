@@ -1,35 +1,46 @@
 ﻿<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
-<link rel="stylesheet" href="@Assets["Components/Layout/ReconnectModal.razor.css"]" />
 
 <dialog id="components-reconnect-modal" data-nosnippet>
     <div class="components-reconnect-container">
         <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="10">
-            <FluentSpinner Size="SpinnerSize.Large" aria-hidden="true" />
-            <FluentText class="components-reconnect-first-attempt-visible">
-                Rejoining the server...
-            </FluentText>
-            <FluentText class="components-reconnect-repeated-attempt-visible">
-                Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
-            </FluentText>
-            <FluentText class="components-reconnect-failed-visible">
-                Failed to rejoin.<br />Please retry or reload the page.
-            </FluentText>
+            <div class="components-reconnect-spinner">
+                <FluentSpinner Size="SpinnerSize.Large" aria-hidden="true" />
+            </div>
+            <div class="components-reconnect-first-attempt-visible">
+                <FluentText>
+                    Rejoining the server...
+                </FluentText>
+            </div>
+            <div class="components-reconnect-repeated-attempt-visible">
+                <FluentText>
+                    Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+                </FluentText>
+            </div>
+            <div class="components-reconnect-failed-visible">
+                <FluentText>
+                    Failed to rejoin.<br />Please retry or reload the page.
+                </FluentText>
+            </div>
             <div id="components-reconnect-button" class="components-reconnect-failed-visible">
                 <FluentButton Appearance="ButtonAppearance.Outline">
                     Retry
                 </FluentButton>
             </div>
-            <FluentText class="components-pause-visible">
-                The session has been paused by the server.
-            </FluentText>
+            <div class="components-pause-visible">
+                <FluentText>
+                    The session has been paused by the server.
+                </FluentText>
+            </div>
             <div id="components-resume-button" class="components-pause-visible">
                 <FluentButton Appearance="ButtonAppearance.Outline">
                     Resume
                 </FluentButton>
             </div>
-            <FluentText class="components-resume-failed-visible">
-                Failed to resume the session.<br />Please reload the page.
-            </FluentText>
+            <div class="components-resume-failed-visible">
+                <FluentText>
+                    Failed to resume the session.<br />Please reload the page.
+                </FluentText>
+            </div>
         </FluentStack>
     </div>
 </dialog>
