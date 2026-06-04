@@ -3,7 +3,8 @@
 .components-reconnect-failed-visible,
 .components-pause-visible,
 .components-resume-failed-visible,
-.components-reconnect-spinner {
+.components-reconnect-spinner,
+.components-failed-to-connect-visible {
     display: none !important;
 }
 
@@ -12,6 +13,7 @@
 #components-reconnect-modal.components-reconnect-retrying .components-reconnect-repeated-attempt-visible,
 #components-reconnect-modal.components-reconnect-retrying .components-reconnect-spinner,
 #components-reconnect-modal.components-reconnect-failed .components-reconnect-failed-visible,
+#components-reconnect-modal.components-reconnect-failed .components-failed-to-connect-visible,
 #components-reconnect-modal.components-reconnect-paused .components-pause-visible,
 #components-reconnect-modal.components-reconnect-resume-failed .components-resume-failed-visible {
     display: block !important;
