@@ -10,9 +10,9 @@
 <PageTitle>Projection Templates</PageTitle>
 
 <FluentCard>
-    <FluentMultiSplitter Class="h-100">
+    <FluentMultiSplitter Height="100%">
         <FluentMultiSplitterPane Size="25%">
-            <FluentStack Orientation="Orientation.Vertical" Class="h-100">
+            <FluentStack Orientation="Orientation.Vertical" Height="100%">
                 <FluentStack Orientation="Orientation.Horizontal" Class="w-100">
                     <FluentText Typo="Typography.PaneHeader">Projection Templates</FluentText>
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewTemplate">
@@ -55,7 +55,7 @@
         <FluentMultiSplitterPane Size="65%" Class="px-2">
             @if (selectedTemplate is null)
             {
-                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Height="100%">
                     <FluentText>Select a template or create a new one.</FluentText>
                 </FluentStack>
             }

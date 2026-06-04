@@ -1,23 +1,21 @@
-<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Class="h-100">
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Height="100%">
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
         <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" VerticalGap="0">
-            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Primary">Current Shift</FluentText>
-            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Primary">Customer Service Assistant</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">Current Shift</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">Customer Service Assistant</FluentText>
         </FluentStack>
-        <FluentBadge Appearance="BadgeAppearance.Filled">
-            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Primary" class="p-1">
-                @_shiftStartTime.ToString("t") - @_shiftEndTime.ToString("t")
-            </FluentText>
-        </FluentBadge>
+        @* <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Informative">
+            @_shiftStartTime.ToString("t") - @_shiftEndTime.ToString("t")
+        </FluentBadge> *@
     </FluentStack>
 
-    <FluentCard Height="auto">
+    <FluentCard Height="auto" Margin="@Margin.Vertical3">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
-                <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" />
+                <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" Margin="@Margin.End2" />
                 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center" VerticalGap="0">
-                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Clocked in</FluentText>
-                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Default">Clocked in</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size300" Color="Color.Info">
                         5 minutes late
                     </FluentText>
                 </FluentStack>

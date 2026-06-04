@@ -1,6 +1,6 @@
 @inject IToastService _toastService
 
-<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center">
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Height="100%">
     <FluentCalendar TValue="DateTime" DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">
         <DaysTemplate>
             @if (context.IsInactive == false && AmIOnShift(context.Date))

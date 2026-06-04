@@ -1,36 +1,25 @@
-@inject IJSRuntime JS
+@inject IThemeService ThemeService
 
-<FluentButton Appearance="ButtonAppearance.Subtle"
-              IconStart="@(_isDark ? new Icons.Regular.Size20.WeatherMoon() : new Icons.Regular.Size20.WeatherSunny())"
-              OnClick="ToggleThemeAsync"
-              Title="@(_isDark ? "Switch to light mode" : "Switch to dark mode")">
-    @(_isDark ? "Dark" : "Light")
+<FluentButton Appearance="ButtonAppearance.Transparent"
+                IconOnly="true"
+                Class="fluent-header-hover"
+                Title="Switch to Light/Dark theme"
+                BackgroundColor="transparent"
+                OnClick="@(async e => await ThemeService.SwitchThemeAsync())">
+
+    <FluentIcon Class="hidden-if-light"
+                Value="@(new Icons.Filled.Size20.WeatherSunny())" />
+
+    <FluentIcon Class="hidden-if-dark"
+                Value="@(new Icons.Filled.Size20.WeatherMoon())" />
 </FluentButton>
 
 @code {
-    private bool _isDark;
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-            return;
-
-        string? stored = await JS.InvokeAsync<string?>("localStorage.getItem", "theme");
-        _isDark = stored == "dark";
-        await ApplyThemeAsync();
-        StateHasChanged();
-    }
-
-    private async Task ToggleThemeAsync()
-    {
-        _isDark = !_isDark;
-        await ApplyThemeAsync();
-        await JS.InvokeVoidAsync("localStorage.setItem", "theme", _isDark ? "dark" : "light");
-    }
-
-    private async Task ApplyThemeAsync()
-    {
-        await JS.InvokeVoidAsync("eval",
-            $"document.documentElement.setAttribute('data-theme', '{(_isDark ? "dark" : "light")}')");
+        if (firstRender)
+        {
+            await ThemeService.SetThemeAsync("#D740BC", false);
+        }
     }
 }

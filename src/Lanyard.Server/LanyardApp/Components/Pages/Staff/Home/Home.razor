@@ -13,17 +13,17 @@
 
 
 <div class="px-1">
-    <FluentGrid AdaptiveRendering="true">
+    <FluentGrid AdaptiveRendering="true" Spacing="3">
         <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
-            <FluentCard Appearance="CardAppearance.Subtle" Class="h-100">
-                <FluentStack Orientation="Orientation.Vertical" Class="h-100">
-                    <FluentText Typo="Typography.H2" Class="my-auto">
+            <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+                <FluentStack Orientation="Orientation.Vertical" Height="100%">
+                    <FluentText Size="TextSize.Size800" Class="my-auto">
                         @GetGreeting(), <b>@_currentUserName!</b>
-                        @if (_showPreviewContent)
-                        {
-                            <FluentText Typo="Typography.H5" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentText>
-                        }
                     </FluentText>
+                    @if (_showPreviewContent)
+                    {
+                        <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentText>
+                    }
                 </FluentStack>
             </FluentCard>
         </FluentGridItem>
@@ -48,18 +48,18 @@
     @if (_showPreviewContent)
     {
         <FluentGrid Spacing="3">
-            <FluentGridItem Lg="7" Md="7" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Subtle">
+            <FluentGridItem Lg="7" Md="12" Sm="12" Xs="12">
+                <FluentCard Appearance="CardAppearance.Filled">
                     <ClockinPortable />
                 </FluentCard>
             </FluentGridItem>
             <FluentGridItem Lg="3" Md="5" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Subtle">
+                <FluentCard Appearance="CardAppearance.Filled">
                     <UpcomingShifts />
                 </FluentCard>
             </FluentGridItem>
-            <FluentGridItem Lg="2" Md="12" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Subtle">
+            <FluentGridItem Lg="2" Md="7" Sm="12" Xs="12">
+                <FluentCard Appearance="CardAppearance.Filled">
                     <ShiftCalendar />
                 </FluentCard>
             </FluentGridItem>

@@ -4,62 +4,74 @@
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
     <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium" Padding="@Padding.All3">
-        <FluentNavItem Href="/"
-                        IconRest="@(new Icons.Regular.Size20.Home())"
-                        IconActive="@(new Icons.Filled.Size20.Home())"
-                        Match="NavLinkMatch.All">
-            Home
-        </FluentNavItem>
-
-        @if (_canControlMusic)
+        @if (_isAuthenticated)
         {
-            <FluentNavItem Href="/music"
-                            IconRest="@(new Icons.Regular.Size20.MusicNote2())"
-                            IconActive="@(new Icons.Filled.Size20.MusicNote2())">
-                Music
+            <FluentNavItem Href="/"
+                            IconRest="@(new Icons.Regular.Size20.Home())"
+                            IconActive="@(new Icons.Filled.Size20.Home())"
+                            Match="NavLinkMatch.All">
+                Home
             </FluentNavItem>
+
+            @if (_canControlMusic)
+            {
+                <FluentNavItem Href="/music"
+                                IconRest="@(new Icons.Regular.Size20.MusicNote2())"
+                                IconActive="@(new Icons.Filled.Size20.MusicNote2())">
+                    Music
+                </FluentNavItem>
+            }
+
+            @if (_canClockIn)
+            {
+                <FluentNavCategory Title="Rota"
+                                    IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
+                                    IconActive="@(new Icons.Filled.Size20.CalendarLtr())">
+                    <FluentNavItem Href="/rota/clockin">Clock In</FluentNavItem>
+                    <FluentNavItem Href="/rota">Rota</FluentNavItem>
+                </FluentNavCategory>
+            }
+
+            @if (_isManager)
+            {
+                <FluentNavSectionHeader Title="Management" />
+
+                <FluentNavItem Href="/files"
+                                IconRest="@(new Icons.Regular.Size20.Folder())"
+                                IconActive="@(new Icons.Filled.Size20.Folder())">
+                    File Manager
+                </FluentNavItem>
+
+                <FluentNavCategory Title="Manage"
+                                    IconRest="@(new Icons.Regular.Size20.Settings())"
+                                    IconActive="@(new Icons.Filled.Size20.Settings())">
+                    <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
+                    <FluentNavItem Href="/manage/users">Users</FluentNavItem>
+                    <FluentNavItem Href="/manage/dashboards">Dashboards</FluentNavItem>
+                </FluentNavCategory>
+            }
+
+            @if (_canManageDmx)
+            {
+                <FluentNavSectionHeader Title="DMX" />
+                
+                <FluentNavItem Href="/dmx"
+                                IconRest="@(new Icons.Regular.Size20.Lightbulb())"
+                                IconActive="@(new Icons.Filled.Size20.Lightbulb())">
+                    DMX Control
+                </FluentNavItem>
+            }
+
+            @if (_isAdmin)
+            {
+                <FluentNavSectionHeader Title="Clients" />
+                
+                <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())" IconActive="@(new Icons.Filled.Size20.LaptopSettings())">Clients</FluentNavItem>
+                <FluentNavItem Href="/manage/projectionprograms" IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())" IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
+                <FluentNavItem Href="/manage/projectiontemplates" IconRest="@(new Icons.Regular.Size20.BookTemplate())" IconActive="@(new Icons.Filled.Size20.BookTemplate())">Templates</FluentNavItem>
+                <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())" IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
+            }
         }
-
-        @if (_canClockIn)
-        {
-            <FluentNavCategory Title="Rota"
-                                IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
-                                IconActive="@(new Icons.Filled.Size20.CalendarLtr())">
-                <FluentNavItem Href="/rota/clockin">Clock In</FluentNavItem>
-                <FluentNavItem Href="/rota">Rota</FluentNavItem>
-            </FluentNavCategory>
-
-            <FluentNavItem Href="/files"
-                            IconRest="@(new Icons.Regular.Size20.Folder())"
-                            IconActive="@(new Icons.Filled.Size20.Folder())">
-                File Manager
-            </FluentNavItem>
-        }
-
-        @if (_isManager)
-        {
-            <FluentNavSectionHeader Title="Management" />
-
-            <FluentNavCategory Title="Manage"
-                                IconRest="@(new Icons.Regular.Size20.Settings())"
-                                IconActive="@(new Icons.Filled.Size20.Settings())">
-                <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
-                <FluentNavItem Href="/manage/users">Users</FluentNavItem>
-                <FluentNavItem Href="/manage/dashboards">Dashboards</FluentNavItem>
-                <FluentNavItem Href="/manage/projectionprograms">Projection</FluentNavItem>
-                @if (_isAdmin)
-                {
-                    <FluentNavItem Href="/manage/clients">Clients</FluentNavItem>
-                    <FluentNavItem Href="/manage/projectiontemplates">Templates</FluentNavItem>
-                    <FluentNavItem Href="/automation">Automation</FluentNavItem>
-                }
-                @if (_canManageDmx)
-                {
-                    <FluentNavItem Href="/manage/dmxdesk">DMX Desk</FluentNavItem>
-                }
-            </FluentNavCategory>
-        }
-
     </FluentNav>
 
     <div class="w-100">

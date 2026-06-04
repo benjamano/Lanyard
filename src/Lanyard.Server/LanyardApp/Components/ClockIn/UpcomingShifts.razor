@@ -1,5 +1,5 @@
-<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start">
-    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" Height="100%">
+    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Info">
         Upcoming Shifts
     </FluentText>
     <FluentStack Class="mt-2">
@@ -15,7 +15,7 @@
             <FluentStack Orientation="Orientation.Vertical">
                 @foreach (ShiftIntervalDTO shift in _upcomingShifts)
                 {
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" HorizontalGap="8px">
                         @if (shift.Id == _currentShift.Id)
                         {
                             <FluentIcon Icon="Icons.Filled.Size20.ClockAlarm" Class="pt-1"/>
@@ -36,7 +36,7 @@
                                 @shift.Start.ToString("ddd, MMM d, h:mm tt") - @shift.End.ToString("h:mm tt")
                             </FluentText>
                             <FluentText Typo="Typography.Body" Color="Color.Info">
-                                Location: @shift.Location
+                                @shift.Location
                             </FluentText>
                         </FluentStack>
                     </FluentStack>

@@ -2,7 +2,7 @@
 
 @inject IDmxService _dmxService
 
-<FluentCard Height="auto" Class="p-0">
+<FluentCard Height="auto" Class="p-0" Appearance="CardAppearance.Default">
     @if (_isLoading)
     {
         <div class="p-4">
@@ -50,37 +50,33 @@
             </FluentStack>
 
             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
-                         Style="overflow-x: auto; scrollbar-width: auto; scrollbar-color: var(--accent-fill-rest) var(--neutral-fill-rest);"
+                         Style="overflow-x: auto; scrollbar-width: auto;"
                          Class="p-4">
                 @foreach (KeyValuePair<int, int> channel in PagedChannels)
                 {
                     <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle">
                         <FluentStack Orientation="Orientation.Vertical"
-                                     HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="2">
-                            <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
-                                         Class="mb-2" Appearance="BadgeAppearance.Filled">
+                                    HorizontalAlignment="HorizontalAlignment.Center"
+                                    VerticalGap="2"
+                                    VerticalAlignment="VerticalAlignment.Center">
+                            @* <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
+                                         Class="mb-2" Appearance="BadgeAppearance.Outline" Shape="BadgeShape.Rounded">
                                 @channel.Key
-                            </FluentBadge>
-                            <FluentSlider @key="channel.Key"
-                                          Orientation="Orientation.Vertical"
-                                          Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                          TValue="int"
-                                          Value="@(255 - channel.Value)"
-                                          Min="0" Max="255" Step="1"
-                                          ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
-                                          Class="mb-2 ps-3"
-                                          Style="min-width: 30px;">
-                                @if (channel.Key == PageFirstChannel)
-                                {
-                                    <FluentSliderLabel Position="255" TValue="int">0</FluentSliderLabel>
-                                    <FluentSliderLabel Position="127" TValue="int">127</FluentSliderLabel>
-                                    <FluentSliderLabel Position="0" TValue="int">255</FluentSliderLabel>
-                                }
+                            </FluentBadge> *@
+                            <FluentSlider Label="@channel.Key.ToString()"
+                                            Message="@channel.Value.ToString()"
+                                            Orientation="Orientation.Vertical"
+                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                                            TValue="int"
+                                            Value="@(channel.Value)"
+                                            Min="0" Max="255"
+                                            ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
+                                            Style="height: 300px; Width: 40px;">
                             </FluentSlider>
-                            <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
+                            @* <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
                                          Class="mt-2" Appearance="BadgeAppearance.Filled">
                                 @channel.Value
-                            </FluentBadge>
+                            </FluentBadge> *@
                             <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
                                           Appearance="ButtonAppearance.Primary"
                                           OnClick="() => UpdateChannelValue(0, channel.Key)"
