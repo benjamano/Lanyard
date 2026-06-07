@@ -8,7 +8,10 @@
 
 <FluentCard Class="mt-2">
     <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
-        <FluentText Typo="Typography.Header">Scenes</FluentText>
+        <FluentText Size="TextSize.Size600"
+                    Color="Color.Default">
+            Scenes
+        </FluentText>
         <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
                       Appearance="ButtonAppearance.Primary"
                       Disabled="@(ClientId == null)"
@@ -20,7 +23,7 @@
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" Style="min-height: 50px;">
         @if (scenes == null || !scenes.Any())
         {
-            <FluentText Typo="Typography.Body">No scenes found for this client.</FluentText>
+            <FluentText Size="TextSize.Size400">No scenes found for this client.</FluentText>
         }
         else
         {

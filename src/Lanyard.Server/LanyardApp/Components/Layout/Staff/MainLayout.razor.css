@@ -23,12 +23,12 @@ html, body {
     transition: opacity 0.2s;
 }
 
-.nav-brand:hover {
-    opacity: 0.75;
+.nav-brand:hover span {
+    text-decoration: none;
 }
 
 .nav-brand-flip {
     display: inline-block;
     transform: rotate(180deg) translateY(-22%);
-    padding-bottom: 0.15rem;
+    padding-bottom: 0.1rem;
 }

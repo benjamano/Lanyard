@@ -3,91 +3,38 @@
 @inject IDmxService _dmxService
 
 <FluentCard Height="auto" Class="p-0" Appearance="CardAppearance.Default">
-    @if (_isLoading)
-    {
-        <div class="p-4">
-            <FluentText>Loading channels...</FluentText>
-            <FluentProgressBar />
-        </div>
-    }
-    else
-    {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
-
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Class="p-3"
-                         Style="border-bottom: 1px solid var(--neutral-stroke-rest);">
-                <FluentButton IconStart="new Icons.Regular.Size20.ChevronDoubleLeft()"
-                              Appearance="ButtonAppearance.Primary"
-                              Disabled="@(_currentPage == 1)"
-                              OnClick="() => GoToPage(1)" />
-                <FluentButton IconStart="new Icons.Regular.Size20.ChevronLeft()"
-                              Appearance="ButtonAppearance.Primary"
-                              Disabled="@(_currentPage == 1)"
-                              OnClick="() => GoToPage(_currentPage - 1)" />
-
-                <FluentText Style="min-width: 140px; text-align: center;">
-                    Ch @PageFirstChannel-@PageLastChannel &nbsp;/&nbsp; Page @_currentPage of @TotalPages
-                </FluentText>
-
-                <FluentButton IconStart="new Icons.Regular.Size20.ChevronRight()"
-                              Appearance="ButtonAppearance.Primary"
-                              Disabled="@(_currentPage == TotalPages)"
-                              OnClick="() => GoToPage(_currentPage + 1)" />
-                <FluentButton IconStart="new Icons.Regular.Size20.ChevronDoubleRight()"
-                              Appearance="ButtonAppearance.Primary"
-                              Disabled="@(_currentPage == TotalPages)"
-                              OnClick="() => GoToPage(TotalPages)" />
-
-                <FluentSelect TOption="int"
-                              TValue="int"
-                              Items="@_pageSizeOptions"
-                              OptionText="@(n => $"{n} / page")"
-                              OptionValue="@(n => n)"
-                              Value="@_pageSize"
-                              ValueChanged="@OnPageSizeChanged"
-                              Style="width: 120px;" />
-            </FluentStack>
-
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
-                         Style="overflow-x: auto; scrollbar-width: auto;"
-                         Class="p-4">
-                @foreach (KeyValuePair<int, int> channel in PagedChannels)
-                {
-                    <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle">
-                        <FluentStack Orientation="Orientation.Vertical"
-                                    HorizontalAlignment="HorizontalAlignment.Center"
-                                    VerticalGap="2"
-                                    VerticalAlignment="VerticalAlignment.Center">
-                            @* <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
-                                         Class="mb-2" Appearance="BadgeAppearance.Outline" Shape="BadgeShape.Rounded">
-                                @channel.Key
-                            </FluentBadge> *@
-                            <FluentSlider Label="@channel.Key.ToString()"
-                                            Message="@channel.Value.ToString()"
-                                            Orientation="Orientation.Vertical"
-                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                            TValue="int"
-                                            Value="@(channel.Value)"
-                                            Min="0" Max="255"
-                                            ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
-                                            Style="height: 300px; Width: 40px;">
-                            </FluentSlider>
-                            @* <FluentBadge Style="font-variant-numeric: tabular-nums; text-align: center;"
-                                         Class="mt-2" Appearance="BadgeAppearance.Filled">
-                                @channel.Value
-                            </FluentBadge> *@
-                            <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                          Appearance="ButtonAppearance.Primary"
-                                          OnClick="() => UpdateChannelValue(0, channel.Key)"
-                                          Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                          Class="mt-2" />
-                        </FluentStack>
-                    </FluentCard>
-                }
-            </FluentStack>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
+                        Style="overflow-x: auto; scrollbar-width: auto;"
+                        Class="p-4 pt-0">
+            @foreach (KeyValuePair<int, int> channel in channelValues)
+            {
+                <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle">
+                    <FluentStack Orientation="Orientation.Vertical"
+                                HorizontalAlignment="HorizontalAlignment.Center"
+                                VerticalGap="2"
+                                VerticalAlignment="VerticalAlignment.Center">
+                        <FluentSlider Label="@channel.Key.ToString()"
+                                        Message="@channel.Value.ToString()"
+                                        Orientation="Orientation.Vertical"
+                                        Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                                        TValue="int"
+                                        Value="@(channel.Value)"
+                                        Min="0" Max="255"
+                                        ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
+                                        Style="height: 300px; Width: 40px;"
+                                        Class="d-flex flex-column gap-3">
+                        </FluentSlider>
+                        <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                                        Appearance="ButtonAppearance.Primary"
+                                        OnClick="() => UpdateChannelValue(0, channel.Key)"
+                                        Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                                        Class="mt-2" />
+                    </FluentStack>
+                </FluentCard>
+            }
         </FluentStack>
-    }
+    </FluentStack>
 </FluentCard>
 
 @code {
@@ -103,19 +50,6 @@
     // Key: Channel number (1–512), Value: Channel value (0–255)
     private Dictionary<int, int> channelValues = new();
     private bool _isLoading = true;
-
-    private int _currentPage = 1;
-    private int _pageSize = 32;
-    private readonly List<int> _pageSizeOptions = new() { 16, 32, 64, 128 };
-
-    private int TotalPages => (int)Math.Ceiling(channelValues.Count / (double)_pageSize);
-    private int PageFirstChannel => (_currentPage - 1) * _pageSize + 1;
-    private int PageLastChannel => Math.Min(_currentPage * _pageSize, channelValues.Count);
-
-    private IEnumerable<KeyValuePair<int, int>> PagedChannels =>
-        channelValues
-            .Skip((_currentPage - 1) * _pageSize)
-            .Take(_pageSize);
 
     protected override async Task OnInitializedAsync()
     {
@@ -162,28 +96,15 @@
             channelValues = channelValuesResult.Data.ToDictionary(kvp => kvp.Address, kvp => (int)kvp.Value);
         }
 
-        _currentPage = 1;
         _isLoading = false;
 
         StateHasChanged();
-    }
-
-    private void GoToPage(int page)
-    {
-        _currentPage = Math.Clamp(page, 1, TotalPages);
-    }
-
-    private void OnPageSizeChanged(int newSize)
-    {
-        _pageSize = newSize;
-        _currentPage = 1;
     }
 
     public void CreateChannels()
     {
         channelValues = Enumerable.Range(1, 512)
             .ToDictionary(i => i, _ => 0);
-        _currentPage = 1;
 
         StateHasChanged();
     }

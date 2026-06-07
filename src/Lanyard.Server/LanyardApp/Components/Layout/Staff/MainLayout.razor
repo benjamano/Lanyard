@@ -2,8 +2,6 @@
 
 @inject NavigationManager NavigationManager
 
-<loading-theme storage-name="theme"></loading-theme>
-
 <FluentProviders />
 
 <FluentLayout>
@@ -11,9 +9,11 @@
         <FluentStack VerticalAlignment="VerticalAlignment.Top">
             <FluentLayoutHamburger Visible="true"/>
             <FluentSpacer Width="10px"></FluentSpacer>
-            <FluentLink Href="/" Class="nav-brand" Style="color: white;">
-                <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500">
-                    Lan<span class="nav-brand-flip">y</span>ard
+            <FluentLink Href="/" Class="nav-brand">
+                <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
+                    <span>
+                        Lan<span class="nav-brand-flip">y</span>ard
+                    </span>
                 </FluentText>
             </FluentLink>
         </FluentStack>
