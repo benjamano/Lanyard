@@ -8,9 +8,8 @@
 
 <FluentStack Orientation="Orientation.Horizontal"
             VerticalAlignment="VerticalAlignment.Center"
-            HorizontalGap="8"
-            Class="music-client-controls"
-            Width="auto">
+            HorizontalAlignment="HorizontalAlignment.Right"
+            HorizontalGap="8">
     <FluentSelect TOption="Client"
                   TValue="string"
                   Items="@clients"
@@ -19,7 +18,6 @@
                   Placeholder="@ClientPlaceholder"
                   Value="@(selectedClientId?.ToString() ?? string.Empty)"
                   ValueChanged="@OnSelectedClientChanged"
-                  Class="music-client-select"
                   Disabled="@(!clients.Any())" />
 
     <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">

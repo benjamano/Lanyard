@@ -23,7 +23,7 @@
 <PageTitle>Music</PageTitle>
 
 <div class="music-page">
-    <div class="music-content p-2">
+    <div class="music-content">
         <div class="music-panes">
             <div class="music-pane music-playlists-pane">
                 <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId" InitialPlaylistId="initialPlaylistId"></Playlists>
@@ -35,7 +35,7 @@
         </div>
     </div>
 
-    <div class="music-bottom-controls">
+    <FluentCard class="music-bottom-controls" Appearance="CardAppearance.Filled" Margin="@Margin.Top3">
         <FluentStack Orientation="Orientation.Horizontal"
                      VerticalAlignment="VerticalAlignment.Center"
                      HorizontalGap="12"
@@ -88,31 +88,28 @@
                                 OnClick="RestartSong"
                                 @ondblclick="PreviousSong"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+                                Style="border-radius: 50%;"
+                                IconStart="@(new Icons.Regular.Size32.Previous())">
                     </FluentButton>
+
+                    @{
+                        Icon playIcon = isPlaying ? new Icons.Regular.Size32.Pause() : new Icons.Regular.Size32.Play();
+                    }
 
                     <FluentButton Appearance="ButtonAppearance.Primary"
                                 Title="@(isPlaying ? "Pause" : "Play")"
                                 OnClick="TogglePlay"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        @if (isPlaying)
-                        {
-                            <FluentIcon Color="Color.Primary" Icon="Icons.Filled.Size20.Pause" />
-                        }
-                        else
-                        {
-                            <FluentIcon Color="Color.Primary" Icon="Icons.Filled.Size20.Play" />
-                        }
+                                Style="border-radius: 50%;"
+                                IconStart="playIcon">
                     </FluentButton>
 
                     <FluentButton Appearance="ButtonAppearance.Outline"
                                 Title="Next"
                                 OnClick="NextSong"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+                                Style="border-radius: 50%;"
+                                IconStart="@(new Icons.Regular.Size32.Next())">
                     </FluentButton>
 
                     @{
@@ -131,23 +128,21 @@
                     <div @onclick="() => showTimeLeftInsteadOfElapsed = !showTimeLeftInsteadOfElapsed" role="button">
                         @if (showTimeLeftInsteadOfElapsed)
                         {
-                            <FluentText>-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentText>
+                            <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                         else
                         {
-                            <FluentText>@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentText>
+                            <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                     </div>
                     <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" Class="mt-3"></FluentSlider>
-                    <FluentText>@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
+                    <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
                 </FluentStack>
             </FluentStack>
 
-            <div style="flex: 1; display: flex; justify-content: flex-end;">
-                <ClientSelector OnClientSelected="SetSelectedClient" />
-            </div>
+            <ClientSelector OnClientSelected="SetSelectedClient" />
         </FluentStack>
-    </div>
+    </FluentCard>
 </div>
 
 @code {

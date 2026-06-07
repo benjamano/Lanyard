@@ -37,7 +37,11 @@
 
         _selfRef = DotNetObjectReference.Create(this);
         
-        await JS.InvokeVoidAsync("autoLogout.init", _selfRef);
+        try
+        {
+            await JS.InvokeVoidAsync("autoLogout.dispose");
+        }
+        catch { }
 
         _ticker = new System.Threading.Timer(
             _ => InvokeAsync(CheckTimers),

@@ -19,7 +19,11 @@
     {
         if (firstRender)
         {
-            await ThemeService.SetThemeAsync("#D740BC", false);
+            try
+            {
+                await ThemeService.SetThemeAsync("#D740BC", false);
+            }
+            catch {}
         }
     }
 }
