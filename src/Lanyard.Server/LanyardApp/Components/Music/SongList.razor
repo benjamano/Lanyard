@@ -17,7 +17,8 @@
         @if (Songs is not null && Songs.Any())
         {
             <FluentDataGrid Items="@Songs.AsQueryable()" GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
-                            Style="width: 100%;" ShowHover="@AllowPlaying">
+                            Style="width: 100%;" 
+                            ShowHover="@(AllowPlaying && SelectedClientId != null)">
                 <ChildContent>
                     <TemplateColumn Title="#" Align="DataGridCellAlignment.End">
                         <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
@@ -40,7 +41,7 @@
                     </TemplateColumn>
 
                     <TemplateColumn Title="Title">
-                        <div style="cursor: pointer; display: flex; align-items: center;"
+                        <div style="display: flex; align-items: center;"
                                 @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentText Weight="@(IsCurrentlyPlaying(context.Song!) ? TextWeight.Bold : TextWeight.Regular)"
                                             Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
@@ -50,19 +51,19 @@
                     </TemplateColumn>
 
                     <TemplateColumn Title="Album">
-                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentText>@context.Song!.AlbumName</FluentText>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Date Added">
-                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentText>@context.Song!.CreateDate.ToString("d")</FluentText>
                         </div>
                     </TemplateColumn>
 
                     <TemplateColumn Title="Length" Align="DataGridCellAlignment.Start">
-                        <div style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
                             <FluentText>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
                             </FluentText>
                         </div>

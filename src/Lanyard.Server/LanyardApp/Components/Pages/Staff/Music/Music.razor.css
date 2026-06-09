@@ -1,8 +1,7 @@
 .music-page {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 168px);
-    max-height: calc(100dvh - 168px);
+    height: calc(100%);
     overflow: hidden;
     min-height: 0;
 }

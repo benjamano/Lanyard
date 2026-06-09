@@ -27,7 +27,8 @@
         <FluentStack class="playlists-grid" Orientation="Orientation.Vertical">
             @foreach (Playlist playlist in playlists)
             {
-                <FluentCard class="playlist-card p-2" Style="@GetPlaylistCardStyle(playlist.Id)"
+                <FluentCard class="playlist-card p-2"
+                            Appearance="GetPlaylistCardStyle(playlist.Id)"
                             @onclick="() => LoadPlaylist(playlist.Id)">
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
                         <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor(playlist.Name); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -70,7 +71,7 @@
                 </FluentCard>
             }
 
-            <FluentCard Class="playlist-card p-2" Style="@GetAllSongsCardStyle()"
+            <FluentCard Class="playlist-card p-2" Appearance="@GetAllSongsCardStyle()"
                         @onclick="ShowAllSongs">
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
                     <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("All Songs"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -176,22 +177,14 @@
         UpdateCurrentPlaylist(triggerRender: false);
     }
 
-    private string GetPlaylistCardStyle(Guid playlistId)
+    private CardAppearance GetPlaylistCardStyle(Guid playlistId)
     {
-        List<string> styles = new List<string> { "cursor: pointer" };
-
         if (selectedPlaylistId == playlistId)
         {
-            styles.Add("background-color: var(--neutral-fill-stealth-active)");
-            styles.Add("border-left:2px solid var(--accent-fill-rest)");
+            return CardAppearance.Filled;
         }
 
-        if (currentlyPlayingPlaylistId == playlistId)
-        {
-            @* styles.Add("border: 2px solid var(--accent-fill-rest)"); *@
-        }
-
-        return string.Join("; ", styles) + ";";
+        return CardAppearance.Default;
     }
 
     private string GetPlaylistNameStyle(Guid playlistId)
@@ -211,24 +204,14 @@
         return string.Join("; ", styles) + ";";
     }
 
-    private string GetAllSongsCardStyle()
+    private CardAppearance GetAllSongsCardStyle()
     {
-        List<string> styles = new List<string> { "cursor: pointer" };
-
         if (allSongsSelected)
         {
-            styles.Add("background-color: var(--neutral-fill-stealth-active)");
-            styles.Add("border-left:2px solid var(--accent-fill-rest)");
+            return CardAppearance.Filled;
         }
 
-        if (SelectedClientId != null &&
-            currentlyPlayingPlaylistId == null &&
-            _player.GetCurrentPlaybackState(SelectedClientId.Value) == PlaybackState.Playing)
-        {
-            styles.Add("border: 2px solid var(--accent-fill-rest)");
-        }
-
-        return string.Join("; ", styles) + ";";
+        return CardAppearance.Default;
     }
 
     private string GetInitials(string name)

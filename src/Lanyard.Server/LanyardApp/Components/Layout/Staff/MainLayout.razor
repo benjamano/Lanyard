@@ -2,6 +2,8 @@
 
 @inject NavigationManager NavigationManager
 
+<FluentProviders />
+
 <FluentLayout>
     <FluentLayoutItem Area="LayoutArea.Header">
         <FluentStack VerticalAlignment="VerticalAlignment.Top">
@@ -21,7 +23,7 @@
         <NavMenu />
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content" Padding="@(addPadding ? Padding.All3 : Padding.All0)">
+    <FluentLayoutItem Area="LayoutArea.Content" Padding="@Padding.All3">
         <AutoLogoutManager />
         @Body
     </FluentLayoutItem>
@@ -32,15 +34,8 @@
 </FluentLayout>
 
 @code {
-    public bool addPadding = true;
-
     protected override void OnInitialized()
     {
-        if (NavigationManager.Uri.Contains("/music", StringComparison.OrdinalIgnoreCase))
-        {
-            addPadding = false;
-        }
-
         base.OnInitialized();
     }
 }

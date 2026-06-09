@@ -60,7 +60,7 @@
                             }
 
                             <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
-                            <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100 mt-3"></FluentSlider>
+                            <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100"></FluentSlider>
                         </FluentStack>
                     </FluentGridItem>
                 </FluentGrid>
@@ -135,12 +135,16 @@
                             <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                     </div>
-                    <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" Class="mt-3"></FluentSlider>
+
+                    <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)"></FluentSlider>
+
                     <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
                 </FluentStack>
             </FluentStack>
 
-            <ClientSelector OnClientSelected="SetSelectedClient" />
+            <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center;">
+                <ClientSelector OnClientSelected="SetSelectedClient" />
+            </div>
         </FluentStack>
     </FluentCard>
 </div>
