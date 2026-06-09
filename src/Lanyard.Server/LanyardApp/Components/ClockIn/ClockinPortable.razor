@@ -1,7 +1,7 @@
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Height="100%">
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
         <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" VerticalGap="0">
-            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">Current Shift</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Color="Color.Default">Current Shift</FluentText>
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">Customer Service Assistant</FluentText>
         </FluentStack>
         @* <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Informative">
@@ -9,7 +9,7 @@
         </FluentBadge> *@
     </FluentStack>
 
-    <FluentCard Height="auto" Margin="@Margin.Vertical3">
+    <FluentCard Margin="@Margin.Vertical3">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
                 <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" Margin="@Margin.End2" />
@@ -35,7 +35,7 @@
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Primary">
                     <FluentStack Orientation="Orientation.Horizontal" VerticalGap="0" Style="font-variant-numeric: tabular-nums;">
                         @FormatElapsed(_currentTime - _shiftStartTime)
-                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentText>
+                        <FluentText Weight="TextWeight.Semibold" Class="mt-2 ms-1" Size="TextSize.Size400" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentText>
                     </FluentStack>
                 </FluentText>
             </FluentStack>

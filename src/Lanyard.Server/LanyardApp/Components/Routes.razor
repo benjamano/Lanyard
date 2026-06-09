@@ -4,12 +4,12 @@
 <CascadingAuthenticationState>
     <LayoutView Layout="@typeof(MainLayout)">
         <Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="typeof(StaffNotFound)">
-            <Navigating>
+            @* <Navigating>
                 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" VerticalGap="16px" Height="100%">
                     <FluentSpinner />
-                    @* <FluentText>Routing you to the correct page...</FluentText> *@
+                    @* <FluentText>Routing you to the correct page...</FluentText>
                 </FluentStack>
-            </Navigating>
+            </Navigating> *@
             <Found Context="routeData">
                 <RouteView RouteData="@routeData" />
             </Found>

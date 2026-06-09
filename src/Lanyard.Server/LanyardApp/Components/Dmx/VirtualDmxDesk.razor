@@ -49,7 +49,6 @@
 
     // Key: Channel number (1–512), Value: Channel value (0–255)
     private Dictionary<int, int> channelValues = new();
-    private bool _isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,7 +85,6 @@
 
     private async Task LoadChannelValues()
     {
-        _isLoading = true;
         StateHasChanged();
 
         Result<IEnumerable<Infrastructure.Models.Dmx.DmxChannel>>? channelValuesResult = await _dmxService.GetDmxChannelsAsync(ClientId ?? Guid.Empty);
@@ -95,8 +93,6 @@
         {
             channelValues = channelValuesResult.Data.ToDictionary(kvp => kvp.Address, kvp => (int)kvp.Value);
         }
-
-        _isLoading = false;
 
         StateHasChanged();
     }

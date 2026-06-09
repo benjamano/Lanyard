@@ -4,7 +4,6 @@
 
 @inject IToastService _toastService
 @inject IClientService _clientService
-@inject ILogger<ClientSelector> _logger
 
 <FluentStack Orientation="Orientation.Horizontal"
             VerticalAlignment="VerticalAlignment.Center"
@@ -56,7 +55,6 @@
         }
         else
         {
-            _logger.LogError("Error loading connected clients: {Message}", result.Error);
             _toastService.ShowError("Failed to load connected clients.");
         }
     }
