@@ -2,47 +2,47 @@
 @using System.Linq.Expressions
 @inject IToastService ToastService
 
-<FluentCard>
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Primary">Other Details</FluentText>
-
-        <EditForm class="w-100" EditContext="@_editContext">
-            <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                <FluentTextInput @bind-Value="model.Email"
-                                 Label="Email Address"
-                                 TextInputType="TextInputType.Email"
-                                 Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.Email)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                 MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
-                </FluentTextInput>
-                <FluentTextInput @bind-Value="model.PhoneNumber"
-                                 Label="Phone Number"
-                                 TextInputType="TextInputType.Telephone"
-                                 Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.PhoneNumber)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                 MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-                </FluentTextInput>
-                <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth"
-                                  Label="Date of Birth"
-                                  Style="width: 100%;"
-                                  Message="@GetValidationMessage(() => model.DateOfBirth)"
-                                  MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                  MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
-                </FluentDatePicker>
-            </FluentStack>
-        </EditForm>
+<EditForm EditContext="@_editContext">
+    <DataAnnotationsValidator />
+    <FluentStack Orientation="Orientation.Vertical">
+        <FluentTextInput @bind-Value="model.Email"
+                            Label="Email Address"
+                            TextInputType="TextInputType.Email"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.Email)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="end" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentTextInput @bind-Value="model.PhoneNumber"
+                            Label="Phone Number"
+                            TextInputType="TextInputType.Telephone"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.PhoneNumber)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="end" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth"
+                            Label="Date of Birth"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.DateOfBirth)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+        </FluentDatePicker>
     </FluentStack>
-</FluentCard>
+</EditForm>
 
 @code {
     private ContactDetailsModel model = new();
     private EditContext _editContext = default!;
+
+    [Parameter]
+    public bool DontShowCard { get; set; } = false;
 
     protected override void OnInitialized()
     {

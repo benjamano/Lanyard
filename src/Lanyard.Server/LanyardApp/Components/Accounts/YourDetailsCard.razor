@@ -2,45 +2,48 @@
 @using System.Linq.Expressions
 @inject IToastService ToastService
 
-<FluentCard Class="mb-2">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Primary">Your Details</FluentText>
-        
-        <EditForm EditContext="@_editContext" class="w-100">
-            <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="16">
-                <FluentTextInput @bind-Value="model.UserName"
-                                 Label="User Name"
-                                 ReadOnly="true"
-                                 Disabled="true"
-                                 Style="width: 100%;">
+<EditForm EditContext="@_editContext">
+    <DataAnnotationsValidator />
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" Width="100%">
+        <FluentTextInput @bind-Value="model.UserName"
+                            Label="User Name"
+                            ReadOnly="true"
+                            Disabled="true"
+                            Width="61%">
+                            
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Start" HorizontalGap="8" Width="75%">
+            <FluentTextInput @bind-Value="model.FirstName"
+                                Label="First Name"
+                                Required="true"
+                                Placeholder="Enter your first name"
+                                Width="100%"
+                                Message="@GetValidationMessage(() => model.FirstName)"
+                                MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                MessageState="MessageState.Error">
+                <EndTemplate>
                     <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextInput>
-                <FluentTextInput @bind-Value="model.FirstName"
-                                 Label="First Name"
-                                 Required="true"
-                                 Placeholder="Enter your first name"
-                                 Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.FirstName)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                 MessageState="MessageState.Error">
+                </EndTemplate>
+            </FluentTextInput>
+            <FluentTextInput @bind-Value="model.LastName"
+                                Label="Last Name"
+                                Required="true"
+                                Placeholder="Enter your last name"
+                                Width="100%"
+                                Message="@GetValidationMessage(() => model.LastName)"
+                                MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                MessageState="MessageState.Error">
+                <EndTemplate>
                     <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextInput>
-                <FluentTextInput @bind-Value="model.LastName"
-                                 Label="Last Name"
-                                 Required="true"
-                                 Placeholder="Enter your last name"
-                                 Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.LastName)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                 MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextInput>
-                <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
-            </FluentStack>
-        </EditForm>
+                </EndTemplate>
+            </FluentTextInput>
+        </FluentStack>
+        <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
     </FluentStack>
-</FluentCard>
+</EditForm>
 
 @code {
     private UserDetailsModel model = new();

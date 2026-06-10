@@ -8,24 +8,26 @@
 <PageTitle>Account Management</PageTitle>
 
 <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Style="max-width: 800px; margin: 16px auto;">
-    @* <FluentText Typo="Typography.PageTitle">Account Management</FluentText> *@
+    <FluentCard>
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size800" Color="Color.Default">Account Management</FluentText>
 
-    <YourDetailsCard @ref="yourDetailsCard" />
+        <YourDetailsCard @ref="yourDetailsCard" />
 
-    <ContactDetailsCard @ref="contactDetailsCard" />
+        <ContactDetailsCard @ref="contactDetailsCard" />
 
-    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8">
-        <FluentButton Appearance="ButtonAppearance.Default" 
-                      IconStart="@(new Icons.Regular.Size20.Key())"
-                      OnClick="OpenChangePasswordDialog">
-            Change Password
-        </FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Primary" 
-                      IconStart="@(new Icons.Regular.Size20.Save())"
-                      OnClick="SaveDetails">
-            Save Changes
-        </FluentButton>
-    </FluentStack>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8">
+            <FluentButton Appearance="ButtonAppearance.Default" 
+                        IconStart="@(new Icons.Regular.Size20.Key())"
+                        OnClick="OpenChangePasswordDialog">
+                Change Password
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" 
+                        IconStart="@(new Icons.Regular.Size20.Save())"
+                        OnClick="SaveDetails">
+                Save Changes
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
 </FluentStack>
 
 @code{

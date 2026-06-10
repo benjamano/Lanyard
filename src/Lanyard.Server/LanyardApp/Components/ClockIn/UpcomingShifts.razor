@@ -18,15 +18,15 @@
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" HorizontalGap="8px">
                         @if (shift.Id == _currentShift.Id)
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.ClockAlarm" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.ClockAlarm" Class="pt-1"/>
                         }
                         else if (shift.Start.Hour < 12)
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.WeatherSunny" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.WeatherSunny" Class="pt-1"/>
                         }
                         else
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.WeatherMoon" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.WeatherMoon" Class="pt-1"/>
                         }
                         <FluentStack Orientation="Orientation.Vertical" Class="mb-1 mt-1" VerticalGap="0">
                             <FluentText Typo="Typography.Body" Color="Color.Primary">
