@@ -1,0 +1,40 @@
+@inject IDashboardService DashboardService
+
+<FluentDataGrid Items="Dashboards.AsQueryable()" 
+                Loading="IsLoading"
+                ShowHover="true"
+                TGridItem="Dashboard">
+    <LoadingContent>
+        <FluentProgressRing/>
+    </LoadingContent>
+    <ChildContent>
+        <PropertyColumn Property="x=> x.Name" Title="Name"/>
+    </ChildContent>
+</FluentDataGrid>
+
+@code {
+    public IEnumerable<Dashboard> Dashboards { get; set; } = [];
+
+    public bool IsLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetDashboards();
+    }
+
+    private async Task GetDashboards()
+    {
+        Result<IEnumerable<Dashboard>> response = await DashboardService.GetDashboardsAsync();
+
+        if (response.IsSuccess && response.Data != null)
+        {
+            Dashboards = response.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load dashboards, {response.Error}");
+        }
+
+        IsLoading = false;
+    }
+}
