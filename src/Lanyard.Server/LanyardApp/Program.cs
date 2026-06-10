@@ -131,12 +131,7 @@ builder.Services.AddScoped(sp =>
 });
 
 // Add FluentUI Components
-builder.Services.AddFluentUIComponents(options =>
-{
-    options.ValidateClassNames = true;
-    options.UseTooltipServiceProvider = true;
-    options.HideTooltipOnCursorLeave = true;
-});
+builder.Services.AddFluentUIComponents();
 
 builder.Services.AddSignalR();
 

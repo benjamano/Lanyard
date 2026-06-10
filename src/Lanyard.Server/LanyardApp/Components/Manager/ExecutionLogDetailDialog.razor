@@ -2,83 +2,79 @@
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.Application.Services
 @using System.Text.Json
-@implements IDialogContentComponent<AutomationRuleExecution>
 
 @inject IClientService _clientService
 
-<FluentDialogHeader ShowDismiss="true">
-    <FluentStack VerticalAlignment="VerticalAlignment.Center">
-        <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
-        <FluentLabel Typo="Typography.PaneHeader">Execution Detail</FluentLabel>
-    </FluentStack>
-</FluentDialogHeader>
-
 <FluentDialogBody>
-    <FluentStack Orientation="Orientation.Vertical" Gap="8">
-        <FluentLabel><strong>Rule:</strong> @Content.RuleName</FluentLabel>
-        <FluentLabel><strong>Trigger Event:</strong> @Content.TriggerEvent</FluentLabel>
-        <FluentLabel><strong>Executed At:</strong> @Content.ExecutedAt.ToLocalTime().ToString("g")</FluentLabel>
-        <FluentLabel>
-            <strong>Overall:</strong>
-            @if (Content.OverallSuccess)
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
+            <FluentText Typo="Typography.PaneHeader">Execution Detail</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentText><strong>Rule:</strong> @Content.RuleName</FluentText>
+            <FluentText><strong>Trigger Event:</strong> @Content.TriggerEvent</FluentText>
+            <FluentText><strong>Executed At:</strong> @Content.ExecutedAt.ToLocalTime().ToString("g")</FluentText>
+            <FluentText>
+                <strong>Overall:</strong>
+                @if (Content.OverallSuccess)
+                {
+                    <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
+                    <span> Success</span>
+                }
+                else
+                {
+                    <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
+                    <span> Failed</span>
+                }
+            </FluentText>
+
+            <FluentDivider />
+
+            <FluentText Typo="Typography.H6">Actions</FluentText>
+
+            @foreach (AutomationRuleActionExecution ae in Content.ActionExecutions)
             {
-                <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
-                <span> Success</span>
-            }
-            else
-            {
-                <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
-                <span> Failed</span>
-            }
-        </FluentLabel>
-
-        <FluentDivider />
-
-        <FluentLabel Typo="Typography.H6">Actions</FluentLabel>
-
-        @foreach (AutomationRuleActionExecution ae in Content.ActionExecutions)
-        {
-            <FluentCard MinimalStyle="true">
-                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Gap="16">
-                    @if (ae.Success)
-                    {
-                        <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
-                    }
-                    else
-                    {
-                        <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
-                    }
-                    <FluentStack Orientation="Orientation.Vertical">
-                        <FluentLabel><strong>Type:</strong> @(ae.AutomationRuleAction?.ActionType ?? "Unknown")</FluentLabel>
-                        <FluentLabel><strong>Target:</strong> @ResolveTargetClient(ae)</FluentLabel>
-                        @if (!string.IsNullOrEmpty(ae.ErrorMessage))
+                <FluentCard Appearance="CardAppearance.Subtle">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" VerticalGap="16">
+                        @if (ae.Success)
                         {
-                            <FluentLabel Color="Color.Error"><strong>Error:</strong> @ae.ErrorMessage</FluentLabel>
+                            <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
                         }
+                        else
+                        {
+                            <FluentIcon Icon="Icons.Regular.Size20.DismissCircle" Color="Color.Error" />
+                        }
+                        <FluentStack Orientation="Orientation.Vertical">
+                            <FluentText><strong>Type:</strong> @(ae.AutomationRuleAction?.ActionType ?? "Unknown")</FluentText>
+                            <FluentText><strong>Target:</strong> @ResolveTargetClient(ae)</FluentText>
+                            @if (!string.IsNullOrEmpty(ae.ErrorMessage))
+                            {
+                                <FluentText Color="Color.Error"><strong>Error:</strong> @ae.ErrorMessage</FluentText>
+                            }
+                        </FluentStack>
                     </FluentStack>
-                </FluentStack>
-            </FluentCard>
-        }
+                </FluentCard>
+            }
 
-        @if (Content.ActionExecutions.Count == 0)
-        {
-            <FluentLabel>No action execution records.</FluentLabel>
-        }
-    </FluentStack>
+            @if (Content.ActionExecutions.Count == 0)
+            {
+                <FluentText>No action execution records.</FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@CloseAsync" Appearance="ButtonAppearance.Outline">Close</FluentButton>
+    </ActionTemplate>
 </FluentDialogBody>
-
-<FluentDialogFooter>
-    <FluentButton OnClick="CloseAsync" Appearance="Appearance.Outline">Close</FluentButton>
-</FluentDialogFooter>
 
 @code {
 #nullable enable
 
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
-
-    [Parameter]
-    public DialogParameters Parameters { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     [Parameter]
     public AutomationRuleExecution Content { get; set; } = default!;
@@ -114,6 +110,6 @@
 
     private async Task CloseAsync()
     {
-        await Dialog!.CancelAsync();
+        await Dialog.CancelAsync();
     }
 }

@@ -1,53 +1,63 @@
-﻿@using System.ComponentModel.DataAnnotations
+@using System.ComponentModel.DataAnnotations
+@using System.Linq.Expressions
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
-@implements IDialogContentComponent<Playlist>
 
 @inject IToastService ToastService
 @inject ApplicationDbContext _context
 
-<FluentDialogHeader ShowDismiss="true">
-    <FluentStack VerticalAlignment="VerticalAlignment.Center">
-        <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
-        <FluentLabel Typo="Typography.PaneHeader">
-            Create New Playlist
-        </FluentLabel>
-    </FluentStack>
-</FluentDialogHeader>
-
 <FluentDialogBody>
-    <EditForm Model="@model" OnValidSubmit="HandleSavePlaylist">
-        <DataAnnotationsValidator />
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            <FluentTextField @bind-Value="model.Name"                             Label="Playlist Name"                             Required                             Placeholder="My Awesome Playlist"
-                             Style="width: 100%;"                             @oninput="@OnNameChanged">
-                <FluentIcon Value="@(new Icons.Regular.Size16.MusicNote2())" Slot="start" />
-            </FluentTextField>
-            <FluentValidationMessage For="@(() => model.Name)" />
-            <FluentTextArea @bind-Value="model.Description"                            Label="Description (Optional)"
-                            Placeholder="Add a description..."                            Rows="3"                            Style="width: 100%;">
-            </FluentTextArea>
-            <FluentValidationMessage For="@(() => model.Description)" />
-            <FluentDialogFooter>
-                <FluentButton Appearance="Appearance.Accent"                              Type="ButtonType.Submit"                              Disabled="@isSubmitting"
-                              IconStart="@(new Icons.Regular.Size20.Add())">
-                    @if (isSubmitting)
-                    {
-                        <FluentProgressRing Style="width: 16px; height: 16px;" />
-                        <span class="ms-2">Creating...</span>
-                    }
-                    else
-                    {
-                        <span>Create</span>
-                    }
-                </FluentButton>
-                <FluentButton Appearance="Appearance.Neutral"                              OnClick="@CancelDialog"                              Disabled="@isSubmitting">
-                    Cancel
-                </FluentButton>
-            </FluentDialogFooter>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+            <FluentText Typo="Typography.PaneHeader">Create New Playlist</FluentText>
         </FluentStack>
-    </EditForm>
+    </TitleTemplate>
+    <ChildContent>
+        <EditForm EditContext="@_editContext" OnValidSubmit="HandleSavePlaylist">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentTextInput @bind-Value="model.Name"
+                                 Label="Playlist Name"
+                                 Required="true"
+                                 Placeholder="My Awesome Playlist"
+                                 Style="width: 100%;"
+                                 Message="@GetValidationMessage(() => model.Name)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                 MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.MusicNote2())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextArea @bind-Value="model.Description"
+                                Label="Description (Optional)"
+                                Placeholder="Add a description..."
+                                Height="5em"
+                                Style="width: 100%;" />
+
+                <FluentStack Orientation="Orientation.Horizontal">
+                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                  Type="ButtonType.Submit"
+                                  Disabled="@isSubmitting"
+                                  IconStart="@(new Icons.Regular.Size20.Add())">
+                        @if (isSubmitting)
+                        {
+                            <FluentSpinner Style="width: 16px; height: 16px;" />
+                            <span class="ms-2">Creating...</span>
+                        }
+                        else
+                        {
+                            <span>Create</span>
+                        }
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Default"
+                                  OnClick="@CancelDialog"
+                                  Disabled="@isSubmitting">
+                        Cancel
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        </EditForm>
+    </ChildContent>
 </FluentDialogBody>
 
 @code {
@@ -55,23 +65,15 @@
     public Playlist Content { get; set; } = default!;
 
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
-
-    [Parameter]
-    public DialogParameters Parameters { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     private bool isSubmitting;
     private NewPlaylistModel model = new();
+    private EditContext _editContext = default!;
 
     protected override void OnInitialized()
     {
-        TogglePrimaryActionButton(false);
-    }
-
-    private void OnNameChanged(ChangeEventArgs e)
-    {
-        bool hasName = !string.IsNullOrWhiteSpace(e.Value?.ToString());
-        TogglePrimaryActionButton(hasName);
+        _editContext = new EditContext(model);
     }
 
     private async Task HandleSavePlaylist()
@@ -92,7 +94,7 @@
             await _context.SaveChangesAsync();
 
             ToastService.ShowSuccess($"Playlist '{playlist.Name}' created successfully!");
-            await Dialog!.CloseAsync(playlist);
+            await Dialog.CloseAsync(playlist);
         }
         catch (Exception ex)
         {
@@ -107,12 +109,13 @@
 
     private async Task CancelDialog()
     {
-        await Dialog!.CancelAsync();
+        await Dialog.CancelAsync();
     }
 
-    private void TogglePrimaryActionButton(bool enable)
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
     {
-        Dialog?.TogglePrimaryActionButton(enable);
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class NewPlaylistModel

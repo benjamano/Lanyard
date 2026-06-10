@@ -1,32 +1,49 @@
-﻿@using Lanyard.Application.Services.Authentication
-<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
+﻿<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
 
 <dialog id="components-reconnect-modal" data-nosnippet>
     <div class="components-reconnect-container">
-        <div class="components-rejoining-animation" aria-hidden="true">
-            <div></div>
-            <div></div>
-        </div>
-        <p class="components-reconnect-first-attempt-visible">
-            Rejoining the server...
-        </p>
-        <p class="components-reconnect-repeated-attempt-visible">
-            Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
-        </p>
-        <p class="components-reconnect-failed-visible">
-            Failed to rejoin.<br />Please retry or reload the page.
-        </p>
-        <FluentButton id="components-reconnect-button" class="components-reconnect-failed-visible" Appearance="Appearance.Outline">
-            Retry
-        </FluentButton>
-        <p class="components-pause-visible">
-            The session has been paused by the server.
-        </p>
-        <button id="components-resume-button" class="components-pause-visible">
-            Resume
-        </button>
-        <p class="components-resume-failed-visible">
-            Failed to resume the session.<br />Please reload the page.
-        </p>
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="10">
+            <div class="components-reconnect-spinner">
+                <FluentSpinner Size="SpinnerSize.Large" aria-hidden="true" />
+            </div>
+            <div class="components-failed-to-connect-visible">
+                <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error"/>
+            </div>
+            <div class="components-reconnect-first-attempt-visible">
+                <FluentText>
+                    Rejoining the server...
+                </FluentText>
+            </div>
+            <div class="components-reconnect-repeated-attempt-visible">
+                <FluentText>
+                    Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+                </FluentText>
+            </div>
+            <div class="components-reconnect-failed-visible">
+                <FluentText>
+                    Failed to rejoin.<br />Please retry or reload the page.
+                </FluentText>
+            </div>
+            <div id="components-reconnect-button" class="components-reconnect-failed-visible">
+                <FluentButton Appearance="ButtonAppearance.Outline">
+                    Retry
+                </FluentButton>
+            </div>
+            <div class="components-pause-visible">
+                <FluentText>
+                    The session has been paused by the server.
+                </FluentText>
+            </div>
+            <div id="components-resume-button" class="components-pause-visible">
+                <FluentButton Appearance="ButtonAppearance.Outline">
+                    Resume
+                </FluentButton>
+            </div>
+            <div class="components-resume-failed-visible">
+                <FluentText>
+                    Failed to resume the session.<br />Please reload the page.
+                </FluentText>
+            </div>
+        </FluentStack>
     </div>
 </dialog>

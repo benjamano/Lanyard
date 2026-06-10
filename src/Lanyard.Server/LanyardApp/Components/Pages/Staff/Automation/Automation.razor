@@ -21,18 +21,18 @@
 <PageTitle>Automation</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentToolbar class="w-100" id="toolbar-automation">
-        <FluentStack slot="start" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+    <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-automation">
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
             <FluentSwitch @bind-Value="_engineEnabled" @bind-Value:after="OnEngineToggleChangedAsync">
                 Engine: @(_engineEnabled ? "Enabled" : "Disabled")
             </FluentSwitch>
         </FluentStack>
-        <FluentButton slot="end" Appearance="Appearance.Outline"
+        <FluentButton Appearance="ButtonAppearance.Outline"
                       IconEnd="new Icons.Regular.Size20.Add()"
                       OnClick="OpenAddRuleDialogAsync">
             New Rule
         </FluentButton>
-    </FluentToolbar>
+    </FluentStack>
 
     <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto" Style="width: 100%;">
         <EmptyContent>
@@ -46,7 +46,7 @@
             <PropertyColumn Title="Trigger Event" Property="@(r => r.TriggerEvent.ToString())" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
-                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Accent"
+                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
                                 OnClick="@(() => OpenEditRuleDialogAsync(context))" />
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
                                 OnClick="@(() => ConfirmDeleteRuleAsync(context))" />
@@ -59,14 +59,14 @@
 <FluentDivider Class="my-2" />
 
 <FluentCard Height="auto">
-    <FluentToolbar class="w-100" id="toolbar-log">
-        <FluentLabel slot="start" Typo="Typography.PaneHeader">Execution Log</FluentLabel>
-        <FluentStack slot="end" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
+    <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-log">
+        <FluentText Typo="Typography.PaneHeader">Execution Log</FluentText>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
             <FluentSwitch @bind-Value="_showFailuresOnly" @bind-Value:after="StateHasChanged">
                 Failures only
             </FluentSwitch>
         </FluentStack>
-    </FluentToolbar>
+    </FluentStack>
 
     <FluentDataGrid Items="@FilteredExecutions.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr auto" Style="width: 100%;">
         <EmptyContent>
@@ -193,18 +193,13 @@
 
     private async Task OpenAddRuleDialogAsync()
     {
-        IDialogReference dialog = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(
-            null!,
-            new DialogParameters()
-            {
-                Width = "auto",
-                Height = "auto",
-                TrapFocus = true,
-                Modal = true,
-            });
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(options =>
+        {
+            options.Width = "600px";
+            options.Modal = true;
+        });
 
-        DialogResult? result = await dialog.Result;
-        if (result?.Data is true)
+        if (result.Value is true)
         {
             await LoadRulesAsync();
         }
@@ -212,18 +207,14 @@
 
     private async Task OpenEditRuleDialogAsync(AutomationRule rule)
     {
-        IDialogReference dialog = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(
-            rule,
-            new DialogParameters()
-            {
-                Width = "auto",
-                Height = "auto",
-                TrapFocus = true,
-                Modal = true
-            });
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAutomationRuleDialog>(options =>
+        {
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditAutomationRuleDialog.Content), rule);
+        });
 
-        DialogResult? result = await dialog.Result;
-        if (result?.Data is true)
+        if (result.Value is true)
         {
             await LoadRulesAsync();
         }
@@ -231,27 +222,16 @@
 
     private async Task ConfirmDeleteRuleAsync(AutomationRule rule)
     {
-        DialogParameters parameters = new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
         {
-            Title = "Are you sure?",
-            OnDialogResult = _dialogService.CreateDialogCallback(this, async result => await HandleDeleteRuleAsync(result)),
-            PrimaryAction = "Yes, Delete",
-            PrimaryActionEnabled = true,
-            SecondaryAction = "Cancel",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
-        parameters.Add("Message", $"Delete rule '{rule.Name}'? This cannot be undone.");
-        await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(rule, parameters);
-    }
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), rule.Name);
+        });
 
-    private async Task HandleDeleteRuleAsync(DialogResult result)
-    {
-        if (result.Cancelled == false)
+        if (!result.Cancelled)
         {
-            AutomationRule rule = (AutomationRule)result.Data!;
             Result<bool> deleteResult = await _ruleService.DeleteRuleAsync(rule.Id);
             if (deleteResult.IsSuccess)
             {
@@ -267,18 +247,12 @@
 
     private async Task OpenExecutionDetailDialogAsync(AutomationRuleExecution execution)
     {
-        await _dialogService.ShowDialogAsync<ExecutionLogDetailDialog>(
-            execution,
-            new DialogParameters()
-            {
-                Title = $"Execution: {execution.RuleName}",
-                PrimaryAction = "Close",
-                PrimaryActionEnabled = true,
-                SecondaryAction = string.Empty,
-                Width = "600px",
-                Height = "auto",
-                TrapFocus = true,
-                Modal = true
-            });
+        await _dialogService.ShowDialogAsync<ExecutionLogDetailDialog>(options =>
+        {
+            options.Header.Title = $"Execution: {execution.RuleName}";
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ExecutionLogDetailDialog.Content), execution);
+        });
     }
 }

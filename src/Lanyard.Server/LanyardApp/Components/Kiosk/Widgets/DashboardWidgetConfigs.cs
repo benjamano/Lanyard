@@ -18,7 +18,7 @@ public static class DashboardWidgetConfigs
         public Guid? ProjectionProgramIdToTrigger { get; set; }
         public Guid? TargetClientId { get; set; }
         public string? ButtonLabel { get; set; }
-        public Appearance Appearance { get; set; }
+        public ButtonAppearance Appearance { get; set; }
     }
 
     public sealed class TextAreaWidgetConfig
@@ -49,7 +49,7 @@ public static class DashboardWidgetConfigs
         {
             ProjectionProgramIdToTrigger = null,
             TargetClientId = null,
-            Appearance = Appearance.Neutral,
+            Appearance = ButtonAppearance.Default,
             ButtonLabel = "Run Action"
         };
     }

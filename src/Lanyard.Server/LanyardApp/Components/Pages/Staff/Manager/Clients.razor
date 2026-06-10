@@ -1,4 +1,4 @@
-﻿@page "/manage/clients"
+@page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
 @using Lanyard.App.Components.Dmx
@@ -11,29 +11,29 @@
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentLabel Typo="Typography.PaneHeader">
+    <FluentText Typo="Typography.PaneHeader">
         Clients
-    </FluentLabel>
+    </FluentText>
     <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <ChildContent>
             <PropertyColumn Property="x => x.Id" Title="Client ID"/>
             <TemplateColumn Sortable="true" Title="Name">
                 @context.Name
-                <FluentIcon OnClick="() => ShowUpdateClientNameDialog(context.Id)" Icon="Icons.Regular.Size20.Edit"
+                <FluentIcon OnClick="@(async () => await ShowUpdateClientNameDialog(context.Id))" Icon="Icons.Regular.Size20.Edit"
                             Class="ms-1" role="button"></FluentIcon>
             </TemplateColumn>
             <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address"/>
-            <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending" Sortable="true"
+            <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
                             Property="x => x.LastLogin" Title="Last Login" />
             <TemplateColumn Title="Capabilities">
                 @if (context.ProjectionEnabled)
                 {
-                    <FluentBadge Appearance="Appearance.Accent" Class="me-1">Projection</FluentBadge>
+                    <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">Projection</FluentBadge>
                 }
 
                 @if (context.DmxEnabled)
                 {
-                    <FluentBadge Appearance="Appearance.Accent" Class="me-1">DMX</FluentBadge>
+                    <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
                 }
 
                 <FluentIcon OnClick="() => OpenUpdateClientCapabilitiesCard(context.Id)"
@@ -62,7 +62,7 @@
 <FluentDivider Class="my-2"></FluentDivider>
 
 <FluentGrid Spacing="2">
-    <FluentGridItem xs="12" sm="12" md="6">
+    <FluentGridItem Xs="12" Sm="12" Md="6">
         <ClientProjectionCapabilities 
             UpdateClientCapabilities="GetClientsAsync" 
             IsShowing="@showClientCapabilitiesCard"
@@ -70,40 +70,38 @@
         </ClientProjectionCapabilities>
     </FluentGridItem>
 
-    <FluentGridItem xs="12" sm="12" md="6">
+    <FluentGridItem Xs="12" Sm="12" Md="6">
         <ClientMusicCapabilities 
             IsShowing="@showClientCapabilitiesCard"
             clientId="@updatingClientId">
         </ClientMusicCapabilities>
     </FluentGridItem>
 
-    <FluentGridItem xs="12" sm="12" md="6">
+    <FluentGridItem Xs="12" Sm="12" Md="6">
         <ClientDmxConfig ClientId="@updatingClientId" />
     </FluentGridItem>
 </FluentGrid>
 
-<FluentDialog @ref="updateClientNameDialog" @bind-Hidden="@hideUpdateClientNameDialog">
-    <FluentDialogHeader @onclose="CloseUpdateClientNameDialog" ShowDismiss="true" Visible="true">
-        <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
-            <FluentLabel Typo="Typography.PaneHeader">
-                Update Client Name
-            </FluentLabel>
-        </FluentStack>
-    </FluentDialogHeader>
-
-    <EditForm Model="updateClientModel" OnValidSubmit="SaveNewClientName">
-        <FluentDialogBody Class="w-100">
-            <FluentTextField @bind-Value="updateClientModel.Name" class="w-100" Label="New Client Name"
-                             Placeholder="Enter new client name..." />
-        </FluentDialogBody>
-
-        <FluentDialogFooter Class="d-flex justify-content-end">
-            <FluentButton Autofocus="true" @onclick="CloseUpdateClientNameDialog">Close</FluentButton>
-            <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit"
-                          IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
-        </FluentDialogFooter>
-    </EditForm>
+<FluentDialog @ref="updateClientNameDialog" Modal="true">
+    <FluentDialogBody>
+        <TitleTemplate>
+            <FluentStack VerticalAlignment="VerticalAlignment.Center">
+                <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
+                <FluentText Typo="Typography.PaneHeader">Update Client Name</FluentText>
+            </FluentStack>
+        </TitleTemplate>
+        <ChildContent>
+            <EditForm Model="updateClientModel" OnValidSubmit="SaveNewClientName">
+                <FluentTextInput @bind-Value="updateClientModel.Name" class="w-100" Label="New Client Name"
+                                 Placeholder="Enter new client name..." />
+                <FluentStack Orientation="Orientation.Horizontal" Class="mt-2">
+                    <FluentButton OnClick="CloseUpdateClientNameDialog">Close</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                  IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
+                </FluentStack>
+            </EditForm>
+        </ChildContent>
+    </FluentDialogBody>
 </FluentDialog>
 
 @code {
@@ -112,7 +110,6 @@
     private FluentDialog? updateClientNameDialog;
     private UpdateClientModel updateClientModel = new();
 
-    private bool hideUpdateClientNameDialog = true;
     private Guid? updatingClientId = null;
 
     private class UpdateClientModel
@@ -124,14 +121,6 @@
 
     private PeriodicTimer? timer;
     private DateTime now;
-
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (firstRender)
-        {
-            updateClientNameDialog!.Hide();
-        }
-    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -156,20 +145,17 @@
         timer?.Dispose();
     }
 
-    private void ShowUpdateClientNameDialog(Guid clientId)
+    private async Task ShowUpdateClientNameDialog(Guid clientId)
     {
         updatingClientId = clientId;
-
         updateClientModel.Name = clients.FirstOrDefault(x => x.Id == clientId)?.Name ?? string.Empty;
-
-        updateClientNameDialog?.Show();
+        await updateClientNameDialog!.ShowAsync();
     }
 
-    private void CloseUpdateClientNameDialog()
+    private async Task CloseUpdateClientNameDialog()
     {
         updatingClientId = null;
-
-        updateClientNameDialog?.Hide();
+        await updateClientNameDialog!.HideAsync();
     }
 
     private async Task GetClientsAsync()
@@ -214,7 +200,7 @@
 
         await GetClientsAsync();
 
-        updateClientNameDialog?.Hide();
+        await updateClientNameDialog!.HideAsync();
     }
 
     private void OpenUpdateClientCapabilitiesCard(Guid clientId)

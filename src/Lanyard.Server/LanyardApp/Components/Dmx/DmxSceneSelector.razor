@@ -8,9 +8,12 @@
 
 <FluentCard Class="mt-2">
     <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
-        <FluentLabel Typo="Typography.Header">Scenes</FluentLabel>
+        <FluentText Size="TextSize.Size600"
+                    Color="Color.Default">
+            Scenes
+        </FluentText>
         <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
-                      Appearance="Appearance.Neutral"
+                      Appearance="ButtonAppearance.Primary"
                       Disabled="@(ClientId == null)"
                       OnClick="CreateNewScene"
                       Class="ms-2"> Add Scene
@@ -20,7 +23,7 @@
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" Style="min-height: 50px;">
         @if (scenes == null || !scenes.Any())
         {
-            <FluentLabel Typo="Typography.Body">No scenes found for this client.</FluentLabel>
+            <FluentText Size="TextSize.Size400">No scenes found for this client.</FluentText>
         }
         else
         {
@@ -30,10 +33,10 @@
 
                 Icon sceneIcon = isRunning ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play();
 
-                <FluentCard Height="auto" MinimalStyle="true" Class="mx-1 w-auto">
+                <FluentCard Height="auto" Appearance="CardAppearance.Subtle" Class="mx-1 w-auto">
                     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
-                        <FluentLabel>Scene</FluentLabel>
-                        <FluentButton Appearance="Appearance.Neutral" IconStart="sceneIcon" Class="mt-2" Style="width: 100%;" />
+                        <FluentText>Scene</FluentText>
+                        <FluentButton Appearance="ButtonAppearance.Default" IconStart="sceneIcon" Class="mt-2" Style="width: 100%;" />
                     </FluentStack>
                 </FluentCard>
             }
@@ -108,15 +111,12 @@
 
     public async Task CreateNewScene()
     {
-        IDialogReference? dialog = await _dialogService.ShowDialogAsync<CreateNewDmxSceneDialog>(new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<CreateNewDmxSceneDialog>(options =>
         {
-            PreventDismissOnOverlayClick = true,
-            PreventScroll = true,   
+            options.Modal = true;
         });
 
-        DialogResult? result = await dialog.Result;
-
-        if (!result.Cancelled && result.Data is string sceneName)
+        if (!result.Cancelled && result.Value is string sceneName)
         {
             Result<DmxScene>? createResult = await _dmxSceneService.CreateSceneAsync(ClientId!.Value, sceneName);
 

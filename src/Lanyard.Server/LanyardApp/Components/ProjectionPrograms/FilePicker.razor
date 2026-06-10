@@ -4,18 +4,18 @@
 @inject IToastService ToastService
 
 <div class="file-picker">
-    <FluentTextField Value="@selectedFileDisplayName"
+    <FluentTextInput Value="@selectedFileDisplayName"
                      Label="Selected File"
-                     Appearance="FluentInputAppearance.Outline"
+                     Appearance="TextInputAppearance.Outline"
                      ReadOnly />
 
     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-        <FluentButton Appearance="Appearance.Accent"
+        <FluentButton Appearance="ButtonAppearance.Primary"
                       IconStart="@(new Icons.Regular.Size20.FolderOpen())"
                       OnClick="OpenPickerAsync">
             Browse
         </FluentButton>
-        <FluentButton Appearance="Appearance.Outline"
+        <FluentButton Appearance="ButtonAppearance.Outline"
                       IconStart="@(new Icons.Regular.Size20.Dismiss())"
                       Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
                       OnClick="ClearSelectionAsync">
@@ -28,7 +28,7 @@
     <FluentDialogHeader ShowDismiss="true">
         <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
             <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
-            <FluentLabel Typo="Typography.PaneHeader">Select File</FluentLabel>
+            <FluentText Typo="Typography.PaneHeader">Select File</FluentText>
         </FluentStack>
     </FluentDialogHeader>
 
@@ -36,7 +36,7 @@
         @if (isLoading)
         {
             <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
-                <FluentProgressRing />
+                <FluentSpinner />
             </FluentStack>
         }
         else
@@ -46,30 +46,30 @@
                              VerticalAlignment="VerticalAlignment.Center"
                              HorizontalGap="8"
                              Class="mb-2">
-                    <FluentButton Appearance="Appearance.Outline"
+                    <FluentButton Appearance="ButtonAppearance.Outline"
                                   Disabled="@(!currentFolderId.HasValue)"
                                   OnClick="NavigateUpAsync">
                         Up
                     </FluentButton>
-                    <FluentLabel Class="file-picker-current-path">@GetCurrentPathText()</FluentLabel>
+                    <FluentText Class="file-picker-current-path">@GetCurrentPathText()</FluentText>
                 </FluentStack>
 
                 <FluentGrid Class="w-100">
-                    <FluentGridItem xs="4">
-                        <FluentCard MinimalStyle="true" AreaRestricted="false" Class="h-100">
-                            <FluentLabel>Folders</FluentLabel>
+                    <FluentGridItem Xs="4">
+                        <FluentCard Appearance="CardAppearance.Subtle" Height="100%">
+                            <FluentText>Folders</FluentText>
                             <FluentDivider class="my-1" />
 
                             @if (folders.Count == 0)
                             {
-                                <FluentLabel>No folders</FluentLabel>
+                                <FluentText>No folders</FluentText>
                             }
                             else
                             {
                                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
                                     @foreach (Folder folder in folders)
                                     {
-                                        <FluentButton Appearance="Appearance.Stealth"
+                                        <FluentButton Appearance="ButtonAppearance.Subtle"
                                                       OnClick="@(() => OpenFolderAsync(folder.Id))">
                                             @folder.Name
                                         </FluentButton>
@@ -79,21 +79,21 @@
                         </FluentCard>
                     </FluentGridItem>
 
-                    <FluentGridItem xs="8">
-                        <FluentCard MinimalStyle="true" AreaRestricted="false" Class="h-100">
-                            <FluentLabel>Files</FluentLabel>
+                    <FluentGridItem Xs="8">
+                        <FluentCard Appearance="CardAppearance.Subtle" Height="100%">
+                            <FluentText>Files</FluentText>
                             <FluentDivider class="my-1" />
 
                             @if (files.Count == 0)
                             {
-                                <FluentLabel>No files in this folder</FluentLabel>
+                                <FluentText>No files in this folder</FluentText>
                             }
                             else
                             {
                                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
                                     @foreach (FileMetadata file in files)
                                     {
-                                        <FluentButton Appearance="Appearance.Stealth"
+                                        <FluentButton Appearance="ButtonAppearance.Subtle"
                                                       OnClick="@(() => SelectFileAsync(file))">
                                             @file.FileName
                                         </FluentButton>
@@ -108,7 +108,7 @@
     </FluentDialogBody>
 
     <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Neutral" OnClick="ClosePicker">Close</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Default" OnClick="ClosePicker">Close</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 

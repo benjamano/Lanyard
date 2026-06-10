@@ -3,8 +3,8 @@
 @inject IToastService _toastService
 @inject IFileService _fileService
 
-<FluentListbox TOption="string" Value="@SelectedFolderId.ToString()" ValueChanged="() => OnFolderChanged(SelectedFolderId)">
-    <FluentOption Value="@(null)" Selected="true">Root</FluentOption>
+<FluentListbox TOption="string" TValue="string" Value="@(SelectedFolderId?.ToString() ?? string.Empty)" ValueChanged="OnFolderValueChanged">
+    <FluentOption Value="@string.Empty">Root</FluentOption>
     @foreach (Folder folder in folders)
     {
         <FluentOption Value="@folder.Id.ToString()">@folder.Name</FluentOption>
@@ -45,5 +45,14 @@
     private async Task OnFolderChanged(Guid? folderId)
     {
         await SelectedFolderIdChanged.InvokeAsync(folderId);
+    }
+
+    private async Task OnFolderValueChanged(string? folderIdValue)
+    {
+        Guid? folderId = Guid.TryParse(folderIdValue, out Guid parsedFolderId)
+            ? parsedFolderId
+            : null;
+
+        await OnFolderChanged(folderId);
     }
 }

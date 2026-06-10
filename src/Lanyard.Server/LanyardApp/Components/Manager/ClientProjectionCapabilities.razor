@@ -1,9 +1,9 @@
-﻿@inject IClientService _clientService
+@inject IClientService _clientService
 @inject IToastService _toastService
 
 <div hidden="@(IsShowing == false)">
     <FluentCard Height="auto">
-        <FluentLabel Typo="Typography.PaneHeader">Projector</FluentLabel>
+        <FluentText Typo="Typography.PaneHeader">Projector</FluentText>
 
         <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
             <ChildContent>
@@ -26,7 +26,7 @@
             </EmptyContent>
         </FluentDataGrid>
 
-        <FluentButton class="mt-2 float-end" OnClick="OpenAddProjectionDialog" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.ProjectionScreenTextSparkle()">Add Projection</FluentButton>
+        <FluentButton class="mt-2 float-end" OnClick="OpenAddProjectionDialog" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.ProjectionScreenTextSparkle()">Add Projection</FluentButton>
     </FluentCard>
 </div>
 
@@ -68,26 +68,16 @@
     {
         if (clientId != null)
         {
-            DialogParameters parameters = new DialogParameters()
+            await _dialogService.ShowDialogAsync<AddNewProjectionDialog>(options =>
             {
-                Title = "Add Projection",
-                OnDialogResult = _dialogService.CreateDialogCallback(this, HandleAddProjection),
-                PrimaryAction = "Create",
-                PrimaryActionEnabled = false,
-                SecondaryAction = "Cancel",
-                Width = "50%",
-                Height = "auto",
-                TrapFocus = true,
-                Modal = true,
-            };
+                options.Header.Title = "Add Projection";
+                options.Width = "50%";
+                options.Modal = true;
+                options.Parameters.Add(nameof(AddNewProjectionDialog.Content), clientId.Value);
+            });
 
-            await _dialogService.ShowDialogAsync<AddNewProjectionDialog>(clientId, parameters);
+            await RefreshCapabilities();
         }
-    }
-
-    private async Task HandleAddProjection(DialogResult result)
-    {
-        await RefreshCapabilities();
     }
 
     private async Task DeleteClientProjectionSettings(Guid projectionSettingsId)

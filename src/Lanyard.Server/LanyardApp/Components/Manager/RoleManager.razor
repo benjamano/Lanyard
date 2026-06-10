@@ -1,6 +1,7 @@
-﻿@using Lanyard.Application.Services.ApplicationRoles
+@using Lanyard.Application.Services.ApplicationRoles
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
+@using System.Linq.Expressions
 
 @inject ApplicationRolesService _rApi
 @inject ISecurityService _securityService
@@ -11,22 +12,19 @@
 <FluentCard Height="auto" Class="mt-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
-            <FluentLabel Typo="Typography.H4">Role Manager</FluentLabel>
-            @* <FluentButton Appearance="Appearance.Accent" OnClick="HandleCreateNewRoleButtonClicked" IconEnd="@(new Icons.Regular.Size20.QuizNew().WithColor(Color.Fill))">
-                Create a new Role
-            </FluentButton> *@
+            <FluentText Typo="Typography.H4">Role Manager</FluentText>
         </FluentStack>
 
         <FluentGrid Class="w-100">
-            <FluentGridItem xs="12" sm="@(isCreatingARole ? 9 : 12)">
+            <FluentGridItem Xs="12" Sm="@(isCreatingARole ? 9 : 12)">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                     @if (roles is not null)
                     {
                         if (roles.Count() == 0)
                         {
-                            <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
+                            <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
                                 No Roles Exist Yet
-                            </FluentLabel>
+                            </FluentText>
                         }
                         else
                         {
@@ -48,8 +46,8 @@
                     else
                     {
                         <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
-                            <FluentProgressRing />
-                            <FluentLabel>Loading...</FluentLabel>
+                            <FluentSpinner />
+                            <FluentText>Loading...</FluentText>
                         </FluentStack>
                     }
                 </FluentStack>
@@ -57,22 +55,24 @@
 
             @if (isCreatingARole)
             {
-                <FluentGridItem xs="12" sm="3">
+                <FluentGridItem Xs="12" Sm="3">
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                        <FluentCard MinimalStyle="true">
-                            <FluentLabel Typo="Typography.H6" Class="mb-2">Create a New Role</FluentLabel>
+                        <FluentCard Appearance="CardAppearance.Subtle">
+                            <FluentText Typo="Typography.H6" Class="mb-2">Create a New Role</FluentText>
 
-                            <EditForm Model="@model" OnValidSubmit="HandleCreateNewRole">
+                            <EditForm EditContext="@_editContext" OnValidSubmit="HandleCreateNewRole">
                                 <DataAnnotationsValidator />
                                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-                                    <FluentTextField @bind-Value="model.RoleName"
+                                    <FluentTextInput @bind-Value="model.RoleName"
                                                      Label="Role Name"
-                                                     Required
-                                                     Style="width: 100%;" />
-                                    <FluentValidationMessage For="@(() => model.RoleName)" />
+                                                     Required="true"
+                                                     Style="width: 100%;"
+                                                     Message="@GetValidationMessage(() => model.RoleName)"
+                                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                                     MessageState="MessageState.Error" />
 
                                     <FluentButton Type="ButtonType.Submit"
-                                                  Appearance="Appearance.Accent"
+                                                  Appearance="ButtonAppearance.Primary"
                                                   Style="align-self: flex-end;">
                                         Create
                                     </FluentButton>
@@ -95,6 +95,12 @@
     private bool isCreatingARole = false;
 
     private CreateNewRolesModel model = new CreateNewRolesModel();
+    private EditContext _editContext = default!;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -155,6 +161,8 @@
         model.RoleName = "";
         isCreatingARole = false;
 
+        _editContext = new EditContext(model);
+
         if (roles is not null)
         {
             await OnRolesChanged.InvokeAsync(roles);
@@ -186,6 +194,12 @@
         {
             await OnRolesChanged.InvokeAsync(roles);
         }
+    }
+
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
+    {
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class CreateNewRolesModel

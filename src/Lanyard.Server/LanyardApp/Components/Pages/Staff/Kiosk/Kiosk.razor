@@ -1,4 +1,4 @@
-﻿@page "/kiosk/{clientId}/{projectionProgramId}"
+@page "/kiosk/{clientId}/{projectionProgramId}"
 
 @using Lanyard.Application.Services
 @using Lanyard.App.Components.Kiosk
@@ -13,9 +13,9 @@
 {
     <FluentCard Height="auto">
         Loading..
-        <FluentProgress Width="200px"></FluentProgress>
+        <FluentProgressBar Style="width: 200px;"></FluentProgressBar>
 
-        <FluentLabel Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentLabel>
+        <FluentText Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentText>
     </FluentCard>
 }
 else
@@ -25,7 +25,6 @@ else
     <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" CurrentStep="CurrentStep" StepsCount="projectionProgram.ProjectionProgramSteps.Count()"></KioskDebugInfo>
 }
 
-<FluentDesignTheme @bind-Mode="@themeMode" StorageName="kiosk-theme" />
 
 @code {
     [Parameter]
@@ -39,8 +38,6 @@ else
     private ClientProjectionSettings? clientProjectionSettings { get; set; } = null;
 
     private ProjectionProgram? projectionProgram { get; set; } = null;
-
-    public DesignThemeModes themeMode { get; set; }
 
     public KioskDisplay kioskDisplay { get; set; } = default!;
 
@@ -78,7 +75,6 @@ else
             return;
         }
 
-        themeMode = clientProjectionSettings!.IsDarkTheme ? DesignThemeModes.Dark : DesignThemeModes.Light;
 
         StateHasChanged();
 

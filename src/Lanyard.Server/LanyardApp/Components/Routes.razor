@@ -1,21 +1,18 @@
 ﻿@using Lanyard.App.Components.Layout.Staff
-@using Lanyard.App.Components.Layout
 @using Microsoft.AspNetCore.Components.Routing
 
 <CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(Program).Assembly">
-        <Found Context="routeData">
-            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
-                <Authorizing>
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px;">
-                        <FluentProgressRing />
-                        <p>Checking authentication...</p>
-                    </div>
-                </Authorizing>
-                <NotAuthorized>
-                    @* <RedirectToLogin /> *@
-                </NotAuthorized>
-            </AuthorizeRouteView>
-        </Found>
-    </Router>
+    <LayoutView Layout="@typeof(MainLayout)">
+        <Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="typeof(StaffNotFound)">
+            @* <Navigating>
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" VerticalGap="16px" Height="100%">
+                    <FluentSpinner />
+                    @* <FluentText>Routing you to the correct page...</FluentText>
+                </FluentStack>
+            </Navigating> *@
+            <Found Context="routeData">
+                <RouteView RouteData="@routeData" />
+            </Found>
+        </Router>
+    </LayoutView>
 </CascadingAuthenticationState>

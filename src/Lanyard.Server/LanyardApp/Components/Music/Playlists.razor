@@ -1,4 +1,4 @@
-﻿@using Lanyard.Application.Services
+@using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
@@ -17,9 +17,9 @@
 <FluentStack Width="auto" class="ps-1 h-100 playlists-root" Orientation="Orientation.Vertical">
     @if (playlists == null)
     {
-        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100">
-            <FluentProgressRing />
-            <FluentLabel>Loading playlists...</FluentLabel>
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Height="100%">
+            <FluentSpinner />
+            <FluentText>Loading playlists...</FluentText>
         </FluentStack>
     }
     else
@@ -27,42 +27,43 @@
         <FluentStack class="playlists-grid" Orientation="Orientation.Vertical">
             @foreach (Playlist playlist in playlists)
             {
-                <FluentCard class="playlist-card p-2" Style="@GetPlaylistCardStyle(playlist.Id)"
+                <FluentCard class="playlist-card p-2"
+                            Appearance="GetPlaylistCardStyle(playlist.Id)"
                             @onclick="() => LoadPlaylist(playlist.Id)">
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
                         <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor(playlist.Name); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            <FluentLabel Style="color: white; font-size: 24px; font-weight: bold;">
+                            <FluentText Style="color: white; font-size: 24px; font-weight: bold;">
                                 @GetInitials(playlist.Name)
-                            </FluentLabel>
+                            </FluentText>
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal">
                             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                                <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="@GetPlaylistNameStyle(playlist.Id)">
+                                <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="@GetPlaylistNameStyle(playlist.Id)">
                                     @playlist.Name
-                                </FluentLabel>
+                                </FluentText>
                                 @if (!string.IsNullOrEmpty(playlist.Description))
                                 {
-                                    <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                                         @playlist.Description
-                                    </FluentLabel>
+                                    </FluentText>
                                 }
                                 else if (playlist.CreateByUser is not null)
                                 {
-                                    <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                         @playlist.CreateByUser.UserName
-                                    </FluentLabel>
+                                    </FluentText>
                                 }
                                 else
                                 {
-                                    <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                         @playlist.CreateDate.ToString("g")
-                                    </FluentLabel>
+                                    </FluentText>
                                 }
                             </FluentStack>
                             <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Right">
                                 @if (currentlyPlayingPlaylistId == playlist.Id)
                                 {
-                                    <FluentIcon Value="@(new Icons.Regular.Size20.PlayCircle())" Color="Color.Accent" />
+                                    <FluentIcon Value="@(new Icons.Regular.Size20.PlayCircle())" Color="Color.Default" />
                                 }
                             </FluentStack>
                         </FluentStack>
@@ -70,19 +71,19 @@
                 </FluentCard>
             }
 
-            <FluentCard Class="playlist-card p-2" Style="@GetAllSongsCardStyle()"
+            <FluentCard Class="playlist-card p-2" Appearance="@GetAllSongsCardStyle()"
                         @onclick="ShowAllSongs">
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12">
                     <div style="width: 64px; height: 64px; border-radius: 8px; background-color: @GetPlaylistColor("All Songs"); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                         <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Custom" CustomColor="white" />
                     </div>
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
-                        <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             All Songs
-                        </FluentLabel>
-                        <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        </FluentText>
+                        <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             All Songs inside Lanyard
-                        </FluentLabel>
+                        </FluentText>
                     </FluentStack>
                 </FluentStack>
             </FluentCard>
@@ -96,12 +97,12 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size24.Add())" Color="Color.Custom" CustomColor="white" />
                             </div>
                             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
-                                <FluentLabel Typo="Typography.Body" Weight="FontWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     New Playlist
-                                </FluentLabel>
-                                <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                </FluentText>
+                                <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     Create a New Playlist
-                                </FluentLabel>
+                                </FluentText>
                             </FluentStack>
                         </FluentStack>
                     </FluentCard>
@@ -176,22 +177,14 @@
         UpdateCurrentPlaylist(triggerRender: false);
     }
 
-    private string GetPlaylistCardStyle(Guid playlistId)
+    private CardAppearance GetPlaylistCardStyle(Guid playlistId)
     {
-        List<string> styles = new List<string> { "cursor: pointer" };
-
         if (selectedPlaylistId == playlistId)
         {
-            styles.Add("background-color: var(--neutral-fill-stealth-active)");
-            styles.Add("border-left:2px solid var(--accent-fill-rest)");
+            return CardAppearance.Filled;
         }
 
-        if (currentlyPlayingPlaylistId == playlistId)
-        {
-            @* styles.Add("border: 2px solid var(--accent-fill-rest)"); *@
-        }
-
-        return string.Join("; ", styles) + ";";
+        return CardAppearance.Default;
     }
 
     private string GetPlaylistNameStyle(Guid playlistId)
@@ -211,24 +204,14 @@
         return string.Join("; ", styles) + ";";
     }
 
-    private string GetAllSongsCardStyle()
+    private CardAppearance GetAllSongsCardStyle()
     {
-        List<string> styles = new List<string> { "cursor: pointer" };
-
         if (allSongsSelected)
         {
-            styles.Add("background-color: var(--neutral-fill-stealth-active)");
-            styles.Add("border-left:2px solid var(--accent-fill-rest)");
+            return CardAppearance.Filled;
         }
 
-        if (SelectedClientId != null &&
-            currentlyPlayingPlaylistId == null &&
-            _player.GetCurrentPlaybackState(SelectedClientId.Value) == PlaybackState.Playing)
-        {
-            styles.Add("border: 2px solid var(--accent-fill-rest)");
-        }
-
-        return string.Join("; ", styles) + ";";
+        return CardAppearance.Default;
     }
 
     private string GetInitials(string name)
@@ -308,32 +291,21 @@
         );
     }
 
-    private async Task CreateNewPlaylist() 
+    private async Task CreateNewPlaylist()
     {
-        Playlist playlist = new Playlist
+        DialogResult result = await _dialogService.ShowDialogAsync<NewPlaylistModal>(options =>
         {
-            Name = string.Empty
-        };
+            options.Header.Title = "Create New Playlist";
+            options.Width = "500px";
+            options.Modal = true;
+        });
 
-        DialogParameters parameters = new DialogParameters()
-        {
-            Title = "Create New Playlist",
-            OnDialogResult = _dialogService.CreateDialogCallback(this, HandleSavePlaylist),
-            PrimaryAction = "Create",
-            PrimaryActionEnabled = false,
-            SecondaryAction = "Cancel",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
-
-        await _dialogService.ShowDialogAsync<NewPlaylistModal>(playlist, parameters);
+        await HandleSavePlaylist(result);
     }
 
     private async Task HandleSavePlaylist(DialogResult result)
     {
-        if (result.Cancelled || result.Data is not Playlist playlist)
+        if (result.Cancelled || result.Value is not Playlist playlist)
         {
             return;
         }

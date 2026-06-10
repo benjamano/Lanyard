@@ -1,29 +1,27 @@
-<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Class="h-100">
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" Height="100%">
     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
         <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" VerticalGap="0">
-            <FluentLabel Typo="Typography.H5">Current Shift</FluentLabel>
-            <FluentLabel Typo="Typography.H4" Color="Color.Accent">Customer Service Assistant</FluentLabel>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Color="Color.Default">Current Shift</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">Customer Service Assistant</FluentText>
         </FluentStack>
-        <FluentBadge Appearance="Appearance.Neutral">
-            <FluentLabel Typo="Typography.Body" Color="Color.Accent" class="p-1">
-                @_shiftStartTime.ToString("t") - @_shiftEndTime.ToString("t")
-            </FluentLabel>
-        </FluentBadge>
+        @* <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Informative">
+            @_shiftStartTime.ToString("t") - @_shiftEndTime.ToString("t")
+        </FluentBadge> *@
     </FluentStack>
 
-    <FluentCard Height="auto">
+    <FluentCard Margin="@Margin.Vertical3">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
-                <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" />
+                <FluentIcon Icon="Icons.Filled.Size32.CheckmarkCircle" Color="Color.Success" Margin="@Margin.End2" />
                 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center" VerticalGap="0">
-                    <FluentLabel Typo="Typography.Subject">Clocked in</FluentLabel>
-                    <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Default">Clocked in</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size300" Color="Color.Info">
                         5 minutes late
-                    </FluentLabel>
+                    </FluentText>
                 </FluentStack>
             </FluentStack>
             <FluentStack HorizontalAlignment="HorizontalAlignment.Right" VerticalAlignment="VerticalAlignment.Bottom">
-                <FluentButton Appearance="Appearance.Outline" Class="my-auto">
+                <FluentButton Appearance="ButtonAppearance.Outline" Class="my-auto">
                     Clock out
                 </FluentButton>
             </FluentStack>
@@ -33,22 +31,22 @@
     <FluentStack Orientation="Orientation.Vertical">
         <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
-                <FluentLabel Typo="Typography.Body" Color="Color.Info">Time worked</FluentLabel>
-                <FluentLabel Typo="Typography.Subject" Color="Color.Accent">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">Time worked</FluentText>
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Primary">
                     <FluentStack Orientation="Orientation.Horizontal" VerticalGap="0" Style="font-variant-numeric: tabular-nums;">
                         @FormatElapsed(_currentTime - _shiftStartTime)
-                        <FluentLabel Typo="Typography.Subject" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentLabel>
+                        <FluentText Weight="TextWeight.Semibold" Class="mt-2 ms-1" Size="TextSize.Size400" Color="Color.Info">of @FormatElapsed(_shiftEndTime - _shiftStartTime)</FluentText>
                     </FluentStack>
-                </FluentLabel>
+                </FluentText>
             </FluentStack>
             <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Bottom" HorizontalAlignment="HorizontalAlignment.Right" VerticalGap="0">
-                <FluentLabel Typo="Typography.Body" Color="Color.Info">Shift progress</FluentLabel>
-                <FluentLabel Typo="Typography.Subject" Color="Color.Accent" Class="" Style="font-variant-numeric: tabular-nums;">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Color="Color.Info">Shift progress</FluentText>
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600" Color="Color.Primary" Class="" Style="font-variant-numeric: tabular-nums;">
                     @(Math.Round(GetShiftProgress(), 2))%
-                </FluentLabel>
+                </FluentText>
             </FluentStack>
         </FluentStack>
-        <FluentProgress Width="100%" Stroke="ProgressStroke.Large" Value="@((int)GetShiftProgress())" />
+        <FluentProgressBar Thickness="ProgressThickness.Large" Value="@((int)GetShiftProgress())" Style="width: 100%;" />
     </FluentStack>
 </FluentStack>
 

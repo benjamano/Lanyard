@@ -1,19 +1,32 @@
-﻿@using Lanyard.Application.Services.Authentication
-@implements IDialogContentComponent<UserProfile>
+@using Lanyard.Application.Services.Authentication
 
 <FluentDialogBody>
-    <p>Are you sure you want to delete the user '@Content.GetName()'?</p>
+    <ChildContent>
+        <p>Are you sure you want to delete '<strong>@(DisplayName ?? Content?.GetName() ?? "this item")</strong>'? This action cannot be undone.</p>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ConfirmAsync">Delete</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
 </FluentDialogBody>
 
 @code {
     [Parameter]
-    public UserProfile Content { get; set; } = default!;
+    public UserProfile? Content { get; set; }
+
+    [Parameter]
+    public string? DisplayName { get; set; }
 
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
+    public required IDialogInstance Dialog { get; set; }
 
-    private void ToggleDialogPrimaryActionButton(bool enable)
+    private async Task ConfirmAsync()
     {
-        Dialog!.TogglePrimaryActionButton(enable);
+        await Dialog.CloseAsync();
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
     }
 }
