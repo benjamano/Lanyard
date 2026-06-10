@@ -1,14 +1,26 @@
 @inject IDashboardService DashboardService
 
+<FluentStack Width="20%">
+    <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
+        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+            <FluentButton Appearance="@ButtonAppearance.Primary" 
+                        IconStart="new Icons.Regular.Size24.AddCircle()"
+                        OnClick="() => CreateBlankDashboard()">Create blank dashboard</FluentButton>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
+
 <FluentDataGrid Items="Dashboards.AsQueryable()" 
                 Loading="IsLoading"
                 ShowHover="true"
-                TGridItem="Dashboard">
+                TGridItem="Dashboard"
+                OnRowClick="(dashboard) => OnRowClick((dashboard.Data as Dashboard)!)">
     <LoadingContent>
-        <FluentProgressRing/>
+        <FluentSpinner/>
     </LoadingContent>
     <ChildContent>
         <PropertyColumn Property="x=> x.Name" Title="Name"/>
+        <PropertyColumn Property="x=> x.LastUpdateDate" Title="Updated Date"/>
     </ChildContent>
 </FluentDataGrid>
 
@@ -36,5 +48,22 @@
         }
 
         IsLoading = false;
+    }
+
+    private void OnRowClick(Dashboard dashboard)
+    {
+        
+    }
+
+    private async Task CreateBlankDashboard()
+    {
+        DialogResult? result = await _dialogService.ShowDialogAsync<CreateDashboardDialog>(options =>{});
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        await GetDashboards();
     }
 }

@@ -2,6 +2,7 @@
     "recommendations": [
         "ms-dotnettools.csharp",
         "ms-dotnettools.csdevkit",
-        "github.vscode-github-actions"
+        "github.vscode-github-actions",
+        "usernamehw.errorlens"
     ]
 }

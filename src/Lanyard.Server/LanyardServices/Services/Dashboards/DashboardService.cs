@@ -250,6 +250,37 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         }
     }
 
+    public async Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dashboard.Name))
+            {
+                return Result<bool>.Fail("Dashboard name is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Dashboard newDashboard = new()
+            {
+                Name = dashboard.Name.Trim(),
+                Description = dashboard.Description?.Trim(),
+                IsActive = true,
+                CreateDate = DateTime.UtcNow,
+                LastUpdateDate = DateTime.UtcNow
+            };
+
+            ctx.Dashboards.Add(newDashboard);
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     private static Result<bool> ValidateWidgets(IEnumerable<DashboardWidget> widgets)
     {
         foreach (DashboardWidget widget in widgets)

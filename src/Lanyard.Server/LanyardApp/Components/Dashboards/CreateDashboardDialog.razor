@@ -1,0 +1,59 @@
+@inherits FluentDialogInstance
+
+@inject IDashboardService DashboardService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        Create a new Dashboard
+    </TitleTemplate>
+
+    <ChildContent>
+        <EditForm Model="@dashboard" OnValidSubmit="() => OnActionClickedAsync(true)">
+            <FluentStack Orientation="@Orientation.Vertical">
+                <FluentTextInput Placeholder="Name" Label="Name" @bind-Value="dashboard.Name" Required="true">
+                    <StartTemplate>
+                        <FluentIcon Value="new Icons.Regular.Size20.TextAddT()" Slot="start"/>
+                    </StartTemplate>
+                </FluentTextInput>
+                <FluentTextArea Placeholder="Description" Label="Description" @bind-Value="dashboard.Description" />
+            </FluentStack>
+
+            <DataAnnotationsValidator />
+            <FluentValidationSummary />
+        </EditForm>
+    </ChildContent>
+</FluentDialogBody>
+
+@code
+{
+    private Dashboard dashboard = new();
+
+    protected override async Task OnActionClickedAsync(bool primary)
+    {
+        if (primary == false)
+        {
+            await DialogInstance.CancelAsync();
+            return;
+        }
+
+        if (!dashboard.IsValid)
+        {
+            _toastService.ShowError("Please ensure the dashboard name is between 3 and 100 characters.");
+            return;
+        }
+
+        Result<bool> result = await DashboardService.CreateDashboardAsync(dashboard);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Dashboard created successfully");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to create the dashboard {result.Error}");
+            return;
+        }
+
+        await DialogInstance.CloseAsync();
+    }
+}

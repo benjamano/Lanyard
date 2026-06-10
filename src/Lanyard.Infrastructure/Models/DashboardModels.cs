@@ -1,10 +1,16 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Lanyard.Infrastructure.Models;
 
 public class Dashboard
 {
     public Guid Id { get; set; }
 
-    public required string Name { get; set; }
+    [Required]
+    [StringLength(100, ErrorMessage = "The Name field can not be longer than 100 characters.")]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(500, ErrorMessage = "The Description field can not be longer than 500 characters.")]
     public string? Description { get; set; }
 
     public bool IsActive { get; set; }
@@ -13,6 +19,8 @@ public class Dashboard
     public DateTime? LastUpdateDate { get; set; }
 
     public virtual List<DashboardWidget> Widgets { get; set; } = [];
+
+    public bool IsValid => !string.IsNullOrWhiteSpace(Name) && Name.Length <= 100 && (Description == null || Description.Length <= 500);
 }
 
 public class DashboardWidget
