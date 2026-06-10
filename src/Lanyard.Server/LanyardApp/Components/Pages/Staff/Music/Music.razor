@@ -1,4 +1,4 @@
-﻿@page "/music"
+@page "/music"
 
 @attribute [Authorize]
 
@@ -23,7 +23,7 @@
 <PageTitle>Music</PageTitle>
 
 <div class="music-page">
-    <div class="music-content p-2">
+    <div class="music-content">
         <div class="music-panes">
             <div class="music-pane music-playlists-pane">
                 <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId" InitialPlaylistId="initialPlaylistId"></Playlists>
@@ -35,7 +35,7 @@
         </div>
     </div>
 
-    <div class="music-bottom-controls">
+    <FluentCard class="music-bottom-controls" Appearance="CardAppearance.Filled" Margin="@Margin.Top3">
         <FluentStack Orientation="Orientation.Horizontal"
                      VerticalAlignment="VerticalAlignment.Center"
                      HorizontalGap="12"
@@ -43,7 +43,7 @@
 
             <div style="flex: 1;">
                 <FluentGrid Style="width: 200px;">
-                    <FluentGridItem xs="12">
+                    <FluentGridItem Xs="12">
                         <FluentStack Orientation="Orientation.Horizontal"
                                     VerticalAlignment="VerticalAlignment.Center"
                                     HorizontalGap="8"
@@ -59,8 +59,8 @@
                                 };
                             }
 
-                            <FluentButton IconStart="volumeIcon" Appearance="Appearance.Lightweight" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
-                            <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100 mt-3"></FluentSlider>
+                            <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
+                            <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100"></FluentSlider>
                         </FluentStack>
                     </FluentGridItem>
                 </FluentGrid>
@@ -76,50 +76,47 @@
                         Icon shuffleIcon = isShuffleEnabled ? new Icons.Regular.Size24.ArrowShuffle() : new Icons.Regular.Size24.ArrowShuffleOff();
                     }
 
-                    <FluentButton Appearance="Appearance.Stealth"
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
                                 Title="Shuffle"
                                 OnClick='ToggleShuffle'
                                 Disabled="@(selectedClientId == null)"
                                 IconStart="shuffleIcon">
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Outline"
+                    <FluentButton Appearance="ButtonAppearance.Outline"
                                 Title="Previous (Double-click) / Restart (Single-click)"
                                 OnClick="RestartSong"
                                 @ondblclick="PreviousSong"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.Previous())" />
+                                Style="border-radius: 50%;"
+                                IconStart="@(new Icons.Regular.Size32.Previous())">
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Accent"
+                    @{
+                        Icon playIcon = isPlaying ? new Icons.Regular.Size32.Pause() : new Icons.Regular.Size32.Play();
+                    }
+
+                    <FluentButton Appearance="ButtonAppearance.Primary"
                                 Title="@(isPlaying ? "Pause" : "Play")"
                                 OnClick="TogglePlay"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        @if (isPlaying)
-                        {
-                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Pause" />
-                        }
-                        else
-                        {
-                            <FluentIcon Color="Color.Fill" Icon="Icons.Regular.Size20.Play" />
-                        }
+                                Style="border-radius: 50%;"
+                                IconStart="playIcon">
                     </FluentButton>
 
-                    <FluentButton Appearance="Appearance.Outline"
+                    <FluentButton Appearance="ButtonAppearance.Outline"
                                 Title="Next"
                                 OnClick="NextSong"
                                 Disabled="@(selectedClientId == null)"
-                                Style="border-radius: 50%; width: 40px; height: 40px;">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.Next())" />
+                                Style="border-radius: 50%;"
+                                IconStart="@(new Icons.Regular.Size32.Next())">
                     </FluentButton>
 
                     @{
                         Icon repeatIcon = isRepeatEnabled ? new Icons.Regular.Size20.ArrowRepeatAll() : new Icons.Regular.Size20.ArrowRepeatAllOff();
                     }
 
-                    <FluentButton Appearance="Appearance.Stealth"
+                    <FluentButton Appearance="ButtonAppearance.Subtle"
                                 Title="Repeat"
                                 OnClick="ToggleRepeat"
                                 Disabled="@(selectedClientId == null)"
@@ -131,23 +128,25 @@
                     <div @onclick="() => showTimeLeftInsteadOfElapsed = !showTimeLeftInsteadOfElapsed" role="button">
                         @if (showTimeLeftInsteadOfElapsed)
                         {
-                            <FluentLabel>-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentLabel>
+                            <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(currentSongLength - currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                         else
                         {
-                            <FluentLabel>@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentLabel>
+                            <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongTime).ToString(@"mm\:ss")</FluentText>
                         }
                     </div>
-                    <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" Class="mt-3"></FluentSlider>
-                    <FluentLabel>@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentLabel>
+
+                    <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)"></FluentSlider>
+
+                    <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
                 </FluentStack>
             </FluentStack>
 
-            <div style="flex: 1; display: flex; justify-content: flex-end;">
+            <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center;">
                 <ClientSelector OnClientSelected="SetSelectedClient" />
             </div>
         </FluentStack>
-    </div>
+    </FluentCard>
 </div>
 
 @code {

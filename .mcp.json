@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fluent-ui-blazor": {
+      "command": "fluentui-mcp",
+      "args": []
+    }
+  }
+}

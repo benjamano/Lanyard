@@ -6,36 +6,36 @@
 @inject IClientService _clientService
 @inject ILogger<KioskLaserGameStatusWidget> _logger
 
-<FluentCard AreaRestricted="false" Class="kiosk-widget-card" Style="height: auto; width: 100%;">
+<FluentCard Class="kiosk-widget-card" Style="height: auto; width: 100%;">
     <FluentStack Orientation="Orientation.Vertical" Class="laser-widget-stack">
-        <FluentLabel Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Laser Stats" : Widget.Title)</FluentLabel>
+        <FluentText Typo="Typography.H6">@(string.IsNullOrWhiteSpace(Widget.Title) ? "Laser Stats" : Widget.Title)</FluentText>
 
         @if (!_selectedClientId.HasValue)
         {
-            <FluentLabel Typo="Typography.Body">No client selected.</FluentLabel>
+            <FluentText Typo="Typography.Body">No client selected.</FluentText>
         }
         else
         {
-            <FluentLabel Typo="Typography.Body" Class="laser-client-name">@_selectedClientName</FluentLabel>
+            <FluentText Typo="Typography.Body" Class="laser-client-name">@_selectedClientName</FluentText>
 
             @if (_status is null)
             {
-                <FluentLabel Typo="Typography.Body">No status received yet.</FluentLabel>
+                <FluentText Typo="Typography.Body">No status received yet.</FluentText>
             }
             else
             {
-                <FluentGrid>
-                    <FluentGridItem xs="6">
-                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Status</FluentLabel>
-                        <FluentLabel Typo="Typography.Body">@GetStatusText(_status.Status)</FluentLabel>
+                <FluentGrid Spacing="3">
+                    <FluentGridItem Xs="6">
+                        <FluentText Typo="Typography.Body" Class="fw-bold">Status</FluentText>
+                        <FluentText Typo="Typography.Body">@GetStatusText(_status.Status)</FluentText>
                     </FluentGridItem>
-                    <FluentGridItem xs="6">
-                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Time Left</FluentLabel>
-                        <FluentLabel Typo="Typography.Body">@FormatSeconds(_status.TimeRemainingSeconds)</FluentLabel>
+                    <FluentGridItem Xs="6">
+                        <FluentText Typo="Typography.Body" Class="fw-bold">Time Left</FluentText>
+                        <FluentText Typo="Typography.Body">@FormatSeconds(_status.TimeRemainingSeconds)</FluentText>
                     </FluentGridItem>
-                    <FluentGridItem xs="12">
-                        <FluentLabel Typo="Typography.Body" Class="fw-bold">Players Tracked</FluentLabel>
-                        <FluentLabel Typo="Typography.Body">@_status.PlayerCount</FluentLabel>
+                    <FluentGridItem Xs="12">
+                        <FluentText Typo="Typography.Body" Class="fw-bold">Players Tracked</FluentText>
+                        <FluentText Typo="Typography.Body">@_status.PlayerCount</FluentText>
                     </FluentGridItem>
                 </FluentGrid>
             }

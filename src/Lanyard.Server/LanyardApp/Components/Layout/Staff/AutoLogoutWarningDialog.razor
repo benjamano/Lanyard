@@ -1,21 +1,24 @@
-@implements IDialogContentComponent<int>
 @implements IAsyncDisposable
 
-<FluentStack Orientation="Orientation.Horizontal" VerticalGap="12">
-    <FluentIcon Value="@(new Icons.Regular.Size48.Timer())" Color="@Color.Warning" />
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Horizontal" VerticalGap="12">
+            <FluentIcon Value="@(new Icons.Regular.Size48.Timer())" Color="@Color.Warning" />
 
-    <FluentLabel Typo="Typography.Body">
-        Your session will expire due to inactivity or reaching the maximum session length.
-        You will be logged out in <strong>@_secondsLeft second@(_secondsLeft == 1 ? "" : "s")</strong>.
-    </FluentLabel>
-</FluentStack>
+            <FluentText Typo="Typography.Body">
+                Your session will expire due to inactivity or reaching the maximum session length.
+                You will be logged out in <strong>@_secondsLeft second@(_secondsLeft == 1 ? "" : "s")</strong>.
+            </FluentText>
+        </FluentStack>
+    </ChildContent>
+</FluentDialogBody>
 
 @code {
     [Parameter]
     public int Content { get; set; }
 
     [CascadingParameter]
-    public FluentDialog Dialog { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     private int _secondsLeft;
     private System.Threading.Timer? _ticker;

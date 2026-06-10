@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 
 @attribute [Authorize]
 
@@ -13,21 +13,21 @@
 
 
 <div class="px-1">
-    <FluentGrid AdaptiveRendering="true">
-        <FluentGridItem lg="4" md="6" sm="12" xs="12">
-            <FluentCard MinimalStyle="true" Class="h-100">
-                <FluentStack Orientation="Orientation.Vertical" Class="h-100">
-                    <FluentLabel Typo="Typography.H2" Class="my-auto">
+    <FluentGrid AdaptiveRendering="true" Spacing="3">
+        <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
+            <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+                <FluentStack Orientation="Orientation.Vertical" Height="100%">
+                    <FluentText Size="TextSize.Size800" Class="my-auto">
                         @GetGreeting(), <b>@_currentUserName!</b>
-                        @if (_showPreviewContent)
-                        {
-                            <FluentLabel Typo="Typography.H5" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentLabel>
-                        }
-                    </FluentLabel>
+                    </FluentText>
+                    @if (_showPreviewContent)
+                    {
+                        <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentText>
+                    }
                 </FluentStack>
             </FluentCard>
         </FluentGridItem>
-        <FluentGridItem lg="4" md="6" sm="12" xs="12">
+        <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
             @if (_showPreviewContent)
             {
                 <MyTasksToday />
@@ -35,31 +35,31 @@
             else
             {
                 <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100 gap-3">
-                    <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="Appearance.Accent" @onclick="() => _showPreviewContent = true">
+                    <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="ButtonAppearance.Primary" @onclick="() => _showPreviewContent = true">
                         Show Preview Content
                     </FluentButton>
                 </FluentStack>
             }
         </FluentGridItem>
-        <FluentGridItem lg="4" md="6" sm="12" xs="12" HiddenWhen="GridItemHidden.MdAndDown">
+        <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
             <DigitalClock />
         </FluentGridItem>
     </FluentGrid>
     @if (_showPreviewContent)
     {
-        <FluentGrid>
-            <FluentGridItem lg="7" md="7" sm="12" xs="12">
-                <FluentCard MinimalStyle="true">
+        <FluentGrid Spacing="3">
+            <FluentGridItem Lg="7" Md="12" Sm="12" Xs="12">
+                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
                     <ClockinPortable />
                 </FluentCard>
             </FluentGridItem>
-            <FluentGridItem lg="3" md="5" sm="12" xs="12">
-                <FluentCard MinimalStyle="true">
+            <FluentGridItem Lg="3" Md="5" Sm="12" Xs="12">
+                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
                     <UpcomingShifts />
                 </FluentCard>
             </FluentGridItem>
-            <FluentGridItem lg="2" md="12" sm="12" xs="12">
-                <FluentCard MinimalStyle="true">
+            <FluentGridItem Lg="2" Md="7" Sm="12" Xs="12">
+                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
                     <ShiftCalendar />
                 </FluentCard>
             </FluentGridItem>

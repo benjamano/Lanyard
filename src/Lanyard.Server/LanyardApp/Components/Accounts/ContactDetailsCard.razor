@@ -1,46 +1,53 @@
 @using Lanyard.Application.Services.Authentication
+@using System.Linq.Expressions
 @inject IToastService ToastService
 
-<FluentCard>
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H5">Other Details</FluentLabel>
-        
-        <FluentEditForm class="w-100" Model="@model">
-            <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                <div class="w-100">
-                    <FluentTextField @bind-Value="model.Email"
-                                    Label="Email Address"
-                                    TextFieldType="TextFieldType.Email"
-                                    Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
-                    </FluentTextField>
-                    <FluentValidationMessage For="@(() => model.Email)" />
-                </div>
-                <div class="w-100">
-                    <FluentTextField @bind-Value="model.PhoneNumber"
-                                    Label="Phone Number"
-                                    TextFieldType="TextFieldType.Tel"
-                                    Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-                    </FluentTextField>
-                    <FluentValidationMessage For="@(() => model.PhoneNumber)" />
-                </div>
-                <div class="w-100">
-                    <FluentDatePicker @bind-Value="model.DateOfBirth"
-                                    Label="Date of Birth"
-                                    Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarLtr())" Slot="start" />
-                    </FluentDatePicker>
-                    <FluentValidationMessage For="@(() => model.DateOfBirth)" />
-                </div>
-            </FluentStack>
-        </FluentEditForm>
+<EditForm EditContext="@_editContext">
+    <DataAnnotationsValidator />
+    <FluentStack Orientation="Orientation.Vertical">
+        <FluentTextInput @bind-Value="model.Email"
+                            Label="Email Address"
+                            TextInputType="TextInputType.Email"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.Email)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="end" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentTextInput @bind-Value="model.PhoneNumber"
+                            Label="Phone Number"
+                            TextInputType="TextInputType.Telephone"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.PhoneNumber)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="end" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth"
+                            Label="Date of Birth"
+                            Width="61%"
+                            Message="@GetValidationMessage(() => model.DateOfBirth)"
+                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                            MessageState="MessageState.Error">
+        </FluentDatePicker>
     </FluentStack>
-</FluentCard>
+</EditForm>
 
 @code {
     private ContactDetailsModel model = new();
+    private EditContext _editContext = default!;
+
+    [Parameter]
+    public bool DontShowCard { get; set; } = false;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -68,6 +75,12 @@
 
             ToastService.ShowSuccess("Details Saved!");
         }
+    }
+
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
+    {
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class ContactDetailsModel

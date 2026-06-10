@@ -1,13 +1,13 @@
-<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start">
-    <FluentLabel Typo="Typography.H5">
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" Height="100%">
+    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Color="Color.Default">
         Upcoming Shifts
-    </FluentLabel>
+    </FluentText>
     <FluentStack Class="mt-2">
         @if (_upcomingShifts == null)
         {
             <FluentStack Orientation="Orientation.Horizontal">
-                Loading your upcoming shifts...
-                <FluentProgressRing Width="20px" />
+                <FluentText Typo="Typography.Body" Color="Color.Info">Loading your upcoming shifts...</FluentText>
+                <FluentSpinner Size="SpinnerSize.Tiny" />
             </FluentStack>
         }
         else
@@ -15,33 +15,33 @@
             <FluentStack Orientation="Orientation.Vertical">
                 @foreach (ShiftIntervalDTO shift in _upcomingShifts)
                 {
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" HorizontalGap="8px">
                         @if (shift.Id == _currentShift.Id)
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.ClockAlarm" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.ClockAlarm" Class="pt-1"/>
                         }
                         else if (shift.Start.Hour < 12)
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.WeatherSunny" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.WeatherSunny" Class="pt-1"/>
                         }
                         else
                         {
-                            <FluentIcon Icon="Icons.Filled.Size20.WeatherMoon" Class="pt-1"/>
+                            <FluentIcon Icon="Icons.Regular.Size20.WeatherMoon" Class="pt-1"/>
                         }
                         <FluentStack Orientation="Orientation.Vertical" Class="mb-1 mt-1" VerticalGap="0">
-                            <FluentLabel Typo="Typography.Body" Color="Color.Accent">
+                            <FluentText Typo="Typography.Body" Color="Color.Primary">
                                 @shift.Title
-                            </FluentLabel>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
+                            </FluentText>
+                            <FluentText Typo="Typography.Body" Color="Color.Info">
                                 @shift.Start.ToString("ddd, MMM d, h:mm tt") - @shift.End.ToString("h:mm tt")
-                            </FluentLabel>
-                            <FluentLabel Typo="Typography.Body" Color="Color.Info">
-                                Location: @shift.Location
-                            </FluentLabel>
+                            </FluentText>
+                            <FluentText Typo="Typography.Body" Color="Color.Info">
+                                @shift.Location
+                            </FluentText>
                         </FluentStack>
                     </FluentStack>
 
-                    <FluentDivider Style="width: 100%;" Role="DividerRole.Separator"></FluentDivider>
+                    <FluentDivider Style="width: 100%;"></FluentDivider>
                 }
             </FluentStack>
         }

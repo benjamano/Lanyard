@@ -1,54 +1,58 @@
-@using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
+@using System.Linq.Expressions
 @inject IToastService ToastService
 
-<FluentCard Class="mb-2">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentLabel Typo="Typography.H5">Your Details</FluentLabel>
-        
-        <FluentEditForm Model="@model" class="w-100">
-            <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="16">
-                <div class="w-100">
-                    <FluentTextField @bind-Value="model.UserName"
-                                    Label="User Name"
-                                    ReadOnly="true"
-                                    Disabled="true"
-                                    Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                    </FluentTextField>
-                    <FluentValidationMessage For="@(() => model.UserName)" />
-                </div>
-                <div class="w-100">
-                    <FluentTextField @bind-Value="model.FirstName"
-                                    Label="First Name"
-                                    Required
-                                    Placeholder="Enter your first name"
-                                    Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                    </FluentTextField>
-                    <FluentValidationMessage For="@(() => model.FirstName)" />
-                </div>
-                <div class="w-100">
-                <FluentTextField @bind-Value="model.LastName"
-                                 Label="Last Name"
-                                 Required
-                                 Placeholder="Enter your last name"
-                                 Style="width: 100%;">
+<EditForm EditContext="@_editContext">
+    <DataAnnotationsValidator />
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" Width="100%">
+        <FluentTextInput @bind-Value="model.UserName"
+                            Label="User Name"
+                            ReadOnly="true"
+                            Disabled="true"
+                            Width="61%">
+                            
+            <EndTemplate>
+                <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+            </EndTemplate>
+        </FluentTextInput>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Start" HorizontalGap="8" Width="75%">
+            <FluentTextInput @bind-Value="model.FirstName"
+                                Label="First Name"
+                                Required="true"
+                                Placeholder="Enter your first name"
+                                Width="100%"
+                                Message="@GetValidationMessage(() => model.FirstName)"
+                                MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                MessageState="MessageState.Error">
+                <EndTemplate>
                     <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextField>
-                <FluentValidationMessage For="@(() => model.LastName)" />
-                </div>
-                <div class="w-100">
-                    <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
-                </div>
-            </FluentStack>
-        </FluentEditForm>
+                </EndTemplate>
+            </FluentTextInput>
+            <FluentTextInput @bind-Value="model.LastName"
+                                Label="Last Name"
+                                Required="true"
+                                Placeholder="Enter your last name"
+                                Width="100%"
+                                Message="@GetValidationMessage(() => model.LastName)"
+                                MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
+                                MessageState="MessageState.Error">
+                <EndTemplate>
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </EndTemplate>
+            </FluentTextInput>
+        </FluentStack>
+        <FluentCheckbox @bind-Value="model.Use24HourFormat" Label="Prefer 24-Hour Format for Time Display" />
     </FluentStack>
-</FluentCard>
+</EditForm>
 
 @code {
     private UserDetailsModel model = new();
+    private EditContext _editContext = default!;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -79,6 +83,12 @@
 
             ToastService.ShowSuccess("Details Saved!");
         }
+    }
+
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
+    {
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class UserDetailsModel

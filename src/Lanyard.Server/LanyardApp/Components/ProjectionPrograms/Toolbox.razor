@@ -1,4 +1,4 @@
-﻿@using Lanyard.Application.Services
+@using Lanyard.Application.Services
 @using Lanyard.App.Services
 
 @inject IProjectionProgramService _projectionService
@@ -7,31 +7,31 @@
 
 <FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
     <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical">
-        <FluentLabel Typo="Typography.PaneHeader">
+        <FluentText Typo="Typography.PaneHeader">
             <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" />
             Toolbox
-        </FluentLabel>
+        </FluentText>
         <FluentDivider Orientation="Orientation.Horizontal" Class="w-100"></FluentDivider>
 
         @if (isLoading)
         {
             <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Class="mt-4">
-                <FluentProgressRing />
+                <FluentSpinner />
             </FluentStack>
         }
         else if (stepTemplates.Count == 0)
         {
-            <FluentLabel Class="mt-4 text-center" Typo="Typography.Body">No templates available</FluentLabel>
+            <FluentText Class="mt-4 text-center" Typo="Typography.Body">No templates available</FluentText>
         }
         else
         {
             foreach (ProjectionProgramStepTemplate template in stepTemplates)
             {
-                <FluentCard MinimalStyle="true" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
-                    <FluentLabel Typo="Typography.H6" Class="text-center">@template.Name</FluentLabel>
+                <FluentCard Appearance="CardAppearance.Subtle" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
+                    <FluentText Typo="Typography.H6" Class="text-center">@template.Name</FluentText>
                     @if (!string.IsNullOrWhiteSpace(template.Description))
                     {
-                        <FluentLabel Class="text-center" Typo="Typography.Body">@template.Description</FluentLabel>
+                        <FluentText Class="text-center" Typo="Typography.Body">@template.Description</FluentText>
                     }
                 </FluentCard>
             }
@@ -41,7 +41,7 @@
     <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Right" class="mt-auto">
         <FluentButton Disabled="@(!ShowSaveButton || IsSaving)" 
                      OnClick="HandleSave" 
-                     Appearance="Appearance.Accent" 
+                     Appearance="ButtonAppearance.Primary" 
                      IconStart="new Icons.Regular.Size20.Save()"
                      Loading="@IsSaving">
             Save

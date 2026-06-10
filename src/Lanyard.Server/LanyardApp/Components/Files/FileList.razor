@@ -9,12 +9,12 @@
         <PropertyColumn Property="x => x.FileSize" Title="Size" />
         <PropertyColumn Property="x => x.ContentType" Title="Type" />
         <PropertyColumn Property="x => x.UploadedAt" Title="Uploaded" />
-        <TemplateColumn Title="Actions" Align="Align.End">
+        <TemplateColumn Title="Actions" Align="DataGridCellAlignment.End">
             <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
         </TemplateColumn>
     </ChildContent>
     @* <LoadingContent>
-        Loading... <FluentProgressRing></FluentProgressRing>
+        Loading... <FluentSpinner></FluentSpinner>
     </LoadingContent> *@
 </FluentDataGrid>
 

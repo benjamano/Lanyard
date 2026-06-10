@@ -1,38 +1,55 @@
-﻿@using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
 @using Microsoft.EntityFrameworkCore
 @inject ApplicationDbContext _context
 @inject IToastService ToastService
-@implements IDialogContentComponent<SongPlaylistSelection>
 
 <FluentDialogBody>
-    @if (isLoading)
-    {
-        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="8">
-            <FluentProgressRing />
-            <FluentLabel>Loading playlists...</FluentLabel>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+            <FluentText Typo="Typography.PaneHeader">Add to Playlist</FluentText>
         </FluentStack>
-    }
-    else if (!Playlists.Any())
-    {
-        <FluentStack VerticalGap="16">
-            <FluentLabel Style="text-align: center; color: var(--neutral-foreground-hint);">
-                No playlists available. Create a playlist first.
-            </FluentLabel>
-        </FluentStack>
-    }
-    else
-    {
-        <FluentSelect TOption="Playlist"
-                      Items="@Playlists"
-                      OptionText="@(p => p.Name)"
-                      OptionValue="@(p => p.Id.ToString())"
-                      SelectedOptionChanged="@OnPlaylistSelected"
-                      Placeholder="Select Playlist"
-                      Label="Playlist"
-                      Style="width: 100%;" />
-    }
+    </TitleTemplate>
+    <ChildContent>
+        @if (isLoading)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="8">
+                <FluentSpinner />
+                <FluentText>Loading playlists...</FluentText>
+            </FluentStack>
+        }
+        else if (!Playlists.Any())
+        {
+            <FluentStack VerticalGap="16">
+                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                    No playlists available. Create a playlist first.
+                </FluentText>
+            </FluentStack>
+        }
+        else
+        {
+            <FluentSelect TOption="Playlist"
+                          TValue="string"
+                          Items="@Playlists"
+                          OptionText="@(p => p?.Name ?? string.Empty)"
+                          OptionValue="@(p => p?.Id.ToString())"
+                          Value="@(Content.Playlist?.Id.ToString() ?? string.Empty)"
+                          ValueChanged="@OnPlaylistSelected"
+                          Placeholder="Select Playlist"
+                          Label="Playlist"
+                          Style="width: 100%;" />
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      Disabled="@(Content.Playlist is null || !Playlists.Any())"
+                      OnClick="@ConfirmAsync">
+            Add to Playlist
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
 </FluentDialogBody>
 
 @code {
@@ -40,10 +57,7 @@
     public SongPlaylistSelection Content { get; set; } = default!;
 
     [CascadingParameter]
-    public FluentDialog? Dialog { get; set; }
-
-    [Parameter]
-    public DialogParameters Parameters { get; set; } = default!;
+    public required IDialogInstance Dialog { get; set; }
 
     private bool isLoading = true;
     private IEnumerable<Playlist> Playlists = Enumerable.Empty<Playlist>();
@@ -73,23 +87,29 @@
         finally
         {
             isLoading = false;
-            TogglePrimaryActionButton();
             StateHasChanged();
         }
     }
 
-    private void OnPlaylistSelected(Playlist? playlist)
+    private void OnPlaylistSelected(string? playlistId)
     {
-        if (playlist is not null)
+        if (Guid.TryParse(playlistId, out Guid parsedPlaylistId))
         {
-            Content.Playlist = playlist;
+            Content.Playlist = Playlists.FirstOrDefault(p => p.Id == parsedPlaylistId);
         }
-        
-        TogglePrimaryActionButton();
+        else
+        {
+            Content.Playlist = null;
+        }
     }
 
-    private void TogglePrimaryActionButton()
+    private async Task ConfirmAsync()
     {
-        Dialog?.TogglePrimaryActionButton(Content.Playlist is not null && Playlists.Any());
+        await Dialog.CloseAsync(Content.Playlist);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
     }
 }

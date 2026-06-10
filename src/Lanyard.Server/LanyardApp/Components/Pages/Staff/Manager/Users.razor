@@ -1,4 +1,4 @@
-﻿@page "/manage/users"
+@page "/manage/users"
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
@@ -8,13 +8,13 @@
 <PageTitle>User Management</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentToolbar class="w-100" id="toolbar-fluent-components">
-        <FluentLabel slot="start" Typo="Typography.PaneHeader">Users</FluentLabel>
+    <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
+        <FluentText Typo="Typography.PaneHeader">Users</FluentText>
 
-        <FluentButton Appearance="Appearance.Outline" class="me-2" slot="end" IconEnd="new Icons.Regular.Size20.PersonAdd()" OnClick="OpenRegisterUserDialog">Register a New User</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" class="me-2" IconEnd="new Icons.Regular.Size20.PersonAdd()" OnClick="OpenRegisterUserDialog">Register a New User</FluentButton>
 
-        <FluentSearch Placeholder="Search..." Immediate="true" AutoComplete="off" slot="end" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
-    </FluentToolbar>
+        <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
+    </FluentStack>
 
     <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <EmptyContent>
@@ -29,7 +29,7 @@
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Accent" OnClick="@(() => OpenChangePasswordDialog(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary" OnClick="@(() => OpenChangePasswordDialog(context))" />
                 </div>
             </TemplateColumn>
         </ChildContent>
@@ -93,17 +93,13 @@
 
     private async Task OpenRegisterUserDialog()
     {
-        IDialogReference dialog = await _dialogService.ShowDialogAsync<RegisterUserDialog>(new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<RegisterUserDialog>(options =>
         {
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true
+            options.Width = "500px";
+            options.Modal = true;
         });
 
-        DialogResult? result = await dialog.Result;
-
-        if (result?.Data is true)
+        if (result.Value is true)
         {
             await GetUsers();
         }
@@ -111,29 +107,17 @@
 
     private async Task ConfirmDeleteUser(UserProfile user)
     {
-        DialogParameters parameters = new DialogParameters()
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
         {
-            Title = "Are you sure?",
-            OnDialogResult = _dialogService.CreateDialogCallback(this, async result => await HandleDeleteUser(result)),
-            PrimaryAction = "Yes",
-            PrimaryActionEnabled = true,
-            SecondaryAction = "No",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
+        });
 
-        parameters.Add("Message", $"Are you sure you want to delete the user '{user.GetName()}'?");
-
-        await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(user, parameters);
-    }
-
-    private async Task HandleDeleteUser(DialogResult result)
-    {
-        if (result.Cancelled == false)
+        if (!result.Cancelled)
         {
-            await _securityService.DeleteUserAsync(((UserProfile)result.Data!).Id);
+            await _securityService.DeleteUserAsync(user.Id);
             await GetUsers();
         }
     }
@@ -146,18 +130,12 @@
             return;
         }
 
-        DialogParameters parameters = new DialogParameters()
+        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(options =>
         {
-            Title = "Change Password",
-            PrimaryAction = "Change Password",
-            PrimaryActionEnabled = true,
-            SecondaryAction = "Cancel",
-            Width = "500px",
-            Height = "auto",
-            TrapFocus = true,
-            Modal = true,
-        };
-
-        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(user, parameters);
+            options.Header.Title = "Change Password";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ChangePasswordDialog.Content), user);
+        });
     }
 }

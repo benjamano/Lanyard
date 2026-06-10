@@ -1,4 +1,4 @@
-﻿@using Lanyard.Application.SignalR
+@using Lanyard.Application.SignalR
 @using Lanyard.Shared.DTO
 @using Microsoft.AspNetCore.SignalR
 
@@ -12,21 +12,24 @@
 @if (client != null)
 {
     <FluentCard>
-        <FluentLabel Typo="Typography.PaneHeader">Music</FluentLabel>
+        <FluentText Typo="Typography.PaneHeader">Music</FluentText>
 
-        <FluentEditForm Model="@client" OnValidSubmit="UpdateClientCapabilitiesAsync" class="mt-2">
+        <EditForm Model="@client" OnValidSubmit="UpdateClientCapabilitiesAsync" class="mt-2">
             <FluentStack Orientation="Orientation.Vertical">
                 <div>
-                    <FluentNumberField @bind-Value="client!.MusicCacheLimitMb" Label="Music Cache Limit (MB)" Step="10" Min="0" Max="10240" />
+                    <FluentTextInput Value="@_cacheLimitStr"
+                                     ValueChanged="@(v => { _cacheLimitStr = v; if (int.TryParse(v, out int n)) client!.MusicCacheLimitMb = n; })"
+                                     Label="Music Cache Limit (MB)"
+                                     TextInputType="TextInputType.Number" />
                 </div>
-                <FluentButton Type="ButtonType.Button" Appearance="Appearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
+                <FluentButton Type="ButtonType.Button" Appearance="ButtonAppearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
                     Get Cached Songs
                 </FluentButton>
-                <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
+                <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
                     Save
                 </FluentButton>
             </FluentStack>
-        </FluentEditForm>
+        </EditForm>
     </FluentCard>
 }
 
@@ -39,6 +42,7 @@
 
     private Client? client = null;
     private bool isClientConnected = false;
+    private string _cacheLimitStr = "500";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -57,6 +61,7 @@
         if (result.IsSuccess)
         {
             client = result.Data!;
+            _cacheLimitStr = client.MusicCacheLimitMb.ToString();
         }
         else
         {
