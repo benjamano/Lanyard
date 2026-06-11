@@ -9,6 +9,9 @@
                 Your session will expire due to inactivity or reaching the maximum session length.
                 You will be logged out in <strong>@_secondsLeft second@(_secondsLeft == 1 ? "" : "s")</strong>.
             </FluentText>
+
+            <FluentButton OnClick="async () => await Dialog.CancelAsync()" Appearance="ButtonAppearance.Primary">Log out now</FluentButton>
+            <FluentButton OnClick="async () => await Dialog.CloseAsync()" Appearance="ButtonAppearance.Default">Stay logged in</FluentButton>
         </FluentStack>
     </ChildContent>
 </FluentDialogBody>
