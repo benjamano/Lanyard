@@ -1,0 +1,116 @@
+@page "/manage/dashboards/{DashboardId:guid}"
+@using Lanyard.App.Components.Home
+@using Lanyard.Infrastructure.Enum
+
+<PageTitle>Edit Dashboard</PageTitle>
+
+@inject IDashboardService DashboardService
+
+@if (Dashboard != null)
+{
+    <FluentCard Appearance="CardAppearance.Default">
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Start">
+            @if (IsEditingDashboardName)
+            {
+                <EditForm Model="@Dashboard" OnValidSubmit="async () => IsEditingDashboardName = false">
+                    <FluentTextInput Placeholder="Name" Label="Name" @bind-Value="Dashboard.Name" Required="true">
+                        <StartTemplate>
+                            <FluentIcon Value="new Icons.Regular.Size20.TextEditStyle()"/>
+                        </StartTemplate>
+                    </FluentTextInput>
+                </EditForm>
+            }
+            else
+            {
+                <FluentButton Appearance="@ButtonAppearance.Subtle" OnClick="() => IsEditingDashboardName = true">
+                    @Dashboard.Name
+                </FluentButton>
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                            IconStart="new Icons.Regular.Size24.Save()"
+                            Tooltip="Save Dashboard">
+            </FluentButton>
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                            IconStart="new Icons.Regular.Size24.PreviewLink()"
+                            Tooltip="Preview Dashboard">
+            </FluentButton>
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                        Id="DashboardWidgetList"
+                        IconStart="new Icons.Regular.Size24.AddCircle()">
+            </FluentButton>
+            <FluentMenu Trigger="DashboardWidgetList">
+                <FluentMenuList>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.DigitalClock)">Digital Clock</FluentMenuItem>
+                </FluentMenuList>
+            </FluentMenu>
+        </FluentStack>
+    </FluentCard>
+
+    <DashboardGrid Widgets="Dashboard!.Widgets"/>
+}
+else
+{
+    <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" Padding="@Padding.All3">
+        <FluentSpinner/>
+    </FluentStack>
+}
+
+@code {
+    [Parameter]
+    public Guid DashboardId { get; set; } = Guid.Empty;
+
+    public Dashboard? Dashboard { get; set; } = null;
+
+    public bool IsEditingDashboardName = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<Dashboard> result = await DashboardService.GetDashboardAsync(DashboardId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            Dashboard = result.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load the dashboard, {result.Error}");
+        }
+    }
+
+    private void AddWidget(WidgetType type)
+    {
+        if (Dashboard == null)
+        {
+            return;
+        }
+
+        switch (type)
+        {
+            case WidgetType.DigitalClock:
+                DigitalClockWidget clockWidget = new DigitalClockWidget
+                {
+                    ShowMilliSeconds = false,
+                    Is24HourFormat = true,
+                };
+
+                Dashboard.Widgets.Add(clockWidget);
+                break;
+            default:
+                DashboardWidget widget = new DashboardWidget
+                {
+                    DashboardId = Dashboard.Id,
+                    Type = type,
+                    GridX = 0,
+                    GridY = 0,
+                    GridW = 2,
+                    GridH = 2
+                };
+
+                Dashboard.Widgets.Add(widget);
+                break;
+        }
+    }
+}

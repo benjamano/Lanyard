@@ -14,7 +14,7 @@
                 Loading="IsLoading"
                 ShowHover="true"
                 TGridItem="Dashboard"
-                OnRowClick="(dashboard) => OnRowClick((dashboard.Data as Dashboard)!)">
+                OnRowClick="(row) => OnRowClick(row.Item!.Id)">
     <LoadingContent>
         <FluentSpinner/>
     </LoadingContent>
@@ -50,9 +50,9 @@
         IsLoading = false;
     }
 
-    private void OnRowClick(Dashboard dashboard)
+    private void OnRowClick(Guid dashboardId)
     {
-        
+        _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}");
     }
 
     private async Task CreateBlankDashboard()

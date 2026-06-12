@@ -9,29 +9,48 @@
     </FluentStack>
 </FluentCard>
 
+@implements IDisposable
+
 @code {
     private string _currentTime = string.Empty;
     private Timer? _timer;
     private string _timeFormat = "HH:mm:ss";
+    private int _timerIntervalMs = 1000;
 
-    protected override async Task OnInitializedAsync()
+    [Parameter]
+    public bool? ShowMilliseconds { get; set; } = false;
+
+    [Parameter]
+    public bool? Is24HourFormat { get; set; } = true;
+
+    protected override void OnInitialized()
     {
-        DetectTimeFormat();
+        ConfigureClockFormat();
         _currentTime = DateTime.Now.ToString(_timeFormat);
-        _timer = new Timer(UpdateClock, null, 0, 1000);
+        _timer = new Timer(UpdateClock, null, 0, _timerIntervalMs);
     }
 
-    private void DetectTimeFormat()
+    protected override void OnParametersSet()
     {
-        string? shortTimePattern = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern;
-        if (shortTimePattern.Contains("tt"))
+        ConfigureClockFormat();
+        _timer?.Change(0, _timerIntervalMs);
+    }
+
+    private void ConfigureClockFormat()
+    {
+        bool includeMilliseconds = ShowMilliseconds == true;
+        bool use24HourFormat = Is24HourFormat != false;
+
+        if (use24HourFormat)
         {
-            _timeFormat = "hh:mm:ss tt";
+            _timeFormat = includeMilliseconds ? "HH:mm:ss.fff" : "HH:mm:ss";
         }
         else
         {
-            _timeFormat = "HH:mm:ss";
+            _timeFormat = includeMilliseconds ? "hh:mm:ss.fff tt" : "hh:mm:ss tt";
         }
+
+        _timerIntervalMs = includeMilliseconds ? 50 : 1000;
     }
 
     private void UpdateClock(object? state)

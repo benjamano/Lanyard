@@ -1,0 +1,57 @@
+@using Lanyard.App.Components.Home
+@using Lanyard.Infrastructure.Enum
+
+<FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
+    <FluentGrid Spacing="1">
+        <FluentMenu @ref=@Menu>
+            <FluentMenuList>
+                <FluentMenuItem>Menu item 1</FluentMenuItem>
+                <FluentMenuItem>Menu item 2</FluentMenuItem>
+                <FluentMenuItem>Menu item 3</FluentMenuItem>
+                <FluentMenuItem>Menu item 4</FluentMenuItem>
+            </FluentMenuList>
+        </FluentMenu>
+        @foreach (DashboardWidget widget in Widgets)
+        {
+            switch (widget.Type)
+            {
+                case WidgetType.DigitalClock:
+                    DigitalClockWidget? clockWidget = widget as DigitalClockWidget;
+
+                    if (clockWidget == null)
+                    {
+                        continue;
+                    }
+    
+                    <FluentGridItem Xl="2" Lg="2" Md="4" Sm="6" Xs="6" Id="@($"widget-{widget.Id}")">
+                        <div @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                            @oncontextmenu:preventDefault="true"
+                            style="height: 100%; width: 100%;">
+                            <DigitalClock ShowMilliseconds="clockWidget.ShowMilliSeconds" Is24HourFormat="clockWidget.Is24HourFormat" />
+                        </div>
+                    </FluentGridItem>
+                    break;
+            }
+        }
+    </FluentGrid>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public List<DashboardWidget> Widgets { get; set; } = new List<DashboardWidget>();
+
+    private FluentMenu? Menu { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+    }
+
+    private async Task ShowMenuAtWidget(Guid widgetId)
+    {
+        if (Menu != null)
+        {
+            await Menu.OpenMenuAsync("widget-" + widgetId.ToString());
+        }
+    }
+}

@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
+using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Infrastructure.Models;
 
@@ -19,18 +21,21 @@ public class Dashboard
     public DateTime? LastUpdateDate { get; set; }
 
     public virtual List<DashboardWidget> Widgets { get; set; } = [];
-
-    public bool IsValid => !string.IsNullOrWhiteSpace(Name) && Name.Length <= 100 && (Description == null || Description.Length <= 500);
 }
 
 public class DashboardWidget
 {
+    public DashboardWidget()
+    {
+        Id = Guid.NewGuid();
+    }
+
     public Guid Id { get; set; }
 
     public Guid DashboardId { get; set; }
     public Dashboard? Dashboard { get; set; }
 
-    public required string Type { get; set; }
+    public required WidgetType Type { get; set; }
     public string? Title { get; set; }
 
     public int GridX { get; set; }
@@ -38,9 +43,17 @@ public class DashboardWidget
     public int GridW { get; set; }
     public int GridH { get; set; }
 
-    public int SortOrder { get; set; }
-
-    public string ConfigJson { get; set; } = "{}";
-
     public bool IsActive { get; set; }
+}
+
+public class DigitalClockWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public DigitalClockWidget()
+    {
+        Type = WidgetType.DigitalClock;
+    }
+
+    public bool ShowMilliSeconds { get; set; }
+    public bool Is24HourFormat { get; set; }
 }

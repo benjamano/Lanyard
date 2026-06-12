@@ -5,10 +5,11 @@
 <FluentDialogBody>
     <TitleTemplate>
         Create a new Dashboard
+
     </TitleTemplate>
 
     <ChildContent>
-        <EditForm Model="@dashboard" OnValidSubmit="() => OnActionClickedAsync(true)">
+        <EditForm Model="@dashboard" OnValidSubmit="SubmitAsync">
             <FluentStack Orientation="@Orientation.Vertical">
                 <FluentTextInput Placeholder="Name" Label="Name" @bind-Value="dashboard.Name" Required="true">
                     <StartTemplate>
@@ -20,8 +21,13 @@
 
             <DataAnnotationsValidator />
             <FluentValidationSummary />
+
+            <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" IconStart="new Icons.Regular.Size20.AddCircle()">Create</FluentButton>
+            <FluentButton OnClick="async () => await DialogInstance.CancelAsync()" Appearance="ButtonAppearance.Default">Cancel</FluentButton>
         </EditForm>
     </ChildContent>
+
+    <ActionTemplate></ActionTemplate>
 </FluentDialogBody>
 
 @code
@@ -30,30 +36,27 @@
 
     protected override async Task OnActionClickedAsync(bool primary)
     {
-        if (primary == false)
+        if (primary)
         {
-            await DialogInstance.CancelAsync();
-            return;
-        }
-
-        if (!dashboard.IsValid)
-        {
-            _toastService.ShowError("Please ensure the dashboard name is between 3 and 100 characters.");
-            return;
-        }
-
-        Result<bool> result = await DashboardService.CreateDashboardAsync(dashboard);
-
-        if (result.IsSuccess)
-        {
-            _toastService.ShowSuccess("Dashboard created successfully");
+            await SubmitAsync();
         }
         else
         {
-            _toastService.ShowError($"Failed to create the dashboard {result.Error}");
-            return;
+            await DialogInstance.CancelAsync();
         }
+    }
 
-        await DialogInstance.CloseAsync();
+    private async Task SubmitAsync()
+    {
+        Result<bool> result = await DashboardService.CreateDashboardAsync(dashboard);
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Dashboard created successfully");
+            await DialogInstance.CloseAsync();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to create the dashboard: {result.Error}");
+        }
     }
 }
