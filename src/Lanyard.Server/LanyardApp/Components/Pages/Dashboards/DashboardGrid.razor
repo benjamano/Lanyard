@@ -2,56 +2,371 @@
 @using Lanyard.Infrastructure.Enum
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
-    <FluentGrid Spacing="1">
+    @if (!PreviewMode)
+    {
         <FluentMenu @ref=@Menu>
             <FluentMenuList>
-                <FluentMenuItem>Menu item 1</FluentMenuItem>
-                <FluentMenuItem>Menu item 2</FluentMenuItem>
-                <FluentMenuItem>Menu item 3</FluentMenuItem>
-                <FluentMenuItem>Menu item 4</FluentMenuItem>
+                @switch (SelectedWidget?.Type)
+                {
+                    case WidgetType.DigitalClock:
+                        DigitalClockWidget? clockWidget = SelectedWidget as DigitalClockWidget;
+
+                        if (clockWidget == null)
+                        {
+                            break;
+                        }
+
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.ShowMilliSeconds"
+                                        CheckedChanged="@(() => clockWidget.ShowMilliSeconds = !clockWidget.ShowMilliSeconds)">
+                            Show Milliseconds
+                        </FluentMenuItem>
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.Is24HourFormat"
+                                        CheckedChanged="@(() => clockWidget.Is24HourFormat = !clockWidget.Is24HourFormat)">
+                            24-Hour Format
+                        </FluentMenuItem>
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.ShowDate"
+                                        CheckedChanged="@(() => clockWidget.ShowDate = !clockWidget.ShowDate)">
+                            Show Date
+                        </FluentMenuItem>
+                        break;
+                }
+                <FluentMenuItem OnClick="@(() => MoveWidgetUp(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowUp()">
+                    Move Up
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetDown(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowDown()">
+                    Move Down
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetRight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowRight()">
+                    Move Right
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetLeft(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowLeft()">
+                    Move Left
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ExtendWidgetWidth(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Add()">
+                    Extend Width
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ShortenWidgetWidth(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Subtract()">
+                    Shorten Width
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ExtendWidgetHeight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Add()">
+                    Extend Height
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ShortenWidgetHeight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Subtract()">
+                    Shorten Height
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => RemoveWidget(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Delete()">
+                    Remove Widget
+                </FluentMenuItem>
             </FluentMenuList>
         </FluentMenu>
+    }
+
+    <div class="dashboard-grid">
         @foreach (DashboardWidget widget in Widgets)
         {
-            switch (widget.Type)
-            {
-                case WidgetType.DigitalClock:
-                    DigitalClockWidget? clockWidget = widget as DigitalClockWidget;
-
-                    if (clockWidget == null)
+            <div class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
+                <FluentStack Orientation="@Orientation.Vertical" 
+                            Height="100%" 
+                            Width="100%"
+                            VerticalAlignment="@VerticalAlignment.Center"
+                            HorizontalAlignment="@HorizontalAlignment.Center">
+                    @if (!PreviewMode)
                     {
-                        continue;
+                        <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                                        IconStart="new Icons.Regular.Size16.ArrowUp()" 
+                                        OnClick="@(() => MoveWidgetUp(widget))"/>
                     }
-    
-                    <FluentGridItem Xl="2" Lg="2" Md="4" Sm="6" Xs="6" Id="@($"widget-{widget.Id}")">
-                        <div @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
-                            @oncontextmenu:preventDefault="true"
-                            style="height: 100%; width: 100%;">
-                            <DigitalClock ShowMilliseconds="clockWidget.ShowMilliSeconds" Is24HourFormat="clockWidget.Is24HourFormat" />
-                        </div>
-                    </FluentGridItem>
-                    break;
-            }
+                    <FluentStack Orientation="@Orientation.Horizontal" 
+                                Height="100%" 
+                                Width="100%"
+                                VerticalAlignment="@VerticalAlignment.Center">
+                        @if (!PreviewMode)
+                        {
+                            <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                                            IconStart="new Icons.Regular.Size16.ArrowLeft()" 
+                                            OnClick="@(() => MoveWidgetLeft(widget))"/>
+                        }
+                        @switch (widget.Type)
+                        {
+                            case WidgetType.DigitalClock:
+                                DigitalClockWidget? clockWidget = widget as DigitalClockWidget;
+
+                                if (clockWidget == null)
+                                {
+                                    break;
+                                }
+                                
+                                <div class="dashboard-widget-host"
+                                        @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                        @oncontextmenu:preventDefault="true">
+                                    <DigitalClock ShowMilliseconds="clockWidget.ShowMilliSeconds" 
+                                                    Is24HourFormat="clockWidget.Is24HourFormat" ShowDate="clockWidget.ShowDate" />
+                                </div>
+                                break;
+                            case WidgetType.TextArea:   
+                                TextAreaWidget? textAreaWidget = widget as TextAreaWidget;
+
+                                if (textAreaWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <FluentCard Appearance="CardAppearance.Default" 
+                                                Padding="@Padding.All2" 
+                                                Height="100%">
+                                        <div contenteditable="true"
+                                            class="text-area-widget-content h-100">
+                                        </div>
+                                    </FluentCard>
+                                </div>
+                                break;
+                        }
+                        @if (!PreviewMode)
+                        {
+                            <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                                            IconStart="new Icons.Regular.Size16.ArrowRight()" 
+                                            OnClick="@(() => MoveWidgetRight(widget))"/>
+                        }
+                    </FluentStack>
+                    @if (!PreviewMode)
+                    {
+                        <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                                        IconStart="new Icons.Regular.Size16.ArrowDown()" 
+                                        OnClick="@(() => MoveWidgetDown(widget))"/>
+                    }
+                </FluentStack>
+            </div>  
         }
-    </FluentGrid>
+    </div>
 </FluentCard>
 
 @code {
     [Parameter]
     public List<DashboardWidget> Widgets { get; set; } = new List<DashboardWidget>();
 
+    [Parameter]
+    public bool PreviewMode { get; set; } = false;
+
     private FluentMenu? Menu { get; set; }
+
+    public DashboardWidget? SelectedWidget { get; set; } = null;
 
     protected override void OnParametersSet()
     {
+        SetInvalidGridPositionsToTheNextFreePosition();
+
         base.OnParametersSet();
+    }
+
+    private void SetInvalidGridPositionsToTheNextFreePosition()
+    {
+        const int totalColumns = 12;
+        HashSet<(int X, int Y)> occupiedCells = new HashSet<(int X, int Y)>();
+
+        foreach (DashboardWidget widget in Widgets)
+        {
+            int widgetWidth = Math.Clamp(widget.GridW, 1, totalColumns);
+            int widgetHeight = Math.Max(1, widget.GridH);
+            int normalizedX = Math.Max(0, widget.GridX);
+            int normalizedY = Math.Max(0, widget.GridY);
+
+            if (normalizedX + widgetWidth > totalColumns ||
+                !CanPlaceWidgetAt(normalizedX, normalizedY, widgetWidth, widgetHeight, occupiedCells))
+            {
+                (int FreeX, int FreeY) freePosition = FindNextFreePosition(widgetWidth, widgetHeight, occupiedCells, totalColumns);
+                normalizedX = freePosition.FreeX;
+                normalizedY = freePosition.FreeY;
+            }
+
+            widget.GridW = widgetWidth;
+            widget.GridH = widgetHeight;
+            widget.GridX = normalizedX;
+            widget.GridY = normalizedY;
+
+            MarkOccupied(normalizedX, normalizedY, widgetWidth, widgetHeight, occupiedCells);
+        }
+    }
+
+    private static bool CanPlaceWidgetAt(int startX, int startY, int width, int height, HashSet<(int X, int Y)> occupiedCells)
+    {
+        for (int x = startX; x < startX + width; x++)
+        {
+            for (int y = startY; y < startY + height; y++)
+            {
+                if (occupiedCells.Contains((x, y)))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static (int X, int Y) FindNextFreePosition(
+        int width,
+        int height,
+        HashSet<(int X, int Y)> occupiedCells,
+        int totalColumns)
+    {
+        int row = 0;
+
+        while (true)
+        {
+            int lastStartColumn = totalColumns - width;
+
+            for (int column = 0; column <= lastStartColumn; column++)
+            {
+                if (CanPlaceWidgetAt(column, row, width, height, occupiedCells))
+                {
+                    return (column, row);
+                }
+            }
+
+            row++;
+        }
+    }
+
+    private static void MarkOccupied(
+        int startX,
+        int startY,
+        int width,
+        int height,
+        HashSet<(int X, int Y)> occupiedCells)
+    {
+        for (int x = startX; x < startX + width; x++)
+        {
+            for (int y = startY; y < startY + height; y++)
+            {
+                occupiedCells.Add((x, y));
+            }
+        }
     }
 
     private async Task ShowMenuAtWidget(Guid widgetId)
     {
-        if (Menu != null)
+        if (Menu != null && !PreviewMode)
         {
+            SelectedWidget = Widgets.FirstOrDefault(w => w.Id == widgetId);
+
             await Menu.OpenMenuAsync("widget-" + widgetId.ToString());
         }
+    }
+
+    private void RemoveWidget(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        Widgets.Remove(widget);
+
+        SelectedWidget = null;
+    }
+
+    private void MoveWidgetRight(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridX += 1;
+    }
+
+    private void MoveWidgetLeft(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridX = Math.Max(0, widget.GridX - 1);
+    }
+
+    private void MoveWidgetUp(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridY = Math.Max(0, widget.GridY - 1);
+    }
+
+    private void MoveWidgetDown(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridY += 1;
+    }
+
+    private void ExtendWidgetWidth(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridW += 1;
+    }
+
+    private void ShortenWidgetWidth(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridW = Math.Max(1, widget.GridW - 1);
+    }
+
+    private void ExtendWidgetHeight(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridH += 1;
+    }
+
+    private void ShortenWidgetHeight(DashboardWidget? widget)
+    {
+        if (widget == null)
+        {
+            return;
+        }
+
+        widget.GridH = Math.Max(1, widget.GridH - 1);
+    }
+
+    private static string GetWidgetStyle(DashboardWidget widget)
+    {
+        int startColumn = Math.Max(1, widget.GridX + 1);
+        int startRow = Math.Max(1, widget.GridY + 1);
+        int spanColumns = Math.Max(1, widget.GridW);
+        int spanRows = Math.Max(1, widget.GridH);
+
+        return $"grid-column: {startColumn} / span {spanColumns}; grid-row: {startRow} / span {spanRows};";
     }
 }

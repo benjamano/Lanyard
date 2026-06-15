@@ -52,8 +52,30 @@ public class DigitalClockWidget : DashboardWidget
     public DigitalClockWidget()
     {
         Type = WidgetType.DigitalClock;
+
+        Is24HourFormat = false;
+        ShowMilliSeconds = false;
+        ShowDate = true;
+
+        GridW = 2;
+        GridH = 1;
     }
 
     public bool ShowMilliSeconds { get; set; }
     public bool Is24HourFormat { get; set; }
+    public bool ShowDate { get; set; }
+}
+
+public class TextAreaWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public TextAreaWidget()
+    {
+        Type = WidgetType.TextArea;
+
+        GridW = 2;
+        GridH = 2;
+    }
+
+    public string? Content { get; set; }
 }

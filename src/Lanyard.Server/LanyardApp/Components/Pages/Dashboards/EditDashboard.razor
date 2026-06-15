@@ -1,5 +1,4 @@
 @page "/manage/dashboards/{DashboardId:guid}"
-@using Lanyard.App.Components.Home
 @using Lanyard.Infrastructure.Enum
 
 <PageTitle>Edit Dashboard</PageTitle>
@@ -13,7 +12,7 @@
             @if (IsEditingDashboardName)
             {
                 <EditForm Model="@Dashboard" OnValidSubmit="async () => IsEditingDashboardName = false">
-                    <FluentTextInput Placeholder="Name" Label="Name" @bind-Value="Dashboard.Name" Required="true">
+                    <FluentTextInput Placeholder="Name" @bind-Value="Dashboard.Name" Required="true">
                         <StartTemplate>
                             <FluentIcon Value="new Icons.Regular.Size20.TextEditStyle()"/>
                         </StartTemplate>
@@ -34,6 +33,7 @@
 
             <FluentButton Appearance="ButtonAppearance.Transparent" 
                             IconStart="new Icons.Regular.Size24.PreviewLink()"
+                            OnClick="() => IsPreviewing = !IsPreviewing"
                             Tooltip="Preview Dashboard">
             </FluentButton>
 
@@ -43,13 +43,18 @@
             </FluentButton>
             <FluentMenu Trigger="DashboardWidgetList">
                 <FluentMenuList>
-                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.DigitalClock)">Digital Clock</FluentMenuItem>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.DigitalClock)">
+                        Digital Clock
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.TextArea)">
+                        Text Area
+                    </FluentMenuItem>
                 </FluentMenuList>
             </FluentMenu>
         </FluentStack>
     </FluentCard>
 
-    <DashboardGrid Widgets="Dashboard!.Widgets"/>
+    <DashboardGrid Widgets="Dashboard.Widgets" PreviewMode="IsPreviewing"/>
 }
 else
 {
@@ -63,6 +68,8 @@ else
     public Guid DashboardId { get; set; } = Guid.Empty;
 
     public Dashboard? Dashboard { get; set; } = null;
+
+    public bool IsPreviewing = false;
 
     public bool IsEditingDashboardName = false;
 
@@ -90,27 +97,11 @@ else
         switch (type)
         {
             case WidgetType.DigitalClock:
-                DigitalClockWidget clockWidget = new DigitalClockWidget
-                {
-                    ShowMilliSeconds = false,
-                    Is24HourFormat = true,
-                };
-
-                Dashboard.Widgets.Add(clockWidget);
+                Dashboard.Widgets.Add(new DigitalClockWidget());
                 break;
-            default:
-                DashboardWidget widget = new DashboardWidget
-                {
-                    DashboardId = Dashboard.Id,
-                    Type = type,
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 2,
-                    GridH = 2
-                };
-
-                Dashboard.Widgets.Add(widget);
+            case WidgetType.TextArea:
+                Dashboard.Widgets.Add(new TextAreaWidget());
                 break;
-        }
+        }    
     }
 }
