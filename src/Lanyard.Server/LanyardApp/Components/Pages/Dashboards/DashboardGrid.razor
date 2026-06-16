@@ -1,3 +1,4 @@
+@using Lanyard.App.Components.Dashboards.Widgets
 @using Lanyard.App.Components.Home
 @using Lanyard.Infrastructure.Enum
 
@@ -84,17 +85,18 @@
                             HorizontalAlignment="@HorizontalAlignment.Center">
                     @if (!PreviewMode)
                     {
-                        <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                        <FluentButton Appearance="@buttonAppearance" 
                                         IconStart="new Icons.Regular.Size16.ArrowUp()" 
                                         OnClick="@(() => MoveWidgetUp(widget))"/>
                     }
                     <FluentStack Orientation="@Orientation.Horizontal" 
                                 Height="100%" 
                                 Width="100%"
-                                VerticalAlignment="@VerticalAlignment.Center">
+                                VerticalAlignment="@VerticalAlignment.Center"
+                                HorizontalAlignment="@HorizontalAlignment.Center">
                         @if (!PreviewMode)
                         {
-                            <FluentButton Appearance="@ButtonAppearance.Transparent" 
+                            <FluentButton Appearance="@buttonAppearance" 
                                             IconStart="new Icons.Regular.Size16.ArrowLeft()" 
                                             OnClick="@(() => MoveWidgetLeft(widget))"/>
                         }
@@ -112,7 +114,8 @@
                                         @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
                                         @oncontextmenu:preventDefault="true">
                                     <DigitalClock ShowMilliseconds="clockWidget.ShowMilliSeconds" 
-                                                    Is24HourFormat="clockWidget.Is24HourFormat" ShowDate="clockWidget.ShowDate" />
+                                                    Is24HourFormat="clockWidget.Is24HourFormat" 
+                                                    ShowDate="clockWidget.ShowDate" />
                                 </div>
                                 break;
                             case WidgetType.TextArea:   
@@ -126,28 +129,44 @@
                                 <div class="dashboard-widget-host"
                                     @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
-                                    <FluentCard Appearance="CardAppearance.Default" 
-                                                Padding="@Padding.All2" 
-                                                Height="100%">
-                                        <div contenteditable="true"
-                                            class="text-area-widget-content h-100">
-                                        </div>
-                                    </FluentCard>
+                                    <RenderTextAreaWidget Widget="textAreaWidget" />
                                 </div>
                                 break;
                         }
                         @if (!PreviewMode)
                         {
-                            <FluentButton Appearance="@ButtonAppearance.Transparent" 
-                                            IconStart="new Icons.Regular.Size16.ArrowRight()" 
-                                            OnClick="@(() => MoveWidgetRight(widget))"/>
+                            <FluentStack Orientation="@Orientation.Vertical" Width="auto">
+                                <FluentButton Appearance="@buttonAppearance" 
+                                                IconStart="new Icons.Regular.Size16.ArrowDownload()" 
+                                                OnClick="@(() => ExtendWidgetWidth(widget))"
+                                                Style="transform: rotate(270deg);"/>
+
+                                <FluentButton Appearance="@buttonAppearance" 
+                                                IconStart="new Icons.Regular.Size16.ArrowRight()" 
+                                                OnClick="@(() => MoveWidgetRight(widget))"/>
+
+                                <FluentButton Appearance="@buttonAppearance" 
+                                                IconStart="new Icons.Regular.Size16.ArrowUpload()" 
+                                                OnClick="@(() => ShortenWidgetWidth(widget))"
+                                                Style="transform: rotate(270deg);"/>
+                            </FluentStack>
                         }
                     </FluentStack>
                     @if (!PreviewMode)
                     {
-                        <FluentButton Appearance="@ButtonAppearance.Transparent" 
-                                        IconStart="new Icons.Regular.Size16.ArrowDown()" 
-                                        OnClick="@(() => MoveWidgetDown(widget))"/>
+                        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+                            <FluentButton Appearance="@buttonAppearance" 
+                                            IconStart="new Icons.Regular.Size16.ArrowDownload()" 
+                                            OnClick="@(() => ExtendWidgetHeight(widget))"/>
+
+                            <FluentButton Appearance="@buttonAppearance" 
+                                            IconStart="new Icons.Regular.Size16.ArrowDown()" 
+                                            OnClick="@(() => MoveWidgetDown(widget))"/>
+
+                            <FluentButton Appearance="@buttonAppearance" 
+                                            IconStart="new Icons.Regular.Size16.ArrowUpload()" 
+                                            OnClick="@(() => ShortenWidgetHeight(widget))"/>
+                        </FluentStack>
                     }
                 </FluentStack>
             </div>  
@@ -161,6 +180,8 @@
 
     [Parameter]
     public bool PreviewMode { get; set; } = false;
+
+    public ButtonAppearance buttonAppearance = ButtonAppearance.Subtle;
 
     private FluentMenu? Menu { get; set; }
 

@@ -26,13 +26,17 @@
                 </FluentButton>
             }
 
+            @{
+                Icon previewIcon = IsPreviewing ? new Icons.Filled.Size24.PreviewLink() : new Icons.Regular.Size24.PreviewLink();
+            }
+
             <FluentButton Appearance="ButtonAppearance.Transparent" 
                             IconStart="new Icons.Regular.Size24.Save()"
                             Tooltip="Save Dashboard">
             </FluentButton>
 
             <FluentButton Appearance="ButtonAppearance.Transparent" 
-                            IconStart="new Icons.Regular.Size24.PreviewLink()"
+                            IconStart="previewIcon"
                             OnClick="() => IsPreviewing = !IsPreviewing"
                             Tooltip="Preview Dashboard">
             </FluentButton>

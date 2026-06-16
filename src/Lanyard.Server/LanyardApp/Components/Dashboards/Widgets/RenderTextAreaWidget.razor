@@ -1,0 +1,26 @@
+@inject IDashboardService DashboardService
+
+<FluentCard Appearance="CardAppearance.Subtle" 
+            Padding="@Padding.All0"
+            Height="100%">
+    <FluentTextArea Class="text-area-widget-content w-100 h-100 d-flex"
+                    Width="100%"
+                    Height="100%"
+                    @bind-Value="Widget.Content"
+                    @bind-Value:after="SaveContentAsync" />
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required TextAreaWidget Widget { get; set; } 
+
+    private async Task SaveContentAsync()
+    {
+        if (Widget.DashboardId == Guid.Empty)
+        {
+            return;
+        }
+
+        await DashboardService.SaveWidgetAsync(Widget);
+    }
+}

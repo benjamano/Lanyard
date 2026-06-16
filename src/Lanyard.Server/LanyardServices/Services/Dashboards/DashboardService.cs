@@ -117,4 +117,68 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             return Result<bool>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<DashboardWidget>> SaveWidgetAsync(DashboardWidget widget)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(widget);
+
+            if (widget.Id == Guid.Empty)
+            {
+                return Result<DashboardWidget>.Fail("Widget id is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            DashboardWidget? existingWidget = await ctx.DashboardWidgets
+                .FirstOrDefaultAsync(x => x.Id == widget.Id);
+
+            if (existingWidget is null)
+            {
+                return Result<DashboardWidget>.Fail("Widget not found.");
+            }
+
+            existingWidget.Title = widget.Title?.Trim();
+            existingWidget.GridX = widget.GridX;
+            existingWidget.GridY = widget.GridY;
+            existingWidget.GridW = widget.GridW;
+            existingWidget.GridH = widget.GridH;
+            existingWidget.IsActive = widget.IsActive;
+
+            if (existingWidget.GetType() != widget.GetType())
+            {
+                return Result<DashboardWidget>.Fail("Widget type mismatch.");
+            }
+
+            switch (existingWidget)
+            {
+                case TextAreaWidget existingTextArea when widget is TextAreaWidget incomingTextArea:
+                    existingTextArea.Content = incomingTextArea.Content;
+                    break;
+
+                case DigitalClockWidget existingClock when widget is DigitalClockWidget incomingClock:
+                    existingClock.ShowDate = incomingClock.ShowDate;
+                    existingClock.ShowMilliSeconds = incomingClock.ShowMilliSeconds;
+                    existingClock.Is24HourFormat = incomingClock.Is24HourFormat;
+                    break;
+            }
+
+            Dashboard? parentDashboard = await ctx.Dashboards
+                .FirstOrDefaultAsync(x => x.Id == existingWidget.DashboardId);
+
+            if (parentDashboard is not null)
+            {
+                parentDashboard.LastUpdateDate = DateTime.UtcNow;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<DashboardWidget>.Ok(existingWidget);
+        }
+        catch (Exception ex)
+        {
+            return Result<DashboardWidget>.Fail(ex.Message);
+        }
+    }
 }
