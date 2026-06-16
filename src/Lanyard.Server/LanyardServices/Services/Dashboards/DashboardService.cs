@@ -81,6 +81,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
 
             return Result<bool>.Ok(true);
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result<bool>.Fail("The dashboard was modified by another operation. Please reload and try again.");
+        }
         catch (Exception ex)
         {
             return Result<bool>.Fail(ex.Message);
@@ -111,6 +115,94 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(dashboard);
+
+            if (dashboard.Id == Guid.Empty)
+            {
+                return Result<bool>.Fail("Dashboard id is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(dashboard.Name))
+            {
+                return Result<bool>.Fail("Dashboard name is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Dashboard? existingDashboard = await ctx.Dashboards
+                .FirstOrDefaultAsync(x => x.Id == dashboard.Id);
+
+            if (existingDashboard is null)
+            {
+                return Result<bool>.Fail("Dashboard not found.");
+            }
+
+            existingDashboard.Name = dashboard.Name.Trim();
+            existingDashboard.Description = dashboard.Description?.Trim();
+            existingDashboard.LastUpdateDate = DateTime.UtcNow;
+
+            List<DashboardWidget> incomingWidgets = dashboard.Widgets ?? [];
+            List<DashboardWidget> existingWidgets = await ctx.DashboardWidgets
+                .Where(x => x.DashboardId == dashboard.Id)
+                .ToListAsync();
+
+            Dictionary<Guid, DashboardWidget> existingWidgetsById = existingWidgets
+                .ToDictionary(x => x.Id, x => x);
+
+            foreach (DashboardWidget incomingWidget in incomingWidgets)
+            {
+                if (incomingWidget.Id == Guid.Empty)
+                {
+                    incomingWidget.Id = Guid.NewGuid();
+                }
+
+                DashboardWidget? existingWidget = existingWidgetsById
+                    .GetValueOrDefault(incomingWidget.Id);
+
+                if (existingWidget is null)
+                {
+                    DashboardWidget newWidget = CreateWidgetCopy(incomingWidget, existingDashboard.Id);
+                    await ctx.DashboardWidgets.AddAsync(newWidget);
+                    continue;
+                }
+
+                if (existingWidget.GetType() != incomingWidget.GetType())
+                {
+                    return Result<bool>.Fail("Widget type mismatch.");
+                }
+
+                UpdateCommonMutableWidgetProperties(existingWidget, incomingWidget);
+                UpdateTypeSpecificWidgetProperties(existingWidget, incomingWidget);
+            }
+
+            HashSet<Guid> incomingWidgetIds = incomingWidgets.Select(x => x.Id).ToHashSet();
+
+            foreach (DashboardWidget existingWidget in existingWidgets)
+            {
+                if (!incomingWidgetIds.Contains(existingWidget.Id))
+                {
+                    existingWidget.IsActive = false;
+                }
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result<bool>.Fail("Dashboard was changed by another operation. Refresh and try saving again.");
         }
         catch (Exception ex)
         {
@@ -179,6 +271,57 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         catch (Exception ex)
         {
             return Result<DashboardWidget>.Fail(ex.Message);
+        }
+    }
+
+    private static DashboardWidget CreateWidgetCopy(DashboardWidget widget, Guid dashboardId)
+    {
+        DashboardWidget copy = widget switch
+        {
+            TextAreaWidget textAreaWidget => new TextAreaWidget
+            {
+                Content = textAreaWidget.Content
+            },
+            DigitalClockWidget clockWidget => new DigitalClockWidget
+            {
+                ShowDate = clockWidget.ShowDate,
+                ShowMilliSeconds = clockWidget.ShowMilliSeconds,
+                Is24HourFormat = clockWidget.Is24HourFormat
+            },
+            _ => throw new InvalidOperationException("Unsupported widget type.")
+        };
+
+        copy.Id = widget.Id == Guid.Empty ? Guid.NewGuid() : widget.Id;
+        copy.Type = widget.Type;
+        UpdateCommonMutableWidgetProperties(copy, widget);
+        copy.DashboardId = dashboardId;
+
+        return copy;
+    }
+
+    private static void UpdateCommonMutableWidgetProperties(DashboardWidget target, DashboardWidget source)
+    {
+        target.Title = source.Title?.Trim();
+        target.GridX = source.GridX;
+        target.GridY = source.GridY;
+        target.GridW = source.GridW;
+        target.GridH = source.GridH;
+        target.IsActive = source.IsActive;
+    }
+
+    private static void UpdateTypeSpecificWidgetProperties(DashboardWidget target, DashboardWidget source)
+    {
+        if (target is TextAreaWidget targetTextArea && source is TextAreaWidget sourceTextArea)
+        {
+            targetTextArea.Content = sourceTextArea.Content;
+            return;
+        }
+
+        if (target is DigitalClockWidget targetClock && source is DigitalClockWidget sourceClock)
+        {
+            targetClock.ShowDate = sourceClock.ShowDate;
+            targetClock.ShowMilliSeconds = sourceClock.ShowMilliSeconds;
+            targetClock.Is24HourFormat = sourceClock.Is24HourFormat;
         }
     }
 }

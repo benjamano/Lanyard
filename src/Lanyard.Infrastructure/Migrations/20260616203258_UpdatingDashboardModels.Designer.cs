@@ -3,6 +3,7 @@ using System;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616203258_UpdatingDashboardModels")]
+    partial class UpdatingDashboardModels
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -441,10 +444,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("DashboardId");
 
                     b.ToTable("DashboardWidgets");
-
-                    b.HasDiscriminator<int>("Type").HasValue(0);
-
-                    b.UseTphMappingStrategy();
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.ClientAvailableDmxDevice", b =>
@@ -1022,32 +1021,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.DigitalClockWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<bool>("Is24HourFormat")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowDate")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowMilliSeconds")
-                        .HasColumnType("boolean");
-
-                    b.HasDiscriminator().HasValue(1);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.TextAreaWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<string>("Content")
-                        .HasColumnType("text");
-
-                    b.HasDiscriminator().HasValue(2);
                 });
 
             modelBuilder.Entity("CompanyTenantMember", b =>

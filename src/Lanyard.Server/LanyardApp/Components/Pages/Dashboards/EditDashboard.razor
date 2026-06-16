@@ -32,7 +32,8 @@
 
             <FluentButton Appearance="ButtonAppearance.Transparent" 
                             IconStart="new Icons.Regular.Size24.Save()"
-                            Tooltip="Save Dashboard">
+                            Tooltip="Save Dashboard"
+                            OnClick="SaveDashboardAsync">
             </FluentButton>
 
             <FluentButton Appearance="ButtonAppearance.Transparent" 
@@ -107,5 +108,20 @@ else
                 Dashboard.Widgets.Add(new TextAreaWidget());
                 break;
         }    
+    }
+
+    private async Task SaveDashboardAsync()
+    {
+        if (Dashboard == null)
+        {
+            return;
+        }
+
+        Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
+        }
     }
 }

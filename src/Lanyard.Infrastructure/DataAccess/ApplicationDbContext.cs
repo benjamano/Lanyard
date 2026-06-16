@@ -1,5 +1,6 @@
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -70,6 +71,12 @@ namespace Lanyard.Infrastructure.DataAccess
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<DashboardWidget>()
+                .HasDiscriminator(x => x.Type)
+                .HasValue<DashboardWidget>(WidgetType.Unknown)
+                .HasValue<DigitalClockWidget>(WidgetType.DigitalClock)
+                .HasValue<TextAreaWidget>(WidgetType.TextArea);
         }
     }
 }

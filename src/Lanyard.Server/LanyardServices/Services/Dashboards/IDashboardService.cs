@@ -9,5 +9,6 @@ public interface IDashboardService
     Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId);
     Task<Result<bool>> DeleteDashboardAsync(Guid dashboardId);
     Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard);
+    Task<Result<bool>> SaveDashboardAsync(Dashboard dashboard);
     Task<Result<DashboardWidget>> SaveWidgetAsync(DashboardWidget widget);
 }
