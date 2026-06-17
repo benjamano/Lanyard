@@ -28,8 +28,9 @@ jobs:
       - name: Get version
         id: version
         run: |
-          $version = ([xml](Get-Content src/Lanyard.Client/Lanyard.Client.csproj)).Project.PropertyGroup.Version
-          $version = $version.Trim()
+          $xml = [xml](Get-Content src/Lanyard.Client/Lanyard.Client.csproj)
+          $version = ($xml.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version.Trim()
+          Write-Host "Resolved version: '$version'"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
       - name: Publish app
