@@ -47,30 +47,30 @@
                                     IconActive="@(new Icons.Filled.Size20.Settings())">
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
-                    <FluentNavItem Href="/manage/dashboards">Dashboards</FluentNavItem>
                 </FluentNavCategory>
-            }
-
-            @if (_canManageDmx)
-            {
-                <FluentNavSectionHeader Title="DMX" />
-                
-                <FluentNavItem Href="/dmx"
-                                IconRest="@(new Icons.Regular.Size20.Lightbulb())"
-                                IconActive="@(new Icons.Filled.Size20.Lightbulb())">
-                    DMX Control
-                </FluentNavItem>
             }
 
             @if (_isAdmin)
             {
                 <FluentNavSectionHeader Title="Clients" />
                 
-                <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())" IconActive="@(new Icons.Filled.Size20.LaptopSettings())">Clients</FluentNavItem>
-                <FluentNavItem Href="/manage/projectionprograms" IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())" IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
-                <FluentNavItem Href="/manage/projectiontemplates" IconRest="@(new Icons.Regular.Size20.BookTemplate())" IconActive="@(new Icons.Filled.Size20.BookTemplate())">Templates</FluentNavItem>
-                <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())" IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
+                <FluentNavCategory Title="Clients"
+                                    IconRest="@(new Icons.Regular.Size20.Laptop())"
+                                    IconActive="@(new Icons.Filled.Size20.Laptop())">
+                    <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())" IconActive="@(new Icons.Filled.Size20.LaptopSettings())">Clients</FluentNavItem>
+                    <FluentNavItem Href="/manage/projectionprograms" IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())" IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
+                    <FluentNavItem Href="/manage/projectiontemplates" IconRest="@(new Icons.Regular.Size20.BookTemplate())" IconActive="@(new Icons.Filled.Size20.BookTemplate())">Templates</FluentNavItem>
+                    <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())" IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
+
+                    @if (_canManageDmx)
+                    {
+                        <FluentNavItem Href="/dmx">DMX Control</FluentNavItem>
+                    }
+                </FluentNavCategory>
             }
+
+            <FluentNavSectionHeader Title="Dashboards" />
+            <FluentNavItem Href="/manage/dashboards" IconRest="@(new Icons.Regular.Size20.DataArea())" IconActive="@(new Icons.Filled.Size20.DataArea())">Dashboards</FluentNavItem>
         }
     </FluentNav>
 

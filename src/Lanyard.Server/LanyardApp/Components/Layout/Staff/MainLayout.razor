@@ -25,7 +25,46 @@
 
     <FluentLayoutItem Area="LayoutArea.Content" Padding="@Padding.All3">
         <AutoLogoutManager />
-        @Body
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent Context="ex">
+                <FluentStack Orientation="Orientation.Vertical"
+                        HorizontalAlignment="HorizontalAlignment.Center"
+                        VerticalGap="0"
+                        Style="padding: 3rem 1rem; max-width: 480px; margin: 0 auto; text-align: center;">
+
+                <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())"
+                            Color="Color.Error"
+                            Style="margin-bottom: 1rem;" />
+
+                <FluentText Size="TextSize.Size800" Style="margin-bottom: 0.5rem; display: block;">
+                    Something went wrong
+                </FluentText>
+
+                <FluentText Size="TextSize.Size400" Color="Color.Default" Style="margin-bottom: 1.5rem; display: block;">
+                    An unexpected error occurred. Try refreshing the page or come back later.
+                </FluentText>
+
+                <FluentMessageBar Intent="MessageBarIntent.Error"
+                                Style="text-align: left; width: 100%; margin-bottom: 1.5rem;">
+                    @ex.Message
+                </FluentMessageBar>
+
+                <FluentStack HorizontalGap="8">
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Recover">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Slot="start" />
+                        Try again
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => NavigationManager.NavigateTo("/", true))">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Home())" Slot="start" />
+                        Go home
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+            </ErrorContent>
+        </ErrorBoundary>
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Footer" Height="auto">
@@ -34,8 +73,12 @@
 </FluentLayout>
 
 @code {
+    private ErrorBoundary? _errorBoundary;
+
     protected override void OnInitialized()
     {
         base.OnInitialized();
     }
+
+    private void Recover() => _errorBoundary?.Recover();
 }

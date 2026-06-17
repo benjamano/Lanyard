@@ -54,10 +54,6 @@ TemporaryDependencyNodeTargetIdentifier=net10.0
 /warnaserror+:NU1605,SYSLIB0011
 
 [sourceFiles]
-artifacts/tmpbuild/obj/Debug/net10.0/
- .NETCoreApp,Version=v10.0.AssemblyAttributes.cs
- Lanyard.Shared.AssemblyInfo.cs
- Lanyard.Shared.GlobalUsings.g.cs
 DTO/
  AppDTO.cs
  CacheDTO.cs
@@ -70,7 +66,7 @@ Enum/
 obj/Debug/net10.0/Lanyard.Shared.GlobalUsings.g.cs
 
 [metadataReferences]
-<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.2/ref/net10.0/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.3/ref/net10.0/
  Microsoft.CSharp.dll
  Microsoft.VisualBasic.Core.dll
  Microsoft.VisualBasic.dll
@@ -240,17 +236,17 @@ obj/Debug/net10.0/Lanyard.Shared.GlobalUsings.g.cs
  WindowsBase.dll
 
 [analyzerReferences]
-<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.2/analyzers/dotnet/cs/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.3/analyzers/dotnet/cs/
  Microsoft.Interop.ComInterfaceGenerator.dll
  Microsoft.Interop.JavaScript.JSImportGenerator.dll
  Microsoft.Interop.LibraryImportGenerator.dll
  Microsoft.Interop.SourceGeneration.dll
  System.Text.Json.SourceGeneration.dll
  System.Text.RegularExpressions.Generator.dll
-<DOTNET>/sdk/10.0.102/Sdks/Microsoft.NET.Sdk/analyzers/
+<DOTNET>/sdk/10.0.103/Sdks/Microsoft.NET.Sdk/analyzers/
  Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
  Microsoft.CodeAnalysis.NetAnalyzers.dll
 
 [analyzerConfigFiles]
-<DOTNET>/sdk/10.0.102/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
+<DOTNET>/sdk/10.0.103/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
 obj/Debug/net10.0/Lanyard.Shared.GeneratedMSBuildEditorConfig.editorconfig

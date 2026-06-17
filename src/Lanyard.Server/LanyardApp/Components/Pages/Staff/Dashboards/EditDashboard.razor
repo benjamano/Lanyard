@@ -1,0 +1,142 @@
+@page "/manage/dashboards/{DashboardId:guid}"
+@using Lanyard.Infrastructure.Enum
+
+<PageTitle>Edit Dashboard</PageTitle>
+
+@inject IDashboardService DashboardService
+
+@if (Dashboard != null)
+{
+    CardAppearance cardAppearance = IsPreviewing ? CardAppearance.Default : CardAppearance.Default;
+    string padding = IsPreviewing ? Padding.All0 : Padding.All3;
+
+    <FluentCard Appearance="cardAppearance" Padding="@padding">
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Start">
+            @if (IsEditingDashboardName)
+            {
+                <EditForm Model="@Dashboard" OnValidSubmit="async () => IsEditingDashboardName = false">
+                    <FluentTextInput Placeholder="Name" @bind-Value="Dashboard.Name" Required="true">
+                        <StartTemplate>
+                            <FluentIcon Value="new Icons.Regular.Size20.TextEditStyle()"/>
+                        </StartTemplate>
+                    </FluentTextInput>
+                </EditForm>
+            }
+            else if (!IsPreviewing)
+            {
+                <FluentButton Appearance="@ButtonAppearance.Subtle" OnClick="() => IsEditingDashboardName = IsPreviewing ? false : true">
+                    @Dashboard.Name
+                </FluentButton>
+            }
+            else
+            {
+                <FluentText Padding="@Padding.Horizontal2">
+                    @Dashboard.Name
+                </FluentText>
+            }
+
+            @{
+                Icon previewIcon = IsPreviewing ? new Icons.Filled.Size24.PreviewLink() : new Icons.Regular.Size24.PreviewLink();
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                            IconStart="new Icons.Regular.Size24.Save()"
+                            Tooltip="Save Dashboard"
+                            OnClick="SaveDashboardAsync">
+            </FluentButton>
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                            IconStart="previewIcon"
+                            OnClick="() => IsPreviewing = !IsPreviewing"
+                            Tooltip="Preview Dashboard">
+            </FluentButton>
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                        Id="DashboardWidgetList"
+                        IconStart="new Icons.Regular.Size24.AddCircle()">
+            </FluentButton>
+            <FluentMenu Trigger="DashboardWidgetList">
+                <FluentMenuList>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.DigitalClock)">
+                        Digital Clock
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.TextArea)">
+                        Text Area
+                    </FluentMenuItem>
+                </FluentMenuList>
+            </FluentMenu>
+        </FluentStack>
+    </FluentCard>
+
+    <DashboardGrid Widgets="Dashboard.Widgets" PreviewMode="IsPreviewing"/>
+}
+else
+{
+    <FluentStack HorizontalAlignment="@HorizontalAlignment.Center" Padding="@Padding.All3">
+        <FluentSpinner/>
+    </FluentStack>
+}
+
+@code {
+    [Parameter]
+    public Guid DashboardId { get; set; } = Guid.Empty;
+
+    public Dashboard? Dashboard { get; set; } = null;
+
+    public bool IsPreviewing = true;
+
+    public bool IsEditingDashboardName = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<Dashboard> result = await DashboardService.GetDashboardAsync(DashboardId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            Dashboard = result.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load the dashboard, {result.Error}");
+        }
+    }
+
+    private void AddWidget(WidgetType type)
+    {
+        if (Dashboard == null)
+        {
+            return;
+        }
+
+        switch (type)
+        {
+            case WidgetType.DigitalClock:
+                Dashboard.Widgets.Add(new DigitalClockWidget());
+                break;
+            case WidgetType.TextArea:
+                Dashboard.Widgets.Add(new TextAreaWidget());
+                break;
+        }    
+    }
+
+    private async Task SaveDashboardAsync()
+    {
+        if (Dashboard == null)
+        {
+            return;
+        }
+
+        Result<bool> result = await DashboardService.SaveDashboardAsync(Dashboard);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
+
+            return;
+        }
+
+        IsEditingDashboardName = false;
+
+        _toastService.ShowSuccess("Dashboard saved successfully.");
+    }
+}

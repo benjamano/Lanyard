@@ -28,11 +28,11 @@ jobs:
       - name: Get version
         id: version
         run: |
-          $version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version
+          $version = ([xml](Get-Content src/Lanyard.Client/Lanyard.Client.csproj)).Project.PropertyGroup.Version
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
       - name: Publish app
-        run: dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
+        run: dotnet publish src/Lanyard.Client/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
         run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe
