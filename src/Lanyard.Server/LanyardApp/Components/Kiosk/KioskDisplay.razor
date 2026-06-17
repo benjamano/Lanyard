@@ -1,5 +1,6 @@
 @implements IDisposable
 @using Lanyard.App.Components.Kiosk.Templates
+@using Lanyard.App.Components.Pages.Staff.Dashboards
 
 @inject IToastService _toastService
 @inject ILogger<KioskDisplay> _logger
@@ -11,6 +12,10 @@
 else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.PlayVideo)
 {
     <KioskPlayVideoTemplate Step="CurrentProjectionStep" />
+}
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.Dashboard)
+{
+    <RenderDashboardTemplate Step="CurrentProjectionStep" />
 }
 
 @code {

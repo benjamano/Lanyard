@@ -7,7 +7,10 @@
 
 @if (Dashboard != null)
 {
-    <FluentCard Appearance="CardAppearance.Default">
+    CardAppearance cardAppearance = IsPreviewing ? CardAppearance.Default : CardAppearance.Default;
+    string padding = IsPreviewing ? Padding.All0 : Padding.All3;
+
+    <FluentCard Appearance="cardAppearance" Padding="@padding">
         <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Start">
             @if (IsEditingDashboardName)
             {
@@ -19,11 +22,17 @@
                     </FluentTextInput>
                 </EditForm>
             }
-            else
+            else if (!IsPreviewing)
             {
-                <FluentButton Appearance="@ButtonAppearance.Subtle" OnClick="() => IsEditingDashboardName = true">
+                <FluentButton Appearance="@ButtonAppearance.Subtle" OnClick="() => IsEditingDashboardName = IsPreviewing ? false : true">
                     @Dashboard.Name
                 </FluentButton>
+            }
+            else
+            {
+                <FluentText Padding="@Padding.Horizontal2">
+                    @Dashboard.Name
+                </FluentText>
             }
 
             @{
@@ -74,7 +83,7 @@ else
 
     public Dashboard? Dashboard { get; set; } = null;
 
-    public bool IsPreviewing = false;
+    public bool IsPreviewing = true;
 
     public bool IsEditingDashboardName = false;
 
@@ -122,6 +131,12 @@ else
         if (!result.IsSuccess)
         {
             _toastService.ShowError($"Failed to save the dashboard, {result.Error}");
+
+            return;
         }
+
+        IsEditingDashboardName = false;
+
+        _toastService.ShowSuccess("Dashboard saved successfully.");
     }
 }

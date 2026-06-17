@@ -3,77 +3,6 @@
 @using Lanyard.Infrastructure.Enum
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
-    @if (!PreviewMode)
-    {
-        <FluentMenu @ref=@Menu>
-            <FluentMenuList>
-                @switch (SelectedWidget?.Type)
-                {
-                    case WidgetType.DigitalClock:
-                        DigitalClockWidget? clockWidget = SelectedWidget as DigitalClockWidget;
-
-                        if (clockWidget == null)
-                        {
-                            break;
-                        }
-
-                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
-                                        Checked="@clockWidget.ShowMilliSeconds"
-                                        CheckedChanged="@(() => clockWidget.ShowMilliSeconds = !clockWidget.ShowMilliSeconds)">
-                            Show Milliseconds
-                        </FluentMenuItem>
-                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
-                                        Checked="@clockWidget.Is24HourFormat"
-                                        CheckedChanged="@(() => clockWidget.Is24HourFormat = !clockWidget.Is24HourFormat)">
-                            24-Hour Format
-                        </FluentMenuItem>
-                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
-                                        Checked="@clockWidget.ShowDate"
-                                        CheckedChanged="@(() => clockWidget.ShowDate = !clockWidget.ShowDate)">
-                            Show Date
-                        </FluentMenuItem>
-                        break;
-                }
-                <FluentMenuItem OnClick="@(() => MoveWidgetUp(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.ArrowUp()">
-                    Move Up
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => MoveWidgetDown(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.ArrowDown()">
-                    Move Down
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => MoveWidgetRight(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.ArrowRight()">
-                    Move Right
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => MoveWidgetLeft(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.ArrowLeft()">
-                    Move Left
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => ExtendWidgetWidth(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.Add()">
-                    Extend Width
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => ShortenWidgetWidth(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.Subtract()">
-                    Shorten Width
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => ExtendWidgetHeight(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.Add()">
-                    Extend Height
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => ShortenWidgetHeight(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.Subtract()">
-                    Shorten Height
-                </FluentMenuItem>
-                <FluentMenuItem OnClick="@(() => RemoveWidget(SelectedWidget))"
-                                IconStart="new Icons.Regular.Size16.Delete()">
-                    Remove Widget
-                </FluentMenuItem>
-            </FluentMenuList>
-        </FluentMenu>
-    }
-
     <div class="dashboard-grid">
         @foreach (DashboardWidget widget in Widgets)
         {
@@ -173,6 +102,77 @@
         }
     </div>
 </FluentCard>
+
+@if (!PreviewMode)
+    {
+        <FluentMenu @ref=@Menu>
+            <FluentMenuList>
+                @switch (SelectedWidget?.Type)
+                {
+                    case WidgetType.DigitalClock:
+                        DigitalClockWidget? clockWidget = SelectedWidget as DigitalClockWidget;
+
+                        if (clockWidget == null)
+                        {
+                            break;
+                        }
+
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.ShowMilliSeconds"
+                                        CheckedChanged="@(() => clockWidget.ShowMilliSeconds = !clockWidget.ShowMilliSeconds)">
+                            Show Milliseconds
+                        </FluentMenuItem>
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.Is24HourFormat"
+                                        CheckedChanged="@(() => clockWidget.Is24HourFormat = !clockWidget.Is24HourFormat)">
+                            24-Hour Format
+                        </FluentMenuItem>
+                        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                                        Checked="@clockWidget.ShowDate"
+                                        CheckedChanged="@(() => clockWidget.ShowDate = !clockWidget.ShowDate)">
+                            Show Date
+                        </FluentMenuItem>
+                        break;
+                }
+                @* <FluentMenuItem OnClick="@(() => MoveWidgetUp(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowUp()">
+                    Move Up
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetDown(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowDown()">
+                    Move Down
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetRight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowRight()">
+                    Move Right
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => MoveWidgetLeft(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.ArrowLeft()">
+                    Move Left
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ExtendWidgetWidth(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Add()">
+                    Extend Width
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ShortenWidgetWidth(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Subtract()">
+                    Shorten Width
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ExtendWidgetHeight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Add()">
+                    Extend Height
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => ShortenWidgetHeight(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Subtract()">
+                    Shorten Height
+                </FluentMenuItem>
+                <FluentMenuItem OnClick="@(() => RemoveWidget(SelectedWidget))"
+                                IconStart="new Icons.Regular.Size16.Delete()">
+                    Remove Widget
+                </FluentMenuItem> *@
+            </FluentMenuList>
+        </FluentMenu>
+    }
 
 @code {
     [Parameter]
