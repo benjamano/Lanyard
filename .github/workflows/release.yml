@@ -4,11 +4,11 @@ on:
     branches:
       - main
     paths:
-      - 'src/LanyardClient/**'
+      - 'src/Lanyard.Client/**'
       - 'src/Lanyard.Shared/**'
-      - 'src/LanyardData/**'
-      - 'src/LanyardTests/Client/**'
-      - 'src/LanyardClient.Watchdog/**'
+      - 'src/Lanyard.Infrastructure/**'
+      - 'src/Lanyard.Tests/Client/**'
+      - 'src/Lanyard.Client.Watchdog/**'
 jobs:
   release:
     runs-on: windows-latest
