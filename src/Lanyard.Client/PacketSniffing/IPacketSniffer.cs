@@ -1,5 +1,9 @@
-﻿public interface IPacketSniffer
+﻿using Lanyard.Infrastructure.DTO.ZoneScoreboard;
+
+namespace Lanyard.Client.PacketSniffing;
+
+public interface IPacketSniffer
 {
-    Task StartSniffingAsync();
+    Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings);
     Task HandlePacketAsync(string[] decodedData);
 }

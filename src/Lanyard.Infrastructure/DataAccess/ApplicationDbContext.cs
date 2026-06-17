@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 namespace Lanyard.Infrastructure.DataAccess
 {
@@ -52,6 +53,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+        public DbSet<ZoneScoreboardSettings> ZoneScoreboardSettings { get; set; }
         
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

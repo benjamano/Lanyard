@@ -6,6 +6,7 @@ using Lanyard.Shared.DTO;
 using FTD2XX_NET;
 using System.Text;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Infrastructure.DTO.Dmx;
 
 namespace Lanyard.Client.Controllers;
 
