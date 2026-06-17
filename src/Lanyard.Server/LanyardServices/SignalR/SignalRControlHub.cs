@@ -1,5 +1,7 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
@@ -9,6 +11,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using System.Collections.Concurrent;
+using System.Net.NetworkInformation;
 
 namespace Lanyard.Application.SignalR;
 
@@ -19,7 +22,8 @@ public class SignalRControlHub(
     ILaserGameStatusStore laserGameStatusStore,
     SignalRProjectionControlHubEvents hubEvents,
     AutomationEngineService automationEngineService,
-    IDmxClientService dmxClientService) : Hub, ISignalRProjectionControlHub
+    IDmxClientService dmxClientService,
+    IClientZoneScoreboardService clientZoneScoreboardService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -29,6 +33,7 @@ public class SignalRControlHub(
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
     private readonly AutomationEngineService _automationEngineService = automationEngineService;
     private readonly IDmxClientService _dmxClientService = dmxClientService;
+    private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -391,5 +396,21 @@ public class SignalRControlHub(
         }
 
         await Clients.Caller.SendAsync("ReceiveDmxSettings", settingsResult.Data);
+    }
+
+    public async Task RecieveClientAvailableNetworkInterfaces(IEnumerable<PhysicalAddress> interfaces)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available network interfaces: {Interfaces}", Context.ConnectionId, interfaces.Select(i => i.ToString()));
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        await _clientZoneScoreboardService.UpdateClientAvailableNetworkInterfacesAsync(clientId, interfaces);
     }
 }

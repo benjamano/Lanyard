@@ -54,7 +54,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
         public DbSet<ZoneScoreboardSettings> ZoneScoreboardSettings { get; set; }
-        
+        public DbSet<ClientAvailableNetworkInterface> ClientAvailableNetworkInterfaces { get; set; }
+    
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
