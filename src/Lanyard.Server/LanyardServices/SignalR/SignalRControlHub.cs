@@ -108,6 +108,7 @@ public class SignalRControlHub(
             await SendProjectionProgramInfoToClientAsync(client.Id);
             await SendMusicSettingsToClientAsync(client);
             await SendDmxSettingsToClientAsync(client);
+            await SendZoneScoreboardSettingsToClientAsync(client);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -226,8 +227,33 @@ public class SignalRControlHub(
     private async Task SendMusicSettingsToClientAsync(Client client)
     {
         ClientMusicSettingsDTO settings = new ClientMusicSettingsDTO { CacheLimitMb = client.MusicCacheLimitMb };
+
         await Clients.Caller.SendAsync("ReceiveMusicSettings", settings);
         _logger.LogInformation("Sent music settings to client {ClientId}: cache limit {CacheLimitMb}MB", client.Id, client.MusicCacheLimitMb);
+    }
+
+    private async Task SendZoneScoreboardSettingsToClientAsync(Client client)
+    {
+        Result<ZoneScoreboardSettings?> getResult = await _clientZoneScoreboardService.GetZoneScoreboardSettingsAsync(client.Id);
+
+        if (!getResult.IsSuccess || getResult.Data == null)
+        {
+            _logger.LogError("Failed to get zone scoreboard settings for client {ClientId}: {Error}", client.Id, getResult.Error);
+            return;
+        }
+
+        ZoneScoreboardSettings settings = getResult.Data;
+
+        ZoneScoreboardSettingsDTO settingsDto = new()
+        {
+            PreferredDeviceMacAddress = settings.PreferredDeviceMacAddress,
+            ZoneScoreboardVersion = settings.ZoneScoreboardVersion,
+            SourceIp = settings.SourceIp,
+            DestinationIp = settings.DestinationIp
+        };
+
+        await Clients.Caller.SendAsync("ReceiveZoneScoreboardSettings", settingsDto);
+        _logger.LogInformation("Sent zone scoreboard settings to client {ClientId}", client.Id);
     }
 
     public async Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId)
