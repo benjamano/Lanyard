@@ -113,6 +113,8 @@ async Task Main()
     await signalRClient.Connect(registrations);
     await laserGameStatePublisher.PublishAsync();
 
+    await Task.Delay(Timeout.Infinite);
+
     // IPacketSniffer sniffer = provider.GetRequiredService<IPacketSniffer>();
 
     // await sniffer.StartSniffingAsync();

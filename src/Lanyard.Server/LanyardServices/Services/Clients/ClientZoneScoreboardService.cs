@@ -37,6 +37,7 @@ public class ClientZoneScoreboardService(IDbContextFactory<ApplicationDbContext>
 
             List<ClientAvailableNetworkInterface> interfaces = await context.ClientAvailableNetworkInterfaces
                 .Where(i => i.ClientId == clientId)
+                .Where(x=> x.IsActive)
                 .ToListAsync();
 
             return Result<List<ClientAvailableNetworkInterface>>.Ok(interfaces);
@@ -49,25 +50,30 @@ public class ClientZoneScoreboardService(IDbContextFactory<ApplicationDbContext>
         }
     }
 
-    public async Task<Result<bool>> UpdateClientAvailableNetworkInterfacesAsync(Guid clientId, IEnumerable<PhysicalAddress> interfaces)
+    public async Task<Result<bool>> UpdateClientAvailableNetworkInterfacesAsync(Guid clientId, IEnumerable<NetworkInterfaceDto> interfaces)
     {
         try
         {
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             List<ClientAvailableNetworkInterface> existingInterfaces = await context.ClientAvailableNetworkInterfaces
+                .TagWithCallSite()
                 .Where(i => i.ClientId == clientId)
+                .Where(x=> x.IsActive)
                 .ToListAsync();
 
-            await context.ClientAvailableNetworkInterfaces
-                .Where(x=> x.ClientId == clientId)
-                .ForEachAsync(x=> x.IsActive = false);
+            existingInterfaces.ForEach(i => i.IsActive = interfaces.Select(x=> x.PhysicalAddress).Contains(i.MacAddress.ToString()));
 
             List<ClientAvailableNetworkInterface> newInterfaces = interfaces
+                .Where(x=> x.PhysicalAddress != PhysicalAddress.None.ToString())
+                .Where(x=> !existingInterfaces.Select(e => e.MacAddress.ToString()).Contains(x.PhysicalAddress))
                 .Select(i => new ClientAvailableNetworkInterface
                 {
                     ClientId = clientId,
-                    MacAddress = i
+                    MacAddress = PhysicalAddress.Parse(i.PhysicalAddress),
+                    Name = i.Name ?? "Unnamed Interface",
+                    LastSeenDate = DateTime.UtcNow,
+                    IsActive = true
                 }).ToList();
 
             await context.ClientAvailableNetworkInterfaces.AddRangeAsync(newInterfaces);

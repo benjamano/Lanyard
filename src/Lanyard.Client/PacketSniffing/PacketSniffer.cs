@@ -59,6 +59,8 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             ReadTimeout = 1000
         });
 
+        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}", device.Name, device.MacAddress);
+
         device.StartCapture();
     }
 

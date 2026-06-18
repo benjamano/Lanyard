@@ -20,7 +20,7 @@
             }
             else
             {
-                <EditForm Model="ZoneScoreboardSettings">
+                <EditForm Model="ZoneScoreboardSettings" class="w-100">
                     <FluentStack Orientation="@Orientation.Vertical">
                         <FluentTextInput @bind-Value="ZoneScoreboardSettings.SourceIp" Placeholder="192.168.1.1" Label="Source IP" Required="true" />
                         <FluentTextInput @bind-Value="ZoneScoreboardSettings.DestinationIp" Placeholder="192.168.1.2" Label="Destination IP" />
@@ -28,11 +28,11 @@
                         @if (ClientNetworkInterfaces != null && ClientNetworkInterfaces.Any())
                         {
                             <FluentSelect Items="ClientNetworkInterfaces" 
-                                        @bind-Value="ZoneScoreboardSettings.PreferredDeviceMacAddress" 
+                                        @bind-Value="ZoneScoreboardSettings.PreferredDeviceMacAddress"
                                         Label="Preferred Device MAC Address" 
                                         Required="true"
-                                        OptionValue="x=> x.ToString()"
-                                        OptionText="x=> x.ToString()"
+                                        OptionValue="x=> x.MacAddress.ToString()"
+                                        OptionText="x=> x.Name"
                                         Placeholder="Select a network interface">
                             </FluentSelect>
                         }
@@ -43,7 +43,7 @@
 
                     </FluentStack>
 
-                    <FluentStack Margin="@Margin.Top2">
+                    <FluentStack Margin="@Margin.Top2" HorizontalAlignment="@HorizontalAlignment.Right" Width="100%">
                         <FluentButton IconStart="new Icons.Regular.Size24.Save()" 
                                         OnClick="SaveSettingsAsync"
                                         Loading="@(_isSaving)">
@@ -62,7 +62,7 @@
 
     private ZoneScoreboardSettings? ZoneScoreboardSettings = null;
 
-    private IEnumerable<PhysicalAddress>? ClientNetworkInterfaces = null;
+    private IEnumerable<ClientAvailableNetworkInterface>? ClientNetworkInterfaces = null;
 
     private bool _isSaving = false;
 
@@ -92,9 +92,7 @@
             Result<List<ClientAvailableNetworkInterface>>? interfacesResult = await ZoneScoreboardService.GetClientAvailableNetworkInterfacesAsync(ClientId.Value);
             if (interfacesResult.IsSuccess)
             {
-                ClientNetworkInterfaces = interfacesResult.Data?.Select(i => i.MacAddress);
-
-                ClientNetworkInterfaces = ClientNetworkInterfaces ?? [];
+                ClientNetworkInterfaces = interfacesResult.Data;
             }
             else
             {
@@ -108,14 +106,19 @@
         if (ZoneScoreboardSettings != null)
         {
             _isSaving = true;
-            try
+
+            Result<bool>? result = await ZoneScoreboardService.UpdateZoneScoreboardSettingsAsync(ZoneScoreboardSettings);
+
+            if (result.IsSuccess)
             {
-                await ZoneScoreboardService.UpdateZoneScoreboardSettingsAsync(ZoneScoreboardSettings);
+                _toastService.ShowSuccess("Zone scoreboard settings saved successfully.");
             }
-            finally
+            else
             {
-                _isSaving = false;
+                _toastService.ShowError("Failed to save zone scoreboard settings: " + result.Error);
             }
-        }
+
+            _isSaving = false;
+        }       
     }
 }

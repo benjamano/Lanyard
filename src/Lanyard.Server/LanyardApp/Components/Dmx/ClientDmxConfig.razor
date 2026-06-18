@@ -6,7 +6,7 @@
 
 @if (ClientId != null)
 {
-    <FluentCard Height="auto">
+    <FluentCard Height="100%">
         <FluentText Typo="Typography.H4">DMX Configuration</FluentText>
 
         <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">

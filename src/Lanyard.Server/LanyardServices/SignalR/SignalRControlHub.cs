@@ -2,6 +2,7 @@
 using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
@@ -398,9 +399,9 @@ public class SignalRControlHub(
         await Clients.Caller.SendAsync("ReceiveDmxSettings", settingsResult.Data);
     }
 
-    public async Task RecieveClientAvailableNetworkInterfaces(IEnumerable<PhysicalAddress> interfaces)
+    public async Task UpdateAvailableNetworkInterfaces(IEnumerable<NetworkInterfaceDto> interfaces)
     {
-        _logger.LogInformation("Client {ConnectionId} reported available network interfaces: {Interfaces}", Context.ConnectionId, interfaces.Select(i => i.ToString()));
+        _logger.LogInformation("Client {ConnectionId} reported available network interfaces: {Interfaces}", Context.ConnectionId, interfaces);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)
@@ -411,6 +412,12 @@ public class SignalRControlHub(
 
         Guid clientId = getClientResult.Data;
 
-        await _clientZoneScoreboardService.UpdateClientAvailableNetworkInterfacesAsync(clientId, interfaces);
+        IEnumerable<NetworkInterfaceDto> physicalAddresses = interfaces.Select(i => new NetworkInterfaceDto
+        {
+            PhysicalAddress = i.PhysicalAddress,
+            Name = i.Name
+        });
+
+        await _clientZoneScoreboardService.UpdateClientAvailableNetworkInterfacesAsync(clientId, physicalAddresses);
     }
 }

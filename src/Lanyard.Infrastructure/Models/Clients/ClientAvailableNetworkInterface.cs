@@ -7,6 +7,8 @@ public class ClientAvailableNetworkInterface
 {
     public int Id { get; set; }
 
+    public required string Name { get; set; }
+
     public required Guid ClientId { get; set; }
     public Client? Client { get; set; }
 
