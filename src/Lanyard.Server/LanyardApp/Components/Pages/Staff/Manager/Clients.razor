@@ -1,6 +1,7 @@
 @page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
+@using Lanyard.App.Components.Clients
 @using Lanyard.App.Components.Dmx
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
@@ -79,6 +80,10 @@
 
     <FluentGridItem Xs="12" Sm="12" Md="6">
         <ClientDmxConfig ClientId="@updatingClientId" />
+    </FluentGridItem>
+
+    <FluentGridItem Xs="12" Sm="12" Md="6">
+        <ClientZoneScoreboardSettings ClientId="@updatingClientId" />
     </FluentGridItem>
 </FluentGrid>
 

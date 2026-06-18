@@ -1,10 +1,14 @@
 using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 public class ZoneScoreboardSettings
 {
     public int Id { get; set; }
+
+    public required Guid ClientId { get; set; }
+    public Client? Client { get; set; }
 
     public required string PreferredDeviceMacAddress { get; set; }
 

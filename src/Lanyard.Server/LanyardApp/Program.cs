@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Lanyard.Application.Services.Clients;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,8 @@ builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+
+builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 
 builder.Services.AddSignalR();
 

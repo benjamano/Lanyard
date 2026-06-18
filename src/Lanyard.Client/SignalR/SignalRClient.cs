@@ -6,6 +6,8 @@ using Lanyard.Client.SignalR;
 using System.Net.Http;
 using System.Windows.Forms;
 using Microsoft.AspNetCore;
+using System.Net.NetworkInformation;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxController, IMusicPlayer musicPlayer) : ISignalRClient
 {
@@ -119,11 +121,37 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         // await SendAvailableAudioDevicesToServer();
         await SendAvailableDmxDevicesToServer();
         await SendMusicPlayerStatusToServer();
+        await SendAvailableNetworkInterfacesToServer();
+    }
+
+    private async Task SendAvailableNetworkInterfacesToServer()
+    {
+        try
+        {
+            _logger.LogInformation("Sending available network interfaces to server...");
+
+            IEnumerable<NetworkInterfaceDto> interfaces = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(ni => ni.OperationalStatus == OperationalStatus.Up)
+                .Select(x => new NetworkInterfaceDto
+                {
+                    PhysicalAddress = x.GetPhysicalAddress().ToString(),
+                    Name = x.Name,
+                })
+                .DistinctBy(x => x.PhysicalAddress)
+                .Where(x=> x.PhysicalAddress != PhysicalAddress.None.ToString());
+
+            await _connection!.InvokeAsync("UpdateAvailableNetworkInterfaces", interfaces);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending available network interfaces to server: {Message}", ex.Message);
+        }
     }
 
     private async Task SendAvailableDmxDevicesToServer()
     {
-        try{
+        try
+        {
             _logger.LogInformation("Sending available DMX devices to server...");
 
             List<string> devices = _dmxController.GetAvailableDevices();

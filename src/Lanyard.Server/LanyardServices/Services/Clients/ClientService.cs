@@ -1,6 +1,7 @@
 ﻿using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
