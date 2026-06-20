@@ -20,9 +20,12 @@ public interface IGameStateService
     GameStatus GetGameStatus();
     TimeSpan GetTimeRemaining();
 
+    LaserGameStatusDTO GetCurrentStatus();
+
     PlayerScoreDTO? GetPlayersScore(int gunId);
     List<PlayerScoreDTO> GetAllPlayerScores();
     void UpdatePlayerScore(PlayerScoreDTO playerScore);
 
     void UpdateGameLength(TimeSpan gameLength);
+    TimeSpan GetGameLength();
 }

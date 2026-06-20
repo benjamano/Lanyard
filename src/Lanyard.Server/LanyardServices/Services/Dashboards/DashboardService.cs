@@ -254,6 +254,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingClock.ShowMilliSeconds = incomingClock.ShowMilliSeconds;
                     existingClock.Is24HourFormat = incomingClock.Is24HourFormat;
                     break;
+                case ClientZoneLaserScoreboardWidget existingScoreboard when widget is ClientZoneLaserScoreboardWidget incomingScoreboard:
+                    existingScoreboard.ClientId = incomingScoreboard.ClientId;
+                    break;
+                case ClientZoneLaserGameStatusWidget existingLaserGameStatus when widget is ClientZoneLaserGameStatusWidget incomingLaserGameStatus:
+                    existingLaserGameStatus.ShowCurrentGameStatus = incomingLaserGameStatus.ShowCurrentGameStatus;
+                    existingLaserGameStatus.ShowTimeLeft = incomingLaserGameStatus.ShowTimeLeft;
+                    existingLaserGameStatus.ClientId = incomingLaserGameStatus.ClientId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -287,6 +295,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ShowDate = clockWidget.ShowDate,
                 ShowMilliSeconds = clockWidget.ShowMilliSeconds,
                 Is24HourFormat = clockWidget.Is24HourFormat
+            },
+            ClientZoneLaserGameStatusWidget laserGameStatusWidget => new ClientZoneLaserGameStatusWidget
+            {
+                ShowCurrentGameStatus = laserGameStatusWidget.ShowCurrentGameStatus,
+                ShowTimeLeft = laserGameStatusWidget.ShowTimeLeft,
+                ClientId = laserGameStatusWidget.ClientId
+            },
+            ClientZoneLaserScoreboardWidget scoreboardWidget => new ClientZoneLaserScoreboardWidget
+            {
+                ClientId = scoreboardWidget.ClientId
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -322,6 +340,18 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetClock.ShowDate = sourceClock.ShowDate;
             targetClock.ShowMilliSeconds = sourceClock.ShowMilliSeconds;
             targetClock.Is24HourFormat = sourceClock.Is24HourFormat;
+        }
+
+        if (target is ClientZoneLaserGameStatusWidget targetLaserGameStatus && source is ClientZoneLaserGameStatusWidget sourceLaserGameStatus)
+        {
+            targetLaserGameStatus.ShowCurrentGameStatus = sourceLaserGameStatus.ShowCurrentGameStatus;
+            targetLaserGameStatus.ShowTimeLeft = sourceLaserGameStatus.ShowTimeLeft;
+            targetLaserGameStatus.ClientId = sourceLaserGameStatus.ClientId;
+        }
+
+        if (target is ClientZoneLaserScoreboardWidget targetScoreboard && source is ClientZoneLaserScoreboardWidget sourceScoreboard)
+        {
+            targetScoreboard.ClientId = sourceScoreboard.ClientId;
         }
     }
 }

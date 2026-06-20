@@ -1,0 +1,136 @@
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.App.Components.Dialogs
+
+@inject IClientService ClientService
+
+@switch (SelectedWidget?.Type)
+{
+    case WidgetType.DigitalClock:
+        DigitalClockWidget? clockWidget = SelectedWidget as DigitalClockWidget;
+
+        if (clockWidget == null)
+        {
+            break;
+        }
+
+        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                        Checked="@clockWidget.ShowMilliSeconds"
+                        CheckedChanged="@(() => ToggleAsync(() => clockWidget.ShowMilliSeconds = !clockWidget.ShowMilliSeconds))">
+            Show Milliseconds
+        </FluentMenuItem>
+        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                        Checked="@clockWidget.Is24HourFormat"
+                        CheckedChanged="@(() => ToggleAsync(() => clockWidget.Is24HourFormat = !clockWidget.Is24HourFormat))">
+            24-Hour Format
+        </FluentMenuItem>
+        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                        Checked="@clockWidget.ShowDate"
+                        CheckedChanged="@(() => ToggleAsync(() => clockWidget.ShowDate = !clockWidget.ShowDate))">
+            Show Date
+        </FluentMenuItem>
+        break;
+    case WidgetType.ClientZoneLaserGameStatus:
+        ClientZoneLaserGameStatusWidget? laserGameStatusWidget = SelectedWidget as ClientZoneLaserGameStatusWidget;
+
+        if (laserGameStatusWidget == null)
+        {
+            break;
+        }
+
+        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                        Checked="@(laserGameStatusWidget.ShowCurrentGameStatus == true)"
+                        CheckedChanged="@(() => ToggleAsync(() => laserGameStatusWidget.ShowCurrentGameStatus = !(laserGameStatusWidget.ShowCurrentGameStatus)))">
+            Show Current Game Status
+        </FluentMenuItem>
+        <FluentMenuItem Role="@MenuItemRole.Checkbox"
+                        Checked="@(laserGameStatusWidget.ShowTimeLeft == true)"
+                        CheckedChanged="@(() => ToggleAsync(() => laserGameStatusWidget.ShowTimeLeft = !(laserGameStatusWidget.ShowTimeLeft)))">
+            Show Time Left
+        </FluentMenuItem>
+        <FluentMenuItem Role="@MenuItemRole.MenuItem"
+                        OnClick="ShowClientSelectionDialog">
+            Select Client
+        </FluentMenuItem>
+        break;
+    case WidgetType.ClientZoneLaserScoreboard:
+        ClientZoneLaserScoreboardWidget? laserScoreboardWidget = SelectedWidget as ClientZoneLaserScoreboardWidget;
+
+        if (laserScoreboardWidget == null)
+        {
+            break;
+        }
+
+        <FluentMenuItem Role="@MenuItemRole.MenuItem"
+                        OnClick="ShowClientSelectionDialog">
+            Select Client
+        </FluentMenuItem>
+        break;
+}
+
+@code {
+    [Parameter]
+    public DashboardWidget? SelectedWidget { get; set; }
+
+    [Parameter]
+    public EventCallback OnWidgetChanged { get; set; }
+
+    private async Task ToggleAsync(Action mutate)
+    {
+        mutate();
+
+        await OnWidgetChanged.InvokeAsync();
+    }
+
+    private async Task ShowClientSelectionDialog()
+    {
+        if (SelectedWidget is ClientZoneLaserGameStatusWidget laserGameStatusWidget)
+        {
+            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await ClientService.GetClientsWithCapabilitiesAsync();
+
+            if (result.IsSuccess && result.Data != null)
+            {
+                IEnumerable<Client> clients = result.Data
+                    .Where(x=> x.ZoneScoreboardVersion == ZoneScoreboardVersion.Begeara2)
+                    .Cast<Client>();
+
+                DialogResult dialogResult = await _dialogService.ShowDialogAsync<SelectClientDialog>(options =>
+                {
+                    options.Modal = true;
+                    options.Parameters.Add(nameof(SelectClientDialog.Clients), clients);
+                });
+
+                if (!dialogResult.Cancelled && dialogResult.Value is Guid clientId)
+                {
+                    laserGameStatusWidget.ClientId = clientId;
+
+                    await OnWidgetChanged.InvokeAsync();
+                }
+            }
+        }
+
+        if (SelectedWidget is ClientZoneLaserScoreboardWidget laserScoreboardWidget)
+        {
+            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await ClientService.GetClientsWithCapabilitiesAsync();
+
+            if (result.IsSuccess && result.Data != null)
+            {
+                IEnumerable<Client> clients = result.Data
+                    .Where(x=> x.ZoneScoreboardVersion == ZoneScoreboardVersion.Begeara2)
+                    .Cast<Client>();
+
+                DialogResult dialogResult = await _dialogService.ShowDialogAsync<SelectClientDialog>(options =>
+                {
+                    options.Modal = true;
+                    options.Parameters.Add(nameof(SelectClientDialog.Clients), clients);
+                });
+
+                if (!dialogResult.Cancelled && dialogResult.Value is Guid clientId)
+                {
+                    laserScoreboardWidget.ClientId = clientId;
+
+                    await OnWidgetChanged.InvokeAsync();
+                }
+            }
+        }
+    }
+}

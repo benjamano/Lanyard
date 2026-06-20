@@ -8,4 +8,6 @@ public interface ILaserGameStatusStore
     bool TryGetStatus(Guid clientId, out LaserGameStatusDTO? status);
     IReadOnlyDictionary<Guid, LaserGameStatusDTO> GetAllStatuses();
     void RemoveStatus(Guid clientId);
+
+    event Action<LaserGameStatusDTO>? OnStatusUpdated;
 }

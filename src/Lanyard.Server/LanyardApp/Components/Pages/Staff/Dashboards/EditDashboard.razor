@@ -1,4 +1,5 @@
 @page "/manage/dashboards/{DashboardId:guid}"
+@using Lanyard.App.Components.Dashboards
 @using Lanyard.Infrastructure.Enum
 
 <PageTitle>Edit Dashboard</PageTitle>
@@ -63,6 +64,12 @@
                     <FluentMenuItem OnClick="() => AddWidget(WidgetType.TextArea)">
                         Text Area
                     </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.ClientZoneLaserGameStatus)">
+                        Laser Game Status
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.ClientZoneLaserScoreboard)">
+                        Laser Scoreboard
+                    </FluentMenuItem>
                 </FluentMenuList>
             </FluentMenu>
         </FluentStack>
@@ -115,6 +122,12 @@ else
                 break;
             case WidgetType.TextArea:
                 Dashboard.Widgets.Add(new TextAreaWidget());
+                break;
+            case WidgetType.ClientZoneLaserGameStatus:
+                Dashboard.Widgets.Add(new ClientZoneLaserGameStatusWidget());
+                break;
+            case WidgetType.ClientZoneLaserScoreboard:
+                Dashboard.Widgets.Add(new ClientZoneLaserScoreboardWidget());
                 break;
         }    
     }

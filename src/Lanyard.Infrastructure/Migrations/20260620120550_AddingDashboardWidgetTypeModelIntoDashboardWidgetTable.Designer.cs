@@ -4,6 +4,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620120550_AddingDashboardWidgetTypeModelIntoDashboardWidgetTable")]
+    partial class AddingDashboardWidgetTypeModelIntoDashboardWidgetTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1099,29 +1102,13 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("ShowCurrentGameStatus")
+                    b.Property<bool?>("ShowCurrentGameStatus")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("ShowTimeLeft")
+                    b.Property<bool?>("ShowTimeLeft")
                         .HasColumnType("boolean");
-
-                    b.ToTable("DashboardWidgets", t =>
-                        {
-                            t.Property("ClientId")
-                                .HasColumnName("ClientZoneLaserGameStatusWidget_ClientId");
-                        });
 
                     b.HasDiscriminator().HasValue(3);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientZoneLaserScoreboardWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<Guid?>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.HasDiscriminator().HasValue(4);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.DigitalClockWidget", b =>

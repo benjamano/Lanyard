@@ -61,9 +61,29 @@ public class GameStateService : IGameStateService
         return TimeRemaining;
     }
 
+    public TimeSpan GetTotalGameTime()
+    {
+        return GameLength;
+    }
+
     public GameStatus GetGameStatus()
     {
         return GameStatus;
+    }
+
+    public LaserGameStatusDTO GetCurrentStatus()
+    {
+        List<PlayerScoreDTO> playerScores = CurrentPlayerScores.ToList();
+
+        return new LaserGameStatusDTO
+        {
+            Status = GameStatus,
+            TimeRemainingSeconds = (int)Math.Max(0, TimeRemaining.TotalSeconds),
+            TotalTimeSeconds = (int)Math.Max(0, GameLength.TotalSeconds),
+            PlayerCount = playerScores.Count,
+            PlayerScores = playerScores,
+            LastUpdateUtc = DateTime.UtcNow
+        };
     }
 
     public PlayerScoreDTO? GetPlayersScore(int gunId)
@@ -95,5 +115,10 @@ public class GameStateService : IGameStateService
     {
         GameLength = gameLength;
         GameStateChanged?.Invoke();
+    }
+
+    public TimeSpan GetGameLength()
+    {
+        return GameLength;
     }
 }

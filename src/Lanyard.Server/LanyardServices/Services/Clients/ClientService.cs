@@ -208,7 +208,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     DmxEnabled = ctx.ClientAvailableDmxDevices
                         .AsNoTracking()
                         .Where(y => y.IsActive && x.Id == y.ClientId)
-                        .Any()
+                        .Any(),
+                    ZoneScoreboardVersion = ctx.ZoneScoreboardSettings
+                        .AsNoTracking()
+                        .Where(y => y.IsActive && x.Id == y.ClientId)
+                        .Select(y => y.ZoneScoreboardVersion)
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 

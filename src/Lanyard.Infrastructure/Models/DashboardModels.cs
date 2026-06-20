@@ -79,3 +79,37 @@ public class TextAreaWidget : DashboardWidget
 
     public string? Content { get; set; }
 }
+
+public class ClientZoneLaserGameStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ClientZoneLaserGameStatusWidget()
+    {
+        Type = WidgetType.ClientZoneLaserGameStatus;
+
+        GridW = 4;
+        GridH = 2;
+
+        ShowCurrentGameStatus = true;
+        ShowTimeLeft = true;
+    }
+
+    public bool ShowTimeLeft { get; set; } = false;
+    public bool ShowCurrentGameStatus { get; set; } = false;
+
+    public Guid? ClientId { get; set; }
+}
+
+public class ClientZoneLaserScoreboardWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ClientZoneLaserScoreboardWidget()
+    {
+        Type = WidgetType.ClientZoneLaserScoreboard;
+
+        GridW = 4;
+        GridH = 2;
+    }
+
+    public Guid? ClientId { get; set; }
+}

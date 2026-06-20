@@ -79,6 +79,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)
                 .HasValue<DigitalClockWidget>(WidgetType.DigitalClock)
+                .HasValue<ClientZoneLaserGameStatusWidget>(WidgetType.ClientZoneLaserGameStatus)
+                .HasValue<ClientZoneLaserScoreboardWidget>(WidgetType.ClientZoneLaserScoreboard)
                 .HasValue<TextAreaWidget>(WidgetType.TextArea);
         }
     }

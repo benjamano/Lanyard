@@ -5,6 +5,8 @@ namespace Lanyard.Application.Services;
 
 public class LaserGameStatusStore : ILaserGameStatusStore
 {
+    public event Action<LaserGameStatusDTO>? OnStatusUpdated;
+
     private readonly ConcurrentDictionary<Guid, LaserGameStatusDTO> _statusByClientId = new();
 
     public void UpdateStatus(Guid clientId, LaserGameStatusDTO status)
@@ -13,6 +15,8 @@ public class LaserGameStatusStore : ILaserGameStatusStore
         status.LastUpdateUtc = DateTime.UtcNow;
 
         _statusByClientId.AddOrUpdate(clientId, status, (_, _) => status);
+
+        OnStatusUpdated?.Invoke(status);
     }
 
     public bool TryGetStatus(Guid clientId, out LaserGameStatusDTO? status)
