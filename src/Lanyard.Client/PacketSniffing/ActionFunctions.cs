@@ -65,13 +65,32 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
         
         if (int.TryParse(packetData[7].ToString(), out int Accuracy) == false)
         {
-            _logger.LogError("Invalid data parsed for the Accuracy figure! Value: {accuracyValue}", packetData[2].ToString());
+            _logger.LogError("Invalid data parsed for the Accuracy figure! Value: {accuracyValue}", packetData[7].ToString());
             return;
         }
 
-        _gameStateService.UpdatePlayerScore(new PlayerScoreDTO { GunId = GunId, Score = Score, Accuracy = Accuracy });
+        if (int.TryParse(packetData[2].ToString(), out int TeamId) == false)
+        {
+            _logger.LogError("Invalid data parsed for the Team ID figure! Value: {teamIdValue}", packetData[2].ToString());
+            return;
+        }
 
-        _logger.LogInformation("Player score updated: GunId={gunId}, Score={score}, Accuracy={accuracy}", GunId, Score, Accuracy);
+        Team team = Team.Green;
+
+        switch (TeamId)
+        {
+            case 0:
+                team = Team.Red;
+                break;
+            case 2:
+                team = Team.Green;
+                break;
+                
+        }
+
+        _gameStateService.UpdatePlayerScore(new PlayerScoreDTO { GunId = GunId, Score = Score, Accuracy = Accuracy, Team = team });
+
+        _logger.LogInformation("Player score updated: GunId={gunId}, Score={score}, Accuracy={accuracy}, Team={team}", GunId, Score, Accuracy, team);
     }
 
     public async Task HandleGameStatusPacketAsync(string[] packetData)
@@ -86,7 +105,7 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
             {
                 if (value.StartsWith("016"))
                 {
-                    _gameStateService.UpdateTimeRemaining(TimeSpan.FromMinutes(int.Parse(value.Substring(3))));
+                    _gameStateService.UpdateGameLength(TimeSpan.FromMinutes(int.Parse(value[3..].Trim())));
 
                     _logger.LogInformation("Game time limit updated to {timelimit} minutes", value[3..].Trim());
                 }

@@ -4,11 +4,11 @@ on:
     branches:
       - main
     paths:
-      - 'src/LanyardClient/**'
+      - 'src/Lanyard.Client/**'
       - 'src/Lanyard.Shared/**'
-      - 'src/LanyardData/**'
-      - 'src/LanyardTests/Client/**'
-      - 'src/LanyardClient.Watchdog/**'
+      - 'src/Lanyard.Infrastructure/**'
+      - 'src/Lanyard.Tests/Client/**'
+      - 'src/Lanyard.Client.Watchdog/**'
 jobs:
   release:
     runs-on: windows-latest
@@ -28,11 +28,13 @@ jobs:
       - name: Get version
         id: version
         run: |
-          $version = ([xml](Get-Content src/LanyardClient/Lanyard.Client.csproj)).Project.PropertyGroup.Version
+          $xml = [xml](Get-Content src/Lanyard.Client/Lanyard.Client.csproj)
+          $version = ($xml.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version.Trim()
+          Write-Host "Resolved version: '$version'"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
       - name: Publish app
-        run: dotnet publish src/LanyardClient/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
+        run: dotnet publish src/Lanyard.Client/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
         run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe

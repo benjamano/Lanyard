@@ -1,0 +1,175 @@
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@using Humanizer;
+@implements IDisposable
+
+@inject ILaserGameStatusStore LaserGameStatusStore
+
+<FluentCard Height="100%">
+    <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+        @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
+        {
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to observe</FluentBadge>
+        }
+        else
+        {
+            @if (_gameStatus == null)
+            {
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge" Color="@BadgeColor.Subtle">No game status available</FluentBadge>
+            }
+            else
+            {
+                <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%">
+                    <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%" Width="100%" Margin="@Margin.VerticalAuto">
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" 
+                                        Size="@BadgeSize.ExtraLarge" 
+                                        Color="@GetBadgeColor()" 
+                                        Shape="@BadgeShape.Rounded">
+                            <FluentStack Orientation="@Orientation.Horizontal"
+                                        HorizontalAlignment="@HorizontalAlignment.Center" 
+                                        VerticalAlignment="@VerticalAlignment.Center" 
+                                        Height="100%" Width="100%"
+                                        HorizontalGap="4">
+                                @if (_gameStatus.Status == GameStatus.NotStarted)
+                                {
+                                    <FluentIcon Icon="Icons.Regular.Size24.Stop" />
+                                }
+                                else if (_gameStatus.Status == GameStatus.GetReady)
+                                {
+                                    <FluentIcon Icon="Icons.Regular.Size24.Warning" />
+                                }
+                                else if (_gameStatus.Status == GameStatus.InGame)
+                                {
+                                    <FluentIcon Icon="Icons.Regular.Size24.Play" />
+                                }
+                                @GetStatusText()
+                            </FluentStack>
+                        </FluentBadge>
+                    </FluentStack>
+                    @if (Widget.ShowTimeLeft == true)
+                    {
+                        <FluentStack Margin="@Margin.TopAuto" Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Width="100%" VerticalGap="3">
+                            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
+                                <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
+                                    Time Remaining: @(TimeSpan.FromSeconds(_gameStatus.TimeRemainingSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
+                                </FluentText>
+
+                                <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
+                                    Total Time: @(TimeSpan.FromSeconds(_gameStatus.TotalTimeSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
+                                </FluentText>
+                            </FluentStack>
+                            <FluentProgressBar Thickness="@ProgressThickness.Large" Value="@_gameStatus.TimeRemainingSeconds" Max="@_gameStatus.TotalTimeSeconds" Min="0"  />
+                        </FluentStack>
+                    }
+                </FluentStack>
+            }
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required ClientZoneLaserGameStatusWidget Widget { get; set; } 
+
+    private LaserGameStatusDTO? _gameStatus = null;
+
+    private readonly System.Timers.Timer _progressBarTimer = new(1000);
+
+    protected override async Task OnInitializedAsync()
+    {
+        LaserGameStatusStore.OnStatusUpdated += OnLaserGameStatusChanged;
+
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            await GetCurrentGameStatusAsync();
+        }
+
+        _progressBarTimer.Elapsed += async (sender, e) =>
+        {
+            if (_gameStatus != null && _gameStatus.Status == GameStatus.InGame)
+            {
+                if (_gameStatus.TimeRemainingSeconds > 0)
+                {
+                    _gameStatus.TimeRemainingSeconds--;
+                }
+                else
+                {
+                    _progressBarTimer.Stop();
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            await GetCurrentGameStatusAsync();
+        }
+    }
+
+    private async Task GetCurrentGameStatusAsync()
+    {
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            if (LaserGameStatusStore.TryGetStatus(Widget.ClientId ?? Guid.Empty, out LaserGameStatusDTO? status) && status != null)
+            {
+                OnLaserGameStatusChanged(status);
+            }
+        }
+    }
+
+    private void OnLaserGameStatusChanged(LaserGameStatusDTO status)
+    {
+        if (status.ClientId == Widget.ClientId)
+        {
+            _gameStatus = status;
+
+            CheckToStartProgressBarTimer();
+
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    public void CheckToStartProgressBarTimer()
+    {
+        if (_gameStatus != null && _gameStatus.Status == GameStatus.InGame)
+        {
+            if (!_progressBarTimer.Enabled)
+            {
+                _progressBarTimer.Start();
+            }
+        }
+        else
+        {
+            if (_progressBarTimer.Enabled)
+            {
+                _progressBarTimer.Stop();
+            }
+        }
+    }
+
+    private BadgeColor GetBadgeColor() => _gameStatus!.Status switch
+    {
+        GameStatus.NotStarted => BadgeColor.Subtle,
+        GameStatus.GetReady => BadgeColor.Warning,
+        GameStatus.InGame => BadgeColor.Success,
+        _ => BadgeColor.Subtle
+    };
+
+    private string GetStatusText() => _gameStatus!.Status switch
+    {
+        GameStatus.NotStarted => "Not Started",
+        GameStatus.GetReady => "Get Ready!",
+        GameStatus.InGame => "In Game",
+        _ => "Unknown"
+    };
+
+    public void Dispose()
+    {
+        LaserGameStatusStore.OnStatusUpdated -= OnLaserGameStatusChanged;
+        _progressBarTimer.Dispose();
+    }
+}

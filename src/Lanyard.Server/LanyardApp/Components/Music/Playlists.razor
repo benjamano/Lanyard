@@ -231,11 +231,7 @@
 
     private string GetPlaylistColor(string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return colors[0];
-
-        int hash = Math.Abs(name.GetHashCode());
-        return colors[hash % colors.Length];
+        return "var(--colorBrandStroke1);";
     }
 
     private async Task LoadPlaylist(Guid playlistId)

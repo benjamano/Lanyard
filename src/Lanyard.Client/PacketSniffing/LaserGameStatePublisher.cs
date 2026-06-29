@@ -32,14 +32,8 @@ public class LaserGameStatePublisher(
                 return;
             }
 
-            LaserGameStatusDTO status = new()
-            {
-                ClientId = clientId,
-                Status = _gameStateService.GetGameStatus(),
-                TimeRemainingSeconds = (int)Math.Max(0, _gameStateService.GetTimeRemaining().TotalSeconds),
-                PlayerCount = _gameStateService.GetAllPlayerScores().Count,
-                LastUpdateUtc = DateTime.UtcNow
-            };
+            LaserGameStatusDTO status = _gameStateService.GetCurrentStatus();
+            status.ClientId = clientId;
 
             await _signalRClient.SendLaserGameStatusAsync(status);
         }

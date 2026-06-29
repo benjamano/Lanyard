@@ -1,0 +1,114 @@
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@implements IDisposable
+
+@inject ILaserGameStatusStore LaserGameStatusStore
+
+<FluentCard Height="100%">
+    <FluentGrid>
+        <FluentGridItem Md="6" Sm="12">
+            <FluentStack Orientation="@Orientation.Horizontal" 
+                            VerticalAlignment="@VerticalAlignment.Center" 
+                            HorizontalAlignment="@HorizontalAlignment.Center">
+                <FluentBadge Color="@BadgeColor.Danger"
+                                    Shape="@BadgeShape.Rounded"
+                                    Padding="@Padding.All3">
+                    <FluentText Align="@TextAlign.Center"
+                                Weight="@TextWeight.Bold">
+                        Red Team
+                    </FluentText>
+                </FluentBadge>
+            </FluentStack>
+            <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Red).OrderByDescending(x => x.Score).AsQueryable()"                  
+                            TGridItem="PlayerScoreDTO"
+                            StripedRows="true"
+                            Style="Height: 75%;">
+                <ChildContent>
+                    <PropertyColumn Title="Name" Property="x=> x.GunId" />
+                    <PropertyColumn Title="Score" Property="x=> x.Score" />
+                </ChildContent>
+                <EmptyContent>
+                    No data to show.
+                </EmptyContent>
+            </FluentDataGrid>
+        </FluentGridItem>
+        <FluentGridItem Md="6" Sm="12">
+            <FluentStack Orientation="@Orientation.Horizontal" 
+                            VerticalAlignment="@VerticalAlignment.Center" 
+                            HorizontalAlignment="@HorizontalAlignment.Center">
+                <FluentBadge Color="@BadgeColor.Success"
+                            Shape="@BadgeShape.Rounded"
+                            Padding="@Padding.All3">
+                    <FluentText Align="@TextAlign.Center"
+                                Weight="@TextWeight.Bold">
+                        Green Team
+                    </FluentText>
+                </FluentBadge>
+            </FluentStack>
+            <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Green).OrderByDescending(x => x.Score).AsQueryable()"                  
+                            TGridItem="PlayerScoreDTO"
+                            StripedRows="true"
+                            Style="Height: 75%;">
+                <ChildContent>
+                    <PropertyColumn Title="Name" Property="x=> x.GunId" />
+                    <PropertyColumn Title="Score" Property="x=> x.Score" />
+                </ChildContent>
+                <EmptyContent>
+                    No data to show.
+                </EmptyContent>
+            </FluentDataGrid>
+        </FluentGridItem>
+    </FluentGrid>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required ClientZoneLaserScoreboardWidget Widget { get; set; } 
+
+    private LaserGameStatusDTO? _gameStatus = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LaserGameStatusStore.OnStatusUpdated += OnLaserGameStatusChanged;
+
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            await GetCurrentGameStatusAsync();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            await GetCurrentGameStatusAsync();
+        }
+    }
+
+    private async Task GetCurrentGameStatusAsync()
+    {
+        if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
+        {
+            if (LaserGameStatusStore.TryGetStatus(Widget.ClientId ?? Guid.Empty, out LaserGameStatusDTO? status) && status != null)
+            {
+                OnLaserGameStatusChanged(status);
+            }
+        }
+    }
+
+    private void OnLaserGameStatusChanged(LaserGameStatusDTO status)
+    {
+        if (status.ClientId == Widget.ClientId)
+        {
+            _gameStatus = status;
+
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        LaserGameStatusStore.OnStatusUpdated -= OnLaserGameStatusChanged;
+    }
+}

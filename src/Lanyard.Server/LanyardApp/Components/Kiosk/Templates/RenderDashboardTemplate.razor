@@ -1,0 +1,47 @@
+@using Lanyard.App.Components.Kiosk
+@using Lanyard.App.Components.Pages.Staff.Dashboards
+
+@inject IDashboardService DashboardService
+
+@if (_dashboard != null)
+{
+    <DashboardGrid Widgets="_dashboard.Widgets" PreviewMode="true" />
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ProjectionProgramStep Step { get; set; } = default!;
+
+    private Dashboard? _dashboard;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        string? dashboardId = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Dashboard);
+
+        if (!string.IsNullOrEmpty(dashboardId))
+        {
+            Result<Dashboard> result = await DashboardService.GetDashboardAsync(Guid.Parse(dashboardId));
+
+            if (result.IsSuccess && result.Data != null)
+            {
+                _dashboard = result.Data;
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to load the dashboard, {result.Error}");
+            }
+        }
+        else
+        {
+            _dashboard = null;
+        }
+    }
+
+    private string? GetStepParameterValue(string parameterName)
+    {
+        return Step.ParameterValues
+            .Where(x => x.Parameter?.Name == parameterName)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+    }
+}

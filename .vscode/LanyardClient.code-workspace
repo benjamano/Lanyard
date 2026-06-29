@@ -7,9 +7,8 @@
   ],
   "settings": {
     "files.exclude": {
-      "**/LanyardAPI": true,
-      "**/LanyardApp": true,
-      "**/LanyardServices": true
+      "**/Lanyard.Server": true,
+      "**/Lanyard.Reach": true,
     }
   }
 }

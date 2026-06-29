@@ -1,0 +1,74 @@
+@inject IDashboardService DashboardService
+
+<FluentStack Width="20%">
+    <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
+        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+            <FluentButton Appearance="@ButtonAppearance.Primary" 
+                        IconStart="new Icons.Regular.Size24.AddCircle()"
+                        OnClick="() => CreateBlankDashboard()">Create blank dashboard</FluentButton>
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
+
+<FluentDataGrid Items="Dashboards.AsQueryable()" 
+                Loading="IsLoading"
+                ShowHover="true"
+                TGridItem="Dashboard"
+                OnRowClick="(row) => OnRowClick(row.Item?.Id ?? Guid.Empty)">
+    <LoadingContent>
+        <FluentSpinner/>
+    </LoadingContent>
+    <ChildContent>
+        <PropertyColumn Property="x=> x.Name" Title="Name"/>
+        <PropertyColumn Property="x=> x.LastUpdateDate" Title="Updated Date"/>
+    </ChildContent>
+</FluentDataGrid>
+
+@code {
+    public IEnumerable<Dashboard> Dashboards { get; set; } = [];
+
+    public bool IsLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetDashboards();
+    }
+
+    private async Task GetDashboards()
+    {
+        Result<IEnumerable<Dashboard>> response = await DashboardService.GetDashboardsAsync();
+
+        if (response.IsSuccess && response.Data != null)
+        {
+            Dashboards = response.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load dashboards, {response.Error}");
+        }
+
+        IsLoading = false;
+    }
+
+    private void OnRowClick(Guid dashboardId)
+    {
+        if (dashboardId == Guid.Empty)
+        {
+            return;
+        }
+
+        _navigationManager.NavigateTo($"/manage/dashboards/{dashboardId}");
+    }
+
+    private async Task CreateBlankDashboard()
+    {
+        DialogResult? result = await _dialogService.ShowDialogAsync<CreateDashboardDialog>(options =>{});
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        await GetDashboards();
+    }
+}

@@ -29,7 +29,10 @@ public class LaserGameStatusDTO
 
     public GameStatus Status { get; set; } = GameStatus.NotStarted;
     public int TimeRemainingSeconds { get; set; }
+    public int TotalTimeSeconds { get; set; }
     public int PlayerCount { get; set; }
+
+    public List<PlayerScoreDTO> PlayerScores { get; set; } = [];
 
     public DateTime LastUpdateUtc { get; set; } = DateTime.UtcNow;
 }

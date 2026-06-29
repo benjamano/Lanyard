@@ -8,19 +8,19 @@ using System.Net.NetworkInformation;
 using System.Text;
 using Lanyard.Client.PacketSniffing;
 using System.Threading.Tasks;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 namespace Lanyard.Client.PacketSniffing;
 
 public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actions) : IPacketSniffer
 {
-    private readonly List<string> SourceIPs = ["192.168.0.10", "192.168.0.11", "192.168.2.42"];
-    private readonly string DestinationIP = "192.168.0.255";
-    private readonly PhysicalAddress PreferedInterfaceMacAddress = PhysicalAddress.Parse("9C-69-D3-4C-69-A1");
+    private List<string> SourceIPs = ["192.168.0.10", "192.168.0.11", "192.168.2.42"];
+    private string? DestinationIP = "192.168.0.255";
 
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
 
-    public async Task StartSniffingAsync()
+    public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
     {
         CaptureDeviceList devices = CaptureDeviceList.Instance;
 
@@ -31,18 +31,23 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
-        ILiveDevice? device = devices.Where(x => x.MacAddress?.ToString() == PreferedInterfaceMacAddress.ToString()).FirstOrDefault();
+        DestinationIP = settings.DestinationIp;
+
+        SourceIPs = [settings.SourceIp];
+
+        PhysicalAddress preferedInterfaceMacAddress = PhysicalAddress.Parse(settings.PreferredDeviceMacAddress);
+
+        ILiveDevice? device = devices.FirstOrDefault(x => x.MacAddress?.ToString() == preferedInterfaceMacAddress.ToString());
 
         if (device == null && devices.Any())
         {
-            _logger.LogWarning("Could not find the Prefered Interface with the MAC Address: {PreferedInterfaceMacAddress}, defaulting to first entry.", PreferedInterfaceMacAddress);
+            _logger.LogWarning("Could not find the Prefered Interface with the MAC Address: {PreferedInterfaceMacAddress}, defaulting to first entry.", settings.PreferredDeviceMacAddress);
 
-            device = devices.Where(x=> string.IsNullOrWhiteSpace(x.MacAddress?.ToString()) == false).FirstOrDefault()!;
+            device = devices.FirstOrDefault(x=> string.IsNullOrWhiteSpace(x.MacAddress?.ToString()) == false)!;
         }
         else if (device == null)
         {
             _logger.LogError("Could not find any interfaces to sniff!");
-
             return;
         }
 
@@ -53,6 +58,8 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             Mode = DeviceModes.Promiscuous,
             ReadTimeout = 1000
         });
+
+        _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}", device.Name, device.MacAddress);
 
         device.StartCapture();
     }
@@ -108,7 +115,6 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             {
                 case 1:
                     // Timing Packet
-
                     await _actions.HandleTimingPacketAsync(decodedData);
                     break;
                 case 2:
@@ -117,17 +123,14 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
                     break;
                 case 3:
                     // Player Score Packet
-
                     await _actions.HandlePlayerScorePacketAsync(decodedData);
                     break;
                 case 4:
                     // Game Status Packet
-
                     await _actions.HandleGameStatusPacketAsync(decodedData);
                     break;
                 case 5:
                     // Shot Confirmed Packet
-
                     await _actions.HandleShotConfirmedPacketAsync(decodedData);
                     break;
             }

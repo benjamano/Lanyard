@@ -1,5 +1,8 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
@@ -9,6 +12,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using System.Collections.Concurrent;
+using System.Net.NetworkInformation;
 
 namespace Lanyard.Application.SignalR;
 
@@ -19,7 +23,8 @@ public class SignalRControlHub(
     ILaserGameStatusStore laserGameStatusStore,
     SignalRProjectionControlHubEvents hubEvents,
     AutomationEngineService automationEngineService,
-    IDmxClientService dmxClientService) : Hub, ISignalRProjectionControlHub
+    IDmxClientService dmxClientService,
+    IClientZoneScoreboardService clientZoneScoreboardService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -29,6 +34,7 @@ public class SignalRControlHub(
     private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
     private readonly AutomationEngineService _automationEngineService = automationEngineService;
     private readonly IDmxClientService _dmxClientService = dmxClientService;
+    private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -102,6 +108,7 @@ public class SignalRControlHub(
             await SendProjectionProgramInfoToClientAsync(client.Id);
             await SendMusicSettingsToClientAsync(client);
             await SendDmxSettingsToClientAsync(client);
+            await SendZoneScoreboardSettingsToClientAsync(client);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -220,8 +227,33 @@ public class SignalRControlHub(
     private async Task SendMusicSettingsToClientAsync(Client client)
     {
         ClientMusicSettingsDTO settings = new ClientMusicSettingsDTO { CacheLimitMb = client.MusicCacheLimitMb };
+
         await Clients.Caller.SendAsync("ReceiveMusicSettings", settings);
         _logger.LogInformation("Sent music settings to client {ClientId}: cache limit {CacheLimitMb}MB", client.Id, client.MusicCacheLimitMb);
+    }
+
+    private async Task SendZoneScoreboardSettingsToClientAsync(Client client)
+    {
+        Result<ZoneScoreboardSettings?> getResult = await _clientZoneScoreboardService.GetZoneScoreboardSettingsAsync(client.Id);
+
+        if (!getResult.IsSuccess || getResult.Data == null)
+        {
+            _logger.LogError("Failed to get zone scoreboard settings for client {ClientId}: {Error}", client.Id, getResult.Error);
+            return;
+        }
+
+        ZoneScoreboardSettings settings = getResult.Data;
+
+        ZoneScoreboardSettingsDTO settingsDto = new()
+        {
+            PreferredDeviceMacAddress = settings.PreferredDeviceMacAddress,
+            ZoneScoreboardVersion = settings.ZoneScoreboardVersion,
+            SourceIp = settings.SourceIp,
+            DestinationIp = settings.DestinationIp
+        };
+
+        await Clients.Caller.SendAsync("ReceiveZoneScoreboardSettings", settingsDto);
+        _logger.LogInformation("Sent zone scoreboard settings to client {ClientId}", client.Id);
     }
 
     public async Task<Result<bool>> SendProjectionProgramInfoToClientAsync(Guid clientId)
@@ -391,5 +423,27 @@ public class SignalRControlHub(
         }
 
         await Clients.Caller.SendAsync("ReceiveDmxSettings", settingsResult.Data);
+    }
+
+    public async Task UpdateAvailableNetworkInterfaces(IEnumerable<NetworkInterfaceDto> interfaces)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available network interfaces: {Interfaces}", Context.ConnectionId, interfaces);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        IEnumerable<NetworkInterfaceDto> physicalAddresses = interfaces.Select(i => new NetworkInterfaceDto
+        {
+            PhysicalAddress = i.PhysicalAddress,
+            Name = i.Name
+        });
+
+        await _clientZoneScoreboardService.UpdateClientAvailableNetworkInterfacesAsync(clientId, physicalAddresses);
     }
 }

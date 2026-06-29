@@ -1,10 +1,12 @@
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 
 namespace Lanyard.Infrastructure.DataAccess
 {
@@ -51,7 +53,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
-        
+        public DbSet<ZoneScoreboardSettings> ZoneScoreboardSettings { get; set; }
+        public DbSet<ClientAvailableNetworkInterface> ClientAvailableNetworkInterfaces { get; set; }
+    
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -70,6 +74,14 @@ namespace Lanyard.Infrastructure.DataAccess
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<DashboardWidget>()
+                .HasDiscriminator(x => x.Type)
+                .HasValue<DashboardWidget>(WidgetType.Unknown)
+                .HasValue<DigitalClockWidget>(WidgetType.DigitalClock)
+                .HasValue<ClientZoneLaserGameStatusWidget>(WidgetType.ClientZoneLaserGameStatus)
+                .HasValue<ClientZoneLaserScoreboardWidget>(WidgetType.ClientZoneLaserScoreboard)
+                .HasValue<TextAreaWidget>(WidgetType.TextArea);
         }
     }
 }

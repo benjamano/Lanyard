@@ -1,0 +1,124 @@
+@using System.Net.NetworkInformation
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Infrastructure.DTO.ZoneScoreboard
+@using Lanyard.Infrastructure.Enum
+@inject IClientZoneScoreboardService ZoneScoreboardService
+
+@if (ClientId != null)
+{
+    <FluentCard Appearance="CardAppearance.Default" Height="100%">
+        <FluentStack Orientation="@Orientation.Vertical">
+            <FluentText Size="TextSize.Size600">
+                Zone Scoreboard Settings
+            </FluentText>
+            @if (ZoneScoreboardSettings == null || ClientNetworkInterfaces == null)
+            {
+                <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" Margin="@Margin.Top2">
+                    <FluentSpinner />
+                    <FluentText>Loading Zone Scoreboard Settings...</FluentText>
+                </FluentStack>
+            }
+            else
+            {
+                <EditForm Model="ZoneScoreboardSettings" class="w-100">
+                    <FluentStack Orientation="@Orientation.Vertical">
+                        <FluentTextInput @bind-Value="ZoneScoreboardSettings.SourceIp" Placeholder="192.168.1.1" Label="Source IP" Required="true" />
+                        <FluentTextInput @bind-Value="ZoneScoreboardSettings.DestinationIp" Placeholder="192.168.1.2" Label="Destination IP" />
+                    
+                        @if (ClientNetworkInterfaces != null && ClientNetworkInterfaces.Any())
+                        {
+                            <FluentSelect Items="ClientNetworkInterfaces" 
+                                        @bind-Value="ZoneScoreboardSettings.PreferredDeviceMacAddress"
+                                        Label="Preferred Device MAC Address" 
+                                        Required="true"
+                                        OptionValue="x=> x.MacAddress.ToString()"
+                                        OptionText="x=> x.Name"
+                                        Placeholder="Select a network interface">
+                            </FluentSelect>
+                        }
+                        else
+                        {
+                            <FluentText>No network interfaces found for this client.</FluentText>
+                        }
+
+                    </FluentStack>
+
+                    <FluentStack Margin="@Margin.Top2" HorizontalAlignment="@HorizontalAlignment.Right" Width="100%">
+                        <FluentButton IconStart="new Icons.Regular.Size24.Save()" 
+                                        OnClick="SaveSettingsAsync"
+                                        Loading="@(_isSaving)">
+                                        Save
+                        </FluentButton>
+                    </FluentStack>
+                </EditForm>
+            }
+        </FluentStack>
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    private ZoneScoreboardSettings? ZoneScoreboardSettings = null;
+
+    private IEnumerable<ClientAvailableNetworkInterface>? ClientNetworkInterfaces = null;
+
+    private bool _isSaving = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ClientId.HasValue)
+        {
+            Result<ZoneScoreboardSettings?>? settingsResult = await ZoneScoreboardService.GetZoneScoreboardSettingsAsync(ClientId.Value);
+            if (settingsResult.IsSuccess)
+            {
+                ZoneScoreboardSettings = settingsResult.Data 
+                    ?? new()
+                    {
+                        ClientId = ClientId.Value,
+                        PreferredDeviceMacAddress = string.Empty,
+                        SourceIp = "",
+                        DestinationIp = "",
+                        IsActive = true,
+                        ZoneScoreboardVersion = ZoneScoreboardVersion.Begeara2
+                    };
+            }
+            else
+            {
+                _toastService.ShowError("Failed to load zone scoreboard settings: " + settingsResult.Error);
+            }
+
+            Result<List<ClientAvailableNetworkInterface>>? interfacesResult = await ZoneScoreboardService.GetClientAvailableNetworkInterfacesAsync(ClientId.Value);
+            if (interfacesResult.IsSuccess)
+            {
+                ClientNetworkInterfaces = interfacesResult.Data;
+            }
+            else
+            {
+                _toastService.ShowError("Failed to load client network interfaces: " + interfacesResult.Error);
+            }
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        if (ZoneScoreboardSettings != null)
+        {
+            _isSaving = true;
+
+            Result<bool>? result = await ZoneScoreboardService.UpdateZoneScoreboardSettingsAsync(ZoneScoreboardSettings);
+
+            if (result.IsSuccess)
+            {
+                _toastService.ShowSuccess("Zone scoreboard settings saved successfully.");
+            }
+            else
+            {
+                _toastService.ShowError("Failed to save zone scoreboard settings: " + result.Error);
+            }
+
+            _isSaving = false;
+        }       
+    }
+}

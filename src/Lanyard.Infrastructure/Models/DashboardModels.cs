@@ -1,10 +1,18 @@
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
+using Lanyard.Infrastructure.Enum;
+
 namespace Lanyard.Infrastructure.Models;
 
 public class Dashboard
 {
     public Guid Id { get; set; }
 
-    public required string Name { get; set; }
+    [Required]
+    [StringLength(100, ErrorMessage = "The Name field can not be longer than 100 characters.")]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(500, ErrorMessage = "The Description field can not be longer than 500 characters.")]
     public string? Description { get; set; }
 
     public bool IsActive { get; set; }
@@ -17,12 +25,17 @@ public class Dashboard
 
 public class DashboardWidget
 {
+    public DashboardWidget()
+    {
+        Id = Guid.NewGuid();
+    }
+
     public Guid Id { get; set; }
 
     public Guid DashboardId { get; set; }
     public Dashboard? Dashboard { get; set; }
 
-    public required string Type { get; set; }
+    public required WidgetType Type { get; set; }
     public string? Title { get; set; }
 
     public int GridX { get; set; }
@@ -30,9 +43,73 @@ public class DashboardWidget
     public int GridW { get; set; }
     public int GridH { get; set; }
 
-    public int SortOrder { get; set; }
-
-    public string ConfigJson { get; set; } = "{}";
-
     public bool IsActive { get; set; }
+}
+
+public class DigitalClockWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public DigitalClockWidget()
+    {
+        Type = WidgetType.DigitalClock;
+
+        Is24HourFormat = false;
+        ShowMilliSeconds = false;
+        ShowDate = true;
+
+        GridW = 2;
+        GridH = 1;
+    }
+
+    public bool ShowMilliSeconds { get; set; }
+    public bool Is24HourFormat { get; set; }
+    public bool ShowDate { get; set; }
+}
+
+public class TextAreaWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public TextAreaWidget()
+    {
+        Type = WidgetType.TextArea;
+
+        GridW = 2;
+        GridH = 2;
+    }
+
+    public string? Content { get; set; }
+}
+
+public class ClientZoneLaserGameStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ClientZoneLaserGameStatusWidget()
+    {
+        Type = WidgetType.ClientZoneLaserGameStatus;
+
+        GridW = 4;
+        GridH = 2;
+
+        ShowCurrentGameStatus = true;
+        ShowTimeLeft = true;
+    }
+
+    public bool ShowTimeLeft { get; set; } = false;
+    public bool ShowCurrentGameStatus { get; set; } = false;
+
+    public Guid? ClientId { get; set; }
+}
+
+public class ClientZoneLaserScoreboardWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ClientZoneLaserScoreboardWidget()
+    {
+        Type = WidgetType.ClientZoneLaserScoreboard;
+
+        GridW = 4;
+        GridH = 2;
+    }
+
+    public Guid? ClientId { get; set; }
 }

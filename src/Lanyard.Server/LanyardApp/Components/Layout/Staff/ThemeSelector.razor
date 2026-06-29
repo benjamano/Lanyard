@@ -1,29 +1,80 @@
 @inject IThemeService ThemeService
 
-<FluentButton Appearance="ButtonAppearance.Transparent"
-                IconOnly="true"
-                Class="fluent-header-hover"
-                Title="Switch to Light/Dark theme"
-                BackgroundColor="transparent"
-                OnClick="@(async e => await ThemeService.SwitchThemeAsync())">
+<FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Start" VerticalAlignment="@VerticalAlignment.Center">
+    <FluentSelect Items="colours"
+                    OptionText="@(x => x.Key)"
+                    OptionValue="@(x => x.Value.ToUpper())"
+                    @bind-Value="selectedColour"
+                    @bind-Value:after="OnColourChanged">
+    </FluentSelect>
 
-    <FluentIcon Class="hidden-if-light"
-                Value="@(new Icons.Filled.Size20.WeatherSunny())" />
+    <FluentButton Appearance="ButtonAppearance.Transparent"
+                    IconOnly="true"
+                    Class="fluent-header-hover"
+                    Tooltip="Switch to Light/Dark theme"
+                    BackgroundColor="transparent"
+                    OnClick="ToggleDarkMode">
 
-    <FluentIcon Class="hidden-if-dark"
-                Value="@(new Icons.Filled.Size20.WeatherMoon())" />
-</FluentButton>
+        <FluentIcon Class="hidden-if-light"
+                    Value="@(new Icons.Filled.Size20.WeatherSunny())" />
+
+        <FluentIcon Class="hidden-if-dark"
+                    Value="@(new Icons.Filled.Size20.WeatherMoon())" />
+    </FluentButton>
+</FluentStack>
 
 @code {
+    private string selectedColour = string.Empty;
+    private bool isDarkMode = false;
+
+    private Dictionary<string, string> colours = new Dictionary<string, string>
+    {
+        { "Red", "#930524" }, 
+        { "Orange", "#cc6633" },
+        { "Yellow", "#9f861f" },
+        { "Green", "#167a47" },
+        { "Blue", "#1b92bc" },
+        { "Indigo", "#4B0082" },
+        { "Violet", "#8F00FF" },
+        { "Pink", "#D740BC"}
+    };
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        @* colours = colours.Select(x=> new 
+            KeyValuePair<string, string>(x.Key, x.Value.ToLower())).ToDictionary(x=> x.Key, x=> x.Value); *@
+
         if (firstRender)
         {
             try
             {
-                await ThemeService.SetThemeAsync("#D740BC", false);
+                selectedColour = await ThemeService.GetBrandColorAsync() 
+                    ?? colours
+                        .Where(x => x.Key == "Pink")
+                        .FirstOrDefault().Value;
+
+                isDarkMode = await ThemeService.IsDarkModeAsync();
+
+                StateHasChanged();
             }
-            catch {}
+            catch { }
         }
+    }
+
+    private async Task OnColourChanged()
+    {
+        await ThemeService.SetThemeAsync(selectedColour, true);
+
+        if (await ThemeService.IsDarkModeAsync() != isDarkMode)
+        {
+            await ThemeService.SwitchThemeAsync();
+        }
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        await ThemeService.SwitchThemeAsync();
+
+        isDarkMode = !isDarkMode;
     }
 }

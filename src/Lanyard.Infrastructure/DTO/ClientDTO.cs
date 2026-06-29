@@ -1,4 +1,5 @@
-﻿using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -16,6 +17,7 @@ public class ClientConnectedWithCapabilitiesDTO : Client
 
     public bool ProjectionEnabled { get; set; }
     public bool DmxEnabled { get; set; }
+    public ZoneScoreboardVersion? ZoneScoreboardVersion { get; set; }
 }
 
 public class ClientMusicSettingsDTO
