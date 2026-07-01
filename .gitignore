@@ -410,3 +410,6 @@ FodyWeavers.xsd
 
 *.csproj.lscache
 *.lscache
+
+# Local docker-compose secrets
+.env

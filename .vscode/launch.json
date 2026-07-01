@@ -24,6 +24,15 @@
             // "preLaunchTask": "Build LanyardApp",
         },
         {
+            "name": "Launch LanyardApp (Docker)",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/.vscode/open-browser.js",
+            "args": ["http://localhost:5096"],
+            "internalConsoleOptions": "neverOpen",
+            "preLaunchTask": "docker-compose: app-dev"
+        },
+        {
             "name": "Debug LanyardReach (Web)",
             "type": "dotnet",
             "request": "launch",

@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+ENV DOTNET_USE_POLLING_FILE_WATCHER=1 \
+    NUGET_PACKAGES=/root/.nuget/packages \
+    PATH="${PATH}:/root/.dotnet/tools"
+
+# Matches the Microsoft.EntityFrameworkCore.Tools version referenced by Lanyard.App.csproj
+RUN dotnet tool install --global dotnet-ef --version 10.0.1
+
+WORKDIR /workspace

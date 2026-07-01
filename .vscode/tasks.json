@@ -107,6 +107,30 @@
             "dependsOn": ["Build LanyardClient", "Build LanyardApp"],
             "dependsOrder": "sequence",
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "docker-compose: app-dev",
+            "type": "shell",
+            "command": "docker compose up --build app-dev",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^(?!)(.)$",
+                    "file": 1,
+                    "location": 1,
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*Building.*",
+                    "endsPattern": ".*Application started\\. Press Ctrl\\+C to shut down\\..*"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
         }
     ]
 }

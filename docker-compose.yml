@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: psqluser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: lanyarddb
+    ports:
+      # Host port moved to 5433 - 5432 is already bound by a native Postgres install on this laptop.
+      # Containers still talk to each other over 5432 internally, so app/app-dev are unaffected.
+      - "5433:5432"
+    volumes:
+      - lanyard-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U psqluser -d lanyarddb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Full dev environment: source is bind-mounted in and `dotnet watch` handles hot reload.
+  # This is what other devs should run day-to-day: `docker compose up app-dev`.
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace/src/Lanyard.Server/LanyardApp
+    command: sh -c "dotnet restore && dotnet ef database update && dotnet watch run --no-launch-profile --urls http://0.0.0.0:5096"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=lanyarddb;Username=psqluser;Password=${POSTGRES_PASSWORD}"
+    volumes:
+      - .:/workspace
+      - lanyard-nuget-cache:/root/.nuget/packages
+      # Mask each project's obj/bin with container-only volumes so the container's restore/build
+      # (different SDK patch version, Linux paths) never overwrites the host's own obj/bin -
+      # doing so previously corrupted the host IDE's design-time build with root-owned files.
+      - app-dev-obj-shared:/workspace/src/Lanyard.Shared/obj
+      - app-dev-bin-shared:/workspace/src/Lanyard.Shared/bin
+      - app-dev-obj-infra:/workspace/src/Lanyard.Infrastructure/obj
+      - app-dev-bin-infra:/workspace/src/Lanyard.Infrastructure/bin
+      - app-dev-obj-services:/workspace/src/Lanyard.Server/LanyardServices/obj
+      - app-dev-bin-services:/workspace/src/Lanyard.Server/LanyardServices/bin
+      - app-dev-obj-api:/workspace/src/Lanyard.Server/LanyardAPI/obj
+      - app-dev-bin-api:/workspace/src/Lanyard.Server/LanyardAPI/bin
+      - app-dev-obj-app:/workspace/src/Lanyard.Server/LanyardApp/obj
+      - app-dev-bin-app:/workspace/src/Lanyard.Server/LanyardApp/bin
+    ports:
+      - "5096:5096"
+
+  # Prod-style image (dotnet publish, aspnet runtime base). Useful for testing a real deploy locally.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=lanyarddb;Username=psqluser;Password=${POSTGRES_PASSWORD}"
+    ports:
+      - "8080:8080"
+
+volumes:
+  lanyard-db-data:
+  lanyard-nuget-cache:
+  app-dev-obj-shared:
+  app-dev-bin-shared:
+  app-dev-obj-infra:
+  app-dev-bin-infra:
+  app-dev-obj-services:
+  app-dev-bin-services:
+  app-dev-obj-api:
+  app-dev-bin-api:
+  app-dev-obj-app:
+  app-dev-bin-app:

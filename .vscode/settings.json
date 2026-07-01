@@ -1,4 +1,5 @@
 {
+    "dotnet.defaultSolution": "LanyardApp.dev.sln",
     "editor.fontFamily": "'Monocraft', monospace",
     "editor.fontLigatures": true,
     "files.exclude": {
