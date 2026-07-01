@@ -1,4 +1,5 @@
 using Lanyard.App.Components;
+using Lanyard.App.Middleware;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
@@ -170,6 +171,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment() == false)
 {
     app.UseForwardedHeaders();
+    app.UseMiddleware<GeoLockMiddleware>();
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseMigrationsEndPoint();
     app.UseRateLimiter();

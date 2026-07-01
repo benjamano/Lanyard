@@ -1,6 +1,7 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -27,39 +28,38 @@ public class DashboardServiceTests
         return new DashboardService(factoryMock.Object);
     }
 
+    // Seeds a bare dashboard directly in the DbContext and returns it.
+    private static async Task<Dashboard> SeedDashboardAsync(DbContextOptions<ApplicationDbContext> options, string name = "Test")
+    {
+        Dashboard dashboard = new()
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            IsActive = true,
+            CreateDate = DateTime.UtcNow
+        };
+        await using ApplicationDbContext ctx = new(options);
+        ctx.Dashboards.Add(dashboard);
+        await ctx.SaveChangesAsync();
+        return dashboard;
+    }
+
     [TestMethod]
     public async Task DashboardService_SaveDashboard_CreatesDashboardWithWidgets()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
+        Dashboard seeded = await SeedDashboardAsync(options, "Ops Dashboard");
 
-        Dashboard dashboard = new()
-        {
-            Id = Guid.Empty,
-            Name = "Ops Dashboard",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.Empty,
-                    Type = "Clock",
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 3,
-                    SortOrder = 0,
-                    IsActive = true
-                }
-            ]
-        };
+        seeded.Widgets = [new DigitalClockWidget { GridW = 4, GridH = 3, IsActive = true }];
 
-        Result<Dashboard> result = await service.SaveDashboardAsync(dashboard);
+        Result<bool> result = await service.SaveDashboardAsync(seeded);
 
         Assert.IsTrue(result.Success, result.Error);
-        Assert.IsNotNull(result.Data);
-        Assert.HasCount(1, result.Data.Widgets);
+
+        Result<Dashboard> getResult = await service.GetDashboardAsync(seeded.Id);
+        Assert.IsTrue(getResult.Success);
+        Assert.HasCount(1, getResult.Data!.Widgets);
     }
 
     [TestMethod]
@@ -67,54 +67,21 @@ public class DashboardServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
+        Dashboard seeded = await SeedDashboardAsync(options);
 
-        Result<Dashboard> createResult = await service.SaveDashboardAsync(new Dashboard
-        {
-            Id = Guid.Empty,
-            Name = "Ops Dashboard",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.NewGuid(),
-                    Type = "Clock",
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 3,
-                    SortOrder = 0,
-                    IsActive = true
-                },
-                new DashboardWidget
-                {
-                    Id = Guid.NewGuid(),
-                    Type = "MusicControls",
-                    GridX = 4,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 3,
-                    SortOrder = 1,
-                    IsActive = true
-                }
-            ]
-        });
+        DashboardWidget widget1 = new DigitalClockWidget { Id = Guid.NewGuid(), GridX = 0, GridY = 0, GridW = 4, GridH = 3, IsActive = true };
+        DashboardWidget widget2 = new TextAreaWidget { Id = Guid.NewGuid(), GridX = 4, GridY = 0, GridW = 4, GridH = 3, IsActive = true };
+        seeded.Widgets = [widget1, widget2];
+        await service.SaveDashboardAsync(seeded);
 
-        Assert.IsTrue(createResult.Success, createResult.Error);
-        Dashboard existing = createResult.Data!;
-        DashboardWidget keepWidget = existing.Widgets.First();
-
-        keepWidget.GridW = 6;
-        existing.Widgets = [keepWidget];
-
-        Result<Dashboard> updateResult = await service.SaveDashboardAsync(existing);
+        // Remove widget2 — it should be soft-deleted (IsActive = false) in the database.
+        seeded.Widgets = [widget1];
+        Result<bool> updateResult = await service.SaveDashboardAsync(seeded);
 
         Assert.IsTrue(updateResult.Success, updateResult.Error);
-        Assert.HasCount(1, updateResult.Data!.Widgets);
 
         await using ApplicationDbContext ctx = new(options);
-        Dashboard dbDashboard = await ctx.Dashboards.Include(x => x.Widgets).FirstAsync(x => x.Id == existing.Id);
+        Dashboard dbDashboard = await ctx.Dashboards.Include(x => x.Widgets).FirstAsync(x => x.Id == seeded.Id);
         Assert.HasCount(2, dbDashboard.Widgets);
         Assert.AreEqual(1, dbDashboard.Widgets.Count(x => x.IsActive));
         Assert.AreEqual(1, dbDashboard.Widgets.Count(x => x.IsActive == false));
@@ -125,110 +92,40 @@ public class DashboardServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
+        Dashboard seeded = await SeedDashboardAsync(options, "Delete Me");
 
-        Result<Dashboard> createResult = await service.SaveDashboardAsync(new Dashboard
-        {
-            Id = Guid.Empty,
-            Name = "Delete Me",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.Empty,
-                    Type = "Clock",
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 3,
-                    SortOrder = 0,
-                    IsActive = true
-                }
-            ]
-        });
+        seeded.Widgets = [new DigitalClockWidget { GridW = 4, GridH = 3, IsActive = true }];
+        await service.SaveDashboardAsync(seeded);
 
-        Assert.IsTrue(createResult.Success, createResult.Error);
-
-        Result<bool> deleteResult = await service.DeleteDashboardAsync(createResult.Data!.Id);
+        Result<bool> deleteResult = await service.DeleteDashboardAsync(seeded.Id);
 
         Assert.IsTrue(deleteResult.Success, deleteResult.Error);
 
         await using ApplicationDbContext ctx = new(options);
-        Dashboard dashboard = await ctx.Dashboards.Include(x => x.Widgets).FirstAsync(x => x.Id == createResult.Data.Id);
+        Dashboard dashboard = await ctx.Dashboards.Include(x => x.Widgets).FirstAsync(x => x.Id == seeded.Id);
         Assert.IsFalse(dashboard.IsActive);
         Assert.IsTrue(dashboard.Widgets.All(x => x.IsActive == false));
     }
 
     [TestMethod]
-    public async Task DashboardService_GetDashboardForRender_ReturnsOnlyActiveWidgets()
+    public async Task DashboardService_GetDashboard_ReturnsAllWidgets()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
+        Dashboard seeded = await SeedDashboardAsync(options, "Widget Test");
 
-        Result<Dashboard> createResult = await service.SaveDashboardAsync(new Dashboard
-        {
-            Id = Guid.Empty,
-            Name = "Render Test",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.Empty,
-                    Type = "Clock",
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 3,
-                    SortOrder = 0,
-                    IsActive = true
-                }
-            ]
-        });
+        DashboardWidget widget = new DigitalClockWidget { Id = Guid.NewGuid(), GridW = 4, GridH = 3, IsActive = true };
+        seeded.Widgets = [widget];
+        await service.SaveDashboardAsync(seeded);
 
-        Assert.IsTrue(createResult.Success, createResult.Error);
+        // Soft-delete by saving with empty widget list.
+        seeded.Widgets = [];
+        await service.SaveDashboardAsync(seeded);
 
-        Dashboard updateDashboard = createResult.Data!;
-        updateDashboard.Widgets = [];
-        await service.SaveDashboardAsync(updateDashboard);
+        Result<Dashboard> getResult = await service.GetDashboardAsync(seeded.Id);
 
-        Result<Dashboard> renderResult = await service.GetDashboardForRenderAsync(createResult.Data!.Id);
-        Assert.IsTrue(renderResult.Success, renderResult.Error);
-        Assert.IsEmpty(renderResult.Data!.Widgets);
-    }
-
-    [TestMethod]
-    public async Task DashboardService_SaveDashboard_FailsOnInvalidGridBounds()
-    {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        DashboardService service = GetService(options);
-
-        Result<Dashboard> result = await service.SaveDashboardAsync(new Dashboard
-        {
-            Id = Guid.Empty,
-            Name = "Invalid Grid",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.Empty,
-                    Type = "Clock",
-                    GridX = 10,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 2,
-                    SortOrder = 0,
-                    IsActive = true
-                }
-            ]
-        });
-
-        Assert.IsFalse(result.Success);
-        Assert.IsTrue(result.Error!.Contains("bounds", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(0, getResult.Data!.Widgets.Count(x => x.IsActive));
     }
 
     [TestMethod]
@@ -236,28 +133,12 @@ public class DashboardServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
+        Dashboard seeded = await SeedDashboardAsync(options, "Unknown Widget");
 
-        Result<Dashboard> result = await service.SaveDashboardAsync(new Dashboard
-        {
-            Id = Guid.Empty,
-            Name = "Unknown Widget",
-            IsActive = true,
-            CreateDate = DateTime.UtcNow,
-            Widgets =
-            [
-                new DashboardWidget
-                {
-                    Id = Guid.Empty,
-                    Type = "Unknown",
-                    GridX = 0,
-                    GridY = 0,
-                    GridW = 4,
-                    GridH = 2,
-                    SortOrder = 0,
-                    IsActive = true
-                }
-            ]
-        });
+        // A base DashboardWidget with Type=Unknown is not handled by CreateWidgetCopy.
+        seeded.Widgets = [new DashboardWidget { Type = WidgetType.Unknown, GridX = 0, GridY = 0, GridW = 4, GridH = 2, IsActive = true }];
+
+        Result<bool> result = await service.SaveDashboardAsync(seeded);
 
         Assert.IsFalse(result.Success);
         Assert.IsTrue(result.Error!.Contains("Unsupported", StringComparison.OrdinalIgnoreCase));

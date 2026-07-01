@@ -1,0 +1,24 @@
+@page "/blocked"
+@layout EmptyLayout
+
+<PageTitle>Access Restricted</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical"
+             VerticalAlignment="VerticalAlignment.Center"
+             HorizontalAlignment="HorizontalAlignment.Center"
+             Style="min-height: 80vh; text-align: center; padding: 16px;">
+
+    <FluentIcon Value="@(new Icons.Regular.Size48.LockClosed())" Color="Color.Error" />
+
+    <FluentLabel Typo="Typography.H3" Style="margin-top: 16px;">Access Restricted</FluentLabel>
+
+    <FluentLabel Style="max-width: 480px; margin-top: 8px;">
+        This site is only accessible from within the <strong>United Kingdom</strong>.
+        Your connection has been detected as originating from outside the UK.
+    </FluentLabel>
+
+    <FluentLabel Style="margin-top: 8px; color: var(--neutral-foreground-hint-rest);">
+        If you believe this is an error, please contact the site administrator.
+    </FluentLabel>
+
+</FluentStack>
