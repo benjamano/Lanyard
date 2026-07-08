@@ -5,59 +5,67 @@
 
 @inject ILaserGameStatusStore LaserGameStatusStore
 
-<FluentCard Height="100%">
-    <FluentGrid>
-        <FluentGridItem Md="6" Sm="12">
-            <FluentStack Orientation="@Orientation.Horizontal" 
-                            VerticalAlignment="@VerticalAlignment.Center" 
-                            HorizontalAlignment="@HorizontalAlignment.Center">
-                <FluentBadge Color="@BadgeColor.Danger"
-                                    Shape="@BadgeShape.Rounded"
-                                    Padding="@Padding.All3">
-                    <FluentText Align="@TextAlign.Center"
-                                Weight="@TextWeight.Bold">
-                        Red Team
-                    </FluentText>
-                </FluentBadge>
-            </FluentStack>
-            <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Red).OrderByDescending(x => x.Score).AsQueryable()"                  
-                            TGridItem="PlayerScoreDTO"
-                            StripedRows="true"
-                            Style="Height: 75%;">
-                <ChildContent>
-                    <PropertyColumn Title="Name" Property="x=> x.GunId" />
-                    <PropertyColumn Title="Score" Property="x=> x.Score" />
-                </ChildContent>
-                <EmptyContent>
-                    No data to show.
-                </EmptyContent>
-            </FluentDataGrid>
+<FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.All0" Height="100%">
+    <FluentGrid Class="h-100">
+        <FluentGridItem Md="6" Sm="12" Padding="@Padding.Right1">
+            <FluentCard Height="100%">
+                <FluentStack Orientation="@Orientation.Horizontal" 
+                                VerticalAlignment="@VerticalAlignment.Center" 
+                                HorizontalAlignment="@HorizontalAlignment.Center">
+                    <FluentBadge Color="@BadgeColor.Danger"
+                                        Shape="@BadgeShape.Rounded"
+                                        Padding="@Padding.All3">
+                        <FluentText Align="@TextAlign.Center"
+                                    Weight="@TextWeight.Bold">
+                            Red Team
+                        </FluentText>
+                    </FluentBadge>
+                </FluentStack>
+                <div>
+                    <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Red).OrderByDescending(x => x.Score).AsQueryable()"                  
+                                    TGridItem="PlayerScoreDTO"
+                                    StripedRows="true"
+                                    Style="Height: 75%;">
+                        <ChildContent>
+                            <PropertyColumn Title="Name" Property="x=> x.GunName" />
+                            <PropertyColumn Title="Score" Property="x=> x.Score" />
+                        </ChildContent>
+                        <EmptyContent>
+                            No data to show.
+                        </EmptyContent>
+                    </FluentDataGrid>
+                </div>
+            </FluentCard>
         </FluentGridItem>
-        <FluentGridItem Md="6" Sm="12">
-            <FluentStack Orientation="@Orientation.Horizontal" 
-                            VerticalAlignment="@VerticalAlignment.Center" 
-                            HorizontalAlignment="@HorizontalAlignment.Center">
-                <FluentBadge Color="@BadgeColor.Success"
-                            Shape="@BadgeShape.Rounded"
-                            Padding="@Padding.All3">
-                    <FluentText Align="@TextAlign.Center"
-                                Weight="@TextWeight.Bold">
-                        Green Team
-                    </FluentText>
-                </FluentBadge>
-            </FluentStack>
-            <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Green).OrderByDescending(x => x.Score).AsQueryable()"                  
-                            TGridItem="PlayerScoreDTO"
-                            StripedRows="true"
-                            Style="Height: 75%;">
-                <ChildContent>
-                    <PropertyColumn Title="Name" Property="x=> x.GunId" />
-                    <PropertyColumn Title="Score" Property="x=> x.Score" />
-                </ChildContent>
-                <EmptyContent>
-                    No data to show.
-                </EmptyContent>
-            </FluentDataGrid>
+        <FluentGridItem Md="6" Sm="12" Padding="@Padding.Left1">
+            <FluentCard Height="100%">
+                <FluentStack Orientation="@Orientation.Horizontal" 
+                                VerticalAlignment="@VerticalAlignment.Center" 
+                                HorizontalAlignment="@HorizontalAlignment.Center">
+                    <FluentBadge Color="@BadgeColor.Success"
+                                Shape="@BadgeShape.Rounded"
+                                Padding="@Padding.All3">
+                        <FluentText Align="@TextAlign.Center"
+                                    Weight="@TextWeight.Bold">
+                            Green Team
+                        </FluentText>
+                    </FluentBadge>
+                </FluentStack>
+                <div>
+                    <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Green).OrderByDescending(x => x.Score).AsQueryable()"                  
+                                    TGridItem="PlayerScoreDTO"
+                                    StripedRows="true"
+                                    Style="Height: 75%;">
+                        <ChildContent>
+                            <PropertyColumn Title="Name" Property="x=> x.GunName" />
+                            <PropertyColumn Title="Score" Property="x=> x.Score" />
+                        </ChildContent>
+                        <EmptyContent>
+                            No data to show.
+                        </EmptyContent>
+                    </FluentDataGrid>
+                </div>
+            </FluentCard>
         </FluentGridItem>
     </FluentGrid>
 </FluentCard>
