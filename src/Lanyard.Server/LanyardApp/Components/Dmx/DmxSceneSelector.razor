@@ -1,7 +1,9 @@
 @using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
+@implements IDisposable
 
 @inject IDmxSceneService _dmxSceneService
+@inject IDmxSceneRunnerService _sceneRunner
 @inject IDialogService _dialogService
 @inject IToastService _toastService
 
@@ -41,30 +43,39 @@
             }
             else
             {
-                @foreach (DmxScene scene in scenes)
+                @foreach (DmxSceneDTO scene in scenes)
                 {
                     bool isRunning = runningSceneIds.Contains(scene.Id);
-                    int progressValue = 0;
+                    int progressValue = GetSceneProgress(scene);
 
-                    <FluentButton Appearance="@ButtonAppearance.Default"
-                                    Padding="@Padding.All0"
-                                    Disabled="@(!IsEditModeEnabled)"
-                                    Class="@($"{(isRunning ? "scene-running" : "")} {(CurrentlyOpenScene != null && CurrentlyOpenScene.Id == scene.Id ? "scene-open" : "")}")"
-                                    Style="width: 120px; height: 50px;"
-                                    OnClick="@(() => OnOpenScene.InvokeAsync(scene))">
-                        <FluentStack Orientation="Orientation.Vertical" 
-                                        HorizontalAlignment="HorizontalAlignment.SpaceBetween" 
-                                        VerticalAlignment="VerticalAlignment.Center"
-                                        Padding="@Padding.All0">
-                            <FluentText Padding="@Padding.All2">@scene.Name</FluentText>
+                    <div style="display: flex; align-items: center; gap: 2px;">
+                        <FluentButton Appearance="@ButtonAppearance.Default"
+                                        Padding="@Padding.All0"
+                                        Disabled="@(!IsEditModeEnabled)"
+                                        Class="@($"{(isRunning ? "scene-running" : "")} {(CurrentlyOpenScene != null && CurrentlyOpenScene.Id == scene.Id ? "scene-open" : "")}")"
+                                        Style="width: 120px; height: 50px;"
+                                        OnClick="@(() => OnOpenScene.InvokeAsync(scene))">
+                            <FluentStack Orientation="Orientation.Vertical"
+                                            HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                                            VerticalAlignment="VerticalAlignment.Center"
+                                            Padding="@Padding.All0">
+                                <FluentText Padding="@Padding.All2">@scene.Name</FluentText>
 
-                            @if (isRunning)
-                            {
-                                <FluentProgressBar Value="@progressValue"
-                                                    Width="100%" />
-                            }
-                        </FluentStack>
-                    </FluentButton>
+                                @if (isRunning)
+                                {
+                                    <FluentProgressBar Min="0"
+                                                        Max="100"
+                                                        Value="@progressValue"
+                                                        Width="100%" />
+                                }
+                            </FluentStack>
+                        </FluentButton>
+                        <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                        Appearance="ButtonAppearance.Transparent"
+                                        Disabled="@(ClientId == null)"
+                                        Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
+                                        OnClick="@(() => ToggleScene(scene, isRunning))" />
+                    </div>
                 }
             }
         </FluentStack>
@@ -87,13 +98,26 @@
     [Parameter]
     public DmxScene? CurrentlyOpenScene { get; set; }
 
-    private List<DmxScene> scenes = [];
+    [Parameter]
+    public Guid? EditedSceneId { get; set; }
+
+    private List<DmxSceneDTO> scenes = [];
 
     private List<Guid> runningSceneIds = [];
+
+    // Key: sceneId, Value: the step number playback last advanced to (drives the progress bar).
+    private readonly Dictionary<Guid, int> sceneStepProgress = [];
 
     private Guid? previousClientId;
 
     private Guid? previousDeletedSceneId;
+
+    protected override void OnInitialized()
+    {
+        _sceneRunner.OnSceneStarted += HandleSceneStarted;
+        _sceneRunner.OnSceneStopped += HandleSceneStopped;
+        _sceneRunner.OnSceneStepAdvanced += HandleSceneStepAdvanced;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -119,6 +143,26 @@
             scenes.RemoveAll(scene => scene.Id == DeletedSceneId.Value);
             runningSceneIds.Remove(DeletedSceneId.Value);
         }
+
+        if (EditedSceneId != null)
+        {
+            DmxSceneDTO? editedScene = scenes.FirstOrDefault(scene => scene.Id == EditedSceneId.Value);
+
+            if (editedScene != null)
+            {
+                Result<DmxSceneDTO>? result = await _dmxSceneService.GetSceneByIdAsync(EditedSceneId.Value);
+
+                if (result.IsSuccess && result.Data != null)
+                {
+                    int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
+                    scenes[index] = result.Data;
+                }
+                else
+                {
+                    _toastService.ShowError($"Failed to load updated scene: {result.Error}");
+                }
+            }
+        }
     }
 
     private async Task LoadScenes(Guid clientId)
@@ -127,7 +171,7 @@
 
         if (scenesResult.IsSuccess && scenesResult.Data != null)
         {
-            scenes = scenesResult.Data.Cast<DmxScene>().ToList();
+            scenes = scenesResult.Data.ToList();
 
             runningSceneIds = scenesResult.Data.Where(s => s.IsRunning).Select(s => s.Id).ToList();
         }
@@ -155,8 +199,52 @@
         }
 
         runningSceneIds.Remove(sceneId);
+        sceneStepProgress.Remove(sceneId);
 
         InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSceneStepAdvanced(Guid clientId, Guid sceneId, int stepNumber)
+    {
+        if (clientId != ClientId) {
+            return;
+        }
+
+        sceneStepProgress[sceneId] = stepNumber;
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private int GetSceneProgress(DmxSceneDTO scene)
+    {
+        if (scene.StepCount <= 0 || !sceneStepProgress.TryGetValue(scene.Id, out int stepNumber))
+        {
+            return 0;
+        }
+
+        return (int)Math.Round(stepNumber / (double)scene.StepCount * 100);
+    }
+
+    private async Task ToggleScene(DmxSceneDTO scene, bool isRunning)
+    {
+        if (ClientId == null)
+        {
+            return;
+        }
+
+        if (isRunning)
+        {
+            _sceneRunner.StopScene(scene.Id);
+
+            return;
+        }
+
+        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+
+        if (!startResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+        }
     }
 
     public async Task CreateNewScene()
@@ -174,7 +262,19 @@
             {
                 _toastService.ShowSuccess($"Scene '{sceneName}' created successfully.");
 
-                scenes.Add(createResult.Data);
+                DmxScene created = createResult.Data;
+
+                scenes.Add(new DmxSceneDTO
+                {
+                    Id = created.Id,
+                    Name = created.Name,
+                    ClientId = created.ClientId,
+                    Loop = created.Loop,
+                    CreateByUserId = created.CreateByUserId,
+                    CreateDate = created.CreateDate,
+                    IsRunning = false,
+                    StepCount = 0
+                });
 
                 await InvokeAsync(StateHasChanged);
             }
@@ -183,5 +283,12 @@
                 _toastService.ShowError($"Failed to create scene: {createResult.Error}");
             }
         }
+    }
+
+    public void Dispose()
+    {
+        _sceneRunner.OnSceneStarted -= HandleSceneStarted;
+        _sceneRunner.OnSceneStopped -= HandleSceneStopped;
+        _sceneRunner.OnSceneStepAdvanced -= HandleSceneStepAdvanced;
     }
 }

@@ -4,12 +4,11 @@ using Lanyard.Infrastructure.Models.Dmx;
 
 public interface IDmxSceneService
 {
-    event Action<Guid, Guid>? OnSceneStarted;
-    event Action<Guid, Guid>? OnSceneStopped;
-
     Task<Result<IEnumerable<DmxSceneDTO>>> GetScenesForClientAsync(Guid clientId);
 
     Task<Result<DmxScene>> CreateSceneAsync(Guid clientId, string name);
+    Task<Result<DmxSceneDTO>> GetSceneByIdAsync(Guid sceneId, Guid? clientId = null);
+    Task<Result<bool>> UpdateSceneAsync(DmxScene scene);
     Task<Result<bool>> DeleteSceneAsync(Guid sceneId);
     Task<Result<List<DmxSceneStep>>> GetSceneStepsAsync(Guid sceneId);
     Task<Result<bool>> DeleteSceneStepAsync(Guid stepId);

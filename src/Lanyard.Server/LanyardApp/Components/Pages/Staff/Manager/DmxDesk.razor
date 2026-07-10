@@ -76,8 +76,9 @@
         <DmxSceneSelector ClientId="@selectedClientId" 
                             IsEditModeEnabled="@isEditModeEnabled" 
                             DeletedSceneId="@deletedSceneId"
+                            EditedSceneId="@editedScene?.Id"
                             OnOpenScene="OpenScene" 
-                            CurrentlyOpenScene="selectedScene"/>
+                            CurrentlyOpenScene="selectedScene" />
     </FluentGridItem>
     <FluentGridItem Xs="@(isASceneOpen ? 12 : 0)" 
                     Sm="@(isASceneOpen ? 12 : 0)" 
@@ -91,7 +92,8 @@
                             OnClose="OnCloseSceneEditor"
                             OnSceneDeleted="OnSceneDeleted"
                             OnEditingStepChanged="OnEditingStepChanged"
-                            IsEditModeEnabled="@isEditModeEnabled" />
+                            IsEditModeEnabled="@isEditModeEnabled" 
+                            OnSceneEdited="OnSceneEdited"/>
         }
     </FluentGridItem>
 </FluentGrid>
@@ -108,6 +110,7 @@
     private DmxScene? selectedScene = null;
 
     private DmxSceneStep? editingStep = null;
+    private DmxScene? editedScene = null;
 
     private Guid? deletedSceneId;
 
@@ -171,5 +174,10 @@
         isASceneOpen = false;
         selectedScene = null;
         editingStep = null;
+    }
+
+    private void OnSceneEdited(DmxScene scene)
+    {
+        editedScene = scene;
     }
 }

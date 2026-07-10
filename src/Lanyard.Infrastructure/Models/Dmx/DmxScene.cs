@@ -11,5 +11,7 @@ public class DmxScene : CreateAndUpdateBase
 
     public bool IsActive { get; set; }
 
+    public bool Loop { get; set; } = true;
+
     public virtual ICollection<DmxSceneStep> Steps { get; set; } = [];
 }
