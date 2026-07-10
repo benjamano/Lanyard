@@ -37,7 +37,7 @@ jobs:
         run: dotnet publish src/Lanyard.Client/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
-        run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe
+        run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe --icon favicon.ico
 
       - name: Create and push tag
         run: |

@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UserSecretsId>a8d53c09-546c-4be3-aeb3-3d9d95c7a9c0</UserSecretsId>
-    <Version>1.0.18</Version>
+    <Version>1.0.19</Version>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
   </PropertyGroup>
 
