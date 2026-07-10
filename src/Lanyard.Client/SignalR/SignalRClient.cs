@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
 using Lanyard.Client.SignalR;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Windows.Forms;
 using Microsoft.AspNetCore;
 using System.Net.NetworkInformation;
@@ -24,10 +25,16 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     {
         string serverUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/websocket";
         string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
+        bool allowInsecureSsl = ShouldAllowInsecureSsl();
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
         _logger.LogInformation("Connecting to SignalR server at {ServerUrl} with client ID {ClientId}", serverUrl, clientId);
+
+        if (allowInsecureSsl && serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("LANYARD_CLIENT_ALLOW_INSECURE_SSL is enabled. TLS certificate validation is disabled for the SignalR connection.");
+        }
 
         await Task.Delay(5000);
         
@@ -36,7 +43,26 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             try
             {
                 _connection = new HubConnectionBuilder()
-                    .WithUrl(serverUrl + $"?clientId={clientId}")
+                    .WithUrl(serverUrl + $"?clientId={clientId}", options =>
+                    {
+                        if (allowInsecureSsl && serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                        {
+                            options.HttpMessageHandlerFactory = handler =>
+                            {
+                                if (handler is HttpClientHandler httpClientHandler)
+                                {
+                                    httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                                }
+
+                                return handler;
+                            };
+
+                            options.WebSocketConfiguration = webSocketOptions =>
+                            {
+                                webSocketOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+                            };
+                        }
+                    })
                     .WithAutomaticReconnect(new RetryForeverPolicy())
                     .Build();
 
@@ -109,10 +135,24 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             catch (HttpRequestException ex)
             {
                 _logger.LogError("Error initializing SignalR connection: {Message}", ex.Message);
+
+                if (ex.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("TLS certificate validation failed. For LAN/dev testing, either set LANYARD_SERVER_URL to http://<server-ip>:5096 or set LANYARD_CLIENT_ALLOW_INSECURE_SSL=true on trusted networks.");
+                }
+
                 _logger.LogInformation("Retrying in 5 seconds...");
                 Thread.Sleep(5000);
             }
         }
+    }
+
+    private static bool ShouldAllowInsecureSsl()
+    {
+        string? allowInsecureSsl = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ALLOW_INSECURE_SSL");
+
+        return bool.TryParse(allowInsecureSsl, out bool allow) && allow;
     }
 
     private async Task SendStatus()
