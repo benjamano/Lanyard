@@ -136,7 +136,10 @@ builder.Services.AddScoped(sp =>
 });
 
 // Add FluentUI Components
-builder.Services.AddFluentUIComponents();
+builder.Services.AddFluentUIComponents(configuration =>
+{
+    configuration.Toast.Position = ToastPosition.TopEnd;
+});
 
 builder.Services.AddSignalR();
 

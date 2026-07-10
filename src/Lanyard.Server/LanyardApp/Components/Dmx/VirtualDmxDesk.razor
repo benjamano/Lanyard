@@ -10,7 +10,7 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
                         Style="overflow-x: auto; scrollbar-width: auto;"
-                        Class="p-4 pt-0">
+                        Class="p-4 ps-0 pt-0">
             @foreach (KeyValuePair<int, int> channel in channelValues)
             {
                 <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1">
