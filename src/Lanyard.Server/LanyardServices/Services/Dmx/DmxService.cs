@@ -54,6 +54,18 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
 
     public async Task UpdateChannelValue(Guid clientId, int channelAddress, byte value)
     {
+        // Keep the server-side universe in sync and notify subscribers (e.g. the
+        // virtual desk) — previously only SetChannelValue (ingest) did this, so
+        // server-originated changes were invisible to the UI and lost on reload.
+        lock (_lock)
+        {
+            ClientDmxState state = GetOrCreateState(clientId);
+
+            state.ChannelValues[channelAddress] = value;
+        }
+
+        OnChannelValueChanged?.Invoke(clientId, channelAddress, value);
+
         using IServiceScope scope = _scopeFactory.CreateScope();
         IClientService _clientService = scope.ServiceProvider.GetRequiredService<IClientService>();
 
@@ -73,9 +85,10 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
             ClientDmxState state = GetOrCreateState(clientId);
 
             state.ChannelValues[channelAddress] = value;
-
-            OnChannelValueChanged?.Invoke(clientId, channelAddress, value);
         }
+
+        // Raised outside the lock so subscribers can't deadlock against other channel writes.
+        OnChannelValueChanged?.Invoke(clientId, channelAddress, value);
     }
 
     private async Task ResetClientChannelValues(Guid clientId)

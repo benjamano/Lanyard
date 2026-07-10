@@ -13,15 +13,6 @@
                 Home
             </FluentNavItem>
 
-            @if (_canControlMusic)
-            {
-                <FluentNavItem Href="/music"
-                                IconRest="@(new Icons.Regular.Size20.MusicNote2())"
-                                IconActive="@(new Icons.Filled.Size20.MusicNote2())">
-                    Music
-                </FluentNavItem>
-            }
-
             @if (_canClockIn)
             {
                 <FluentNavCategory Title="Rota"
@@ -57,7 +48,14 @@
                 <FluentNavCategory Title="Clients"
                                     IconRest="@(new Icons.Regular.Size20.Laptop())"
                                     IconActive="@(new Icons.Filled.Size20.Laptop())">
-                    <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())" IconActive="@(new Icons.Filled.Size20.LaptopSettings())">Clients</FluentNavItem>
+                    <FluentNavItem Href="/music">
+                        Music
+                    </FluentNavItem>
+                    <FluentNavItem Href="/manage/clients" 
+                                    IconRest="@(new Icons.Regular.Size20.LaptopSettings())" 
+                                    IconActive="@(new Icons.Filled.Size20.LaptopSettings())">
+                        Clients
+                    </FluentNavItem>
                     <FluentNavItem Href="/manage/projectionprograms" IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())" IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
                     <FluentNavItem Href="/manage/projectiontemplates" IconRest="@(new Icons.Regular.Size20.BookTemplate())" IconActive="@(new Icons.Filled.Size20.BookTemplate())">Templates</FluentNavItem>
                     <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())" IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>

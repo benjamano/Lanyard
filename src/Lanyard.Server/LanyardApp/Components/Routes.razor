@@ -1,18 +1,22 @@
 ﻿@using Lanyard.App.Components.Layout.Staff
 @using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.Extensions.Hosting
+
+@inject IWebHostEnvironment HostEnvironment
 
 <CascadingAuthenticationState>
     <LayoutView Layout="@typeof(MainLayout)">
         <Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="typeof(StaffNotFound)">
-            @* <Navigating>
-                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" VerticalGap="16px" Height="100%">
-                    <FluentSpinner />
-                    @* <FluentText>Routing you to the correct page...</FluentText>
-                </FluentStack>
-            </Navigating> *@
             <Found Context="routeData">
                 <RouteView RouteData="@routeData" />
             </Found>
         </Router>
     </LayoutView>
 </CascadingAuthenticationState>
+
+@code {
+    private void OnNavigateHandler(NavigationContext context)
+    {
+
+    }
+}

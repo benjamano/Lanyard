@@ -53,6 +53,7 @@ builder.Services.AddSingleton<MusicPlayerService>();
 builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
+builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
 
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();

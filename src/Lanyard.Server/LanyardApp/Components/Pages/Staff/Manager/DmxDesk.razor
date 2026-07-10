@@ -3,41 +3,181 @@
 @using Lanyard.App.Components.Clients
 @using Lanyard.App.Components.Dmx
 @using Microsoft.AspNetCore.Authorization
+@using Lanyard.Infrastructure.Models.Dmx
 
 @attribute [Authorize(Roles = "Admin, CanManageDmxSystems")]
 
+@inject IDmxSceneService _dmxSceneService
+
 <PageTitle>DMX Desk</PageTitle>
 
-<VirtualDmxDesk ClientId="@selectedClientId" IsEditModeEnabled="@isEditModeEnabled" IsBlindModeEnabled="@isBlindModeEnabled" />
+<FluentGrid Spacing="1">
+    <FluentGridItem Xs="@(isASceneOpen ? 12 : 12)" 
+                    Sm="@(isASceneOpen ? 12 : 12)" 
+                    Md="@(isASceneOpen ? 9 : 12)" 
+                    Lg="@(isASceneOpen ? 9 : 12)" 
+                    Xl="@(isASceneOpen ? 9 : 12)">
+        <FluentCard Appearance="@CardAppearance.Default" Padding="@Padding.Vertical2">
+            <FluentStack Orientation="@Orientation.Horizontal" 
+                            VerticalAlignment="@VerticalAlignment.Center" 
+                            HorizontalAlignment="@HorizontalAlignment.SpaceBetween">
+                <FluentStack Orientation="@Orientation.Horizontal" 
+                                VerticalAlignment="@VerticalAlignment.Center" 
+                                HorizontalAlignment="@HorizontalAlignment.Start"
+                                HorizontalGap="6">
+                    <FluentStack Width="auto">
+                        <FluentGrid>
+                            <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
+                                    <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
+                                            Appearance="ButtonAppearance.Primary" 
+                                            OnClick="ToggleEditMode">
+                                        @(isEditModeEnabled ? "Disable Edit Mode" : "Enable Edit Mode")
+                                    </FluentButton>
+                                </FluentGridItem>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
+                                    <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
+                                            Appearance="ButtonAppearance.Primary" 
+                                            OnClick="ToggleEditMode"
+                                            Tooltip="Toggle Edit Mode"/>
+                                </FluentGridItem>
+                        </FluentGrid>
+                    </FluentStack>
 
-<DmxSceneSelector ClientId="@selectedClientId" />
-
-<FluentCard Class="mt-2">
-    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
-        <FluentStack HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
-            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
-                <FluentText>Edit Mode</FluentText>
-                <FluentText>Blind Mode</FluentText>
+                    @if (isEditModeEnabled)
+                    {
+                        <FluentStack Width="auto">
+                            <FluentGrid>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
+                                        <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
+                                            Appearance="ButtonAppearance.Primary"
+                                            OnClick="ToggleBlindMode">
+                                            @(isBlindModeEnabled ? "Disable Blind Editing Mode" : "Enable Blind Editing Mode")
+                                        </FluentButton>
+                                    </FluentGridItem>
+                                    <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
+                                        <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
+                                            Appearance="ButtonAppearance.Primary"
+                                            OnClick="ToggleBlindMode"
+                                            Tooltip="Toggle Blind Mode"/>
+                                    </FluentGridItem>
+                            </FluentGrid>
+                        </FluentStack>
+                    }
+                </FluentStack>
+                <ClientSelector OnClientSelected="SetSelectedClient" />
             </FluentStack>
-            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Left" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12" Class="w-auto">
-                <FluentSwitch Value="@isEditModeEnabled" ValueChanged="@(value => isEditModeEnabled = value)"/>
-                <FluentSwitch Value="@isBlindModeEnabled" ValueChanged="@(value => isBlindModeEnabled = value)"/>
-            </FluentStack>
-        </FluentStack>
+        </FluentCard>
 
-        <ClientSelector OnClientSelected="SetSelectedClient" />
-    </FluentStack>
-</FluentCard>
+        <VirtualDmxDesk ClientId="@selectedClientId"
+                        IsEditModeEnabled="@isEditModeEnabled"
+                        IsBlindModeEnabled="@isBlindModeEnabled"
+                        EditingStep="@editingStep" />
+
+        <DmxSceneSelector ClientId="@selectedClientId" 
+                            IsEditModeEnabled="@isEditModeEnabled" 
+                            DeletedSceneId="@deletedSceneId"
+                            EditedSceneId="@editedScene?.Id"
+                            OnOpenScene="OpenScene" 
+                            CurrentlyOpenScene="selectedScene" />
+    </FluentGridItem>
+    <FluentGridItem Xs="@(isASceneOpen ? 12 : 0)" 
+                    Sm="@(isASceneOpen ? 12 : 0)" 
+                    Md="@(isASceneOpen ? 3 : 0)" 
+                    Lg="@(isASceneOpen ? 3 : 0)" 
+                    Xl="@(isASceneOpen ? 3 : 0)">
+        @if (isASceneOpen)
+        {
+            <DmxSceneEditor ClientId="@selectedClientId"
+                            OpenScene="@selectedScene"
+                            OnClose="OnCloseSceneEditor"
+                            OnSceneDeleted="OnSceneDeleted"
+                            OnEditingStepChanged="OnEditingStepChanged"
+                            IsEditModeEnabled="@isEditModeEnabled" 
+                            OnSceneEdited="OnSceneEdited"/>
+        }
+    </FluentGridItem>
+</FluentGrid>
 
 @code{
     private Guid? selectedClientId = null;
 
     private bool isEditModeEnabled = false;
 
-    private bool isBlindModeEnabled = false;
+    private bool isBlindModeEnabled = true;
+
+    private bool isASceneOpen = false;
+
+    private DmxScene? selectedScene = null;
+
+    private DmxSceneStep? editingStep = null;
+    private DmxScene? editedScene = null;
+
+    private Guid? deletedSceneId;
+
+    private int WhenOpenDmxSceneEditorWidth = 3;
+    private int WhenOpenEverythingElseWidth = 9;
+
+    private void ToggleEditMode()
+    {
+        isEditModeEnabled = !isEditModeEnabled;
+
+        // Step editing requires edit mode; leaving it drops the step the desk was bound to.
+        if (!isEditModeEnabled)
+        {
+            editingStep = null;
+        }
+    }
+
+    private async Task ToggleBlindMode()
+    {
+        isBlindModeEnabled = !isBlindModeEnabled;
+
+        // Turning blind editing OFF makes the operator the sole controller of the
+        // client's live DMX, so stop any running scenes that would fight them for channels.
+        if (!isBlindModeEnabled && selectedClientId != null)
+        {
+            await _dmxSceneService.StopAllScenesForClientAsync(selectedClientId.Value);
+        }
+    }
+
+    private void OnEditingStepChanged(DmxSceneStep? step)
+    {
+        editingStep = step;
+    }
+
+    private void OnSceneDeleted(DmxScene scene)
+    {
+        deletedSceneId = scene.Id;
+
+        if (selectedScene != null && selectedScene.Id == scene.Id)
+        {
+            isASceneOpen = false;
+            selectedScene = null;
+            editingStep = null;
+        }
+    }
 
     private void SetSelectedClient(Guid? clientId)
     {
         selectedClientId = clientId;
+    }
+
+    private void OpenScene(DmxScene scene)
+    {
+        selectedScene = scene;
+
+        isASceneOpen = true;
+    }
+
+    private void OnCloseSceneEditor()
+    {
+        isASceneOpen = false;
+        selectedScene = null;
+        editingStep = null;
+    }
+
+    private void OnSceneEdited(DmxScene scene)
+    {
+        editedScene = scene;
     }
 }

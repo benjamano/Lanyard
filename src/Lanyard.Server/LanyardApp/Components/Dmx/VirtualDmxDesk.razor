@@ -1,15 +1,19 @@
 @implements IDisposable
 
-@inject IDmxService _dmxService
+@using Lanyard.Infrastructure.Models.Dmx
 
-<FluentCard Height="auto" Class="p-0" Appearance="CardAppearance.Default">
+@inject IDmxService _dmxService
+@inject IDmxSceneService _dmxSceneService
+@inject IToastService _toastService
+
+<FluentCard Height="auto" Class="p-0 mt-2" Appearance="CardAppearance.Default">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
                         Style="overflow-x: auto; scrollbar-width: auto;"
                         Class="p-4 pt-0">
             @foreach (KeyValuePair<int, int> channel in channelValues)
             {
-                <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle">
+                <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1">
                     <FluentStack Orientation="Orientation.Vertical"
                                 HorizontalAlignment="HorizontalAlignment.Center"
                                 VerticalGap="2"
@@ -18,15 +22,17 @@
                                         Message="@channel.Value.ToString()"
                                         Orientation="Orientation.Vertical"
                                         Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                        TValue="int"
+                                        TValue="@int"
                                         Value="@(channel.Value)"
-                                        Min="0" Max="255"
+                                        Min="0" 
+                                        Max="255"
                                         ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
                                         Style="height: 300px; Width: 40px;"
+                                        ImmediateDelay="20"
                                         Class="d-flex flex-column gap-3">
                         </FluentSlider>
                         <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                        Appearance="ButtonAppearance.Primary"
+                                        Appearance="ButtonAppearance.Default"
                                         OnClick="() => UpdateChannelValue(0, channel.Key)"
                                         Disabled="@(ClientId == null || !IsEditModeEnabled)"
                                         Class="mt-2" />
@@ -47,17 +53,39 @@
     [Parameter]
     public bool IsBlindModeEnabled { get; set; } = false;
 
+    [Parameter]
+    public DmxSceneStep? EditingStep { get; set; }
+
     // Key: Channel number (1–512), Value: Channel value (0–255)
     private Dictionary<int, int> channelValues = new();
 
-    protected override async Task OnInitializedAsync()
+    // When a step is selected the desk is a per-step editor: values load from and
+    // save to that step's DmxSceneStepChannelValue rows, never the live universe
+    // (unless the operator drops blind mode to preview it live).
+    private bool IsEditingStep => EditingStep != null;
+
+    // Tracks what the desk is currently bound to so we only reload on a real change.
+    private Guid? _loadedStepId;
+    private Guid? _loadedClientId;
+    private bool _hasLoaded;
+    private bool? _previousBlind;
+
+    // Per-channel debounce so dragging a fader writes to the DB once it settles.
+    private readonly Dictionary<int, CancellationTokenSource> _saveDebounce = new();
+
+    protected override Task OnInitializedAsync()
     {
         _dmxService.OnChannelValueChanged += HandleChannelValueChanged;
+
+        return Task.CompletedTask;
     }
-    
+
     private void HandleChannelValueChanged(Guid clientId, int channel, byte value)
     {
-        if (IsBlindModeEnabled == true)
+        // Blind or edit mode: the desk shows the operator's own buffer, so ignore
+        // ingested live events (physical faders / a running scene) that would
+        // otherwise overwrite what they are editing.
+        if (IsBlindModeEnabled == true || IsEditModeEnabled == true)
         {
             return;
         }
@@ -70,31 +98,61 @@
         }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnParametersSetAsync()
     {
-        if (firstRender)
+        bool bindingChanged = !_hasLoaded
+            || _loadedClientId != ClientId
+            || _loadedStepId != EditingStep?.Id;
+
+        if (bindingChanged)
         {
             await LoadChannelValues();
         }
-    }
 
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadChannelValues();
+        // Operator dropped blind mode while editing a step: push the whole step to
+        // the client so the fixtures snap to it and further edits preview live.
+        if (_previousBlind == true && !IsBlindModeEnabled && IsEditingStep && ClientId != null)
+        {
+            await PushBufferLive();
+        }
+
+        _previousBlind = IsBlindModeEnabled;
     }
 
     private async Task LoadChannelValues()
     {
-        StateHasChanged();
-
-        Result<IEnumerable<Infrastructure.Models.Dmx.DmxChannel>>? channelValuesResult = await _dmxService.GetDmxChannelsAsync(ClientId ?? Guid.Empty);
-
-        if (channelValuesResult.IsSuccess && channelValuesResult.Data != null)
+        if (IsEditingStep)
         {
-            channelValues = channelValuesResult.Data.ToDictionary(kvp => kvp.Address, kvp => (int)kvp.Value);
+            channelValues = Enumerable.Range(1, 512).ToDictionary(i => i, _ => 0);
+
+            foreach (DmxSceneStepChannelValue channelValue in EditingStep!.ChannelValues)
+            {
+                channelValues[channelValue.ChannelNumber] = channelValue.Value;
+            }
+        }
+        else
+        {
+            Result<IEnumerable<Infrastructure.Models.Dmx.DmxChannel>>? channelValuesResult = await _dmxService.GetDmxChannelsAsync(ClientId ?? Guid.Empty);
+
+            if (channelValuesResult.IsSuccess && channelValuesResult.Data != null)
+            {
+                channelValues = channelValuesResult.Data.ToDictionary(kvp => kvp.Address, kvp => (int)kvp.Value);
+            }
         }
 
+        _loadedStepId = EditingStep?.Id;
+        _loadedClientId = ClientId;
+        _hasLoaded = true;
+
         StateHasChanged();
+    }
+
+    private async Task PushBufferLive()
+    {
+        foreach (KeyValuePair<int, int> channel in channelValues)
+        {
+            await _dmxService.UpdateChannelValue(ClientId!.Value, channel.Key, (byte)channel.Value);
+        }
     }
 
     public void CreateChannels()
@@ -105,18 +163,97 @@
         StateHasChanged();
     }
 
-    private void UpdateChannelValue(int newValue, int channelNumber)
+    private async Task UpdateChannelValue(int newValue, int channelNumber)
     {
-        if (ClientId != null)
-        {
-            channelValues[channelNumber] = newValue;
+        channelValues[channelNumber] = newValue;
 
-            _dmxService.UpdateChannelValue(ClientId.Value, channelNumber, (byte)(255 - newValue));
+        if (ClientId == null)
+        {
+            return;
         }
+
+        if (IsEditingStep)
+        {
+            // Keep the in-memory step in sync so re-selecting it shows the edit
+            // without a DB round trip, then persist (debounced).
+            SyncStepChannelValue(channelNumber, (byte)newValue);
+            DebounceSaveStepChannelValue(channelNumber, (byte)newValue);
+
+            // Blind OFF = deliberate live preview on the client's DMX.
+            if (!IsBlindModeEnabled)
+            {
+                await _dmxService.UpdateChannelValue(ClientId.Value, channelNumber, (byte)newValue);
+            }
+        }
+        else if (IsBlindModeEnabled == false && IsEditModeEnabled == true)
+        {
+            await _dmxService.UpdateChannelValue(ClientId.Value, channelNumber, (byte)newValue);
+        }
+    }
+
+    private void SyncStepChannelValue(int channelNumber, byte value)
+    {
+        DmxSceneStepChannelValue? existing = EditingStep!.ChannelValues.FirstOrDefault(c => c.ChannelNumber == channelNumber);
+
+        if (existing != null)
+        {
+            existing.Value = value;
+        }
+        else
+        {
+            EditingStep.ChannelValues.Add(new DmxSceneStepChannelValue
+            {
+                SceneStepId = EditingStep.Id,
+                ChannelNumber = channelNumber,
+                Value = value,
+                CreateByUserId = string.Empty
+            });
+        }
+    }
+
+    private void DebounceSaveStepChannelValue(int channelNumber, byte value)
+    {
+        if (_saveDebounce.TryGetValue(channelNumber, out CancellationTokenSource? existing))
+        {
+            existing.Cancel();
+            existing.Dispose();
+        }
+
+        CancellationTokenSource cts = new();
+        _saveDebounce[channelNumber] = cts;
+
+        Guid stepId = EditingStep!.Id;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, cts.Token);
+
+                Result<bool> result = await _dmxSceneService.SaveSceneStepChannelValueAsync(stepId, channelNumber, value);
+
+                if (!result.IsSuccess)
+                {
+                    _toastService.ShowError($"Failed to save channel {channelNumber}: {result.Error}");
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                // Superseded by a newer edit to this channel; ignore.
+            }
+        });
     }
 
     public void Dispose()
     {
         _dmxService.OnChannelValueChanged -= HandleChannelValueChanged;
+
+        foreach (CancellationTokenSource cts in _saveDebounce.Values)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+
+        _saveDebounce.Clear();
     }
 }
