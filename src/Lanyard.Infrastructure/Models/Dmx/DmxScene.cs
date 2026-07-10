@@ -10,4 +10,6 @@ public class DmxScene : CreateAndUpdateBase
     public string Name { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
+
+    public virtual ICollection<DmxSceneStep> Steps { get; set; } = [];
 }

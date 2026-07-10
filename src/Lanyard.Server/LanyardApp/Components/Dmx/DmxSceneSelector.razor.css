@@ -1,0 +1,16 @@
+::deep .scene-running {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+::deep .scene-open {
+    border: 1px solid var(--colorNeutralForeground1);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        background-color: var(--colorNeutralBackground2);
+    }
+    50% {
+        background-color: var(--accent-fill-rest);
+    }
+}

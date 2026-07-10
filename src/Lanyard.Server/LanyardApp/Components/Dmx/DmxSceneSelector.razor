@@ -1,73 +1,123 @@
 @using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
-@implements IDisposable
 
 @inject IDmxSceneService _dmxSceneService
 @inject IDialogService _dialogService
 @inject IToastService _toastService
 
-<FluentCard Class="mt-2">
-    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
-        <FluentText Size="TextSize.Size600"
-                    Color="Color.Default">
-            Scenes
-        </FluentText>
-        <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
-                      Appearance="ButtonAppearance.Primary"
-                      Disabled="@(ClientId == null)"
-                      OnClick="CreateNewScene"
-                      Class="ms-2"> Add Scene
-        </FluentButton>
-    </FluentStack>
-    <FluentDivider Class="my-3" />
-    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Left" Style="min-height: 50px;">
-        @if (scenes == null || !scenes.Any())
-        {
-            <FluentText Size="TextSize.Size400">No scenes found for this client.</FluentText>
-        }
-        else
-        {
-            @foreach (DmxScene scene in scenes)
+<div>
+    <FluentCard Class="mt-2" Height="100%">
+        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+            <FluentText Size="TextSize.Size600"
+                        Color="Color.Default">
+                Scenes
+            </FluentText>
+            <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
+                        Appearance="ButtonAppearance.Primary"
+                        Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                        OnClick="CreateNewScene"
+                        Class="ms-2"> 
+                        Add Scene
+            </FluentButton>
+        </FluentStack>
+        <FluentDivider Class="my-3" />
+        <FluentStack Orientation="Orientation.Horizontal" 
+                        HorizontalAlignment="HorizontalAlignment.Left" 
+                        Wrap="true"
+                        Style="min-height: 50px;">
+            @if (ClientId == null)
             {
-                bool isRunning = runningSceneIds.Contains(scene.Id);
-
-                Icon sceneIcon = isRunning ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play();
-
-                <FluentCard Height="auto" Appearance="CardAppearance.Subtle" Class="mx-1 w-auto">
-                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center">
-                        <FluentText>Scene</FluentText>
-                        <FluentButton Appearance="ButtonAppearance.Default" IconStart="sceneIcon" Class="mt-2" Style="width: 100%;" />
-                    </FluentStack>
-                </FluentCard>
+                <FluentText Size="TextSize.Size400">Select a client to view scenes.</FluentText>
             }
-        }
-    </FluentStack>
-</FluentCard>
+            else if (scenes == null)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                    Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
+                </FluentStack>
+            }
+            else if (!scenes.Any())
+            {
+                <FluentText Size="TextSize.Size400">No scenes found for this client.</FluentText>
+            }
+            else
+            {
+                @foreach (DmxScene scene in scenes)
+                {
+                    bool isRunning = runningSceneIds.Contains(scene.Id);
+                    int progressValue = 0;
+
+                    <FluentButton Appearance="@ButtonAppearance.Default"
+                                    Padding="@Padding.All0"
+                                    Disabled="@(!IsEditModeEnabled)"
+                                    Class="@($"{(isRunning ? "scene-running" : "")} {(CurrentlyOpenScene != null && CurrentlyOpenScene.Id == scene.Id ? "scene-open" : "")}")"
+                                    Style="width: 120px; height: 50px;"
+                                    OnClick="@(() => OnOpenScene.InvokeAsync(scene))">
+                        <FluentStack Orientation="Orientation.Vertical" 
+                                        HorizontalAlignment="HorizontalAlignment.SpaceBetween" 
+                                        VerticalAlignment="VerticalAlignment.Center"
+                                        Padding="@Padding.All0">
+                            <FluentText Padding="@Padding.All2">@scene.Name</FluentText>
+
+                            @if (isRunning)
+                            {
+                                <FluentProgressBar Value="@progressValue"
+                                                    Width="100%" />
+                            }
+                        </FluentStack>
+                    </FluentButton>
+                }
+            }
+        </FluentStack>
+    </FluentCard>
+</div>
 
 @code {
     [Parameter]
     public Guid? ClientId { get; set; }
 
+    [Parameter]
+    public bool IsEditModeEnabled { get; set; } = false;
+
+    [Parameter]
+    public Guid? DeletedSceneId { get; set; }
+
+    [Parameter]
+    public EventCallback<DmxScene> OnOpenScene { get; set; }
+
+    [Parameter]
+    public DmxScene? CurrentlyOpenScene { get; set; }
+
     private List<DmxScene> scenes = [];
 
     private List<Guid> runningSceneIds = [];
 
-    protected override void OnInitialized()
-    {
-        _dmxSceneService.OnSceneStarted += HandleSceneStarted;
-        _dmxSceneService.OnSceneStopped += HandleSceneStopped;
-    }
+    private Guid? previousClientId;
+
+    private Guid? previousDeletedSceneId;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (ClientId != null)
+        if (ClientId != previousClientId)
         {
-            await LoadScenes(ClientId.Value);
+            previousClientId = ClientId;
+
+            if (ClientId != null)
+            {
+                await LoadScenes(ClientId.Value);
+            }
+            else
+            {
+                scenes = [];
+                runningSceneIds = [];
+            }
         }
-        else
+
+        if (DeletedSceneId != null && DeletedSceneId != previousDeletedSceneId)
         {
-            scenes = [];
-            runningSceneIds = [];
+            previousDeletedSceneId = DeletedSceneId;
+
+            scenes.RemoveAll(scene => scene.Id == DeletedSceneId.Value);
+            runningSceneIds.Remove(DeletedSceneId.Value);
         }
     }
 
@@ -133,11 +183,5 @@
                 _toastService.ShowError($"Failed to create scene: {createResult.Error}");
             }
         }
-    }
-
-    public void Dispose()
-    {
-        _dmxSceneService.OnSceneStarted -= HandleSceneStarted;
-        _dmxSceneService.OnSceneStopped -= HandleSceneStopped;
     }
 }

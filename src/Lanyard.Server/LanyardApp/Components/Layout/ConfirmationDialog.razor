@@ -1,0 +1,40 @@
+<FluentDialogBody>
+    <ChildContent>
+        <FluentText>
+            @Message
+        </FluentText>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="@ConfirmAppearance" OnClick="@ConfirmAsync">@ConfirmText</FluentButton>
+            <FluentButton OnClick="@CancelAsync">@CancelText</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public string Message { get; set; } = "Are you sure you want to continue?";
+
+    [Parameter]
+    public string ConfirmText { get; set; } = "Confirm";
+
+    [Parameter]
+    public string CancelText { get; set; } = "Cancel";
+
+    [Parameter]
+    public ButtonAppearance ConfirmAppearance { get; set; } = ButtonAppearance.Primary;
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private async Task ConfirmAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

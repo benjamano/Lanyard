@@ -52,6 +52,8 @@
                 
                 await OnClientSelected.InvokeAsync(selectedClientId);
             }
+
+            _toastService.ShowSuccess($"Successfully loaded {clients.Count()} connected clients.");
         }
         else
         {

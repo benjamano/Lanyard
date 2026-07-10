@@ -3,8 +3,8 @@
 <FluentDialogBody>
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size24.WindowApps())" />
-            <FluentText Typo="Typography.PaneHeader">Create new DMX scene</FluentText>
+            <FluentIcon Value="new Icons.Regular.Size24.WindowApps()" Margin="@Margin.End2"/>
+            <FluentText Size="@TextSize.Size500">Create new DMX scene</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
@@ -14,9 +14,7 @@
                              Value="@Content.SceneName"
                              ValueChanged="@(value => Content.SceneName = value)"
                              Style="width: 100%;" />
-            <div style="color: var(--error);">
-                <FluentValidationSummary />
-            </div>
+            <FluentValidationSummary />
         </EditForm>
     </ChildContent>
     <ActionTemplate>
