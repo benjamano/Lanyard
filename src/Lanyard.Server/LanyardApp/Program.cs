@@ -139,6 +139,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddFluentUIComponents(configuration =>
 {
     configuration.Toast.Position = ToastPosition.TopEnd;
+    configuration.Toast.Timeout = 5000;
 });
 
 builder.Services.AddSignalR();
@@ -147,7 +148,7 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("ip-fixed", httpContext =>
     {
-        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
