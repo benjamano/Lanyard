@@ -3,9 +3,10 @@
 @using Microsoft.Extensions.Hosting
 
 @inject IWebHostEnvironment HostEnvironment
+@inject NavigationManager Navigation
 
 <CascadingAuthenticationState>
-    <LayoutView Layout="@typeof(MainLayout)">
+    <LayoutView Layout="@GetLayout()">
         <Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="typeof(StaffNotFound)">
             <Found Context="routeData">
                 <RouteView RouteData="@routeData" />
@@ -15,6 +16,11 @@
 </CascadingAuthenticationState>
 
 @code {
+    private Type GetLayout()
+    {
+        return Navigation.Uri.Contains("/kiosk") ? typeof(EmptyLayout) : typeof(MainLayout);
+    }
+
     private void OnNavigateHandler(NavigationContext context)
     {
 

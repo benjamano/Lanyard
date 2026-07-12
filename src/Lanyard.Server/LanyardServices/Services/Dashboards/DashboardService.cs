@@ -262,6 +262,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingLaserGameStatus.ShowTimeLeft = incomingLaserGameStatus.ShowTimeLeft;
                     existingLaserGameStatus.ClientId = incomingLaserGameStatus.ClientId;
                     break;
+                case ButtonWidget existingButton when widget is ButtonWidget incomingButton:
+                    existingButton.Label = incomingButton.Label;
+                    existingButton.Appearance = incomingButton.Appearance;
+                    existingButton.ActionType = incomingButton.ActionType;
+                    existingButton.ClientId = incomingButton.ClientId;
+                    existingButton.ProjectionProgramId = incomingButton.ProjectionProgramId;
+                    existingButton.DisplayIndex = incomingButton.DisplayIndex;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -305,6 +313,15 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             ClientZoneLaserScoreboardWidget scoreboardWidget => new ClientZoneLaserScoreboardWidget
             {
                 ClientId = scoreboardWidget.ClientId
+            },
+            ButtonWidget buttonWidget => new ButtonWidget
+            {
+                Label = buttonWidget.Label,
+                Appearance = buttonWidget.Appearance,
+                ActionType = buttonWidget.ActionType,
+                ClientId = buttonWidget.ClientId,
+                ProjectionProgramId = buttonWidget.ProjectionProgramId,
+                DisplayIndex = buttonWidget.DisplayIndex
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -352,6 +369,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is ClientZoneLaserScoreboardWidget targetScoreboard && source is ClientZoneLaserScoreboardWidget sourceScoreboard)
         {
             targetScoreboard.ClientId = sourceScoreboard.ClientId;
+        }
+
+        if (target is ButtonWidget targetButton && source is ButtonWidget sourceButton)
+        {
+            targetButton.Label = sourceButton.Label;
+            targetButton.Appearance = sourceButton.Appearance;
+            targetButton.ActionType = sourceButton.ActionType;
+            targetButton.ClientId = sourceButton.ClientId;
+            targetButton.ProjectionProgramId = sourceButton.ProjectionProgramId;
+            targetButton.DisplayIndex = sourceButton.DisplayIndex;
         }
     }
 }

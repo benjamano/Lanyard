@@ -24,15 +24,15 @@
     </FluentStack>
 </div>
 
-<FluentDialog Hidden="@(!isPickerOpen)" OnDialogResult="ClosePicker">
-    <FluentDialogHeader ShowDismiss="true">
-        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-            <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
-            <FluentText Typo="Typography.PaneHeader">Select File</FluentText>
-        </FluentStack>
-    </FluentDialogHeader>
-
+<FluentDialog @ref="_pickerDialog" Modal="true">
     <FluentDialogBody>
+        <TitleTemplate>
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
+                <FluentText Typo="Typography.PaneHeader">Select File</FluentText>
+            </FluentStack>
+        </TitleTemplate>
+        <ChildContent>
         @if (isLoading)
         {
             <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
@@ -105,11 +105,11 @@
                 </FluentGrid>
             </div>
         }
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Default" OnClick="ClosePickerAsync">Close</FluentButton>
+        </ActionTemplate>
     </FluentDialogBody>
-
-    <FluentDialogFooter>
-        <FluentButton Appearance="ButtonAppearance.Default" OnClick="ClosePicker">Close</FluentButton>
-    </FluentDialogFooter>
 </FluentDialog>
 
 @code {
@@ -129,7 +129,7 @@
     private List<Folder> folders = [];
     private string? selectedFileId;
     private string selectedFileDisplayName = "No file selected";
-    private bool isPickerOpen;
+    private FluentDialog? _pickerDialog;
     private bool isLoading;
     private Guid? currentFolderId;
 
@@ -163,13 +163,13 @@
 
     private async Task OpenPickerAsync()
     {
-        isPickerOpen = true;
+        await _pickerDialog!.ShowAsync();
         await LoadFolderContentsAsync(currentFolderId);
     }
 
-    private void ClosePicker()
+    private async Task ClosePickerAsync()
     {
-        isPickerOpen = false;
+        await _pickerDialog!.HideAsync();
     }
 
     private async Task LoadFolderContentsAsync(Guid? folderId)
@@ -232,10 +232,15 @@
 
     private async Task SelectFileAsync(FileMetadata file)
     {
-        selectedFileId = file.Id.ToString();
+        string newFileId = file.Id.ToString();
+
+        selectedFileId = newFileId;
         selectedFileDisplayName = file.FileName;
-        isPickerOpen = false;
-        await OnFileSelected.InvokeAsync(selectedFileId);
+
+        // Notify the parent before any await: a render with the old SelectedFileId can
+        // interleave at the first await and OnParametersSetAsync would clobber the selection.
+        await OnFileSelected.InvokeAsync(newFileId);
+        await _pickerDialog!.HideAsync();
     }
 
     private async Task ClearSelectionAsync()

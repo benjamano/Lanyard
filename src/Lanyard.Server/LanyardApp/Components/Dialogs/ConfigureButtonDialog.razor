@@ -1,0 +1,217 @@
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.Infrastructure.Models
+
+@inject IClientService ClientService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Settings())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Button
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentTextInput @bind-Value="Widget.Label"
+                             Label="Label"
+                             Placeholder="Button label"
+                             Style="width: 100%;" />
+
+            <FluentSelect TOption="ButtonAppearance"
+                          TValue="ButtonAppearance"
+                          @bind-Value="Widget.Appearance"
+                          Label="Appearance"
+                          Style="width: 100%;">
+                <FluentOption Value="@ButtonAppearance.Default">Default</FluentOption>
+                <FluentOption Value="@ButtonAppearance.Primary">Primary</FluentOption>
+                <FluentOption Value="@ButtonAppearance.Outline">Outline</FluentOption>
+                <FluentOption Value="@ButtonAppearance.Subtle">Subtle</FluentOption>
+                <FluentOption Value="@ButtonAppearance.Transparent">Transparent</FluentOption>
+            </FluentSelect>
+
+            <FluentSelect TOption="string"
+                          TValue="string"
+                          Label="Action"
+                          Value="@_actionValue"
+                          ValueChanged="OnActionChanged"
+                          Style="width: 100%;">
+                <FluentOption Value="@(((int)ButtonActionType.Unknown).ToString())">No Action</FluentOption>
+                <FluentOption Value="@(((int)ButtonActionType.TriggerProjectionProgram).ToString())">Trigger Projection Program</FluentOption>
+            </FluentSelect>
+
+            @if (Widget.ActionType == ButtonActionType.TriggerProjectionProgram)
+            {
+                <FluentSelect TOption="Client"
+                              TValue="string"
+                              Items="@Clients"
+                              OptionText="@(c => c?.Name ?? string.Empty)"
+                              OptionValue="@(c => c?.Id.ToString())"
+                              Label="Client"
+                              Placeholder="Select a client..."
+                              Value="@_clientValue"
+                              ValueChanged="OnClientChanged"
+                              Style="width: 100%;" />
+
+                <FluentSelect TOption="ProjectionProgram"
+                              TValue="string"
+                              Items="@Programs"
+                              OptionText="@(p => p?.Name ?? string.Empty)"
+                              OptionValue="@(p => p?.Id.ToString())"
+                              Label="Projection Program"
+                              Placeholder="Select a projection program..."
+                              Value="@_programValue"
+                              ValueChanged="OnProgramChanged"
+                              Style="width: 100%;" />
+
+                @if (Widget.ClientId is not null)
+                {
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="Screen"
+                                  Value="@_screenValue"
+                                  ValueChanged="OnScreenChanged"
+                                  Style="width: 100%;">
+                        <FluentOption TValue="string" Value="default">Client default</FluentOption>
+                        @foreach (ClientAvailableScreen screen in _screens)
+                        {
+                            <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                        }
+                    </FluentSelect>
+                }
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required ButtonWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Client> Clients { get; set; }
+
+    [Parameter]
+    public required IEnumerable<ProjectionProgram> Programs { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string _actionValue = string.Empty;
+    private string _clientValue = string.Empty;
+    private string _programValue = string.Empty;
+    private string _screenValue = string.Empty;
+
+    private List<ClientAvailableScreen> _screens = [];
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private string? _originalLabel;
+    private ButtonAppearance _originalAppearance;
+    private ButtonActionType? _originalActionType;
+    private Guid? _originalClientId;
+    private Guid? _originalProjectionProgramId;
+    private int? _originalDisplayIndex;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _originalLabel = Widget.Label;
+        _originalAppearance = Widget.Appearance;
+        _originalActionType = Widget.ActionType;
+        _originalClientId = Widget.ClientId;
+        _originalProjectionProgramId = Widget.ProjectionProgramId;
+        _originalDisplayIndex = Widget.DisplayIndex;
+
+        _actionValue = ((int)(Widget.ActionType ?? ButtonActionType.Unknown)).ToString();
+        _clientValue = Widget.ClientId?.ToString() ?? string.Empty;
+        _programValue = Widget.ProjectionProgramId?.ToString() ?? string.Empty;
+        _screenValue = Widget.DisplayIndex?.ToString() ?? "default";
+
+        if (Widget.ClientId is Guid clientId)
+        {
+            await LoadScreensAsync(clientId);
+        }
+    }
+
+    private void OnActionChanged(string? newValue)
+    {
+        if (int.TryParse(newValue, out int parsed))
+        {
+            Widget.ActionType = (ButtonActionType)parsed;
+        }
+
+        _actionValue = newValue ?? string.Empty;
+    }
+
+    private async Task OnClientChanged(string? newValue)
+    {
+        Widget.ClientId = Guid.TryParse(newValue, out Guid clientId) ? clientId : null;
+        _clientValue = newValue ?? string.Empty;
+
+        // Display indices are per-client, so reset the screen choice when the client changes.
+        Widget.DisplayIndex = null;
+        _screenValue = "default";
+
+        if (Widget.ClientId is Guid id)
+        {
+            await LoadScreensAsync(id);
+        }
+        else
+        {
+            _screens = [];
+        }
+    }
+
+    private void OnProgramChanged(string? newValue)
+    {
+        Widget.ProjectionProgramId = Guid.TryParse(newValue, out Guid programId) ? programId : null;
+        _programValue = newValue ?? string.Empty;
+    }
+
+    private void OnScreenChanged(string? newValue)
+    {
+        Widget.DisplayIndex = int.TryParse(newValue, out int index) ? index : null;
+        _screenValue = newValue ?? string.Empty;
+    }
+
+    private async Task LoadScreensAsync(Guid clientId)
+    {
+        Result<IEnumerable<ClientAvailableScreen>> result = await ClientService.GetClientAvailableScreensAsync(clientId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            _screens = result.Data
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Index)
+                .ToList();
+        }
+        else
+        {
+            _screens = [];
+            _toastService.ShowError($"Failed to load screens, {result.Error}");
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.Label = _originalLabel;
+        Widget.Appearance = _originalAppearance;
+        Widget.ActionType = _originalActionType;
+        Widget.ClientId = _originalClientId;
+        Widget.ProjectionProgramId = _originalProjectionProgramId;
+        Widget.DisplayIndex = _originalDisplayIndex;
+
+        await Dialog.CancelAsync();
+    }
+}

@@ -26,7 +26,7 @@ public interface IClientService
     Task<Result<bool>> DeleteClientProjectionSettingsAsync(Guid clientProjectionSettingsId);
     Result<IEnumerable<ClientProjectionSettingsDTO>> ConvertIntoClientProjectionSettingsDTO(IEnumerable<ClientProjectionSettings> settings);
     Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId);
-    Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId);
+    Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null);
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);

@@ -83,7 +83,22 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<DigitalClockWidget>(WidgetType.DigitalClock)
                 .HasValue<ClientZoneLaserGameStatusWidget>(WidgetType.ClientZoneLaserGameStatus)
                 .HasValue<ClientZoneLaserScoreboardWidget>(WidgetType.ClientZoneLaserScoreboard)
+                .HasValue<ButtonWidget>(WidgetType.Button)
                 .HasValue<TextAreaWidget>(WidgetType.TextArea);
+
+            // Three sibling widget types share a ClientId property in the TPH table; pin the
+            // column names so EF's automatic uniquification cannot rename existing columns.
+            modelBuilder.Entity<ClientZoneLaserScoreboardWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("ClientId");
+
+            modelBuilder.Entity<ClientZoneLaserGameStatusWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("ClientZoneLaserGameStatusWidget_ClientId");
+
+            modelBuilder.Entity<ButtonWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("ButtonWidget_ClientId");
         }
     }
 }

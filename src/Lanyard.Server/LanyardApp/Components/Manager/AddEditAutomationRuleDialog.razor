@@ -12,6 +12,7 @@
 @inject IClientService _clientService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
 @inject IPlaylistService _playlistService
+@inject IProjectionProgramService _projectionProgramService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
 
 <FluentDialogBody>
@@ -58,6 +59,17 @@
                     int index = i;
                     <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
                         <div>
+                            <FluentSelect TOption="string"
+                                TValue="string"
+                                Label="Action Type"
+                                Value="@_actionRows[index].ActionType"
+                                ValueChanged="@((string? type) => OnRowActionTypeChangedAsync(index, type))"
+                                Style="width: 180px;">
+                                <FluentOption Value="@AutomationActionTypes.MusicControl">Music Control</FluentOption>
+                                <FluentOption Value="@AutomationActionTypes.StartProjectionProgram">Start Projection Program</FluentOption>
+                            </FluentSelect>
+                        </div>
+                        <div>
                             <FluentSelect TOption="ClientConnectedDTO"
                                 TValue="string"
                                 Label="Target Client"
@@ -65,32 +77,64 @@
                                 OptionText="@(c => c?.Name ?? string.Empty)"
                                 OptionValue="@(c => c?.Id.ToString())"
                                 Value="@_actionRows[index].TargetClientIdString"
-                                ValueChanged="@((string? id) => _actionRows[index].TargetClientIdString = id ?? string.Empty)"
+                                ValueChanged="@((string? id) => OnRowClientChangedAsync(index, id))"
                                 Style="flex: 1;" />
                         </div>
-                        <div>
-                            <FluentSelect TOption="string"
-                                TValue="string"
-                                Label="Operation"
-                                Value="@_actionRows[index].Operation"
-                                ValueChanged="@((string? op) => _actionRows[index].Operation = op ?? "Play")"
-                                Style="width: 120px;">
-                                <FluentOption Value="@("Play")">Play</FluentOption>
-                                <FluentOption Value="@("Pause")">Pause</FluentOption>
-                            </FluentSelect>
-                        </div>
-                        <div>
-                            <FluentSelect TOption="Playlist"
-                                TValue="string"
-                                Label="Playlist"
-                                Placeholder="Select Playlist"
-                                Items="@_playlists"
-                                OptionText="@(p => p?.Name ?? string.Empty)"
-                                OptionValue="@(p => p?.Id.ToString())"
-                                Value="@(_actionRows[index].PlaylistId?.ToString() ?? string.Empty)"
-                                ValueChanged="@((string? id) => _actionRows[index].PlaylistId = Guid.TryParse(id, out Guid playlistId) ? playlistId : (Guid?)null)"
-                                Style="flex: 1;" />
-                        </div>
+                        @if (_actionRows[index].ActionType == AutomationActionTypes.StartProjectionProgram)
+                        {
+                            <div>
+                                <FluentSelect TOption="ProjectionProgram"
+                                    TValue="string"
+                                    Label="Projection Program"
+                                    Placeholder="Select Program"
+                                    Items="@_programs"
+                                    OptionText="@(p => p?.Name ?? string.Empty)"
+                                    OptionValue="@(p => p?.Id.ToString())"
+                                    Value="@_actionRows[index].ProjectionProgramIdString"
+                                    ValueChanged="@((string? id) => _actionRows[index].ProjectionProgramIdString = id ?? string.Empty)"
+                                    Style="flex: 1;" />
+                            </div>
+                            <div>
+                                <FluentSelect TOption="string"
+                                    TValue="string"
+                                    Label="Screen"
+                                    Value="@_actionRows[index].DisplayIndexString"
+                                    ValueChanged="@((string? screen) => _actionRows[index].DisplayIndexString = screen ?? "default")"
+                                    Style="width: 160px;">
+                                    <FluentOption TValue="string" Value="default">Client default</FluentOption>
+                                    @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
+                                    {
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                    }
+                                </FluentSelect>
+                            </div>
+                        }
+                        else
+                        {
+                            <div>
+                                <FluentSelect TOption="string"
+                                    TValue="string"
+                                    Label="Operation"
+                                    Value="@_actionRows[index].Operation"
+                                    ValueChanged="@((string? op) => _actionRows[index].Operation = op ?? "Play")"
+                                    Style="width: 120px;">
+                                    <FluentOption Value="@("Play")">Play</FluentOption>
+                                    <FluentOption Value="@("Pause")">Pause</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            <div>
+                                <FluentSelect TOption="Playlist"
+                                    TValue="string"
+                                    Label="Playlist"
+                                    Placeholder="Select Playlist"
+                                    Items="@_playlists"
+                                    OptionText="@(p => p?.Name ?? string.Empty)"
+                                    OptionValue="@(p => p?.Id.ToString())"
+                                    Value="@(_actionRows[index].PlaylistId?.ToString() ?? string.Empty)"
+                                    ValueChanged="@((string? id) => _actionRows[index].PlaylistId = Guid.TryParse(id, out Guid playlistId) ? playlistId : (Guid?)null)"
+                                    Style="flex: 1;" />
+                            </div>
+                        }
                         <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
                             Disabled="@(_actionRows.Count <= 1)"
                             OnClick="@(() => RemoveActionRow(index))" />
@@ -127,7 +171,7 @@
             <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
             <FluentButton Appearance="ButtonAppearance.Primary"
                           Loading="@_isSaving"
-                          Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => string.IsNullOrEmpty(r.TargetClientIdString)))"
+                          Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => string.IsNullOrEmpty(r.TargetClientIdString)) || _actionRows.Any(r => r.ActionType == AutomationActionTypes.StartProjectionProgram && string.IsNullOrEmpty(r.ProjectionProgramIdString)))"
                           OnClick="SaveRuleAsync">
                 Save Rule
             </FluentButton>
@@ -146,9 +190,13 @@
     private sealed class ActionRow
     {
         public Guid? ExistingActionId { get; set; }
+        public string ActionType { get; set; } = AutomationActionTypes.MusicControl;
         public string TargetClientIdString { get; set; } = string.Empty;
         public string Operation { get; set; } = "Play";
         public Guid? PlaylistId { get; set; }
+        public string ProjectionProgramIdString { get; set; } = string.Empty;
+        public string DisplayIndexString { get; set; } = "default";
+        public List<ClientAvailableScreen> Screens { get; set; } = [];
     }
 
     private int _currentStepIndex = 0;
@@ -162,6 +210,7 @@
     private bool _isSaving = false;
 
     private IEnumerable<Playlist> _playlists { get; set; } = [];
+    private IEnumerable<ProjectionProgram> _programs { get; set; } = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -177,14 +226,57 @@
             foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
             {
                 JsonDocument doc = JsonDocument.Parse(action.ParametersJson);
-                Guid targetId = doc.RootElement.GetProperty("TargetClientId").GetGuid();
-                string op = doc.RootElement.GetProperty("Operation").GetString() ?? "Play";
-                _actionRows.Add(new ActionRow
+
+                ActionRow row = new ActionRow
                 {
                     ExistingActionId = action.Id,
-                    TargetClientIdString = targetId.ToString(),
-                    Operation = op
-                });
+                    ActionType = action.ActionType
+                };
+
+                if (doc.RootElement.TryGetProperty("TargetClientId", out JsonElement targetClientElement) &&
+                    targetClientElement.ValueKind == JsonValueKind.String &&
+                    targetClientElement.TryGetGuid(out Guid targetId))
+                {
+                    row.TargetClientIdString = targetId.ToString();
+                }
+
+                if (action.ActionType == AutomationActionTypes.StartProjectionProgram)
+                {
+                    if (doc.RootElement.TryGetProperty("ProjectionProgramId", out JsonElement programElement) &&
+                        programElement.ValueKind == JsonValueKind.String &&
+                        programElement.TryGetGuid(out Guid programId))
+                    {
+                        row.ProjectionProgramIdString = programId.ToString();
+                    }
+
+                    if (doc.RootElement.TryGetProperty("DisplayIndex", out JsonElement displayElement) &&
+                        displayElement.ValueKind == JsonValueKind.Number)
+                    {
+                        row.DisplayIndexString = displayElement.GetInt32().ToString();
+                    }
+                }
+                else
+                {
+                    if (doc.RootElement.TryGetProperty("Operation", out JsonElement operationElement))
+                    {
+                        row.Operation = operationElement.GetString() ?? "Play";
+                    }
+
+                    if (doc.RootElement.TryGetProperty("PlaylistId", out JsonElement playlistElement) &&
+                        playlistElement.ValueKind == JsonValueKind.String &&
+                        playlistElement.TryGetGuid(out Guid playlistId))
+                    {
+                        row.PlaylistId = playlistId;
+                    }
+                }
+
+                _actionRows.Add(row);
+
+                if (row.ActionType == AutomationActionTypes.StartProjectionProgram &&
+                    !string.IsNullOrEmpty(row.TargetClientIdString))
+                {
+                    await LoadScreensForRowAsync(_actionRows.Count - 1);
+                }
             }
         }
         else
@@ -206,6 +298,73 @@
         {
             _toastService.ShowError(playlistResult.Error ?? "Failed to load playlists.");
             _logger.LogError("Failed to load playlists: {Error}", playlistResult.Error);
+        }
+
+        Result<IEnumerable<ProjectionProgram>> programResult = await _projectionProgramService.GetProjectionProgramsAsync();
+
+        if (programResult.IsSuccess)
+        {
+            _programs = programResult.Data ?? [];
+        }
+        else
+        {
+            _toastService.ShowError(programResult.Error ?? "Failed to load projection programs.");
+            _logger.LogError("Failed to load projection programs: {Error}", programResult.Error);
+        }
+    }
+
+    private async Task OnRowActionTypeChangedAsync(int index, string? newType)
+    {
+        ActionRow row = _actionRows[index];
+        row.ActionType = newType ?? AutomationActionTypes.MusicControl;
+
+        if (row.ActionType == AutomationActionTypes.StartProjectionProgram &&
+            !string.IsNullOrEmpty(row.TargetClientIdString) &&
+            row.Screens.Count == 0)
+        {
+            await LoadScreensForRowAsync(index);
+        }
+    }
+
+    private async Task OnRowClientChangedAsync(int index, string? newClientId)
+    {
+        ActionRow row = _actionRows[index];
+        row.TargetClientIdString = newClientId ?? string.Empty;
+
+        // Display indices are per-client, so reset the screen choice when the client changes.
+        row.DisplayIndexString = "default";
+        row.Screens = [];
+
+        if (row.ActionType == AutomationActionTypes.StartProjectionProgram &&
+            !string.IsNullOrEmpty(row.TargetClientIdString))
+        {
+            await LoadScreensForRowAsync(index);
+        }
+    }
+
+    private async Task LoadScreensForRowAsync(int index)
+    {
+        ActionRow row = _actionRows[index];
+
+        if (!Guid.TryParse(row.TargetClientIdString, out Guid clientId))
+        {
+            row.Screens = [];
+            return;
+        }
+
+        Result<IEnumerable<ClientAvailableScreen>> result = await _clientService.GetClientAvailableScreensAsync(clientId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            row.Screens = result.Data
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Index)
+                .ToList();
+        }
+        else
+        {
+            row.Screens = [];
+            _toastService.ShowError($"Failed to load screens, {result.Error}");
         }
     }
 
@@ -247,17 +406,30 @@
             ActionRow row = _actionRows[i];
             Guid targetClientId = Guid.Parse(row.TargetClientIdString);
 
-            string parametersJson = JsonSerializer.Serialize(new
+            string parametersJson;
+            if (row.ActionType == AutomationActionTypes.StartProjectionProgram)
             {
-                TargetClientId = targetClientId,
-                Operation = row.Operation,
-                PlaylistId = row.PlaylistId
-            });
+                parametersJson = JsonSerializer.Serialize(new
+                {
+                    TargetClientId = targetClientId,
+                    ProjectionProgramId = Guid.Parse(row.ProjectionProgramIdString),
+                    DisplayIndex = int.TryParse(row.DisplayIndexString, out int displayIndex) ? displayIndex : (int?)null
+                });
+            }
+            else
+            {
+                parametersJson = JsonSerializer.Serialize(new
+                {
+                    TargetClientId = targetClientId,
+                    Operation = row.Operation,
+                    PlaylistId = row.PlaylistId
+                });
+            }
 
             newActions.Add(new AutomationRuleAction
             {
                 Id = row.ExistingActionId ?? Guid.NewGuid(),
-                ActionType = "MusicControl",
+                ActionType = row.ActionType,
                 ParametersJson = parametersJson,
                 SortOrder = i,
                 IsActive = true

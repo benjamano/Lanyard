@@ -9,20 +9,57 @@
 
 <PageTitle>Kiosk</PageTitle>
 
-@if (projectionProgram == null || clientProjectionSettings == null)
+@if (errorMessage == null && (projectionProgram == null || clientProjectionSettings == null))
 {
     <FluentCard Height="auto">
-        Loading..
-        <FluentProgressBar Style="width: 200px;"></FluentProgressBar>
+        <FluentStack Orientation="@Orientation.Vertical"
+                        VerticalGap="10">
+            <FluentStack HorizontalGap="10">
+                <FluentText Size="@TextSize.Size700">
+                    Loading...
+                </FluentText>
 
-        <FluentText Typo="Typography.H6">Client Id: @clientId, Projection Program Id: @projectionProgramId</FluentText>
+                <FluentSpinner Size="SpinnerSize.Large" />
+            </FluentStack>
+            <FluentText Color="@Color.Info">
+                Client Id: @clientId
+                <br />
+                Projection Program Id: @projectionProgramId
+            </FluentText>
+        </FluentStack>
     </FluentCard>
 }
-else
+else if (errorMessage is not null)
 {
-    <KioskDisplay @ref="kioskDisplay" ProjectionProgram="@projectionProgram" RepeatCount="clientProjectionSettings.RepeatNumberOfTimes" RepeatInfinitely="clientProjectionSettings.RepeatInfinitely"></KioskDisplay>
+    <FluentCard Height="auto">
+        <FluentStack Orientation="@Orientation.Vertical"
+                        VerticalGap="10">
+            <FluentStack HorizontalGap="10">
+                <FluentText Size="@TextSize.Size700">
+                    Error
+                </FluentText>
+            </FluentStack>
+            <FluentStack Orientation="@Orientation.Horizontal"
+                        HorizontalGap="10">
+                <FluentIcon Value="@(new Icons.Regular.Size24.ErrorCircle())" 
+                            Color="@Color.Error" />
+                <FluentText Color="@Color.Error">
+                    @errorMessage
+                </FluentText>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+}
+else if (projectionProgram is not null && clientProjectionSettings is not null)
+{
+    <KioskDisplay @ref="kioskDisplay" 
+                    ProjectionProgram="@projectionProgram" 
+                    RepeatCount="clientProjectionSettings.RepeatNumberOfTimes" 
+                    RepeatInfinitely="clientProjectionSettings.RepeatInfinitely" />
 
-    <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" CurrentStep="CurrentStep" StepsCount="projectionProgram.ProjectionProgramSteps.Count()"></KioskDebugInfo>
+    <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" 
+                    CurrentStep="CurrentStep" 
+                    StepsCount="projectionProgram.ProjectionProgramSteps.Count()" />
 }
 
 
@@ -41,43 +78,64 @@ else
 
     public KioskDisplay kioskDisplay { get; set; } = default!;
 
+    private string? errorMessage { get; set; } = null;
+
     protected async override Task OnInitializedAsync()
     {
-        Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(Guid.Parse(projectionProgramId));
-
-        Result<IEnumerable<ClientProjectionSettings>> getResult1 = await _clientService.GetClientProjectionSettingsAsync(Guid.Parse(clientId));
-
-        if (getResult1.IsSuccess)
+        if (!Guid.TryParse(projectionProgramId, out Guid projectionProgramGuid))
         {
-            clientProjectionSettings = getResult1.Data!.Where(x => x.ProjectionProgramId == Guid.Parse(projectionProgramId)).FirstOrDefault();
-        }
-        else
-        {
-            if (getResult1.Error != null)
-            {
-                _toastService.ShowError(getResult1.Error);
-            }
+            errorMessage = "Invalid projection program id.";
 
             return;
         }
 
-        if (getResult.IsSuccess)
+        if (!Guid.TryParse(clientId, out Guid clientGuid))
         {
-            projectionProgram = getResult.Data!;
-        }
-        else
-        {
-            if (getResult.Error != null)
-            {
-                _toastService.ShowError(getResult.Error);
-            }
+            errorMessage = "Invalid client id.";
 
             return;
         }
 
+        Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
+
+        if (!getResult.IsSuccess || getResult.Data is null)
+        {
+            errorMessage = getResult.Error ?? "Projection program not found.";
+
+            return;
+        }
+
+        projectionProgram = getResult.Data;
+
+        Result<IEnumerable<ClientProjectionSettings>> settingsResult = await _clientService.GetClientProjectionSettingsAsync(clientGuid);
+
+        if (settingsResult.IsSuccess && settingsResult.Data is not null)
+        {
+            clientProjectionSettings = settingsResult.Data
+                .FirstOrDefault(x => x.ProjectionProgramId == projectionProgramGuid);
+        }
+
+        clientProjectionSettings ??= new ClientProjectionSettings
+        {
+            ClientId = clientGuid,
+            ProjectionProgramId = projectionProgramGuid
+        };
 
         StateHasChanged();
+    }
 
-        kioskDisplay.StartProcessing();
+    private bool _processingStarted;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!_processingStarted
+            && kioskDisplay is not null
+            && projectionProgram is not null
+            && clientProjectionSettings is not null)
+        {
+            _processingStarted = true;
+
+            kioskDisplay.StartProcessing();
+        }
     }
 }

@@ -1,6 +1,10 @@
 @using Lanyard.App.Components.Dashboards.Widgets
+@using Lanyard.App.Components.Dialogs
 @using Lanyard.App.Components.Home
 @using Lanyard.Infrastructure.Enum
+
+@inject IClientService ClientService
+@inject IProjectionProgramService ProjectionProgramService
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
@@ -40,7 +44,7 @@
                                 }
                                 
                                 <div class="dashboard-widget-host"
-                                        @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                        @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                         @oncontextmenu:preventDefault="true">
                                     <DigitalClock ShowMilliseconds="clockWidget.ShowMilliSeconds" 
                                                     Is24HourFormat="clockWidget.Is24HourFormat" 
@@ -56,7 +60,7 @@
                                 }
 
                                 <div class="dashboard-widget-host"
-                                    @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderTextAreaWidget Widget="textAreaWidget" />
                                 </div>
@@ -70,7 +74,7 @@
                                 }
 
                                 <div class="dashboard-widget-host"
-                                    @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderClientZoneLaserGameStatusWidget Widget="laserGameStatusWidget" />
                                 </div>
@@ -84,9 +88,23 @@
                                 }
 
                                 <div class="dashboard-widget-host"
-                                    @oncontextmenu="@(() => ShowMenuAtWidget(widget.Id))"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderClientZoneLaserScoreboardWidget Widget="laserScoreboardWidget" />
+                                </div>
+                                break;
+                            case WidgetType.Button:
+                                ButtonWidget? buttonWidget = widget as ButtonWidget;
+
+                                if (buttonWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderButtonWidget Widget="buttonWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
                         }
@@ -131,15 +149,6 @@
     </div>
 </FluentCard>
 
-@if (!PreviewMode)
-{
-    <FluentMenu @ref=@Menu>
-        <FluentMenuList>
-            <WidgetMenuItems SelectedWidget="SelectedWidget" OnWidgetChanged="StateHasChanged" />
-        </FluentMenuList>
-    </FluentMenu>
-}
-
 @code {
     [Parameter]
     public List<DashboardWidget> Widgets { get; set; } = new List<DashboardWidget>();
@@ -148,8 +157,6 @@
     public bool PreviewMode { get; set; } = false;
 
     public ButtonAppearance buttonAppearance = ButtonAppearance.Subtle;
-
-    private FluentMenu? Menu { get; set; }
 
     public DashboardWidget? SelectedWidget { get; set; } = null;
 
@@ -245,13 +252,138 @@
         }
     }
 
-    private async Task ShowMenuAtWidget(Guid widgetId)
+    // Right-clicking a widget (in edit-layout mode) opens its config dialog directly.
+    private async Task ShowWidgetConfigDialog(Guid widgetId)
     {
-        if (Menu != null && !PreviewMode)
+        if (PreviewMode)
         {
-            SelectedWidget = Widgets.FirstOrDefault(w => w.Id == widgetId);
+            return;
+        }
 
-            await Menu.OpenMenuAsync("widget-" + widgetId.ToString());
+        DashboardWidget? widget = Widgets.FirstOrDefault(w => w.Id == widgetId);
+
+        switch (widget)
+        {
+            case DigitalClockWidget clockWidget:
+                await ShowConfigureDigitalClockDialog(clockWidget);
+                break;
+            case ClientZoneLaserGameStatusWidget laserGameStatusWidget:
+                await ShowConfigureLaserGameStatusDialog(laserGameStatusWidget);
+                break;
+            case ClientZoneLaserScoreboardWidget laserScoreboardWidget:
+                await ShowConfigureLaserScoreboardDialog(laserScoreboardWidget);
+                break;
+            case ButtonWidget buttonWidget:
+                await ShowConfigureButtonDialog(buttonWidget);
+                break;
+        }
+    }
+
+    // Loads the clients eligible for the zone scoreboard/game-status widgets.
+    private async Task<IEnumerable<Client>> GetZoneScoreboardClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await ClientService.GetClientsWithCapabilitiesAsync();
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            return result.Data
+                .Where(x => x.ZoneScoreboardVersion == ZoneScoreboardVersion.Begeara2)
+                .Cast<Client>();
+        }
+
+        _toastService.ShowError($"Failed to load clients, {result.Error}");
+
+        return [];
+    }
+
+    private async Task ShowConfigureDigitalClockDialog(DigitalClockWidget clockWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureDigitalClockDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureDigitalClockDialog.Widget), clockWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureLaserGameStatusDialog(ClientZoneLaserGameStatusWidget laserGameStatusWidget)
+    {
+        IEnumerable<Client> clients = await GetZoneScoreboardClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureLaserGameStatusDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureLaserGameStatusDialog.Widget), laserGameStatusWidget);
+            options.Parameters.Add(nameof(ConfigureLaserGameStatusDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureLaserScoreboardDialog(ClientZoneLaserScoreboardWidget laserScoreboardWidget)
+    {
+        IEnumerable<Client> clients = await GetZoneScoreboardClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureLaserScoreboardDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureLaserScoreboardDialog.Widget), laserScoreboardWidget);
+            options.Parameters.Add(nameof(ConfigureLaserScoreboardDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureButtonDialog(ButtonWidget buttonWidget)
+    {
+        IEnumerable<Client> clients = [];
+
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> clientResult = await ClientService.GetClientsWithCapabilitiesAsync();
+
+        if (clientResult.IsSuccess && clientResult.Data != null)
+        {
+            clients = clientResult.Data
+                .Cast<Client>();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load clients, {clientResult.Error}");
+        }
+
+        IEnumerable<ProjectionProgram> programs = [];
+
+        Result<IEnumerable<ProjectionProgram>> programResult = await ProjectionProgramService.GetProjectionProgramsAsync();
+
+        if (programResult.IsSuccess && programResult.Data != null)
+        {
+            programs = programResult.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load projection programs, {programResult.Error}");
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureButtonDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureButtonDialog.Widget), buttonWidget);
+            options.Parameters.Add(nameof(ConfigureButtonDialog.Clients), clients);
+            options.Parameters.Add(nameof(ConfigureButtonDialog.Programs), programs);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
         }
     }
 

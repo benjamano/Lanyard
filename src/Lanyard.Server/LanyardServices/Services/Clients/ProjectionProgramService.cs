@@ -403,7 +403,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         }
     }
 
-    public async Task<Result<bool>> TriggerProjectionProgramAsync(Guid projectionProgramId, Guid selectedClientId)
+    public async Task<Result<bool>> TriggerProjectionProgramAsync(Guid projectionProgramId, Guid selectedClientId, int? displayIndex = null)
     {
         try
         {
@@ -414,7 +414,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
                 return Result<bool>.Fail($"Projection program not found: {projectionProgramId}");
             }
 
-            Result<bool> triggerResult = await _clientService.TriggerProjectionProgramOnClientAsync(selectedClientId, projectionProgramId);
+            Result<bool> triggerResult = await _clientService.TriggerProjectionProgramOnClientAsync(selectedClientId, projectionProgramId, displayIndex);
 
             if (!triggerResult.IsSuccess)
             {
