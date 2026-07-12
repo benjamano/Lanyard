@@ -296,7 +296,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
                 .Select(x => new ClientAvailableVideoDeviceDTO()
                 {
                     ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
-                    Name = x.Name,
+                    DeviceName = x.Name,
                     DeviceId = x.ClassID,
                 });
 
