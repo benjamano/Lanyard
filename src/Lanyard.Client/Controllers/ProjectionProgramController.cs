@@ -25,11 +25,11 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
             await _projectionProgramsService.StartProjectingAsync(programs);
         });
 
-        connection.On<Guid>("TriggerProjectionProgram", async (projectionProgramId) =>
+        connection.On<Guid, int?>("TriggerProjectionProgram", async (projectionProgramId, displayIndex) =>
         {
-            _logger.LogInformation("Received command to trigger projection program {ProgramId}", projectionProgramId);
+            _logger.LogInformation("Received command to trigger projection program {ProgramId} on display {DisplayIndex}", projectionProgramId, displayIndex);
 
-            await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, async () =>
+            await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, displayIndex, async () =>
             {
                 _logger.LogInformation("Triggered projection program {ProgramId} completed, notifying server", projectionProgramId);
                 await _connection!.InvokeAsync("ProjectionProgramCompleted");
