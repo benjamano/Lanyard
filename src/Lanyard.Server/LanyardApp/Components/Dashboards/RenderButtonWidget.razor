@@ -1,0 +1,70 @@
+@using Lanyard.Infrastructure.Enum
+
+@inject IProjectionProgramService ProjectionProgramService
+
+<div style="width: 100%; height: 100%;">
+    <FluentButton Appearance="@Widget.Appearance"
+                    Style="width: 100%; height: 100%;"
+                    Disabled="@_isExecuting"
+                    @onclick="HandleClick">
+        @Widget.Label
+    </FluentButton>
+</div>
+
+@code {
+    [Parameter]
+    public required ButtonWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private bool _isExecuting;
+
+    private async Task HandleClick()
+    {
+        if (!AllowTrigger || _isExecuting)
+        {
+            return;
+        }
+
+        _isExecuting = true;
+
+        try
+        {
+            switch (Widget.ActionType)
+            {
+                case ButtonActionType.TriggerProjectionProgram:
+                    await TriggerProjectionProgramAsync();
+                    break;
+                default:
+                    _toastService.ShowWarning("This button has no action configured.");
+                    break;
+            }
+        }
+        finally
+        {
+            _isExecuting = false;
+        }
+    }
+
+    private async Task TriggerProjectionProgramAsync()
+    {
+        if (Widget.ClientId is not Guid clientId || Widget.ProjectionProgramId is not Guid projectionProgramId)
+        {
+            _toastService.ShowWarning("This button is not configured with a client and projection program.");
+
+            return;
+        }
+
+        Result<bool> result = await ProjectionProgramService.TriggerProjectionProgramAsync(projectionProgramId, clientId, Widget.DisplayIndex);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Triggered projection program.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to trigger projection program, {result.Error}");
+        }
+    }
+}

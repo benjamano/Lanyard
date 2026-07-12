@@ -20,6 +20,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
+using Lanyard.App.Components.Layout;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,7 @@ builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
 
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
@@ -139,6 +141,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddFluentUIComponents(configuration =>
 {
     configuration.Toast.Position = ToastPosition.TopEnd;
+    configuration.Toast.Timeout = 5000;
 });
 
 builder.Services.AddSignalR();

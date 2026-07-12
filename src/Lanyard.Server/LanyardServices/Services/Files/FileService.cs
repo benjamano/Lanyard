@@ -34,7 +34,7 @@ public class FileService : IFileService
         IWebHostEnvironment environment)
     {
         _dbFactory = dbFactory;
-        _storageRoot = Path.Combine(Directory.GetCurrentDirectory(), "UploadedFiles");
+        _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _securityService = securityService;
         _isDevelopment = environment.IsDevelopment();
 

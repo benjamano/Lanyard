@@ -1,10 +1,11 @@
 @page "/manage/dashboards/{DashboardId:guid}"
 @using Lanyard.App.Components.Dashboards
-@using Lanyard.Infrastructure.Enum
+@using Lanyard.App.Components.Dialogs
 
 <PageTitle>Edit Dashboard</PageTitle>
 
 @inject IDashboardService DashboardService
+@inject NavigationManager NavigationManager
 
 @if (Dashboard != null)
 {
@@ -53,25 +54,34 @@
             </FluentButton>
 
             <FluentButton Appearance="ButtonAppearance.Transparent" 
-                        Id="DashboardWidgetList"
-                        IconStart="new Icons.Regular.Size24.AddCircle()">
+                            Id="DashboardWidgetList"
+                            IconStart="new Icons.Regular.Size24.AddCircle()">
             </FluentButton>
             <FluentMenu Trigger="DashboardWidgetList">
                 <FluentMenuList>
-                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.DigitalClock)">
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new DigitalClockWidget())">
                         Digital Clock
                     </FluentMenuItem>
-                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.TextArea)">
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new TextAreaWidget())">
                         Text Area
                     </FluentMenuItem>
-                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.ClientZoneLaserGameStatus)">
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new ClientZoneLaserGameStatusWidget())">
                         Laser Game Status
                     </FluentMenuItem>
-                    <FluentMenuItem OnClick="() => AddWidget(WidgetType.ClientZoneLaserScoreboard)">
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new ClientZoneLaserScoreboardWidget())">
                         Laser Scoreboard
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new ButtonWidget())">
+                        Button
                     </FluentMenuItem>
                 </FluentMenuList>
             </FluentMenu>
+
+            <FluentButton Appearance="ButtonAppearance.Transparent" 
+                            IconStart="new Icons.Regular.Size24.BinRecycle()"
+                            OnClick="DeleteDashboardAsync"
+                            Tooltip="Delete Dashboard">
+            </FluentButton>
         </FluentStack>
     </FluentCard>
 
@@ -108,30 +118,6 @@ else
         }
     }
 
-    private void AddWidget(WidgetType type)
-    {
-        if (Dashboard == null)
-        {
-            return;
-        }
-
-        switch (type)
-        {
-            case WidgetType.DigitalClock:
-                Dashboard.Widgets.Add(new DigitalClockWidget());
-                break;
-            case WidgetType.TextArea:
-                Dashboard.Widgets.Add(new TextAreaWidget());
-                break;
-            case WidgetType.ClientZoneLaserGameStatus:
-                Dashboard.Widgets.Add(new ClientZoneLaserGameStatusWidget());
-                break;
-            case WidgetType.ClientZoneLaserScoreboard:
-                Dashboard.Widgets.Add(new ClientZoneLaserScoreboardWidget());
-                break;
-        }    
-    }
-
     private async Task SaveDashboardAsync()
     {
         if (Dashboard == null)
@@ -151,5 +137,38 @@ else
         IsEditingDashboardName = false;
 
         _toastService.ShowSuccess("Dashboard saved successfully.");
+    }
+
+    private async Task DeleteDashboardAsync()
+    {
+        if (Dashboard == null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete Dashboard";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Are you sure you want to delete '{Dashboard.Name}'? This action cannot be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (!result.Cancelled && result.Value is true)
+        {
+            Result<bool> deleteResult = await DashboardService.DeleteDashboardAsync(Dashboard.Id);
+            
+            if (deleteResult.IsSuccess)
+            {
+                _toastService.ShowSuccess($"Dashboard '{Dashboard.Name}' deleted successfully.");
+
+                NavigationManager.NavigateTo("/manage/dashboards");
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to delete dashboard '{Dashboard.Name}': {deleteResult.Error}");
+            }
+        }
     }
 }

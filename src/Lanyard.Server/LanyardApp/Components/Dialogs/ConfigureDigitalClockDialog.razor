@@ -1,0 +1,59 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Clock())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Clock
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentCheckbox @bind-Value="Widget.ShowMilliSeconds" Label="Show Milliseconds" />
+            <FluentCheckbox @bind-Value="Widget.Is24HourFormat" Label="24-Hour Format" />
+            <FluentCheckbox @bind-Value="Widget.ShowDate" Label="Show Date" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required DigitalClockWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private bool _originalShowMilliSeconds;
+    private bool _originalIs24HourFormat;
+    private bool _originalShowDate;
+
+    protected override void OnInitialized()
+    {
+        _originalShowMilliSeconds = Widget.ShowMilliSeconds;
+        _originalIs24HourFormat = Widget.Is24HourFormat;
+        _originalShowDate = Widget.ShowDate;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.ShowMilliSeconds = _originalShowMilliSeconds;
+        Widget.Is24HourFormat = _originalIs24HourFormat;
+        Widget.ShowDate = _originalShowDate;
+
+        await Dialog.CancelAsync();
+    }
+}

@@ -556,7 +556,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
-    public async Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId)
+    public async Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null)
     {
         try
         {
@@ -574,7 +574,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                 return Result<bool>.Fail("Client has no active connection.");
             }
 
-            await _hubContext.Clients.Client(connectionId).SendAsync("TriggerProjectionProgram", projectionProgramId);
+            await _hubContext.Clients.Client(connectionId).SendAsync("TriggerProjectionProgram", projectionProgramId, displayIndex);
 
             return Result<bool>.Ok(true);
         }

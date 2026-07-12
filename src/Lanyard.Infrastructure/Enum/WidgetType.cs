@@ -6,5 +6,6 @@ public enum WidgetType
     DigitalClock = 1,
     TextArea = 2,
     ClientZoneLaserGameStatus = 3,
-    ClientZoneLaserScoreboard = 4
+    ClientZoneLaserScoreboard = 4,
+    Button = 5
 }

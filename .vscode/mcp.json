@@ -2,6 +2,26 @@
     "servers": {
         "fluent-ui-blazor": {
             "command": "fluentui-mcp"
+        },
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "@playwright/mcp@latest"
+            ]
+        },
+        "github": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/"
+        },
+        "nuget": {
+            "type": "stdio",
+            "command": "dnx",
+            "args": [ "NuGet.Mcp.Server", "--source", "https://api.nuget.org/v3/index.json", "--yes" ]
+        },
+        "pointbreak": {
+            "type": "stdio",
+            "command": "pointbreak",
+            "args": [ "mcp", "serve" ]
         }
     }
 }

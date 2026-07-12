@@ -25,7 +25,7 @@ public class MusicControlActionExecutor(
         public Guid? PlaylistId { get; set; }
     }
 
-    public bool CanHandle(string actionType) => actionType == "MusicControl";
+    public bool CanHandle(string actionType) => actionType == AutomationActionTypes.MusicControl;
 
     public async Task<(bool Success, string? ErrorMessage)> ExecuteAsync(
         AutomationRuleAction action, Guid triggerClientId)

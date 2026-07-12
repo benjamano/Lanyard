@@ -4,6 +4,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711224302_AddingButtonWidgetProjectionTrigger")]
+    partial class AddingButtonWidgetProjectionTrigger
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1190,9 +1193,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid")
                         .HasColumnName("ButtonWidget_ClientId");
-
-                    b.Property<int?>("DisplayIndex")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Label")
                         .HasColumnType("text");

@@ -70,18 +70,19 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         }
     }
 
-    public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, Func<Task> onCompleted)
+    public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted)
     {
         HideWindow();
 
         ClientProjectionSettingsDTO? displaySettings = loadedProjectionPrograms.FirstOrDefault();
 
-        int displayIndex = displaySettings?.DisplayIndex ?? 0;
+        // Use the display the button specified; otherwise fall back to the client's default.
+        int resolvedDisplayIndex = displayIndex ?? displaySettings?.DisplayIndex ?? 0;
         int width = displaySettings?.Width ?? 1920;
         int height = displaySettings?.Height ?? 1080;
         bool isFullScreen = displaySettings?.IsFullScreen ?? true;
 
-        ShowWindow(displayIndex, width, height, isFullScreen, projectionProgramId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+        ShowWindow(resolvedDisplayIndex, width, height, isFullScreen, projectionProgramId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
 
         if (_kioskProcess != null)
         {
@@ -103,7 +104,7 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         int x = screen.Bounds.Left;
         int y = screen.Bounds.Top;
 
-        string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}//kiosk/{clientId}/{projectionProgramId}";
+        string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/kiosk/{clientId}/{projectionProgramId}";
 
         string userDataDir = Path.Combine(
             Path.GetTempPath(),

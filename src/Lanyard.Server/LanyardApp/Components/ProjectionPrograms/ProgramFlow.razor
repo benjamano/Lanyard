@@ -24,7 +24,7 @@
 
             <ProjectionStepOptionsMenu AnchorId="@($"menu-btn-step-{step.Id}")" ProjectionProgramStep="step" OnDeleteButtonClicked="DeleteProjectionProgramStep"></ProjectionStepOptionsMenu>
 
-            <FluentCard Appearance="CardAppearance.Subtle" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
+            <FluentCard Appearance="CardAppearance.Filled" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
                     <div>
                         @step.Template?.Name
@@ -33,7 +33,7 @@
                 
                 @if (step.Template?.Parameters.Any() == true)
                 {
-                    <FluentAccordion>
+                    <FluentAccordion Size="@AccordionItemSize.Large">
                         <FluentAccordionItem class="mt-2" Expanded="false">
                             <HeaderTemplate>
                                 <FluentIcon Value="@(new Icons.Regular.Size20.TaskListRtl())"></FluentIcon>
@@ -51,7 +51,7 @@
                                     bool isVideoParameter = string.Equals(parameter.Name, "VideoFile", StringComparison.OrdinalIgnoreCase)
                                         || string.Equals(parameter.DataType, "VideoFile", StringComparison.OrdinalIgnoreCase);
 
-                                    <FluentGridItem Xs="6">
+                                    <FluentGridItem Xs="12">
                                         @if (string.Equals(parameter.DataType, "Dashboard", StringComparison.OrdinalIgnoreCase))
                                         {
                                             <FluentSelect Class="w-100"

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using Lanyard.Infrastructure.Enum;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace Lanyard.Infrastructure.Models;
 
@@ -112,4 +113,31 @@ public class ClientZoneLaserScoreboardWidget : DashboardWidget
     }
 
     public Guid? ClientId { get; set; }
+}
+
+public class ButtonWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ButtonWidget()
+    {
+        Type = WidgetType.Button;
+
+        GridW = 2;
+        GridH = 1;
+
+        Appearance = ButtonAppearance.Primary;
+        Label = "Click me!";
+        ActionType = ButtonActionType.TriggerProjectionProgram;
+    }
+
+    public string? Label { get; set; }
+    public ButtonAppearance Appearance { get; set; } = ButtonAppearance.Primary;
+
+    // Nullable so button rows created before this column existed read as "no action configured"
+    public ButtonActionType? ActionType { get; set; }
+    public Guid? ClientId { get; set; }
+    public Guid? ProjectionProgramId { get; set; }
+
+    // Which monitor the projection opens on; null uses the client's default display.
+    public int? DisplayIndex { get; set; }
 }
