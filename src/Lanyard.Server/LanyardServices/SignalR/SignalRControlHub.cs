@@ -2,6 +2,7 @@
 using Lanyard.Application.Services.Clients;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -445,5 +446,27 @@ public class SignalRControlHub(
         });
 
         await _clientZoneScoreboardService.UpdateClientAvailableNetworkInterfacesAsync(clientId, physicalAddresses);
+    }
+
+    public async Task UpdateAvailableVideoDevices(IEnumerable<ClientAvailableVideoDeviceDTO> devices)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available video devices: {Devices}", Context.ConnectionId, devices.Select(d => d.DeviceName));
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        Result<bool> setResult = await _clientService.SetClientAvailableVideoDevicesAsync(clientId, devices);
+
+        if (!setResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to update available video devices for client {ClientId}: {Error}", clientId, setResult.Error);
+        }
     }
 }
