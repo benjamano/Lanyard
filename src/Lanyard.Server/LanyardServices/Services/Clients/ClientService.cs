@@ -788,6 +788,98 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    public async Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<string> deviceNames = await ctx.ClientAvailableVideoDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .Select(x => x.DeviceName)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync();
+
+            return Result<IEnumerable<string>>.Ok(deviceNames);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<string>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ActiveVideoDeviceInfoDTO> devices = await ctx.ClientAvailableVideoDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .Join(ctx.Clients,
+                    device => device.ClientId,
+                    client => client.Id,
+                    (device, client) => new ActiveVideoDeviceInfoDTO
+                    {
+                        ClientId = client.Id,
+                        ClientName = client.Name,
+                        DeviceName = device.DeviceName
+                    })
+                .OrderBy(x => x.ClientName)
+                .ThenBy(x => x.DeviceName)
+                .ToListAsync();
+
+            return Result<IEnumerable<ActiveVideoDeviceInfoDTO>>.Ok(devices);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ActiveVideoDeviceInfoDTO>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId)
+    {
+        return await SendVideoPublisherCommandAsync(clientId, "StartVideoPublisher");
+    }
+
+    public async Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId)
+    {
+        return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher");
+    }
+
+    private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client has no active connection.");
+            }
+
+            await _hubContext.Clients.Client(connectionId).SendAsync(commandName);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId)
     {
         try

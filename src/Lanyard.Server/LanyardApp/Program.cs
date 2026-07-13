@@ -20,6 +20,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.App.Components.Layout;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,6 +51,7 @@ builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
+builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.AddSingleton<MusicPlayerService>();
 builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());

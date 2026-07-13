@@ -1,4 +1,6 @@
 ﻿@using Lanyard.App.Services
+@using Lanyard.App.Components.Kiosk
+@using Lanyard.Infrastructure.DTO.VideoDevices
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Application.Services
 
@@ -6,6 +8,7 @@
 @inject IToastService _toastService
 @inject IProjectionProgramService _projectionProgramService
 @inject IDashboardService _dashboardService
+@inject IClientService _clientService
 
 <FluentStack class="text-center flow-scroll" Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Top" HorizontalAlignment="HorizontalAlignment.Center">
     <FluentCard Appearance="CardAppearance.Subtle" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, 0)">START</FluentCard>
@@ -66,6 +69,26 @@
                                                 }
                                             </FluentSelect>
                                         }
+                                        else if (string.Equals(parameter.DataType, "VideoDevice", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <FluentSelect Class="w-100"
+                                                          @bind-Value="paramValue.Value"
+                                                          TOption="string"
+                                                          TValue="string"
+                                                          Label="@parameter.Name">
+                                                <FluentOption Value="@string.Empty">Default (first available)</FluentOption>
+                                                @foreach (ActiveVideoDeviceInfoDTO device in videoDevices)
+                                                {
+                                                    <FluentOption Value="@VideoDeviceParameterValue.Format(device.ClientId, device.DeviceName)">@($"{device.ClientName}: {device.DeviceName}")</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        }
+                                        else if (string.Equals(parameter.DataType, "Boolean", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <FluentSwitch Label="@parameter.Name"
+                                                          Value="@(bool.TryParse(paramValue.Value, out bool boolValue) && boolValue)"
+                                                          ValueChanged="@(newValue => paramValue.Value = newValue.ToString().ToLowerInvariant())" />
+                                        }
                                         else if (parameter.DataType == "File" || isVideoParameter)
                                         {
                                             <FilePicker SelectedFileId="@paramValue.Value"
@@ -108,6 +131,7 @@
     public bool CanSave => SelectedProgram?.ProjectionProgramSteps?.Count > 0;
     private static readonly string[] VideoExtensions = [".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".wmv"];
     private List<Dashboard> dashboards = [];
+    private List<ActiveVideoDeviceInfoDTO> videoDevices = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,6 +144,17 @@
         else
         {
             dashboards = [];
+        }
+
+        Result<IEnumerable<ActiveVideoDeviceInfoDTO>> videoDeviceResult = await _clientService.GetAllActiveVideoDevicesWithClientNamesAsync();
+
+        if (videoDeviceResult.IsSuccess && videoDeviceResult.Data is not null)
+        {
+            videoDevices = videoDeviceResult.Data.ToList();
+        }
+        else
+        {
+            videoDevices = [];
         }
     }
 

@@ -18,7 +18,9 @@
 @code {
     private Type GetLayout()
     {
-        return Navigation.Uri.Contains("/kiosk") ? typeof(EmptyLayout) : typeof(MainLayout);
+        return Navigation.Uri.Contains("/kiosk") || Navigation.Uri.Contains("/video-publisher")
+            ? typeof(EmptyLayout)
+            : typeof(MainLayout);
     }
 
     private void OnNavigateHandler(NavigationContext context)
