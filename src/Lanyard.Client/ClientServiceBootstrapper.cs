@@ -2,6 +2,7 @@ using Lanyard.Client.Controllers;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Client.SignalR;
+using Lanyard.Client.VideoPublisher;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<MusicControlHandler>();
         services.AddSingleton<ProjectionProgramController>();
         services.AddSingleton<ZoneScoreboardSignalRController>();
+        services.AddSingleton<IVideoPublisherWindowService, VideoPublisherWindowService>();
+        services.AddSingleton<VideoPublisherSignalRController>();
 
         return services.BuildServiceProvider();
     }
@@ -57,7 +60,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<MusicControlHandler>().Register,
             provider.GetRequiredService<ProjectionProgramController>().Register,
             provider.GetRequiredService<DmxSignalRController>().Register,
-            provider.GetRequiredService<ZoneScoreboardSignalRController>().Register
+            provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
+            provider.GetRequiredService<VideoPublisherSignalRController>().Register
         ];
     }
 }
