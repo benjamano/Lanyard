@@ -59,12 +59,16 @@
                                 };
                             }
 
-                            <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
+                            <FluentButton IconStart="volumeIcon" 
+                                            Appearance="ButtonAppearance.Subtle" 
+                                            Disabled="@(selectedClientId == null)" 
+                                            OnClick="ToggleMuteVolume" />
 
                             <FluentStack>
                                 <FluentSlider Disabled="@(selectedClientId == null)" 
                                                 Min="0" 
                                                 Max="100" 
+                                                ImmediateDelay="20"
                                                 TValue="int" 
                                                 Value="currentVolume" 
                                                 ValueChanged="(volume) => HandleVolumeChange(volume)" 

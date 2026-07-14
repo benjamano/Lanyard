@@ -100,6 +100,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ButtonWidget>()
                 .Property(x => x.ClientId)
                 .HasColumnName("ButtonWidget_ClientId");
+
+            // A song may be backed by an uploaded file. When that file row is hard-deleted,
+            // null the link rather than cascade-deleting the song (it is soft-deleted instead).
+            modelBuilder.Entity<Song>()
+                .HasOne(s => s.FileMetadata)
+                .WithMany()
+                .HasForeignKey(s => s.FileMetadataId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

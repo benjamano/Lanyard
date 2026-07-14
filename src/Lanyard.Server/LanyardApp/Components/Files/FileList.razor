@@ -30,6 +30,12 @@
         await LoadFilesAsync();
     }
 
+    public async Task RefreshAsync()
+    {
+        await LoadFilesAsync();
+        StateHasChanged();
+    }
+
     private async Task LoadFilesAsync()
     {
         Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(FolderId, CancellationToken.None);

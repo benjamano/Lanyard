@@ -23,6 +23,11 @@ namespace Lanyard.Infrastructure.Models
         public DateTime CreateDate { get; set; }
         public bool IsDownloaded { get; set; }
         public bool IsActive { get; set; }
+
+        // Set when the song originates from a file upload (null for songs discovered by the
+        // local dev music-folder scan). Links back to the stored file in the bucket / on disk.
+        public Guid? FileMetadataId { get; set; }
+        public FileMetadata? FileMetadata { get; set; }
     }
 
     public class Playlist
