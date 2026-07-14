@@ -17,7 +17,7 @@
             <AuthorizeView>
                 <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
             </AuthorizeView>
-            <FileList @key="fileListKey" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+            <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
         </FluentGridItem>
     </FluentGrid>
 </FluentCard>
@@ -25,31 +25,30 @@
 @code {
     private Guid? selectedFolderId;
 
-    public EventCallback RefreshFileList;
-
-    private int fileListKey = 0;
+    private FileList? fileList;
 
     private void OnFolderChanged(Guid? folderId)
     {
+        // Changing the parameter re-triggers FileList.OnParametersSetAsync, which reloads.
         selectedFolderId = folderId;
         StateHasChanged();
     }
 
-    private void OnFileUploaded(FileMetadata file)
+    private async Task OnFileUploaded(FileMetadata file)
     {
-        fileListKey++;
-        StateHasChanged();
+        if (fileList is not null)
+            await fileList.RefreshAsync();
     }
 
-    private void OnFileDeleted(Guid fileId)
+    private async Task OnFileDeleted(Guid fileId)
     {
-        fileListKey++;
-        StateHasChanged();
+        if (fileList is not null)
+            await fileList.RefreshAsync();
     }
 
-    private void OnFileRenamed(FileMetadata file)
+    private async Task OnFileRenamed(FileMetadata file)
     {
-        fileListKey++;
-        StateHasChanged();
+        if (fileList is not null)
+            await fileList.RefreshAsync();
     }
 }

@@ -70,6 +70,10 @@
             {
                 await OnFileUploaded.InvokeAsync(result.Data);
             }
+            else
+            {
+                _toastService.ShowError($"Failed to upload {file.Name}: {result.Error}");
+            }
         }
 
         await Task.Delay(3000);

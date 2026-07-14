@@ -12,15 +12,26 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory, IHost
     private readonly IHostEnvironment _hostEnvironment = hostEnvironment;
     private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
 
-    public Task<Result<IEnumerable<Song>>> GetSongsAsync()
+    public async Task<Result<IEnumerable<Song>>> GetSongsAsync()
     {
         try
         {
             if (_hostEnvironment.IsProduction())
             {
                 // BECAUSE WE USE THE DATABASE IN PRODUCTION, WE NEED TO GET THE SONGS FROM THE DATABASE
+                // (files themselves live in the Railway bucket; see FileService for the upload path)
 
-                
+                await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+                IEnumerable<Song> songs = await context.Songs
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(song => song.IsActive)
+                    .OrderBy(song => song.AlbumName)
+                    .ThenBy(song => song.Name)
+                    .ToListAsync();
+
+                return Result<IEnumerable<Song>>.Ok(songs);
             }
             else
             {
@@ -52,12 +63,12 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory, IHost
                         };
                     });
 
-                return Task.FromResult(Result<IEnumerable<Song>>.Ok(songs));
+                return Result<IEnumerable<Song>>.Ok(songs);
             }
         }
         catch (Exception ex)
         {
-            return Task.FromResult(Result<IEnumerable<Song>>.Fail($"An error occurred while retrieving songs: {ex.Message}"));
+            return Result<IEnumerable<Song>>.Fail($"An error occurred while retrieving songs: {ex.Message}");
         }
     }
 
