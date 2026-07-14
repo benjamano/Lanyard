@@ -64,3 +64,16 @@ public class ClientAvailableScreen
 
     public bool IsActive { get; set; }
 }
+
+public class ClientAvailableVideoDevice
+{
+    public Guid Id { get; set; }
+
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    public Guid DeviceId { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; }
+}

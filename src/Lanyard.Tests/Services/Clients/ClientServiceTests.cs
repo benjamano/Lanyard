@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Lanyard.Application.Services;
@@ -449,6 +451,413 @@ namespace Lanyard.Tests.Services.Clients
             Assert.IsTrue(result.Success);
             Assert.IsNotNull(result.Data);
             Assert.AreEqual(0, result.Data!.Count(), "Expected no available screens.");
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableVideoDevicesAsync_ShouldAddDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> resultCreate = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+            });
+
+            Assert.IsTrue(resultCreate.Success);
+            Assert.IsNotNull(resultCreate.Data);
+
+            List<ClientAvailableVideoDeviceDTO> devices =
+            [
+                new() { ClientId = resultCreate.Data.Id, DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() },
+                new() { ClientId = resultCreate.Data.Id, DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ];
+
+            Result<bool> result = await service.SetClientAvailableVideoDevicesAsync(resultCreate.Data.Id, devices);
+
+            Assert.IsTrue(result.Success, result.Error);
+
+            Result<IEnumerable<ClientAvailableVideoDevice>> getResult = await service.GetClientAvailableVideoDevicesAsync(resultCreate.Data.Id);
+
+            Assert.IsTrue(getResult.Success);
+            Assert.IsNotNull(getResult.Data);
+            Assert.AreEqual(2, getResult.Data!.Count(), "Expected two available video devices.");
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableVideoDevicesAsync_ShouldDeactivateUnseenDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> resultCreate = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+            });
+
+            Assert.IsTrue(resultCreate.Success);
+            Assert.IsNotNull(resultCreate.Data);
+
+            Guid clientId = resultCreate.Data.Id;
+
+            List<ClientAvailableVideoDeviceDTO> initialDevices =
+            [
+                new() { ClientId = clientId, DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() },
+                new() { ClientId = clientId, DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ];
+
+            Result<bool> firstResult = await service.SetClientAvailableVideoDevicesAsync(clientId, initialDevices);
+
+            Assert.IsTrue(firstResult.Success, firstResult.Error);
+
+            List<ClientAvailableVideoDeviceDTO> secondReport =
+            [
+                new() { ClientId = clientId, DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ];
+
+            Result<bool> secondResult = await service.SetClientAvailableVideoDevicesAsync(clientId, secondReport);
+
+            Assert.IsTrue(secondResult.Success, secondResult.Error);
+
+            Result<IEnumerable<ClientAvailableVideoDevice>> getResult = await service.GetClientAvailableVideoDevicesAsync(clientId);
+
+            Assert.IsTrue(getResult.Success);
+            Assert.IsNotNull(getResult.Data);
+            Assert.AreEqual(1, getResult.Data!.Count(), "Expected only the still-present video device to be active.");
+            Assert.AreEqual("Webcam 1", getResult.Data!.First().DeviceName);
+
+            ApplicationDbContext ctx = new(options);
+
+            ClientAvailableVideoDevice? deactivatedDevice = await ctx.ClientAvailableVideoDevices
+                .Where(x => x.ClientId == clientId)
+                .Where(x => x.DeviceName == "Capture Card")
+                .FirstOrDefaultAsync();
+
+            Assert.IsNotNull(deactivatedDevice, "Expected the unseen device to still exist in the database.");
+            Assert.IsFalse(deactivatedDevice!.IsActive, "Expected the unseen device to be deactivated.");
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableVideoDevicesAsync_ShouldReactivateReturningDevice()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> resultCreate = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+            });
+
+            Assert.IsTrue(resultCreate.Success);
+            Assert.IsNotNull(resultCreate.Data);
+
+            Guid clientId = resultCreate.Data.Id;
+
+            List<ClientAvailableVideoDeviceDTO> initialDevices =
+            [
+                new() { ClientId = clientId, DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ];
+
+            Result<bool> firstResult = await service.SetClientAvailableVideoDevicesAsync(clientId, initialDevices);
+
+            Assert.IsTrue(firstResult.Success, firstResult.Error);
+
+            Result<bool> secondResult = await service.SetClientAvailableVideoDevicesAsync(clientId, []);
+
+            Assert.IsTrue(secondResult.Success, secondResult.Error);
+
+            Result<IEnumerable<ClientAvailableVideoDevice>> afterRemoval = await service.GetClientAvailableVideoDevicesAsync(clientId);
+
+            Assert.IsTrue(afterRemoval.Success);
+            Assert.AreEqual(0, afterRemoval.Data!.Count(), "Expected no active video devices after removal.");
+
+            Result<bool> thirdResult = await service.SetClientAvailableVideoDevicesAsync(clientId, initialDevices);
+
+            Assert.IsTrue(thirdResult.Success, thirdResult.Error);
+
+            Result<IEnumerable<ClientAvailableVideoDevice>> afterReturn = await service.GetClientAvailableVideoDevicesAsync(clientId);
+
+            Assert.IsTrue(afterReturn.Success);
+            Assert.AreEqual(1, afterReturn.Data!.Count(), "Expected the returning video device to be reactivated.");
+
+            ApplicationDbContext ctx = new(options);
+
+            int totalRows = await ctx.ClientAvailableVideoDevices
+                .Where(x => x.ClientId == clientId)
+                .CountAsync();
+
+            Assert.AreEqual(1, totalRows, "Expected the returning device to reuse its existing row, not create a duplicate.");
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableVideoDevicesAsync_ReturnsFailureWhenClientNotFound()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            List<ClientAvailableVideoDeviceDTO> devices =
+            [
+                new() { ClientId = Guid.NewGuid(), DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ];
+
+            Result<bool> result = await service.SetClientAvailableVideoDevicesAsync(Guid.NewGuid(), devices);
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("Client not found for the given client ID.", result.Error);
+        }
+
+        [TestMethod]
+        public async Task GetAllActiveVideoDeviceNamesAsync_ReturnsDistinctSortedNamesAcrossClients()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> clientOneResult = await service.CreateClientAsync(new Client { Name = "Client 1" });
+            Result<Client?> clientTwoResult = await service.CreateClientAsync(new Client { Name = "Client 2" });
+
+            Assert.IsTrue(clientOneResult.Success);
+            Assert.IsTrue(clientTwoResult.Success);
+
+            Result<bool> setOneResult = await service.SetClientAvailableVideoDevicesAsync(clientOneResult.Data!.Id,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() },
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Result<bool> setTwoResult = await service.SetClientAvailableVideoDevicesAsync(clientTwoResult.Data!.Id,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(setOneResult.Success, setOneResult.Error);
+            Assert.IsTrue(setTwoResult.Success, setTwoResult.Error);
+
+            Result<IEnumerable<string>> result = await service.GetAllActiveVideoDeviceNamesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+
+            List<string> deviceNames = result.Data!.ToList();
+
+            Assert.AreEqual(2, deviceNames.Count, "Expected the shared device name to be de-duplicated.");
+            Assert.AreEqual("Capture Card", deviceNames[0], "Expected device names to be sorted alphabetically.");
+            Assert.AreEqual("Webcam 1", deviceNames[1]);
+        }
+
+        [TestMethod]
+        public async Task GetAllActiveVideoDeviceNamesAsync_ExcludesInactiveDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client { Name = "Client 1" });
+
+            Assert.IsTrue(clientResult.Success);
+
+            Guid clientId = clientResult.Data!.Id;
+
+            Result<bool> firstSetResult = await service.SetClientAvailableVideoDevicesAsync(clientId,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() },
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(firstSetResult.Success, firstSetResult.Error);
+
+            Result<bool> secondSetResult = await service.SetClientAvailableVideoDevicesAsync(clientId,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(secondSetResult.Success, secondSetResult.Error);
+
+            Result<IEnumerable<string>> result = await service.GetAllActiveVideoDeviceNamesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+            Assert.AreEqual(1, result.Data!.Count(), "Expected the deactivated device name to be excluded.");
+            Assert.AreEqual("Webcam 1", result.Data!.First());
+        }
+
+        [TestMethod]
+        public async Task GetAllActiveVideoDeviceNamesAsync_ReturnsEmptyWhenNoDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<IEnumerable<string>> result = await service.GetAllActiveVideoDeviceNamesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+            Assert.AreEqual(0, result.Data!.Count(), "Expected no device names when nothing has been reported.");
+        }
+
+        [TestMethod]
+        public async Task GetAllActiveVideoDevicesWithClientNamesAsync_ReturnsJoinedClientNamesSorted()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> clientBravo = await service.CreateClientAsync(new Client { Name = "Bravo PC" });
+            Result<Client?> clientAlpha = await service.CreateClientAsync(new Client { Name = "Alpha PC" });
+
+            Assert.IsTrue(clientBravo.Success);
+            Assert.IsTrue(clientAlpha.Success);
+
+            Result<bool> setBravo = await service.SetClientAvailableVideoDevicesAsync(clientBravo.Data!.Id,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Result<bool> setAlpha = await service.SetClientAvailableVideoDevicesAsync(clientAlpha.Data!.Id,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(setBravo.Success, setBravo.Error);
+            Assert.IsTrue(setAlpha.Success, setAlpha.Error);
+
+            Result<IEnumerable<ActiveVideoDeviceInfoDTO>> result = await service.GetAllActiveVideoDevicesWithClientNamesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+
+            List<ActiveVideoDeviceInfoDTO> devices = result.Data!.ToList();
+
+            Assert.AreEqual(2, devices.Count);
+            Assert.AreEqual("Alpha PC", devices[0].ClientName, "Expected devices sorted by client name.");
+            Assert.AreEqual("Capture Card", devices[0].DeviceName);
+            Assert.AreEqual(clientAlpha.Data!.Id, devices[0].ClientId);
+            Assert.AreEqual("Bravo PC", devices[1].ClientName);
+            Assert.AreEqual("Webcam 1", devices[1].DeviceName);
+        }
+
+        [TestMethod]
+        public async Task GetAllActiveVideoDevicesWithClientNamesAsync_ExcludesInactiveDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client { Name = "Client 1" });
+
+            Assert.IsTrue(clientResult.Success);
+
+            Guid clientId = clientResult.Data!.Id;
+
+            Result<bool> firstSet = await service.SetClientAvailableVideoDevicesAsync(clientId,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() },
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Capture Card", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(firstSet.Success, firstSet.Error);
+
+            Result<bool> secondSet = await service.SetClientAvailableVideoDevicesAsync(clientId,
+            [
+                new ClientAvailableVideoDeviceDTO { DeviceName = "Webcam 1", DeviceId = Guid.NewGuid() }
+            ]);
+
+            Assert.IsTrue(secondSet.Success, secondSet.Error);
+
+            Result<IEnumerable<ActiveVideoDeviceInfoDTO>> result = await service.GetAllActiveVideoDevicesWithClientNamesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual(1, result.Data!.Count());
+            Assert.AreEqual("Webcam 1", result.Data!.First().DeviceName);
+        }
+
+        [TestMethod]
+        public async Task StartVideoPublisherOnClientAsync_FailsForUnknownClient()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(Guid.NewGuid(), "publisher-token");
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("Failed to get client.", result.Error);
+        }
+
+        [TestMethod]
+        public async Task StartVideoPublisherOnClientAsync_FailsWhenClientHasNoConnection()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client { Name = "Client 1" });
+
+            Assert.IsTrue(clientResult.Success);
+
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id, "publisher-token");
+
+            Assert.IsFalse(result.Success);
+            Assert.AreEqual("Client has no active connection.", result.Error);
+        }
+
+        [TestMethod]
+        public async Task StartVideoPublisherOnClientAsync_SendsCommandToClientConnection()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+
+            Mock<ISingleClientProxy> clientProxyMock = new();
+            Mock<IHubClients> hubClientsMock = new();
+            hubClientsMock.Setup(c => c.Client("connection-1")).Returns(clientProxyMock.Object);
+
+            Mock<IHubContext<SignalRControlHub>> hubContextMock = new();
+            hubContextMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+
+            ClientService service = new(
+                factoryMock.Object,
+                hubContextMock.Object,
+                new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
+                new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Object);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = "connection-1"
+            });
+
+            Assert.IsTrue(clientResult.Success);
+
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id, "publisher-token");
+
+            Assert.IsTrue(result.Success, result.Error);
+            clientProxyMock.Verify(p => p.SendCoreAsync("StartVideoPublisher",
+                It.Is<object?[]>(args => args.Length == 1 && (string)args[0]! == "publisher-token"),
+                It.IsAny<System.Threading.CancellationToken>()), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task GetClientAvailableVideoDevicesAsync_ReturnsEmptyListWhenClientNotFound()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<IEnumerable<ClientAvailableVideoDevice>> result = await service.GetClientAvailableVideoDevicesAsync(Guid.NewGuid());
+
+            Assert.IsTrue(result.Success);
+            Assert.IsNotNull(result.Data);
+            Assert.AreEqual(0, result.Data!.Count(), "Expected no available video devices.");
         }
 
         [TestMethod]

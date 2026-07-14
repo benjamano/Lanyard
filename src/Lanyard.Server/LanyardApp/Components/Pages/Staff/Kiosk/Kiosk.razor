@@ -52,9 +52,11 @@ else if (errorMessage is not null)
 }
 else if (projectionProgram is not null && clientProjectionSettings is not null)
 {
-    <KioskDisplay @ref="kioskDisplay" 
-                    ProjectionProgram="@projectionProgram" 
-                    RepeatCount="clientProjectionSettings.RepeatNumberOfTimes" 
+    <KioskDisplay @ref="kioskDisplay"
+                    ProjectionProgram="@projectionProgram"
+                    ClientId="clientGuid"
+                    ViewerToken="@Token"
+                    RepeatCount="clientProjectionSettings.RepeatNumberOfTimes"
                     RepeatInfinitely="clientProjectionSettings.RepeatInfinitely" />
 
     <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" 
@@ -70,6 +72,9 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
     [Parameter]
     public string projectionProgramId { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
     public ProjectionProgramStep? CurrentStep { get; set; } = null;
 
     private ClientProjectionSettings? clientProjectionSettings { get; set; } = null;
@@ -77,6 +82,8 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
     private ProjectionProgram? projectionProgram { get; set; } = null;
 
     public KioskDisplay kioskDisplay { get; set; } = default!;
+
+    private Guid clientGuid;
 
     private string? errorMessage { get; set; } = null;
 
@@ -89,7 +96,7 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
             return;
         }
 
-        if (!Guid.TryParse(clientId, out Guid clientGuid))
+        if (!Guid.TryParse(clientId, out clientGuid))
         {
             errorMessage = "Invalid client id.";
 

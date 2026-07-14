@@ -10,6 +10,8 @@ using Microsoft.AspNetCore;
 using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Client.PacketSniffing;
+using DirectShowLib;
+using Lanyard.Infrastructure.DTO.VideoDevices;
 
 public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxController, IMusicPlayer musicPlayer, IGameStateService gameStateService) : ISignalRClient
 {
@@ -165,6 +167,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         await SendMusicPlayerStatusToServer();
         await SendAvailableNetworkInterfacesToServer();
         await SendZoneScoreboardStatusToServer();
+        await SendAvailableVideoDevicesToServer();
     }
 
     private async Task SendZoneScoreboardStatusToServer()
@@ -283,6 +286,28 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         await _connection!.InvokeAsync("UpdateAvailableAudioDevices", devices);
     }
 
+    private async Task SendAvailableVideoDevicesToServer()
+    {
+        try
+        {
+            _logger.LogInformation("Sending available video devices to server...");
+
+            IEnumerable<ClientAvailableVideoDeviceDTO> devices = DsDevice.GetDevicesOfCat(FilterCategory.VideoInputDevice)
+                .Select(x => new ClientAvailableVideoDeviceDTO()
+                {
+                    ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
+                    DeviceName = x.Name,
+                    DeviceId = x.ClassID,
+                });
+
+            await _connection!.InvokeAsync("UpdateAvailableVideoDevices", devices);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending available video devices to server: {Message}", ex.Message);
+        }
+    }
+
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
@@ -291,6 +316,16 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     public async Task SendDmxChannelValueAsync(int channel, byte value)
     {
         await _connection!.InvokeAsync("UpdateDmxChannelValue", channel, value);
+    }
+
+    public async Task<string> IssueKioskTokenAsync()
+    {
+        if (_connection is null || _connection.State != HubConnectionState.Connected)
+        {
+            return string.Empty;
+        }
+
+        return await _connection.InvokeAsync<string>("IssueKioskToken");
     }
 }
 

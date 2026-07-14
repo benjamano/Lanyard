@@ -27,6 +27,8 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
 
         connection.On<Guid, int?>("TriggerProjectionProgram", async (projectionProgramId, displayIndex) =>
         {
+            //TODO: I THINK RUNNING THIS, FREEZES THE ENTIRE LANYARD CLIENT, AS ANY SIGNAL R INTERACTIONS DON'T GO THROUGH UNTIL THJE OPEN THING IS CLOSED.
+
             _logger.LogInformation("Received command to trigger projection program {ProgramId} on display {DisplayIndex}", projectionProgramId, displayIndex);
 
             await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, displayIndex, async () =>

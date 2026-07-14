@@ -2,6 +2,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
@@ -696,6 +697,193 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             _logger.LogError("Error setting client available DMX devices: {Message}", ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetClientAvailableVideoDevicesAsync(Guid clientId, IEnumerable<ClientAvailableVideoDeviceDTO> devices)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool clientExists = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .AnyAsync();
+
+            if (!clientExists)
+            {
+                return Result<bool>.Fail("Client not found for the given client ID.");
+            }
+
+            List<ClientAvailableVideoDevice> existingDevices = await ctx.ClientAvailableVideoDevices
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId)
+                .ToListAsync();
+
+            foreach (ClientAvailableVideoDevice deviceFound in existingDevices)
+            {
+                if (!devices.Any(d => d.DeviceName.Equals(deviceFound.DeviceName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    deviceFound.IsActive = false;
+                }
+            }
+
+            foreach (ClientAvailableVideoDeviceDTO incoming in devices)
+            {
+                ClientAvailableVideoDevice? match = existingDevices.FirstOrDefault(x => x.DeviceName.Equals(incoming.DeviceName, StringComparison.OrdinalIgnoreCase));
+
+                if (match == null)
+                {
+                    ClientAvailableVideoDevice newDevice = new()
+                    {
+                        ClientId = clientId,
+                        DeviceId = incoming.DeviceId,
+                        DeviceName = incoming.DeviceName,
+                        IsActive = true
+                    };
+
+                    ctx.ClientAvailableVideoDevices.Add(newDevice);
+                }
+                else
+                {
+                    match.IsActive = true;
+                    match.DeviceId = incoming.DeviceId;
+                }
+            }
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Updated available video devices for client {ClientId}: {Devices}", clientId, string.Join(", ", devices.Select(d => d.DeviceName)));
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error setting client available video devices: {Message}", ex.Message);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ClientAvailableVideoDevice>>> GetClientAvailableVideoDevicesAsync(Guid clientId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ClientAvailableVideoDevice> devices = await ctx.ClientAvailableVideoDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId)
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DeviceName)
+                .ToListAsync();
+
+            return Result<IEnumerable<ClientAvailableVideoDevice>>.Ok(devices);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ClientAvailableVideoDevice>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<string> deviceNames = await ctx.ClientAvailableVideoDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .Select(x => x.DeviceName)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync();
+
+            return Result<IEnumerable<string>>.Ok(deviceNames);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<string>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ActiveVideoDeviceInfoDTO> devices = await ctx.ClientAvailableVideoDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .Join(ctx.Clients,
+                    device => device.ClientId,
+                    client => client.Id,
+                    (device, client) => new ActiveVideoDeviceInfoDTO
+                    {
+                        ClientId = client.Id,
+                        ClientName = client.Name,
+                        DeviceName = device.DeviceName
+                    })
+                .OrderBy(x => x.ClientName)
+                .ThenBy(x => x.DeviceName)
+                .ToListAsync();
+
+            return Result<IEnumerable<ActiveVideoDeviceInfoDTO>>.Ok(devices);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ActiveVideoDeviceInfoDTO>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken)
+    {
+        return await SendVideoPublisherCommandAsync(clientId, "StartVideoPublisher", publisherToken);
+    }
+
+    public async Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId)
+    {
+        return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher", commandArgument: null);
+    }
+
+    private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName, string? commandArgument)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client has no active connection.");
+            }
+
+            if (commandArgument == null)
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync(commandName);
+            }
+            else
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync(commandName, commandArgument);
+            }
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
