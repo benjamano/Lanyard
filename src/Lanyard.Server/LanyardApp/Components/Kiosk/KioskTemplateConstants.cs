@@ -8,6 +8,7 @@ public static class KioskTemplateConstants
         public const string PlayVideo = "Play a Video";
         public const string Delay = "Delay";
         public const string Dashboard = "Dashboard";
+        public const string LiveCapture = "Live Capture";
     }
 
     public static class ParameterNames
@@ -17,5 +18,7 @@ public static class KioskTemplateConstants
         public const string ShouldRepeat = "ShouldRepeat";
         public const string Volume = "Volume";
         public const string Dashboard = "Dashboard";
+        public const string VideoDevice = "Video Device";
+        public const string EnableAudio = "Enable Audio";
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
+using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
@@ -28,6 +29,12 @@ public interface IClientService
     Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId);
     Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null);
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);
+    Task<Result<bool>> SetClientAvailableVideoDevicesAsync(Guid clientId, IEnumerable<ClientAvailableVideoDeviceDTO> devices);
+    Task<Result<IEnumerable<ClientAvailableVideoDevice>>> GetClientAvailableVideoDevicesAsync(Guid clientId);
+    Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync();
+    Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync();
+    Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);
+    Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId);
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);
     Task<Result<bool>> RemoveClientPrimaryDevice(Guid clientId, Guid deviceId);

@@ -17,10 +17,20 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 {
     <RenderDashboardTemplate Step="CurrentProjectionStep" />
 }
+else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.LiveCapture)
+{
+    <KioskLiveCaptureTemplate Step="CurrentProjectionStep" ClientId="ClientId" ViewerToken="@ViewerToken" />
+}
 
 @code {
     [Parameter]
     public ProjectionProgram projectionProgram { get; set; } = new() { Name = "" };
+
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ViewerToken { get; set; }
 
     [Parameter]
     public bool RepeatInfinitely { get; set; } = true;

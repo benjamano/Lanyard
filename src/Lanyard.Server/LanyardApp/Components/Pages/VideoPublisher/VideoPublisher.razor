@@ -1,0 +1,168 @@
+@page "/video-publisher/{ClientId:guid}"
+
+@using Lanyard.Application.Services.VideoStreaming
+
+@implements IVideoPublisherHandle
+@implements IAsyncDisposable
+
+@inject IVideoStreamSignalingService _signalingService
+@inject IJSRuntime JS
+@inject ILogger<VideoPublisher> _logger
+
+<PageTitle>Video Publisher</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" Class="p-4" VerticalGap="8">
+    <FluentText Size="TextSize.Size500">Video publisher for client @ClientId</FluentText>
+
+    @if (_rejected)
+    {
+        <FluentText Color="@Color.Error">Not authorised: this publisher was not started by the server.</FluentText>
+    }
+    else if (!_registered)
+    {
+        <FluentText>Starting...</FluentText>
+    }
+    else
+    {
+        <FluentText>@_activeSessionCount active session(s)</FluentText>
+    }
+
+    @foreach (string error in _sessionErrors)
+    {
+        <FluentText Color="@Color.Error">@error</FluentText>
+    }
+</FluentStack>
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    private DotNetObjectReference<VideoPublisher>? _selfRef;
+    private bool _registered;
+    private bool _rejected;
+    private int _activeSessionCount;
+    private readonly List<string> _sessionErrors = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Register only from the interactive render (never the prerender) and only after the
+        // JS side is initialised, so sessions can be forwarded the moment registration lands.
+        _selfRef = DotNetObjectReference.Create(this);
+
+        await JS.InvokeVoidAsync("videoPublisher.init", _selfRef);
+
+        if (!_signalingService.RegisterPublisher(this, Token))
+        {
+            _rejected = true;
+            StateHasChanged();
+            return;
+        }
+
+        _registered = true;
+
+        RefreshSessionCount();
+        StateHasChanged();
+    }
+
+    public async Task StartSessionAsync(Guid sessionId, string deviceName, bool enableAudio, int idealWidth, int idealHeight)
+    {
+        await InvokeAsync(async () =>
+        {
+            _logger.LogInformation("Publisher {ClientId} starting video session {SessionId} for device '{DeviceName}'", ClientId, sessionId, deviceName);
+
+            await JS.InvokeVoidAsync("videoPublisher.startSession", sessionId, deviceName, enableAudio, idealWidth, idealHeight);
+
+            RefreshSessionCount();
+            StateHasChanged();
+        });
+    }
+
+    public async Task ReceiveAnswerAsync(Guid sessionId, string sdpAnswer)
+    {
+        await InvokeAsync(async () =>
+        {
+            await JS.InvokeVoidAsync("videoPublisher.receiveAnswer", sessionId, sdpAnswer);
+        });
+    }
+
+    public async Task ReceiveIceCandidateAsync(Guid sessionId, string candidateJson)
+    {
+        await InvokeAsync(async () =>
+        {
+            await JS.InvokeVoidAsync("videoPublisher.addIceCandidate", sessionId, candidateJson);
+        });
+    }
+
+    public async Task EndSessionAsync(Guid sessionId)
+    {
+        await InvokeAsync(async () =>
+        {
+            await JS.InvokeVoidAsync("videoPublisher.endSession", sessionId);
+
+            RefreshSessionCount();
+            StateHasChanged();
+        });
+    }
+
+    [JSInvokable]
+    public async Task OnPublisherOffer(Guid sessionId, string sdpOffer)
+    {
+        await _signalingService.PublisherSendOfferAsync(sessionId, sdpOffer);
+    }
+
+    [JSInvokable]
+    public async Task OnPublisherIceCandidate(Guid sessionId, string candidateJson)
+    {
+        await _signalingService.PublisherSendIceCandidateAsync(sessionId, candidateJson);
+    }
+
+    [JSInvokable]
+    public async Task OnPublisherSessionError(Guid sessionId, string error)
+    {
+        await _signalingService.PublisherReportSessionErrorAsync(sessionId, error);
+
+        await InvokeAsync(() =>
+        {
+            _sessionErrors.Add($"Session {sessionId}: {error}");
+            RefreshSessionCount();
+            StateHasChanged();
+        });
+    }
+
+    private void RefreshSessionCount()
+    {
+        _activeSessionCount = _signalingService.GetActiveSessionCount(ClientId);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Deregister first: pure C#, always succeeds, and stops new sessions being routed here.
+        if (_registered)
+        {
+            _signalingService.UnregisterPublisher(this);
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("videoPublisher.disposeAll");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit is gone; the browser page (and its streams) is already torn down.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop unavailable (e.g. prerendering); nothing to stop.
+        }
+
+        _selfRef?.Dispose();
+    }
+}

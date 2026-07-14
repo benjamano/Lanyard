@@ -1,0 +1,294 @@
+@implements IAsyncDisposable
+@implements IVideoViewerHandle
+@using Lanyard.App.Components.Kiosk
+@using Lanyard.Application.Services.VideoStreaming
+@using Lanyard.Infrastructure.DTO.VideoDevices
+
+@inject IJSRuntime JS
+@inject IVideoStreamSignalingService _signalingService
+@inject ILogger<KioskLiveCaptureTemplate> _logger
+
+@if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <FluentText Color="@Color.Error">Unable to start video capture: @_errorMessage</FluentText>
+}
+
+<video id="@VideoElementId" width="100%" height="100%" autoplay playsinline></video>
+
+@code {
+    private const string VideoElementId = "live-capture-video";
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+
+    [Parameter, EditorRequired]
+    public ProjectionProgramStep Step { get; set; } = default!;
+
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ViewerToken { get; set; }
+
+    private string? _errorMessage;
+    private string _deviceName = string.Empty;
+    private bool _enableAudio;
+    private bool _pendingStart;
+
+    private bool _isRemote;
+    private Guid _sourceClientId;
+    private Guid? _sessionId;
+    private int _startGeneration;
+
+    private DotNetObjectReference<KioskLiveCaptureTemplate>? _selfRef;
+    private readonly CancellationTokenSource _disposeCts = new();
+
+    private Guid _lastStepId = Guid.Empty;
+    private string? _lastDeviceValue;
+    private string? _lastEnableAudioValue;
+
+    protected override void OnParametersSet()
+    {
+        string? deviceValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.VideoDevice);
+        string? enableAudioValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.EnableAudio);
+
+        bool hasRelevantChange = _lastStepId != Step.Id
+            || !string.Equals(deviceValue, _lastDeviceValue, StringComparison.Ordinal)
+            || !string.Equals(enableAudioValue, _lastEnableAudioValue, StringComparison.Ordinal);
+
+        if (!hasRelevantChange)
+        {
+            return;
+        }
+
+        _lastStepId = Step.Id;
+        _lastDeviceValue = deviceValue;
+        _lastEnableAudioValue = enableAudioValue;
+
+        _enableAudio = bool.TryParse(enableAudioValue, out bool enableAudio) && enableAudio;
+
+        if (VideoDeviceParameterValue.TryParseRemote(deviceValue, out Guid sourceClientId, out string parsedDeviceName))
+        {
+            // The device belongs to this kiosk's own machine: capture locally, no WebRTC loopback.
+            _isRemote = sourceClientId != ClientId;
+            _sourceClientId = sourceClientId;
+            _deviceName = parsedDeviceName;
+        }
+        else
+        {
+            _isRemote = false;
+            _sourceClientId = Guid.Empty;
+            _deviceName = deviceValue ?? string.Empty;
+        }
+
+        _startGeneration++;
+        _pendingStart = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_pendingStart)
+        {
+            return;
+        }
+
+        _pendingStart = false;
+
+        _selfRef ??= DotNetObjectReference.Create(this);
+
+        await StopCurrentAsync();
+
+        if (_isRemote)
+        {
+            await StartRemoteAsync(_startGeneration);
+        }
+        else
+        {
+            string error = await JS.InvokeAsync<string>("startLiveCapture", VideoElementId, _deviceName, _enableAudio);
+
+            SetErrorMessage(string.IsNullOrWhiteSpace(error) ? null : error);
+        }
+    }
+
+    private async Task StartRemoteAsync(int generation)
+    {
+        try
+        {
+            int[] targetDimensions = await JS.InvokeAsync<int[]>("videoViewer.getTargetDimensions");
+
+            Result<Guid> sessionResult = await _signalingService.CreateSessionAsync(
+                _sourceClientId, ClientId, ViewerToken, _deviceName, _enableAudio,
+                targetDimensions[0], targetDimensions[1], this, _disposeCts.Token);
+
+            if (generation != _startGeneration || _disposeCts.IsCancellationRequested)
+            {
+                // Config changed or component disposed while waiting; abandon this session.
+                if (sessionResult.IsSuccess)
+                {
+                    await _signalingService.EndSessionAsync(sessionResult.Data);
+                }
+
+                return;
+            }
+
+            if (!sessionResult.IsSuccess)
+            {
+                SetErrorMessage(sessionResult.Error);
+                ScheduleRetry(generation);
+
+                return;
+            }
+
+            _sessionId = sessionResult.Data;
+
+            SetErrorMessage(null);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit gone; nothing to retry.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to start remote video session for client {SourceClientId}", _sourceClientId);
+
+            SetErrorMessage(ex.Message);
+            ScheduleRetry(generation);
+        }
+    }
+
+    private void ScheduleRetry(int generation)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(RetryDelay, _disposeCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (generation != _startGeneration)
+            {
+                return;
+            }
+
+            await InvokeAsync(async () =>
+            {
+                if (generation == _startGeneration && !_disposeCts.IsCancellationRequested)
+                {
+                    await StartRemoteAsync(generation);
+                }
+            });
+        });
+    }
+
+    public async Task ReceiveOfferAsync(Guid sessionId, string sdpOffer)
+    {
+        string answerSdp = string.Empty;
+
+        await InvokeAsync(async () =>
+        {
+            answerSdp = await JS.InvokeAsync<string>("videoViewer.receiveOffer", VideoElementId, sessionId, sdpOffer, _enableAudio, _selfRef);
+        });
+
+        await _signalingService.ViewerSendAnswerAsync(sessionId, answerSdp);
+    }
+
+    public async Task ReceiveIceCandidateAsync(Guid sessionId, string candidateJson)
+    {
+        await InvokeAsync(async () =>
+        {
+            await JS.InvokeVoidAsync("videoViewer.addIceCandidate", sessionId, candidateJson);
+        });
+    }
+
+    public async Task SessionEndedAsync(Guid sessionId, string? error)
+    {
+        await InvokeAsync(async () =>
+        {
+            if (_sessionId != sessionId)
+            {
+                return;
+            }
+
+            _sessionId = null;
+
+            try
+            {
+                await JS.InvokeVoidAsync("videoViewer.stop", sessionId, VideoElementId);
+            }
+            catch (JSDisconnectedException) { }
+            catch (InvalidOperationException) { }
+
+            SetErrorMessage(error ?? "Video source disconnected.");
+            ScheduleRetry(_startGeneration);
+        });
+    }
+
+    [JSInvokable]
+    public async Task OnViewerIceCandidate(Guid sessionId, string candidateJson)
+    {
+        await _signalingService.ViewerSendIceCandidateAsync(sessionId, candidateJson);
+    }
+
+    [JSInvokable]
+    public async Task OnViewerConnectionLost(Guid sessionId)
+    {
+        // Clean up the server-side session (and the publisher, if still reachable),
+        // then run the normal ended path: clear the video, show the error, retry.
+        await _signalingService.EndSessionAsync(sessionId);
+        await SessionEndedAsync(sessionId, "The video connection was lost.");
+    }
+
+    private string? GetStepParameterValue(string parameterName)
+    {
+        return Step.ParameterValues
+            .Where(x => x.Parameter?.Name == parameterName)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+    }
+
+    private void SetErrorMessage(string? error)
+    {
+        if (!string.Equals(error, _errorMessage, StringComparison.Ordinal))
+        {
+            _errorMessage = error;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopCurrentAsync()
+    {
+        if (_sessionId is Guid previousSessionId)
+        {
+            _sessionId = null;
+
+            await _signalingService.EndSessionAsync(previousSessionId);
+
+            try
+            {
+                await JS.InvokeVoidAsync("videoViewer.stop", previousSessionId, VideoElementId);
+            }
+            catch (JSDisconnectedException) { }
+            catch (InvalidOperationException) { }
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("stopLiveCapture", VideoElementId);
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeCts.Cancel();
+        _startGeneration++;
+
+        await StopCurrentAsync();
+
+        _selfRef?.Dispose();
+        _disposeCts.Dispose();
+    }
+}
