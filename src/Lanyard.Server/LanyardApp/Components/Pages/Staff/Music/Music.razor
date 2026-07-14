@@ -149,13 +149,15 @@
                         }
                     </div>
 
-                    <FluentSlider Style="Width: 750px;" 
-                                    Value="currentSongTime" 
-                                    Min="0" 
+                    <FluentSlider Style="Width: 750px;"
+                                    Value="currentSongTime"
+                                    Min="0"
                                     Max="@(currentSongLength != 0 ? currentSongLength : 1)"
-                                    TValue="double" 
-                                    Orientation="Orientation.Horizontal" 
-                                    Disabled="@(selectedClientId == null || currentSongLength == 0)" 
+                                    TValue="double"
+                                    Orientation="Orientation.Horizontal"
+                                    Disabled="@(selectedClientId == null || currentSongLength == 0)"
+                                    @onpointerdown="OnSeekStart"
+                                    @onpointerup="OnSeekEnd"
                                     ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
 
                     <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
@@ -186,6 +188,7 @@
     private int currentSongLength = 0;
     private Timer? songTimeTimer;
     private bool showTimeLeftInsteadOfElapsed = false;
+    private bool isUserSeeking = false;
 
     private Guid? initialPlaylistId;
 
@@ -400,7 +403,16 @@
         {
             if (selectedClientId.HasValue)
             {
-                currentSongTime += 0.1f;
+                // While the user is dragging the timeline, don't push updates that would
+                // snap the slider thumb back to the playback position.
+                if (isUserSeeking)
+                {
+                    return;
+                }
+
+                // Advance in whole seconds so the slider (integer step, rounds) and the
+                // elapsed-time text (TimeSpan, truncates) stay on the same value in lockstep.
+                currentSongTime += 1f;
 
                 await InvokeAsync(StateHasChanged);
             }
@@ -408,7 +420,7 @@
             {
                 stopSongTimeTimer();
             }
-        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     private async Task<Guid?> GetPersistedSelectedClientIdAsync()
@@ -466,6 +478,8 @@
         }
 
         await _player.RestartOrPrevious(selectedClientId.Value);
+
+        SyncSongProgressFromServer();
     }
 
     private async Task PreviousSong()
@@ -477,6 +491,8 @@
         }
 
         await _player.Previous(selectedClientId.Value);
+
+        SyncSongProgressFromServer();
     }
 
     private async Task NextSong()
@@ -488,6 +504,22 @@
         }
 
         await _player.Next(selectedClientId.Value);
+
+        SyncSongProgressFromServer();
+    }
+
+    // Restart/next/previous reset (or replace) the track without a playback-state transition,
+    // so HandlePlaybackStateChanged won't fire. Pull the fresh position/length so the timeline
+    // reflects the new track immediately instead of the timer counting on from the old value.
+    private void SyncSongProgressFromServer()
+    {
+        if (selectedClientId == null)
+        {
+            return;
+        }
+
+        currentSongTime = _player.GetCurrentSongTime(selectedClientId.Value);
+        currentSongLength = _player.GetCurrentSongLength(selectedClientId.Value);
     }
 
     private void HandleSongsSelected((IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs) args)
@@ -545,17 +577,57 @@
         isRepeatEnabled = await _player.ToggleRepeat(selectedClientId.Value);
     }
 
+    private void OnSeekStart()
+    {
+        isUserSeeking = true;
+    }
+
+    private async Task OnSeekEnd()
+    {
+        // Only act if this pointer-up ends a drag we started tracking, so a stray
+        // pointer-up doesn't fire a redundant seek.
+        if (!isUserSeeking)
+        {
+            return;
+        }
+
+        isUserSeeking = false;
+
+        await CommitSeekAsync();
+    }
+
     private async Task OnSongTimeChanged(double newTime)
+    {
+        // FluentSlider raises ValueChanged continuously while dragging. Follow the thumb
+        // for display, but defer the actual seek until the user releases (OnSeekEnd) so the
+        // 100ms timer can't resume mid-drag and yank the thumb back to the playback position.
+        if (isUserSeeking)
+        {
+            currentSongTime = (float)newTime;
+            return;
+        }
+
+        // Ignore echo events: re-rendering the slider (e.g. from the playback timer) makes
+        // the underlying web component re-raise ValueChanged with a rounded copy of the value
+        // we just set. Comparing before assigning keeps those echoes from stalling the timeline.
+        if (Math.Abs(newTime - currentSongTime) < 0.5)
+        {
+            return;
+        }
+
+        // Genuine change from outside a drag (e.g. keyboard adjustment) — commit immediately.
+        currentSongTime = (float)newTime;
+
+        await CommitSeekAsync();
+    }
+
+    private async Task CommitSeekAsync()
     {
         if (selectedClientId == null)
         {
             _toastService.ShowWarning("Select a connected client first.");
             return;
         }
-
-        if (Math.Abs(newTime - currentSongTime) < 0.5) return;
-
-        currentSongTime = (float)newTime;
 
         await _player.Seek(selectedClientId.Value, currentSongTime);
     }

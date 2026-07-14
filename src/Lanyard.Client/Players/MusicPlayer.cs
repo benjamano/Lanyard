@@ -71,21 +71,35 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             return Result<bool>.Fail("Player not initialised");
         }
 
-        if (_player.PlaybackState != PlaybackState.Playing)
+        if (_player.PlaybackState == PlaybackState.Playing)
         {
-            await Load(QueueIndex, SongAndPlaylistQueue[QueueIndex]);
+            return Result<bool>.Ok(true);
+        }
 
-            _logger.LogInformation("MusicPlayer: Play");
+        // Resume from a pause without reloading, otherwise the track restarts from the beginning.
+        if (_player.PlaybackState == PlaybackState.Paused && _reader != null)
+        {
+            _logger.LogInformation("MusicPlayer: Resume");
             _player.Play();
 
             await UpdateServerPlaybackStatus();
 
-            if (SongAndPlaylistQueue.Count > 0 && QueueIndex != Guid.Empty)
-            {
-                await UpdateServerCurrentPlayingSong();
+            return Result<bool>.Ok(true);
+        }
 
-                PreCacheNext();
-            }
+        // Stopped (or no reader loaded): load the current song from the start and play it.
+        await Load(QueueIndex, SongAndPlaylistQueue[QueueIndex]);
+
+        _logger.LogInformation("MusicPlayer: Play");
+        _player.Play();
+
+        await UpdateServerPlaybackStatus();
+
+        if (SongAndPlaylistQueue.Count > 0 && QueueIndex != Guid.Empty)
+        {
+            await UpdateServerCurrentPlayingSong();
+
+            PreCacheNext();
         }
 
         return Result<bool>.Ok(true);
