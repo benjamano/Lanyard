@@ -27,6 +27,7 @@ public class FileService : IFileService
     private readonly bool _isDevelopment;
     private readonly string? _bucketName;
     private readonly IAmazonS3? _s3Client;
+    private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
 
     public FileService(
         IDbContextFactory<ApplicationDbContext> dbFactory,
@@ -82,6 +83,44 @@ public class FileService : IFileService
         return $"{prefix}/{fileId}{fileName}";
     }
 
+    private static (double durationSeconds, string albumName) TryReadAudioMetadata(IFormFile file, string fileName)
+    {
+        try
+        {
+            using Stream stream = file.OpenReadStream();
+            using TagLib.File tag = TagLib.File.Create(new StreamFileAbstraction(fileName, stream));
+
+            double durationSeconds = tag.Properties.Duration.TotalSeconds;
+            string albumName = tag.Tag.Album ?? string.Empty;
+
+            return (durationSeconds, albumName);
+        }
+        catch
+        {
+            return (0, string.Empty);
+        }
+    }
+
+    private sealed class StreamFileAbstraction : TagLib.File.IFileAbstraction
+    {
+        private readonly Stream _stream;
+
+        public StreamFileAbstraction(string name, Stream stream)
+        {
+            Name = name;
+            _stream = stream;
+        }
+
+        public string Name { get; }
+        public Stream ReadStream => _stream;
+        public Stream WriteStream => _stream;
+
+        public void CloseStream(Stream stream)
+        {
+            // The caller owns the stream lifetime; do not close it here.
+        }
+    }
+
     public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken)
     {
         Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
@@ -105,6 +144,11 @@ public class FileService : IFileService
             string fileName = Path.GetFileName(file.FileName);
             Guid fileId = Guid.NewGuid();
             string filePath;
+
+            bool isAudio = _audioExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
+            (double durationSeconds, string albumName) = isAudio
+                ? TryReadAudioMetadata(file, fileName)
+                : (0, string.Empty);
 
             if (_isDevelopment)
             {
@@ -156,6 +200,27 @@ public class FileService : IFileService
             };
 
             db.FileMetadata.Add(metadata);
+
+            // Audio uploads are also registered as songs so they show up in the music library.
+            // The file itself lives wherever the upload landed (local disk in dev, Railway bucket in prod);
+            // Song.FilePath mirrors FileMetadata.FilePath so MusicService/DownloadFileAsync can resolve it.
+            if (isAudio)
+            {
+                Song song = new()
+                {
+                    Id = Guid.NewGuid(),
+                    Name = Path.GetFileNameWithoutExtension(fileName),
+                    AlbumName = albumName,
+                    FilePath = filePath,
+                    DurationSeconds = durationSeconds,
+                    CreateDate = DateTime.UtcNow,
+                    IsDownloaded = true,
+                    IsActive = true,
+                    FileMetadataId = fileId
+                };
+
+                db.Songs.Add(song);
+            }
 
             await db.SaveChangesAsync(cancellationToken);
 
@@ -220,6 +285,17 @@ public class FileService : IFileService
                 };
 
                 await _s3Client!.DeleteObjectAsync(deleteRequest, cancellationToken);
+            }
+
+            // Retire the song backed by this file (if any) so it drops out of the library.
+            // Done before the file row is removed; the FK is configured to null on delete.
+            List<Song> songs = await db.Songs
+                .Where(s => s.FileMetadataId == file.Id && s.IsActive)
+                .ToListAsync(cancellationToken);
+
+            foreach (Song song in songs)
+            {
+                song.IsActive = false;
             }
 
             db.FileMetadata.Remove(file);
