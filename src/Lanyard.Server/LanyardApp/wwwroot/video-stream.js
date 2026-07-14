@@ -3,6 +3,33 @@
 // videoViewer runs on the kiosk that displays the remote stream. SDP/ICE signaling
 // travels through the server's VideoStreamSignalingService via Blazor circuits.
 
+// STUN fallback used when the server supplies no ICE servers. Note it needs internet
+// access; on an isolated LAN it is harmless (host candidates are still gathered) but a
+// configured TURN server is what makes blocked networks work.
+const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+function parseIceServers(iceServersJson) {
+    try {
+        const parsed = JSON.parse(iceServersJson || '[]');
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+        }
+    } catch {
+        // fall through to default
+    }
+    return DEFAULT_ICE_SERVERS;
+}
+
+// Routes ICE candidate + connection-state events back to the server log (via the page's
+// Blazor circuit) so a two-machine setup can be diagnosed from one console: which candidate
+// types/IPs each side gathered, and exactly where the connection stalls.
+function attachIceDiagnostics(pc, report) {
+    pc.addEventListener('icegatheringstatechange', () => report('ice-gathering', pc.iceGatheringState));
+    pc.addEventListener('iceconnectionstatechange', () => report('ice-connection', pc.iceConnectionState));
+    pc.addEventListener('connectionstatechange', () => report('connection', pc.connectionState));
+    pc.addEventListener('icecandidateerror', e => report('ice-candidate-error', `code=${e.errorCode} ${e.errorText || ''} url=${e.url || ''}`));
+}
+
 window.videoPublisher = (() => {
     let dotNetRef = null;
     const sessions = new Map(); // sessionId -> { pc, deviceKey, pendingCandidates, remoteDescSet }
@@ -43,18 +70,25 @@ window.videoPublisher = (() => {
             dotNetRef = ref;
         },
 
-        async startSession(sessionId, deviceName, enableAudio, idealWidth, idealHeight) {
+        async startSession(sessionId, deviceName, enableAudio, idealWidth, idealHeight, iceServersJson) {
+            const report = (phase, detail) => {
+                if (dotNetRef) dotNetRef.invokeMethodAsync('OnIceDiagnostic', sessionId, phase, detail);
+            };
+
             try {
                 const deviceKey = `${(deviceName || "").toLowerCase()}|${!!enableAudio}`;
                 const stream = await acquireShared(deviceKey, deviceName, enableAudio, idealWidth || 1920, idealHeight || 1080);
 
-                const pc = new RTCPeerConnection({ iceServers: [] });
+                const pc = new RTCPeerConnection({ iceServers: parseIceServers(iceServersJson) });
                 sessions.set(sessionId, { pc: pc, deviceKey: deviceKey, pendingCandidates: [], remoteDescSet: false });
+
+                attachIceDiagnostics(pc, report);
 
                 stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
                 pc.onicecandidate = e => {
                     if (e.candidate && dotNetRef) {
+                        report('local-candidate', e.candidate.candidate);
                         dotNetRef.invokeMethodAsync('OnPublisherIceCandidate', sessionId, JSON.stringify(e.candidate));
                     }
                 };
@@ -101,6 +135,9 @@ window.videoPublisher = (() => {
             if (!session) return;
 
             const candidate = JSON.parse(candidateJson);
+            if (dotNetRef && candidate && candidate.candidate) {
+                dotNetRef.invokeMethodAsync('OnIceDiagnostic', sessionId, 'remote-candidate', candidate.candidate);
+            }
 
             // ICE candidates can trickle in before the answer sets the remote description.
             if (session.remoteDescSet) {
@@ -139,13 +176,18 @@ window.videoViewer = (() => {
             ];
         },
 
-        async receiveOffer(videoElementId, sessionId, sdpOffer, enableAudio, dotNetRef) {
-            const pc = new RTCPeerConnection({ iceServers: [] });
+        async receiveOffer(videoElementId, sessionId, sdpOffer, enableAudio, dotNetRef, iceServersJson) {
+            const report = (phase, detail) => dotNetRef.invokeMethodAsync('OnIceDiagnostic', sessionId, phase, detail);
+
+            const pc = new RTCPeerConnection({ iceServers: parseIceServers(iceServersJson) });
             const session = { pc: pc, videoElementId: videoElementId, pendingCandidates: [], remoteDescSet: false, lostNotified: false, disconnectTimer: null };
             sessions.set(sessionId, session);
 
+            attachIceDiagnostics(pc, report);
+
             pc.onicecandidate = e => {
                 if (e.candidate) {
+                    report('local-candidate', e.candidate.candidate);
                     dotNetRef.invokeMethodAsync('OnViewerIceCandidate', sessionId, JSON.stringify(e.candidate));
                 }
             };

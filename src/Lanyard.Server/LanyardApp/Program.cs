@@ -53,6 +53,7 @@ builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
+builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
 builder.Services.AddSingleton<MusicPlayerService>();
 builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());

@@ -159,6 +159,10 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             $"--window-size={width/2},{height/2} " +
             $"--no-first-run --disable-session-crashed-bubble " +
             mediaCaptureArgs +
+            // The server uses the .NET dev cert over HTTPS, which is only valid for localhost and
+            // untrusted on other machines; accept it so the kiosk loads without a cert interstitial.
+            // The origin stays HTTPS (a valid secure context for camera + WebRTC).
+            $"--ignore-certificate-errors " +
             // Real LAN host ICE candidates (not mDNS .local names) so cross-client WebRTC
             // streams connect, and no gesture requirement for audible playback.
             $"--disable-features=WebRtcHideLocalIpsWithMdns " +

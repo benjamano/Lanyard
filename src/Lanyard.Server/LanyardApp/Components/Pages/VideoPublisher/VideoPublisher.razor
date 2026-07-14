@@ -1,11 +1,13 @@
 @page "/video-publisher/{ClientId:guid}"
 
 @using Lanyard.Application.Services.VideoStreaming
+@using Microsoft.Extensions.Options
 
 @implements IVideoPublisherHandle
 @implements IAsyncDisposable
 
 @inject IVideoStreamSignalingService _signalingService
+@inject IOptions<VideoStreamingOptions> _videoStreamingOptions
 @inject IJSRuntime JS
 @inject ILogger<VideoPublisher> _logger
 
@@ -78,11 +80,17 @@
         {
             _logger.LogInformation("Publisher {ClientId} starting video session {SessionId} for device '{DeviceName}'", ClientId, sessionId, deviceName);
 
-            await JS.InvokeVoidAsync("videoPublisher.startSession", sessionId, deviceName, enableAudio, idealWidth, idealHeight);
+            await JS.InvokeVoidAsync("videoPublisher.startSession", sessionId, deviceName, enableAudio, idealWidth, idealHeight, _videoStreamingOptions.Value.ToIceServersJson());
 
             RefreshSessionCount();
             StateHasChanged();
         });
+    }
+
+    [JSInvokable]
+    public void OnIceDiagnostic(Guid sessionId, string phase, string detail)
+    {
+        _logger.LogInformation("Publisher {ClientId} session {SessionId} [{Phase}]: {Detail}", ClientId, sessionId, phase, detail);
     }
 
     public async Task ReceiveAnswerAsync(Guid sessionId, string sdpAnswer)

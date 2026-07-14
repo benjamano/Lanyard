@@ -50,6 +50,9 @@ public class VideoPublisherWindowService(ILogger<VideoPublisherWindowService> lo
                 $"--window-size=480,360 " +
                 $"--no-first-run --disable-session-crashed-bubble " +
                 mediaCaptureArgs +
+                // Accept the server's HTTPS dev cert (localhost-only, untrusted elsewhere) so the
+                // publisher loads without an interstitial; the origin stays a secure context.
+                $"--ignore-certificate-errors " +
                 // Real LAN host ICE candidates instead of mDNS .local hostnames, and no
                 // throttling of the hidden window's timers/rendering while it streams.
                 $"--disable-features=WebRtcHideLocalIpsWithMdns " +

@@ -3,9 +3,11 @@
 @using Lanyard.App.Components.Kiosk
 @using Lanyard.Application.Services.VideoStreaming
 @using Lanyard.Infrastructure.DTO.VideoDevices
+@using Microsoft.Extensions.Options
 
 @inject IJSRuntime JS
 @inject IVideoStreamSignalingService _signalingService
+@inject IOptions<VideoStreamingOptions> _videoStreamingOptions
 @inject ILogger<KioskLiveCaptureTemplate> _logger
 
 @if (!string.IsNullOrWhiteSpace(_errorMessage))
@@ -188,7 +190,7 @@
 
         await InvokeAsync(async () =>
         {
-            answerSdp = await JS.InvokeAsync<string>("videoViewer.receiveOffer", VideoElementId, sessionId, sdpOffer, _enableAudio, _selfRef);
+            answerSdp = await JS.InvokeAsync<string>("videoViewer.receiveOffer", VideoElementId, sessionId, sdpOffer, _enableAudio, _selfRef, _videoStreamingOptions.Value.ToIceServersJson());
         });
 
         await _signalingService.ViewerSendAnswerAsync(sessionId, answerSdp);
@@ -229,6 +231,12 @@
     public async Task OnViewerIceCandidate(Guid sessionId, string candidateJson)
     {
         await _signalingService.ViewerSendIceCandidateAsync(sessionId, candidateJson);
+    }
+
+    [JSInvokable]
+    public void OnIceDiagnostic(Guid sessionId, string phase, string detail)
+    {
+        _logger.LogInformation("Viewer {ClientId} session {SessionId} [{Phase}]: {Detail}", ClientId, sessionId, phase, detail);
     }
 
     [JSInvokable]
