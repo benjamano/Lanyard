@@ -52,9 +52,9 @@ public class VerifyEnvironmentVariables
 
             while (string.IsNullOrWhiteSpace(variable))
             {
-                Console.WriteLine($"Please set the {envVar} (Press enter for the default: {defaultValue}): ");
+                // Console.WriteLine($"Please set the {envVar} (Press enter for the default: {defaultValue}): ");
 
-                variable = Console.ReadLine();
+                // variable = Console.ReadLine();
 
                 if (string.IsNullOrWhiteSpace(variable))
                 {
