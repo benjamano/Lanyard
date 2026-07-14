@@ -60,7 +60,16 @@
                             }
 
                             <FluentButton IconStart="volumeIcon" Appearance="ButtonAppearance.Subtle" Disabled="@(selectedClientId == null)" OnClick="ToggleMuteVolume"></FluentButton>
-                            <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100" Step="1" TValue="int" Value="currentVolume" ValueChanged="(volume) => HandleVolumeChange(volume)" Orientation="Orientation.Horizontal" Class="w-100"></FluentSlider>
+
+                            <FluentStack>
+                                <FluentSlider Disabled="@(selectedClientId == null)" 
+                                                Min="0" 
+                                                Max="100" 
+                                                TValue="int" 
+                                                Value="currentVolume" 
+                                                ValueChanged="(volume) => HandleVolumeChange(volume)" 
+                                                Orientation="Orientation.Horizontal" />
+                            </FluentStack>
                         </FluentStack>
                     </FluentGridItem>
                 </FluentGrid>
@@ -136,7 +145,14 @@
                         }
                     </div>
 
-                    <FluentSlider Style="Width: 750px;" Value="currentSongTime" Min="0" Max="@(currentSongLength != 0 ? currentSongLength : 1)" Step="1" TValue="double" Orientation="Orientation.Horizontal" Disabled="@(selectedClientId == null || currentSongLength == 0)" ValueChanged="(double newValue) => OnSongTimeChanged(newValue)"></FluentSlider>
+                    <FluentSlider Style="Width: 750px;" 
+                                    Value="currentSongTime" 
+                                    Min="0" 
+                                    Max="@(currentSongLength != 0 ? currentSongLength : 1)"
+                                    TValue="double" 
+                                    Orientation="Orientation.Horizontal" 
+                                    Disabled="@(selectedClientId == null || currentSongLength == 0)" 
+                                    ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
 
                     <FluentText Color="Color.Info">@TimeSpan.FromSeconds(currentSongLength).ToString(@"mm\:ss")</FluentText>
                 </FluentStack>

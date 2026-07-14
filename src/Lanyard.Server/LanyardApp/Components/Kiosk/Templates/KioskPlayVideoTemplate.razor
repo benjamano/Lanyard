@@ -112,6 +112,7 @@ else
         }
 
         _applyVolumeAfterRender = false;
+        
         await JS.InvokeVoidAsync("setVideoVolume", $"video_{_currentVideoFileId}", double.Parse(_currentVolume) / 100);
     }
 
