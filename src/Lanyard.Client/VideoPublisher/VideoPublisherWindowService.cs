@@ -15,7 +15,7 @@ public class VideoPublisherWindowService(ILogger<VideoPublisherWindowService> lo
     private Process? _publisherProcess;
     private readonly object _lock = new();
 
-    public void EnsureRunning()
+    public void EnsureRunning(string publisherToken)
     {
         lock (_lock)
         {
@@ -25,7 +25,7 @@ public class VideoPublisherWindowService(ILogger<VideoPublisherWindowService> lo
             StopInternal();
 
             string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
-            string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/video-publisher/{clientId}";
+            string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/video-publisher/{clientId}?token={Uri.EscapeDataString(publisherToken)}";
 
             string userDataDir = Path.Combine(Path.GetTempPath(), "LanyardVideoPublisher", clientId);
 

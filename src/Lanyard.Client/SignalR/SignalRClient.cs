@@ -317,6 +317,16 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     {
         await _connection!.InvokeAsync("UpdateDmxChannelValue", channel, value);
     }
+
+    public async Task<string> IssueKioskTokenAsync()
+    {
+        if (_connection is null || _connection.State != HubConnectionState.Connected)
+        {
+            return string.Empty;
+        }
+
+        return await _connection.InvokeAsync<string>("IssueKioskToken");
+    }
 }
 
 public class RetryForeverPolicy : IRetryPolicy

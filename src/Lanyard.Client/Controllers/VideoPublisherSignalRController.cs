@@ -11,11 +11,11 @@ public class VideoPublisherSignalRController(IVideoPublisherWindowService window
 
     public void Register(HubConnection connection)
     {
-        connection.On("StartVideoPublisher", () =>
+        connection.On<string>("StartVideoPublisher", token =>
         {
             _logger.LogInformation("Received StartVideoPublisher command from server.");
 
-            _windowService.EnsureRunning();
+            _windowService.EnsureRunning(token);
         });
 
         connection.On("StopVideoPublisher", () =>
