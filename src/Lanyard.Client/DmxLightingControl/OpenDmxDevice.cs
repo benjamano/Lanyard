@@ -97,11 +97,7 @@ public class OpenDmxDevice : IDisposable
 
         FTDI.FT_STATUS status = ftdi.GetNumberOfDevices(ref deviceCount);
 
-        if (status != FTDI.FT_STATUS.FT_OK || deviceCount == 0)
-        {
-            _logger.LogWarning("No FTDI devices found for DMX control.");
-        }
-        else
+        if (status == FTDI.FT_STATUS.FT_OK && deviceCount > 0)
         {
             for (uint i = 0; i < deviceCount; i++)
             {
