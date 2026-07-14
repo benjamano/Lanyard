@@ -19,7 +19,7 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 }
 else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.LiveCapture)
 {
-    <KioskLiveCaptureTemplate Step="CurrentProjectionStep" ClientId="ClientId" />
+    <KioskLiveCaptureTemplate Step="CurrentProjectionStep" ClientId="ClientId" ViewerToken="@ViewerToken" />
 }
 
 @code {
@@ -28,6 +28,9 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
 
     [Parameter]
     public Guid ClientId { get; set; }
+
+    [Parameter]
+    public string? ViewerToken { get; set; }
 
     [Parameter]
     public bool RepeatInfinitely { get; set; } = true;

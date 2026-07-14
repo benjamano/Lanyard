@@ -55,6 +55,7 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
     <KioskDisplay @ref="kioskDisplay"
                     ProjectionProgram="@projectionProgram"
                     ClientId="clientGuid"
+                    ViewerToken="@Token"
                     RepeatCount="clientProjectionSettings.RepeatNumberOfTimes"
                     RepeatInfinitely="clientProjectionSettings.RepeatInfinitely" />
 
@@ -70,6 +71,9 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     [Parameter]
     public string projectionProgramId { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
 
     public ProjectionProgramStep? CurrentStep { get; set; } = null;
 

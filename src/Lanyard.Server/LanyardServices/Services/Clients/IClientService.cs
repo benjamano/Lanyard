@@ -33,7 +33,7 @@ public interface IClientService
     Task<Result<IEnumerable<ClientAvailableVideoDevice>>> GetClientAvailableVideoDevicesAsync(Guid clientId);
     Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync();
     Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync();
-    Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId);
+    Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);
     Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId);
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);

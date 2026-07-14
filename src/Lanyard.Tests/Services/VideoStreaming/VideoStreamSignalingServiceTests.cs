@@ -15,6 +15,7 @@ namespace Lanyard.Tests.Services.VideoStreaming
     public class VideoStreamSignalingServiceTests
     {
         private Mock<IClientService> _clientServiceMock = default!;
+        private VideoStreamTokenService _tokenService = default!;
         private VideoStreamSignalingService _service = default!;
 
         [TestInitialize]
@@ -31,7 +32,8 @@ namespace Lanyard.Tests.Services.VideoStreaming
             Mock<IServiceScopeFactory> scopeFactoryMock = new();
             scopeFactoryMock.Setup(f => f.CreateScope()).Returns(scopeMock.Object);
 
-            _service = new VideoStreamSignalingService(scopeFactoryMock.Object, Mock.Of<ILogger<VideoStreamSignalingService>>());
+            _tokenService = new VideoStreamTokenService();
+            _service = new VideoStreamSignalingService(scopeFactoryMock.Object, _tokenService, Mock.Of<ILogger<VideoStreamSignalingService>>());
         }
 
         private static Mock<IVideoPublisherHandle> CreatePublisherMock(Guid clientId)
@@ -41,54 +43,115 @@ namespace Lanyard.Tests.Services.VideoStreaming
             return publisherMock;
         }
 
+        private void RegisterPublisherWithToken(IVideoPublisherHandle publisher)
+        {
+            string token = _tokenService.IssuePublisherToken(publisher.ClientId);
+            Assert.IsTrue(_service.RegisterPublisher(publisher, token));
+        }
+
+        private Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, Guid viewingClientId, IVideoViewerHandle viewer)
+        {
+            string viewerToken = _tokenService.IssueViewerToken(viewingClientId);
+            return _service.CreateSessionAsync(sourceClientId, viewingClientId, viewerToken, "Webcam 1", false, 1920, 1080, viewer, CancellationToken.None);
+        }
+
         [TestMethod]
         public async Task CreateSessionAsync_WithRegisteredPublisher_StartsSession()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             Mock<IVideoViewerHandle> viewerMock = new();
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", true, 1920, 1080, viewerMock.Object, CancellationToken.None);
+            string viewerToken = _tokenService.IssueViewerToken(viewingClientId);
+            Result<Guid> result = await _service.CreateSessionAsync(clientId, viewingClientId, viewerToken, "Webcam 1", true, 1920, 1080, viewerMock.Object, CancellationToken.None);
 
             Assert.IsTrue(result.Success, result.Error);
             publisherMock.Verify(p => p.StartSessionAsync(result.Data, "Webcam 1", true, 1920, 1080), Times.Once);
             Assert.AreEqual(1, _service.GetActiveSessionCount(clientId));
-            _clientServiceMock.Verify(c => c.StartVideoPublisherOnClientAsync(It.IsAny<Guid>()), Times.Never,
+            _clientServiceMock.Verify(c => c.StartVideoPublisherOnClientAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never,
                 "No launch command should be sent when a publisher is already registered.");
+        }
+
+        [TestMethod]
+        public async Task CreateSessionAsync_InvalidViewerToken_FailsWithoutLaunchingPublisher()
+        {
+            Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
+
+            Result<Guid> result = await _service.CreateSessionAsync(clientId, viewingClientId, "forged-token", "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+
+            Assert.IsFalse(result.Success);
+            _clientServiceMock.Verify(c => c.StartVideoPublisherOnClientAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never,
+                "An unauthorised viewer must never cause a source camera to be activated.");
+        }
+
+        [TestMethod]
+        public void RegisterPublisher_InvalidToken_IsRejected()
+        {
+            Guid clientId = Guid.NewGuid();
+
+            Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
+
+            bool registered = _service.RegisterPublisher(publisherMock.Object, "forged-token");
+
+            Assert.IsFalse(registered);
+        }
+
+        [TestMethod]
+        public async Task RegisterPublisher_TokenForDifferentClient_IsRejected()
+        {
+            Guid clientId = Guid.NewGuid();
+            Guid otherClientId = Guid.NewGuid();
+
+            Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
+
+            // A token issued for another client must not authorise this publisher.
+            string otherToken = _tokenService.IssuePublisherToken(otherClientId);
+
+            bool registered = _service.RegisterPublisher(publisherMock.Object, otherToken);
+
+            Assert.IsFalse(registered);
+            Assert.AreEqual(0, _service.GetActiveSessionCount(clientId));
+            await Task.CompletedTask;
         }
 
         [TestMethod]
         public async Task CreateSessionAsync_PublisherRegistersAfterStartCommand_CompletesSession()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             Mock<IVideoViewerHandle> viewerMock = new();
 
+            // The service issues the publisher token and passes it to the client; the publisher
+            // registers with exactly that token.
             _clientServiceMock
-                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId))
-                .Callback(() => _service.RegisterPublisher(publisherMock.Object))
+                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId, It.IsAny<string>()))
+                .Callback<Guid, string>((_, token) => _service.RegisterPublisher(publisherMock.Object, token))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1280, 720, viewerMock.Object, CancellationToken.None);
+            Result<Guid> result = await CreateSessionAsync(clientId, viewingClientId, viewerMock.Object);
 
             Assert.IsTrue(result.Success, result.Error);
-            publisherMock.Verify(p => p.StartSessionAsync(result.Data, "Webcam 1", false, 1280, 720), Times.Once);
+            publisherMock.Verify(p => p.StartSessionAsync(result.Data, "Webcam 1", false, 1920, 1080), Times.Once);
         }
 
         [TestMethod]
         public async Task CreateSessionAsync_OfflineClient_FailsFast()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             _clientServiceMock
-                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId))
+                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId, It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Fail("Client has no active connection."));
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+            Result<Guid> result = await CreateSessionAsync(clientId, viewingClientId, new Mock<IVideoViewerHandle>().Object);
 
             Assert.IsFalse(result.Success);
             Assert.AreEqual(0, _service.GetActiveSessionCount(clientId), "No session should exist after a failed launch request.");
@@ -98,14 +161,16 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task CreateSessionAsync_CancelledWhileWaiting_FailsWithoutLeakingSession()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             _clientServiceMock
-                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId))
+                .Setup(c => c.StartVideoPublisherOnClientAsync(clientId, It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(100));
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, cts.Token);
+            string viewerToken = _tokenService.IssueViewerToken(viewingClientId);
+            Result<Guid> result = await _service.CreateSessionAsync(clientId, viewingClientId, viewerToken, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, cts.Token);
 
             Assert.IsFalse(result.Success);
             Assert.AreEqual(0, _service.GetActiveSessionCount(clientId));
@@ -115,15 +180,16 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task CreateSessionAsync_PublisherThrowsOnStart_FailsAndDeregistersPublisher()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             publisherMock
                 .Setup(p => p.StartSessionAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ThrowsAsync(new InvalidOperationException("Circuit gone"));
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+            Result<Guid> result = await CreateSessionAsync(clientId, viewingClientId, new Mock<IVideoViewerHandle>().Object);
 
             Assert.IsFalse(result.Success);
             Assert.AreEqual(0, _service.GetActiveSessionCount(clientId));
@@ -133,13 +199,14 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task SignalingForwards_OfferAnswerAndIce_ToTheCorrectPeer()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             Mock<IVideoViewerHandle> viewerMock = new();
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> sessionResult = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, viewerMock.Object, CancellationToken.None);
+            Result<Guid> sessionResult = await CreateSessionAsync(clientId, viewingClientId, viewerMock.Object);
             Guid sessionId = sessionResult.Data;
 
             await _service.PublisherSendOfferAsync(sessionId, "offer-sdp");
@@ -159,12 +226,13 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task EndSessionAsync_IsIdempotent_AndNotifiesPublisherOnce()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> sessionResult = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+            Result<Guid> sessionResult = await CreateSessionAsync(clientId, viewingClientId, new Mock<IVideoViewerHandle>().Object);
             Guid sessionId = sessionResult.Data;
 
             await _service.EndSessionAsync(sessionId);
@@ -178,13 +246,14 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task UnregisterPublisher_NotifiesViewersAndClearsSessions()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             Mock<IVideoViewerHandle> viewerMock = new();
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> sessionResult = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, viewerMock.Object, CancellationToken.None);
+            Result<Guid> sessionResult = await CreateSessionAsync(clientId, viewingClientId, viewerMock.Object);
             Guid sessionId = sessionResult.Data;
 
             _service.UnregisterPublisher(publisherMock.Object);
@@ -197,17 +266,18 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task UnregisterPublisher_StaleInstance_DoesNotEvictNewerRegistration()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> oldPublisherMock = CreatePublisherMock(clientId);
             Mock<IVideoPublisherHandle> newPublisherMock = CreatePublisherMock(clientId);
 
-            _service.RegisterPublisher(oldPublisherMock.Object);
-            _service.RegisterPublisher(newPublisherMock.Object);
+            RegisterPublisherWithToken(oldPublisherMock.Object);
+            RegisterPublisherWithToken(newPublisherMock.Object);
 
             // The old page's circuit disposes after the relaunched page registered.
             _service.UnregisterPublisher(oldPublisherMock.Object);
 
-            Result<Guid> result = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, new Mock<IVideoViewerHandle>().Object, CancellationToken.None);
+            Result<Guid> result = await CreateSessionAsync(clientId, viewingClientId, new Mock<IVideoViewerHandle>().Object);
 
             Assert.IsTrue(result.Success, "The newer publisher registration should still serve sessions.");
             newPublisherMock.Verify(p => p.StartSessionAsync(It.IsAny<Guid>(), "Webcam 1", false, 1920, 1080), Times.Once);
@@ -217,13 +287,14 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task PublisherReportSessionErrorAsync_NotifiesViewerAndRemovesSession()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
             Mock<IVideoViewerHandle> viewerMock = new();
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> sessionResult = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, viewerMock.Object, CancellationToken.None);
+            Result<Guid> sessionResult = await CreateSessionAsync(clientId, viewingClientId, viewerMock.Object);
             Guid sessionId = sessionResult.Data;
 
             await _service.PublisherReportSessionErrorAsync(sessionId, "Camera in use.");
@@ -236,6 +307,7 @@ namespace Lanyard.Tests.Services.VideoStreaming
         public async Task ThrowingViewer_EndsItsSessionWithoutBreakingOthers()
         {
             Guid clientId = Guid.NewGuid();
+            Guid viewingClientId = Guid.NewGuid();
 
             Mock<IVideoPublisherHandle> publisherMock = CreatePublisherMock(clientId);
 
@@ -246,10 +318,10 @@ namespace Lanyard.Tests.Services.VideoStreaming
 
             Mock<IVideoViewerHandle> healthyViewerMock = new();
 
-            _service.RegisterPublisher(publisherMock.Object);
+            RegisterPublisherWithToken(publisherMock.Object);
 
-            Result<Guid> throwingSession = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, throwingViewerMock.Object, CancellationToken.None);
-            Result<Guid> healthySession = await _service.CreateSessionAsync(clientId, "Webcam 1", false, 1920, 1080, healthyViewerMock.Object, CancellationToken.None);
+            Result<Guid> throwingSession = await CreateSessionAsync(clientId, viewingClientId, throwingViewerMock.Object);
+            Result<Guid> healthySession = await CreateSessionAsync(clientId, viewingClientId, healthyViewerMock.Object);
 
             await _service.PublisherSendOfferAsync(throwingSession.Data, "offer-1");
             await _service.PublisherSendOfferAsync(healthySession.Data, "offer-2");

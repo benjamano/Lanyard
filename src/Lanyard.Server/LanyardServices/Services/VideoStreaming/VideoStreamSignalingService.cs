@@ -5,11 +5,12 @@ using System.Collections.Concurrent;
 
 namespace Lanyard.Application.Services.VideoStreaming;
 
-public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, ILogger<VideoStreamSignalingService> logger) : IVideoStreamSignalingService
+public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, IVideoStreamTokenService tokenService, ILogger<VideoStreamSignalingService> logger) : IVideoStreamSignalingService
 {
     private static readonly TimeSpan PublisherStartTimeout = TimeSpan.FromSeconds(15);
 
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly IVideoStreamTokenService _tokenService = tokenService;
     private readonly ILogger<VideoStreamSignalingService> _logger = logger;
 
     private readonly ConcurrentDictionary<Guid, IVideoPublisherHandle> _publishers = new();
@@ -24,8 +25,16 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, ILog
         public required IVideoPublisherHandle Publisher { get; init; }
     }
 
-    public void RegisterPublisher(IVideoPublisherHandle publisher)
+    public bool RegisterPublisher(IVideoPublisherHandle publisher, string? publisherToken)
     {
+        // Only a page launched off a server StartVideoPublisher command holds a valid token,
+        // so an attacker opening /video-publisher/{clientId} directly cannot seize the source.
+        if (!_tokenService.ValidatePublisherToken(publisher.ClientId, publisherToken))
+        {
+            _logger.LogWarning("Rejected video publisher registration for client {ClientId}: invalid or missing token.", publisher.ClientId);
+            return false;
+        }
+
         _publishers[publisher.ClientId] = publisher;
 
         _logger.LogInformation("Video publisher registered for client {ClientId}", publisher.ClientId);
@@ -34,6 +43,8 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, ILog
         {
             pending.TrySetResult(publisher);
         }
+
+        return true;
     }
 
     public void UnregisterPublisher(IVideoPublisherHandle publisher)
@@ -56,11 +67,20 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, ILog
         }
     }
 
-    public async Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, string deviceName, bool enableAudio,
-        int idealWidth, int idealHeight, IVideoViewerHandle viewer, CancellationToken cancellationToken)
+    public async Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, Guid viewingClientId, string? viewerToken,
+        string deviceName, bool enableAudio, int idealWidth, int idealHeight, IVideoViewerHandle viewer,
+        CancellationToken cancellationToken)
     {
         try
         {
+            // The viewer token proves this request came from a kiosk a client actually launched,
+            // not from someone who simply opened the (unguessable) kiosk URL in a browser.
+            if (!_tokenService.ValidateViewerToken(viewingClientId, viewerToken))
+            {
+                _logger.LogWarning("Rejected video session request from client {ViewingClientId}: invalid or missing viewer token.", viewingClientId);
+                return Result<Guid>.Fail("This kiosk is not authorised to open a video stream.");
+            }
+
             if (!_publishers.TryGetValue(sourceClientId, out IVideoPublisherHandle? publisher))
             {
                 publisher = await WaitForPublisherAsync(sourceClientId, cancellationToken);
@@ -124,11 +144,15 @@ public class VideoStreamSignalingService(IServiceScopeFactory scopeFactory, ILog
             return racedPublisher;
         }
 
+        // The publisher page presents this token to RegisterPublisher; only a client that
+        // received the command over its hub connection can produce it.
+        string publisherToken = _tokenService.IssuePublisherToken(sourceClientId);
+
         await using (AsyncServiceScope scope = _scopeFactory.CreateAsyncScope())
         {
             IClientService clientService = scope.ServiceProvider.GetRequiredService<IClientService>();
 
-            Result<bool> startResult = await clientService.StartVideoPublisherOnClientAsync(sourceClientId);
+            Result<bool> startResult = await clientService.StartVideoPublisherOnClientAsync(sourceClientId, publisherToken);
 
             if (!startResult.IsSuccess)
             {

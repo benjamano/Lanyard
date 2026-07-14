@@ -1,5 +1,6 @@
 ﻿using Lanyard.Application.Services;
 using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
@@ -25,7 +26,8 @@ public class SignalRControlHub(
     SignalRProjectionControlHubEvents hubEvents,
     AutomationEngineService automationEngineService,
     IDmxClientService dmxClientService,
-    IClientZoneScoreboardService clientZoneScoreboardService) : Hub, ISignalRProjectionControlHub
+    IClientZoneScoreboardService clientZoneScoreboardService,
+    IVideoStreamTokenService videoStreamTokenService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
 
@@ -36,6 +38,7 @@ public class SignalRControlHub(
     private readonly AutomationEngineService _automationEngineService = automationEngineService;
     private readonly IDmxClientService _dmxClientService = dmxClientService;
     private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
+    private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -468,5 +471,24 @@ public class SignalRControlHub(
         {
             _logger.LogWarning("Failed to update available video devices for client {ClientId}: {Error}", clientId, setResult.Error);
         }
+    }
+
+    /// <summary>
+    /// Issues a capability token that authorises this client's kiosk to open remote video
+    /// streams. Called by the client just before it launches a kiosk window; the token is
+    /// bound to the client resolved from this hub connection, so it cannot be minted by
+    /// merely opening the kiosk URL.
+    /// </summary>
+    public async Task<string> IssueKioskToken()
+    {
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to issue kiosk token; could not resolve client from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return string.Empty;
+        }
+
+        return _videoStreamTokenService.IssueViewerToken(getClientResult.Data);
     }
 }

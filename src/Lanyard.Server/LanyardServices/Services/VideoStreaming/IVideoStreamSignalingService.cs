@@ -34,7 +34,7 @@ public interface IVideoViewerHandle
 public interface IVideoStreamSignalingService
 {
     // Publisher circuit
-    void RegisterPublisher(IVideoPublisherHandle publisher);
+    bool RegisterPublisher(IVideoPublisherHandle publisher, string? publisherToken);
     void UnregisterPublisher(IVideoPublisherHandle publisher);
     Task PublisherSendOfferAsync(Guid sessionId, string sdpOffer);
     Task PublisherSendIceCandidateAsync(Guid sessionId, string candidateJson);
@@ -42,8 +42,9 @@ public interface IVideoStreamSignalingService
     int GetActiveSessionCount(Guid clientId);
 
     // Viewer circuit
-    Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, string deviceName, bool enableAudio,
-        int idealWidth, int idealHeight, IVideoViewerHandle viewer, CancellationToken cancellationToken);
+    Task<Result<Guid>> CreateSessionAsync(Guid sourceClientId, Guid viewingClientId, string? viewerToken,
+        string deviceName, bool enableAudio, int idealWidth, int idealHeight, IVideoViewerHandle viewer,
+        CancellationToken cancellationToken);
     Task ViewerSendAnswerAsync(Guid sessionId, string sdpAnswer);
     Task ViewerSendIceCandidateAsync(Guid sessionId, string candidateJson);
     Task EndSessionAsync(Guid sessionId);

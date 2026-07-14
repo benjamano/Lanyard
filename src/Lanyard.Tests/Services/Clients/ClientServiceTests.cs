@@ -785,7 +785,7 @@ namespace Lanyard.Tests.Services.Clients
 
             ClientService service = GetService(options);
 
-            Result<bool> result = await service.StartVideoPublisherOnClientAsync(Guid.NewGuid());
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(Guid.NewGuid(), "publisher-token");
 
             Assert.IsFalse(result.Success);
             Assert.AreEqual("Failed to get client.", result.Error);
@@ -802,7 +802,7 @@ namespace Lanyard.Tests.Services.Clients
 
             Assert.IsTrue(clientResult.Success);
 
-            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id);
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id, "publisher-token");
 
             Assert.IsFalse(result.Success);
             Assert.AreEqual("Client has no active connection.", result.Error);
@@ -838,11 +838,11 @@ namespace Lanyard.Tests.Services.Clients
 
             Assert.IsTrue(clientResult.Success);
 
-            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id);
+            Result<bool> result = await service.StartVideoPublisherOnClientAsync(clientResult.Data!.Id, "publisher-token");
 
             Assert.IsTrue(result.Success, result.Error);
             clientProxyMock.Verify(p => p.SendCoreAsync("StartVideoPublisher",
-                It.Is<object?[]>(args => args.Length == 0),
+                It.Is<object?[]>(args => args.Length == 1 && (string)args[0]! == "publisher-token"),
                 It.IsAny<System.Threading.CancellationToken>()), Times.Once);
         }
 

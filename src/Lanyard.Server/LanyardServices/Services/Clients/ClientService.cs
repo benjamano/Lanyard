@@ -842,17 +842,17 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
-    public async Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId)
+    public async Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken)
     {
-        return await SendVideoPublisherCommandAsync(clientId, "StartVideoPublisher");
+        return await SendVideoPublisherCommandAsync(clientId, "StartVideoPublisher", publisherToken);
     }
 
     public async Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId)
     {
-        return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher");
+        return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher", commandArgument: null);
     }
 
-    private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName)
+    private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName, string? commandArgument)
     {
         try
         {
@@ -870,7 +870,14 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                 return Result<bool>.Fail("Client has no active connection.");
             }
 
-            await _hubContext.Clients.Client(connectionId).SendAsync(commandName);
+            if (commandArgument == null)
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync(commandName);
+            }
+            else
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync(commandName, commandArgument);
+            }
 
             return Result<bool>.Ok(true);
         }

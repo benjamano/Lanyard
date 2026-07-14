@@ -51,6 +51,7 @@ builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
+builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.AddSingleton<MusicPlayerService>();
 builder.Services.AddSingleton<DmxService>();

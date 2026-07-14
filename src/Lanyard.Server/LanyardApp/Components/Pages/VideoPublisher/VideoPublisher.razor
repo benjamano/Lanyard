@@ -14,7 +14,11 @@
 <FluentStack Orientation="Orientation.Vertical" Class="p-4" VerticalGap="8">
     <FluentText Size="TextSize.Size500">Video publisher for client @ClientId</FluentText>
 
-    @if (!_registered)
+    @if (_rejected)
+    {
+        <FluentText Color="@Color.Error">Not authorised: this publisher was not started by the server.</FluentText>
+    }
+    else if (!_registered)
     {
         <FluentText>Starting...</FluentText>
     }
@@ -33,8 +37,12 @@
     [Parameter]
     public Guid ClientId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
     private DotNetObjectReference<VideoPublisher>? _selfRef;
     private bool _registered;
+    private bool _rejected;
     private int _activeSessionCount;
     private readonly List<string> _sessionErrors = [];
 
@@ -51,7 +59,13 @@
 
         await JS.InvokeVoidAsync("videoPublisher.init", _selfRef);
 
-        _signalingService.RegisterPublisher(this);
+        if (!_signalingService.RegisterPublisher(this, Token))
+        {
+            _rejected = true;
+            StateHasChanged();
+            return;
+        }
+
         _registered = true;
 
         RefreshSessionCount();

@@ -25,6 +25,9 @@
     [Parameter]
     public Guid ClientId { get; set; }
 
+    [Parameter]
+    public string? ViewerToken { get; set; }
+
     private string? _errorMessage;
     private string _deviceName = string.Empty;
     private bool _enableAudio;
@@ -112,7 +115,7 @@
             int[] targetDimensions = await JS.InvokeAsync<int[]>("videoViewer.getTargetDimensions");
 
             Result<Guid> sessionResult = await _signalingService.CreateSessionAsync(
-                _sourceClientId, _deviceName, _enableAudio,
+                _sourceClientId, ClientId, ViewerToken, _deviceName, _enableAudio,
                 targetDimensions[0], targetDimensions[1], this, _disposeCts.Token);
 
             if (generation != _startGeneration || _disposeCts.IsCancellationRequested)
