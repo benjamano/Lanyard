@@ -16,6 +16,8 @@ jobs:
       contents: write 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -33,11 +35,40 @@ jobs:
           Write-Host "Resolved version: '$version'"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
+      - name: Generate release notes
+        run: |
+          $previousTag = git describe --tags --match "LanyardClient-*" --abbrev=0 2>$null
+          $global:LASTEXITCODE = 0
+
+          if ([string]::IsNullOrWhiteSpace($previousTag)) {
+            Write-Host "No previous LanyardClient tag found, using full history"
+            $range = "HEAD"
+          }
+          else {
+            Write-Host "Previous tag: $previousTag"
+            $range = "$previousTag..HEAD"
+          }
+
+          $commits = git log $range --no-merges --pretty=format:"- %s (%h)"
+          if ([string]::IsNullOrWhiteSpace($commits)) {
+            $commits = "- No changes recorded since the previous release."
+          }
+
+          $notes = "## What's Changed", ""
+          $notes += $commits
+          if (-not [string]::IsNullOrWhiteSpace($previousTag)) {
+            $notes += ""
+            $notes += "**Full changelog**: https://github.com/${{ github.repository }}/compare/$previousTag...LanyardClient-${{ steps.version.outputs.VERSION }}"
+          }
+
+          Set-Content -Path release-notes.md -Value $notes -Encoding utf8
+          Get-Content release-notes.md
+
       - name: Publish app
         run: dotnet publish src/Lanyard.Client/Lanyard.Client.csproj -c Release -r win-x64 --self-contained -o ./publish
 
       - name: Package with Velopack
-        run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe --icon src/Lanyard.Client/favicon.ico
+        run: vpk pack --packId LanyardClient --packVersion ${{ steps.version.outputs.VERSION }} --packDir ./publish --mainExe Lanyard.Client.exe --icon src/Lanyard.Client/favicon.ico --releaseNotes release-notes.md
 
       - name: Create and push tag
         run: |
