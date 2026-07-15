@@ -9,6 +9,12 @@ public interface IMusicPlayer
     event Action<Guid>? PlaylistChanged;
     event Action<List<Guid>?>? QueueChanged;
 
+    /// <summary>
+    /// Raised when a track finishes on its own. The server owns the queue, repeat and shuffle
+    /// state, so it decides what plays next — the player only reports that the track ended.
+    /// </summary>
+    event Action? SongEnded;
+
     Task<Result<bool>> Play();
     Task<Result<bool>> Pause();
     Task<Result<bool>> PlayNext();

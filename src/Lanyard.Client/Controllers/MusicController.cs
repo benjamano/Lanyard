@@ -27,6 +27,7 @@ public class MusicControlHandler
         _musicPlayer.PlayerVolumeChanged += OnPlayerVolumeChanged;
         _musicPlayer.PlaylistChanged += OnPlaylistChanged;
         _musicPlayer.QueueChanged += OnQueueChanged;
+        _musicPlayer.SongEnded += OnSongEnded;
     }
 
     public void Register(HubConnection connection)
@@ -205,6 +206,29 @@ public class MusicControlHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send playback state to server");
+        }
+    }
+
+    /// <summary>
+    /// Tells the server a track finished on its own so it can apply repeat/shuffle and
+    /// start whatever comes next.
+    /// </summary>
+    private async void OnSongEnded()
+    {
+        if (_connection == null || _connection.State != HubConnectionState.Connected)
+        {
+            _logger.LogWarning("Cannot send song ended - connection not established");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Sending song ended");
+            await _connection.InvokeAsync("SongEnded");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send song ended to server");
         }
     }
 

@@ -13,6 +13,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     public event Action<int>? PlayerVolumeChanged;
     public event Action<Guid>? PlaylistChanged;
     public event Action<List<Guid>?>? QueueChanged;
+    public event Action? SongEnded;
 
     private WaveOutEvent? _player;
     private MediaFoundationReader? _reader;
@@ -26,6 +27,47 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         _cacheService = cacheService;
 
         _player = new WaveOutEvent();
+        _player.PlaybackStopped += OnPlaybackStopped;
+    }
+
+    /// <summary>
+    /// Fires when the NAudio playback thread exits — either because Stop was called or because
+    /// the stream ran out. Without this the server is never told a track finished, so it keeps
+    /// reporting Playing and estimating the position past the end of the song.
+    /// </summary>
+    private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
+    {
+        if (e.Exception is not null)
+        {
+            _logger.LogError(e.Exception, "MusicPlayer: Playback stopped unexpectedly");
+        }
+
+        try
+        {
+            MediaFoundationReader? reader = _reader;
+
+            // Stop (and the Stop inside Load) disposes the reader before the playback thread
+            // gets here and reports the state itself, so a live reader that has consumed its
+            // whole stream is a track that ended on its own.
+            if (reader is null || reader.Position < reader.Length)
+            {
+                return;
+            }
+
+            _logger.LogInformation("MusicPlayer: Reached end of track {SongId}", QueueIndex);
+
+            // Rewind rather than dispose, so a later Play (or a Seek issued while stopped)
+            // starts from a sane position instead of replaying the last moment of the track.
+            reader.CurrentTime = TimeSpan.Zero;
+
+            UpdateServerPlaybackStatus();
+
+            SongEnded?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MusicPlayer: Failed to handle end of playback");
+        }
     }
 
     public async Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList)
@@ -87,8 +129,23 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             return Result<bool>.Ok(true);
         }
 
-        // Stopped (or no reader loaded): load the current song from the start and play it.
-        await Load(QueueIndex, SongAndPlaylistQueue[QueueIndex]);
+        // Stopped: reuse an already-loaded reader so playback picks up from wherever it sits
+        // (start of a finished track, or a position the server seeked to while stopped).
+        // Reloading here would throw that position away and always restart from zero.
+        if (_reader == null)
+        {
+            if (QueueIndex == Guid.Empty || !SongAndPlaylistQueue.TryGetValue(QueueIndex, out Guid playlistId))
+            {
+                return Result<bool>.Fail("No song loaded.");
+            }
+
+            Result<bool> loadResult = await Load(QueueIndex, playlistId);
+
+            if (!loadResult.IsSuccess)
+            {
+                return loadResult;
+            }
+        }
 
         _logger.LogInformation("MusicPlayer: Play");
         _player.Play();
@@ -127,15 +184,17 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     {
         _logger.LogInformation("MusicPlayer: Stop");
 
-        if (notify)
-        {
-            UpdateServerPlaybackStatus();
-        }
-
         _player?.Stop();
 
         _reader?.Dispose();
         _reader = null;
+
+        // Report after stopping — reading the state first sends the server the outgoing
+        // state (Playing), leaving it convinced the track is still running.
+        if (notify)
+        {
+            UpdateServerPlaybackStatus();
+        }
     }
 
     public async Task<Result<bool>> PlayNext()
