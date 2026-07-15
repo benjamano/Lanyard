@@ -1,0 +1,67 @@
+@using Lanyard.Infrastructure.Models.Dmx
+
+@inject IDmxSceneService _dmxSceneService
+@inject IToastService _toastService
+
+<FluentCard>
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+        <FluentButton IconStart="@(OpenScene.Loop ? new Icons.Filled.Size20.ArrowRepeatAll(): new Icons.Regular.Size20.ArrowRepeatAll())"
+                        Tooltip="Loop"
+                        Appearance="@(OpenScene.Loop ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                        OnClick="@(() => ToggleLoop(OpenScene))"
+                        Style="width: 100%;">
+                        Loop @(OpenScene.Loop ? "On" : "Off")
+        </FluentButton>
+        <FluentButton IconStart="@(OpenScene.IsMomentary ? new Icons.Filled.Size20.Flash() : new Icons.Regular.Size20.Flash())"
+                        Tooltip="Momentary - hold the scene's play button to run it"
+                        Appearance="@(OpenScene.IsMomentary ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                        OnClick="@(() => ToggleMomentary(OpenScene))"
+                        Style="width: 100%;">
+                        Momentary @(OpenScene.IsMomentary ? "On" : "Off")
+        </FluentButton>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required DmxScene OpenScene { get; set; }
+
+    [Parameter]
+    public EventCallback<DmxScene> OnSceneEdited { get; set; }
+
+    private async Task ToggleLoop(DmxScene scene)
+    {
+        scene.Loop = !scene.Loop;
+
+        await SaveSceneAsync(scene, () => scene.Loop = !scene.Loop);
+    }
+
+    private async Task ToggleMomentary(DmxScene scene)
+    {
+        scene.IsMomentary = !scene.IsMomentary;
+
+        await SaveSceneAsync(scene, () => scene.IsMomentary = !scene.IsMomentary);
+    }
+
+    // The toggles mutate the scene optimistically, so a failed save has to put the
+    // flag back or the button keeps showing a state the database never took.
+    private async Task SaveSceneAsync(DmxScene scene, Action revert)
+    {
+        Result<bool> result = await _dmxSceneService.UpdateSceneAsync(scene);
+
+        if (!result.IsSuccess)
+        {
+            revert();
+
+            _toastService.ShowError($"Failed to update scene: {result.Error}");
+
+            StateHasChanged();
+
+            return;
+        }
+
+        await OnSceneEdited.InvokeAsync(scene);
+
+        StateHasChanged();
+    }
+}

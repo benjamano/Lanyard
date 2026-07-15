@@ -70,11 +70,29 @@
                                 }
                             </FluentStack>
                         </FluentButton>
-                        <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
-                                        Appearance="ButtonAppearance.Transparent"
-                                        Disabled="@(ClientId == null)"
-                                        Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
-                                        OnClick="@(() => ToggleScene(scene, isRunning))" />
+                        @if (scene.IsMomentary)
+                        {
+                            @* Handlers sit on the wrapper, not the FluentButton: the web
+                               component only surfaces OnClick. *@
+                            <div @onpointerdown="@((PointerEventArgs e) => StartMomentaryAsync(scene, e))"
+                                    @onpointerup="@(() => StopMomentary(scene))"
+                                    @onpointerleave="@(() => StopMomentary(scene))"
+                                    @oncontextmenu:preventDefault="true"
+                                    style="touch-action: none;">
+                                <FluentButton IconStart="@(new Icons.Regular.Size20.FlashPlay())"
+                                                Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Transparent)"
+                                                Disabled="@(ClientId == null)"
+                                                Tooltip="Hold to run scene" />
+                            </div>
+                        }
+                        else
+                        {
+                            <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                            Appearance="ButtonAppearance.Transparent"
+                                            Disabled="@(ClientId == null)"
+                                            Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
+                                            OnClick="@(() => ToggleScene(scene, isRunning))" />
+                        }
                     </div>
                 }
             }
@@ -111,6 +129,9 @@
     private Guid? previousClientId;
 
     private Guid? previousDeletedSceneId;
+
+    // The scene currently held down on a momentary button, if any.
+    private Guid? momentaryHeldSceneId;
 
     protected override void OnInitialized()
     {
@@ -247,6 +268,41 @@
         }
     }
 
+    private async Task StartMomentaryAsync(DmxSceneDTO scene, PointerEventArgs e)
+    {
+        // Button 0 is the left button. Without this, right-clicking fires the scene.
+        if (ClientId == null || e.Button != 0)
+        {
+            return;
+        }
+
+        momentaryHeldSceneId = scene.Id;
+
+        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+
+        if (!startResult.IsSuccess)
+        {
+            momentaryHeldSceneId = null;
+
+            _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+        }
+    }
+
+    private void StopMomentary(DmxSceneDTO scene)
+    {
+        // pointerup and pointerleave both fire on a normal release-then-exit, and stray
+        // leaves are common — without this guard the second call would stop whatever
+        // scene happened to be held next.
+        if (momentaryHeldSceneId != scene.Id)
+        {
+            return;
+        }
+
+        momentaryHeldSceneId = null;
+
+        _sceneRunner.StopScene(scene.Id);
+    }
+
     public async Task CreateNewScene()
     {
         DialogResult result = await _dialogService.ShowDialogAsync<CreateNewDmxSceneDialog>(options =>
@@ -270,6 +326,7 @@
                     Name = created.Name,
                     ClientId = created.ClientId,
                     Loop = created.Loop,
+                    IsMomentary = created.IsMomentary,
                     CreateByUserId = created.CreateByUserId,
                     CreateDate = created.CreateDate,
                     IsRunning = false,

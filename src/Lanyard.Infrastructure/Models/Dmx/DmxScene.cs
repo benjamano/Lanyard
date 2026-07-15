@@ -9,9 +9,11 @@ public class DmxScene : CreateAndUpdateBase
 
     public string Name { get; set; } = string.Empty;
 
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public bool Loop { get; set; } = true;
+
+    public bool IsMomentary { get; set; }
 
     public virtual ICollection<DmxSceneStep> Steps { get; set; } = [];
 }

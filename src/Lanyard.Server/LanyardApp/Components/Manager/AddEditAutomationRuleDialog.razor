@@ -141,6 +141,18 @@
                                         Style="flex: 1;" />
                                 </div>
                             }
+                            @if (_actionRows[index].DmxOperation == DmxSceneControlActionExecutor.StartScene)
+                            {
+                                <div>
+                                    <FluentNumberInput TValue="int?"
+                                        Label="Hold for (ms)"
+                                        Placeholder="Runs until stopped"
+                                        Min="1"
+                                        Value="@_actionRows[index].HoldMilliseconds"
+                                        ValueChanged="@((int? ms) => _actionRows[index].HoldMilliseconds = ms)"
+                                        Style="width: 150px;" />
+                                </div>
+                            }
                         }
                         else
                         {
@@ -232,6 +244,7 @@
         public List<ClientAvailableScreen> Screens { get; set; } = [];
         public string DmxOperation { get; set; } = DmxSceneControlActionExecutor.StartScene;
         public string SceneIdString { get; set; } = string.Empty;
+        public int? HoldMilliseconds { get; set; }
         public List<DmxSceneDTO> Scenes { get; set; } = [];
     }
 
@@ -319,6 +332,14 @@
                         sceneElement.TryGetGuid(out Guid sceneId))
                     {
                         row.SceneIdString = sceneId.ToString();
+                    }
+
+                    // Absent on rules authored before hold support, which means no hold.
+                    if (doc.RootElement.TryGetProperty("HoldMilliseconds", out JsonElement holdElement) &&
+                        holdElement.ValueKind == JsonValueKind.Number &&
+                        holdElement.TryGetInt32(out int holdMilliseconds))
+                    {
+                        row.HoldMilliseconds = holdMilliseconds;
                     }
                 }
                 else if (action.ActionType == AutomationActionTypes.MusicControl)
@@ -474,7 +495,6 @@
         if (result.IsSuccess && result.Data != null)
         {
             row.Scenes = result.Data
-                .Where(x => x.IsActive)
                 .OrderBy(x => x.Name)
                 .ToList();
         }
@@ -539,7 +559,10 @@
                 {
                     TargetClientId = targetClientId,
                     Operation = row.DmxOperation,
-                    SceneId = Guid.TryParse(row.SceneIdString, out Guid sceneId) ? sceneId : (Guid?)null
+                    SceneId = Guid.TryParse(row.SceneIdString, out Guid sceneId) ? sceneId : (Guid?)null,
+                    HoldMilliseconds = row.DmxOperation == DmxSceneControlActionExecutor.StartScene && row.HoldMilliseconds > 0
+                        ? row.HoldMilliseconds
+                        : null
                 });
             }
             else

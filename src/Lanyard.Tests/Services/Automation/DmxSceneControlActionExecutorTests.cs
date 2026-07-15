@@ -98,7 +98,7 @@ public class DmxSceneControlActionExecutorTests
         Guid sceneId = Guid.NewGuid();
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
-        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId))
+        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, null))
             .ReturnsAsync(Result<bool>.Ok(true));
 
         DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
@@ -109,7 +109,80 @@ public class DmxSceneControlActionExecutorTests
 
         Assert.IsTrue(success, error);
         Assert.IsNull(error);
-        runnerMock.Verify(r => r.StartSceneAsync(client.Id, sceneId), Times.Once);
+
+        // No HoldMilliseconds in the JSON is how every rule authored before hold support
+        // reads back, and it must still mean "run until stopped".
+        runnerMock.Verify(r => r.StartSceneAsync(client.Id, sceneId, null), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ShouldPassHoldDurationToRunner_WhenStartingScene()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Client client = await SeedClientAsync(options);
+        Guid sceneId = Guid.NewGuid();
+
+        Mock<IDmxSceneRunnerService> runnerMock = new();
+        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, TimeSpan.FromMilliseconds(3000)))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
+
+        string parametersJson =
+            $"{{\"TargetClientId\":\"{client.Id}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\",\"HoldMilliseconds\":3000}}";
+
+        (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
+
+        Assert.IsTrue(success, error);
+        runnerMock.Verify(r => r.StartSceneAsync(client.Id, sceneId, TimeSpan.FromMilliseconds(3000)), Times.Once);
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(-1)]
+    public async Task ExecuteAsync_ShouldTreatNonPositiveHoldAsNoHold(int holdMilliseconds)
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Client client = await SeedClientAsync(options);
+        Guid sceneId = Guid.NewGuid();
+
+        Mock<IDmxSceneRunnerService> runnerMock = new();
+        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, null))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
+
+        string parametersJson =
+            $"{{\"TargetClientId\":\"{client.Id}\",\"Operation\":\"StartScene\",\"SceneId\":\"{sceneId}\",\"HoldMilliseconds\":{holdMilliseconds}}}";
+
+        (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
+
+        Assert.IsTrue(success, error);
+
+        // A zero or negative hold must not become a CancelAfter that kills the scene instantly.
+        runnerMock.Verify(r => r.StartSceneAsync(client.Id, sceneId, null), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ShouldIgnoreHoldDuration_WhenStoppingScene()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Client client = await SeedClientAsync(options);
+        Guid sceneId = Guid.NewGuid();
+
+        Mock<IDmxSceneRunnerService> runnerMock = new();
+        runnerMock.Setup(r => r.StopScene(sceneId)).Returns(Result<bool>.Ok(true));
+
+        DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);
+
+        string parametersJson =
+            $"{{\"TargetClientId\":\"{client.Id}\",\"Operation\":\"StopScene\",\"SceneId\":\"{sceneId}\",\"HoldMilliseconds\":3000}}";
+
+        (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
+
+        Assert.IsTrue(success, error);
+        runnerMock.Verify(r => r.StopScene(sceneId), Times.Once);
+        runnerMock.VerifyNoOtherCalls();
     }
 
     [TestMethod]
@@ -230,7 +303,7 @@ public class DmxSceneControlActionExecutorTests
         Guid sceneId = Guid.NewGuid();
 
         Mock<IDmxSceneRunnerService> runnerMock = new();
-        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId))
+        runnerMock.Setup(r => r.StartSceneAsync(client.Id, sceneId, It.IsAny<TimeSpan?>()))
             .ReturnsAsync(Result<bool>.Fail("Scene has no steps"));
 
         DmxSceneControlActionExecutor executor = GetExecutor(options, runnerMock.Object, isClientConnected: true);

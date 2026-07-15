@@ -28,6 +28,7 @@ public class DmxSceneControlActionExecutor(
         public Guid TargetClientId { get; init; }
         public string Operation { get; init; } = StartScene;
         public Guid? SceneId { get; init; }
+        public int? HoldMilliseconds { get; init; }
     }
 
     public bool CanHandle(string actionType) => actionType == AutomationActionTypes.DmxSceneControl;
@@ -78,7 +79,13 @@ public class DmxSceneControlActionExecutor(
             switch (parameters.Operation)
             {
                 case StartScene:
-                    result = await _sceneRunner.StartSceneAsync(parameters.TargetClientId, parameters.SceneId!.Value);
+                    // The runner auto-stops on its own task, so the engine is never
+                    // blocked for the duration of the hold.
+                    TimeSpan? holdFor = parameters.HoldMilliseconds is > 0
+                        ? TimeSpan.FromMilliseconds(parameters.HoldMilliseconds.Value)
+                        : null;
+
+                    result = await _sceneRunner.StartSceneAsync(parameters.TargetClientId, parameters.SceneId!.Value, holdFor);
                     break;
                 case StopScene:
                     result = _sceneRunner.StopScene(parameters.SceneId!.Value);
