@@ -87,9 +87,11 @@
 
                     @{
                         Icon shuffleIcon = isShuffleEnabled ? new Icons.Regular.Size24.ArrowShuffle() : new Icons.Regular.Size24.ArrowShuffleOff();
+
+                        ButtonAppearance shuffleButtonAppearance = isShuffleEnabled ? ButtonAppearance.Outline : ButtonAppearance.Subtle;
                     }
 
-                    <FluentButton Appearance="ButtonAppearance.Subtle"
+                    <FluentButton Appearance="@shuffleButtonAppearance"
                                 Title="Shuffle"
                                 OnClick='ToggleShuffle'
                                 Disabled="@(selectedClientId == null)"
@@ -126,12 +128,26 @@
                     </FluentButton>
 
                     @{
-                        Icon repeatIcon = isRepeatEnabled ? new Icons.Regular.Size20.ArrowRepeatAll() : new Icons.Regular.Size20.ArrowRepeatAllOff();
+                        Icon repeatIcon = repeatMode switch
+                        {
+                            RepeatMode.All => new Icons.Regular.Size20.ArrowRepeatAll(),
+                            RepeatMode.One => new Icons.Regular.Size20.ArrowRepeat1(),
+                            _ => new Icons.Regular.Size20.ArrowRepeatAllOff()
+                        };
+
+                        ButtonAppearance repeatButtonAppearance = repeatMode == RepeatMode.Off ? ButtonAppearance.Subtle : ButtonAppearance.Outline;
+
+                        string repeatTitle = repeatMode switch
+                        {
+                            RepeatMode.All => "Repeat: playlist",
+                            RepeatMode.One => "Repeat: current song",
+                            _ => "Repeat: off"
+                        };
                     }
 
-                    <FluentButton Appearance="ButtonAppearance.Subtle"
-                                Title="Repeat"
-                                OnClick="ToggleRepeat"
+                    <FluentButton Appearance="@repeatButtonAppearance"
+                                Title="@repeatTitle"
+                                OnClick="CycleRepeatMode"
                                 Disabled="@(selectedClientId == null)"
                                 IconStart="repeatIcon">
                     </FluentButton>
@@ -183,7 +199,7 @@
     private bool allowPlaying = true;
     private int currentVolume = 0;
     private bool isShuffleEnabled = false;
-    private bool isRepeatEnabled = false;
+    private RepeatMode repeatMode = RepeatMode.Off;
     private float currentSongTime = 0.0f;
     private int currentSongLength = 0;
     private Timer? songTimeTimer;
@@ -370,7 +386,7 @@
         isPlaying = clientId.HasValue ? _player.GetCurrentPlaybackState(clientId.Value) == PlaybackState.Playing : false;
         currentVolume = clientId.HasValue ? _player.GetCurrentVolume(clientId.Value) : 0;
         isShuffleEnabled = clientId.HasValue ? _player.GetCurrentShuffleState(clientId.Value) : false;
-        isRepeatEnabled = clientId.HasValue ? _player.GetCurrentRepeatState(clientId.Value) : false;
+        repeatMode = clientId.HasValue ? _player.GetCurrentRepeatMode(clientId.Value) : RepeatMode.Off;
         currentSongTime = clientId.HasValue ? _player.GetCurrentSongTime(clientId.Value) : 0;
         currentSongLength = clientId.HasValue ? _player.GetCurrentSongLength(clientId.Value) : 0;
 
@@ -412,7 +428,12 @@
 
                 // Advance in whole seconds so the slider (integer step, rounds) and the
                 // elapsed-time text (TimeSpan, truncates) stay on the same value in lockstep.
-                currentSongTime += 1f;
+                // Never run past the end: the slider clamps its own value to Max and echoes
+                // ValueChanged back, which OnSongTimeChanged would then commit as a seek once
+                // per tick for as long as the timeline sat at the end.
+                currentSongTime = currentSongLength > 0
+                    ? Math.Min(currentSongTime + 1f, currentSongLength)
+                    : currentSongTime + 1f;
 
                 await InvokeAsync(StateHasChanged);
             }
@@ -566,7 +587,7 @@
         isShuffleEnabled = await _player.ToggleShuffle(selectedClientId.Value);
     }
 
-    private async Task ToggleRepeat()
+    private async Task CycleRepeatMode()
     {
         if (selectedClientId == null)
         {
@@ -574,7 +595,7 @@
             return;
         }
 
-        isRepeatEnabled = await _player.ToggleRepeat(selectedClientId.Value);
+        repeatMode = await _player.CycleRepeatMode(selectedClientId.Value);
     }
 
     private void OnSeekStart()

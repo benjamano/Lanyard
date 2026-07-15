@@ -45,7 +45,9 @@ public class MusicPlayerService
         public List<Song> Queue { get; set; } = [];
         public int QueueIndex { get; set; }
         public bool IsShuffleEnabled { get; set; }
-        public bool IsRepeatEnabled { get; set; } = true;
+        // Defaults to looping the queue so unattended playback keeps going without someone
+        // having to arm repeat on every client.
+        public RepeatMode RepeatMode { get; set; } = RepeatMode.All;
         public double LastKnownPositionSeconds { get; set; }
         public DateTime LastPositionUpdateUtc { get; set; } = DateTime.UtcNow;
         public int CurrentVolume { get; set; }
@@ -117,15 +119,6 @@ public class MusicPlayerService
         lock (_lock)
         {
             return state.IsShuffleEnabled;
-        }
-    }
-
-    public bool GetRepeatEnabled(Guid clientId)
-    {
-        ClientMusicState state = GetOrCreateState(clientId);
-        lock (_lock)
-        {
-            return state.IsRepeatEnabled;
         }
     }
 
@@ -258,7 +251,7 @@ public class MusicPlayerService
         await SetQueue(clientId, songs, playlistId);
     }
 
-    private bool MoveToNext(Guid clientId)
+    private bool MoveToNext(Guid clientId, bool isAutomaticAdvance)
     {
         Song? nextSong;
         ClientMusicState state = GetOrCreateState(clientId);
@@ -271,7 +264,7 @@ public class MusicPlayerService
                 return false;
             }
 
-            int? nextIndex = GetNextQueueIndex(state);
+            int? nextIndex = GetNextQueueIndex(state, isAutomaticAdvance);
 
             if (!nextIndex.HasValue)
             {
@@ -302,11 +295,6 @@ public class MusicPlayerService
                 return false;
             }
 
-            if (state.IsRepeatEnabled)
-            {
-                state.IsRepeatEnabled = false;
-            }
-
             int? previousIndex = GetPreviousQueueIndex(state);
 
             if (!previousIndex.HasValue)
@@ -325,24 +313,31 @@ public class MusicPlayerService
         return true;
     }
 
-    private static int? GetNextQueueIndex(ClientMusicState state)
+    /// <param name="isAutomaticAdvance">
+    /// True when the current track ended by itself, false when the user pressed Next.
+    /// Only an automatic advance honours <see cref="RepeatMode.One"/> — an explicit skip
+    /// means the user wants to move on, so it advances regardless.
+    /// </param>
+    private static int? GetNextQueueIndex(ClientMusicState state, bool isAutomaticAdvance)
     {
         if (state.Queue.Count == 0)
         {
             return null;
         }
 
-        if (state.IsRepeatEnabled)
+        if (isAutomaticAdvance && state.RepeatMode == RepeatMode.One)
         {
-            // Just return the current song
             return state.QueueIndex;
         }
+
+        // Any repeat mode keeps the queue circular; only Off runs off the end and stops.
+        bool wrapsAround = state.RepeatMode != RepeatMode.Off;
 
         if (state.IsShuffleEnabled)
         {
             if (state.Queue.Count == 1)
             {
-                return state.IsRepeatEnabled ? 0 : null;
+                return wrapsAround ? 0 : null;
             }
 
             int nextIndex;
@@ -357,7 +352,7 @@ public class MusicPlayerService
         int sequentialNext = state.QueueIndex + 1;
         if (sequentialNext >= state.Queue.Count)
         {
-            return state.IsRepeatEnabled ? 0 : null;
+            return wrapsAround ? 0 : null;
         }
 
         return sequentialNext;
@@ -370,11 +365,13 @@ public class MusicPlayerService
             return null;
         }
 
+        bool wrapsAround = state.RepeatMode != RepeatMode.Off;
+
         if (state.IsShuffleEnabled)
         {
             if (state.Queue.Count == 1)
             {
-                return state.IsRepeatEnabled ? 0 : null;
+                return wrapsAround ? 0 : null;
             }
 
             int previousIndex;
@@ -389,7 +386,7 @@ public class MusicPlayerService
         int sequentialPrevious = state.QueueIndex - 1;
         if (sequentialPrevious < 0)
         {
-            return state.IsRepeatEnabled ? state.Queue.Count - 1 : null;
+            return wrapsAround ? state.Queue.Count - 1 : null;
         }
 
         return sequentialPrevious;
@@ -523,6 +520,50 @@ public class MusicPlayerService
         await SendToClientAsync(clientId, "Play");
     }
 
+    /// <summary>
+    /// Called when a client reports that its track finished on its own. Advances the queue via
+    /// the same repeat/shuffle rules the Next button uses; with repeat on that resolves back to
+    /// the current track, which replays it. Stops quietly at the end of a non-repeating queue.
+    /// </summary>
+    public async Task HandleSongEndedAsync(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        lock (_lock)
+        {
+            state.LastKnownPositionSeconds = 0;
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
+        if (GetCurrentSong(clientId) is null)
+        {
+            return;
+        }
+
+        if (!MoveToNext(clientId, isAutomaticAdvance: true))
+        {
+            _logger.LogInformation("Client {ClientId} reached the end of its queue", clientId);
+            return;
+        }
+
+        Song? nextSong = GetCurrentSong(clientId);
+        if (nextSong is null)
+        {
+            return;
+        }
+
+        Guid currentPlaylistId;
+        lock (_lock)
+        {
+            currentPlaylistId = state.CurrentPlaylist?.Id ?? Guid.Empty;
+        }
+
+        _logger.LogInformation("Client {ClientId} advancing to song {SongId} after track end", clientId, nextSong.Id);
+
+        await SendToClientAsync(clientId, "Load", nextSong.Id, currentPlaylistId);
+        await SendToClientAsync(clientId, "Play");
+    }
+
     public async Task Pause(Guid clientId)
     {
         await SendToClientAsync(clientId, "Pause");
@@ -562,12 +603,7 @@ public class MusicPlayerService
 
         ClientMusicState state = GetOrCreateState(clientId);
 
-        if (state.IsRepeatEnabled)
-        {
-            await ToggleShuffle(clientId);
-        }
-
-        if (MoveToNext(clientId))
+        if (MoveToNext(clientId, isAutomaticAdvance: false))
         {
             Song? nextSong = GetCurrentSong(clientId);
             Guid currentPlaylistId = state.CurrentPlaylist?.Id ?? Guid.Empty;
@@ -653,18 +689,27 @@ public class MusicPlayerService
         return Task.FromResult(isEnabled);
     }
 
-    public Task<bool> ToggleRepeat(Guid clientId)
+    /// <summary>
+    /// Advances the repeat setting one step around Off -> All -> One -> Off.
+    /// </summary>
+    public Task<RepeatMode> CycleRepeatMode(Guid clientId)
     {
         ClientMusicState state = GetOrCreateState(clientId);
-        bool isEnabled;
+        RepeatMode mode;
 
         lock (_lock)
         {
-            state.IsRepeatEnabled = !state.IsRepeatEnabled;
-            isEnabled = state.IsRepeatEnabled;
+            state.RepeatMode = state.RepeatMode switch
+            {
+                RepeatMode.Off => RepeatMode.All,
+                RepeatMode.All => RepeatMode.One,
+                _ => RepeatMode.Off
+            };
+
+            mode = state.RepeatMode;
         }
 
-        return Task.FromResult(isEnabled);
+        return Task.FromResult(mode);
     }
 
     public async Task Seek(Guid clientId, double positionSeconds)
@@ -719,12 +764,12 @@ public class MusicPlayerService
         }
     }
 
-    public bool GetCurrentRepeatState(Guid clientId)
+    public RepeatMode GetCurrentRepeatMode(Guid clientId)
     {
         ClientMusicState state = GetOrCreateState(clientId);
         lock (_lock)
         {
-            return state.IsRepeatEnabled;
+            return state.RepeatMode;
         }
     }
 

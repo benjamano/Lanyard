@@ -155,6 +155,20 @@ public class SignalRControlHub(
         _playerService.UpdatePlaybackState(getClientResult.Data, state);
     }
 
+    public async Task SongEnded()
+    {
+        _logger.LogInformation("Client {ConnectionId} reported its track finished", Context.ConnectionId);
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        await _playerService.HandleSongEndedAsync(getClientResult.Data);
+    }
+
     public async Task CurrentPlayingSongChanged(Guid song)
     {
         _logger.LogInformation("Client {ConnectionId} reported new song: {Song}", Context.ConnectionId, song);

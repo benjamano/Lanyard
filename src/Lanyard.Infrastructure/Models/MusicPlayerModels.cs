@@ -9,6 +9,21 @@ using System.Text;
 
 namespace Lanyard.Infrastructure.Models
 {
+    /// <summary>
+    /// How playback behaves when it runs off the end of a track or the queue.
+    /// </summary>
+    public enum RepeatMode
+    {
+        /// <summary>Play the queue through once and stop at the end.</summary>
+        Off = 0,
+
+        /// <summary>Loop the queue: the track after the last one is the first one.</summary>
+        All = 1,
+
+        /// <summary>Replay the current track each time it ends. Skipping still moves on.</summary>
+        One = 2
+    }
+
     public class Song
     {
         public Guid Id { get; set; }
