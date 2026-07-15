@@ -14,22 +14,96 @@
     <ImportMap />
 
     <link rel="icon" type="image/png" href="favicon.png" />
-    <link href="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.bundle.scp.css" rel="stylesheet" />
+    <link href="@Assets["_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.bundle.scp.css"]" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <script src="@Assets["app.js"]"></script>
     <script src="@Assets["video-stream.js"]"></script>
     <script src="@Assets["js/autoLogout.js"]"></script>
-    <link rel="stylesheet" href="Lanyard.App.styles.css" />
+    <link rel="stylesheet" href="@Assets["Lanyard.App.styles.css"]" />
     <HeadOutlet @rendermode="PageRenderMode" />
 
     <style>
-        @@media (prefers-color-scheme: dark) {
-            body {
-                background-color: #292929;
-                color: #ffffff;
-            }
+        html[data-app-booting] body { visibility: hidden; }
+        html[data-app-booting] #app-splash { visibility: visible; }
+        html:not([data-app-booting]) #app-splash { display: none; }
+
+        #app-splash {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background-color: #ffffff;
+        }
+
+        html[data-app-theme="dark"] #app-splash { background-color: #292929; }
+
+        .app-splash-spinner {
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 3px solid rgba(127, 127, 127, .25);
+            border-top-color: #0d6efd;
+            border-radius: 50%;
+            animation: app-splash-spin .8s linear infinite;
+        }
+
+        @@keyframes app-splash-spin { to { transform: rotate(360deg); } }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .app-splash-spinner { animation: none; }
         }
     </style>
+
+    <script>
+        (() => {
+            const root = document.documentElement;
+
+            // Fluent stores the user's explicit choice here; prefers-color-scheme alone
+            // would contradict a user who picked Light on a dark OS.
+            const stored = (() => {
+                try { return JSON.parse(localStorage.getItem('fluentui-blazor:theme-settings') || '{}'); }
+                catch { return {}; }
+            })();
+            const isDark = stored.mode === 'dark'
+                || (stored.mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            root.setAttribute('data-app-theme', isDark ? 'dark' : 'light');
+
+            // Set from JS, never in markup: if scripting is unavailable the page is
+            // never cloaked, so it can never stay blank.
+            root.setAttribute('data-app-booting', '');
+
+            let revealed = false;
+            const reveal = () => {
+                if (revealed) { return; }
+                revealed = true;
+                clearTimeout(failsafe);
+                root.removeAttribute('data-app-booting');
+            };
+
+            const failsafe = setTimeout(reveal, 5000);
+            window.lanyardRevealApp = reveal;
+
+            // defineComponents() runs at beforeStart but applyStyles() runs at
+            // afterStarted, so waiting on the custom element alone would reveal
+            // mid-flash. default-fuib-css is the last thing applyStyles() injects.
+            const isReady = () => {
+                if (customElements.get('fluent-button') === undefined) { return false; }
+                const link = document.getElementById('default-fuib-css');
+                if (link === null) { return false; }
+                try { return link.sheet !== null; } catch { return false; }
+            };
+
+            const poll = () => {
+                if (revealed) { return; }
+                if (isReady()) {
+                    requestAnimationFrame(() => requestAnimationFrame(reveal));
+                    return;
+                }
+                setTimeout(poll, 30);
+            };
+
+            poll();
+        })();
+    </script>
 
     @if (NavigationManager.Uri.Contains("/", StringComparison.OrdinalIgnoreCase))
     {
@@ -39,6 +113,8 @@
 </head>
 
 <body>
+    <div id="app-splash" aria-hidden="true"><div class="app-splash-spinner"></div></div>
+
     <Routes @rendermode="PageRenderMode" />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="https://kit.fontawesome.com/9d35a24d36.js" crossorigin="anonymous"></script>
