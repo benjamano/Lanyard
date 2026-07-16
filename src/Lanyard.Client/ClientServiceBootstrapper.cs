@@ -1,6 +1,7 @@
 using Lanyard.Client.Controllers;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.RestartScheduler;
 using Lanyard.Client.SignalR;
 using Lanyard.Client.VideoPublisher;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -49,6 +50,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<ZoneScoreboardSignalRController>();
         services.AddSingleton<IVideoPublisherWindowService, VideoPublisherWindowService>();
         services.AddSingleton<VideoPublisherSignalRController>();
+        services.AddSingleton<IRestartSchedulerService, RestartSchedulerService>();
+        services.AddSingleton<RestartScheduleController>();
 
         return services.BuildServiceProvider();
     }
@@ -61,7 +64,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<ProjectionProgramController>().Register,
             provider.GetRequiredService<DmxSignalRController>().Register,
             provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
-            provider.GetRequiredService<VideoPublisherSignalRController>().Register
+            provider.GetRequiredService<VideoPublisherSignalRController>().Register,
+            provider.GetRequiredService<RestartScheduleController>().Register
         ];
     }
 }

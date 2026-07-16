@@ -85,6 +85,13 @@
     <FluentGridItem Xs="12" Sm="12" Md="6">
         <ClientZoneScoreboardSettings ClientId="@updatingClientId" />
     </FluentGridItem>
+
+    <FluentGridItem Xs="12" Sm="12" Md="6">
+        <ClientRestartSchedule
+            IsShowing="@showClientCapabilitiesCard"
+            clientId="@updatingClientId">
+        </ClientRestartSchedule>
+    </FluentGridItem>
 </FluentGrid>
 
 <FluentDialog @ref="updateClientNameDialog" Modal="true">
