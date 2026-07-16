@@ -17,6 +17,11 @@ public class Client
     public DateTime CreateDate { get; set; }
 
     public int MusicCacheLimitMb { get; set; } = 500;
+
+    public bool AutoRestartEnabled { get; set; } = false;
+    public RestartIntervalUnit AutoRestartIntervalUnit { get; set; } = RestartIntervalUnit.Day;
+    public int AutoRestartIntervalCount { get; set; } = 1;
+    public TimeOnly AutoRestartTimeOfDay { get; set; } = new TimeOnly(4, 0);
 }
 
 public class ClientProjectionSettings

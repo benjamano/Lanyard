@@ -19,3 +19,10 @@ public enum ProjectionType
     VideoFile = 4,
     ImageFile = 5
 }
+
+public enum RestartIntervalUnit
+{
+    Day = 1,
+    Week = 2,
+    Month = 3
+}

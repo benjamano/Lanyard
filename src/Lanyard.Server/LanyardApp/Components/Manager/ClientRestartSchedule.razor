@@ -1,0 +1,120 @@
+@using Lanyard.Shared.Enum
+
+@inject IClientService _clientService
+@inject IToastService _toastService
+
+@if (client != null)
+{
+    <FluentCard Height="100%">
+        <FluentText Typo="Typography.PaneHeader">Auto Restart</FluentText>
+
+        <EditForm Model="@client" OnValidSubmit="UpdateRestartScheduleAsync" class="mt-2">
+            <FluentStack Orientation="Orientation.Vertical">
+                <FluentSwitch @bind-Value="client!.AutoRestartEnabled" Label="Enable scheduled PC restart" />
+
+                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Bottom">
+                    <FluentTextInput Value="@_countStr"
+                                     ValueChanged="@OnCountChanged"
+                                     TextInputType="TextInputType.Number"
+                                     Disabled="!client.AutoRestartEnabled"
+                                     Label="Every" />
+
+                    <FluentSelect Items="@_intervalUnits"
+                                  @bind-Value="client!.AutoRestartIntervalUnit"
+                                  OptionText="@(unit => UnitLabel(unit))"
+                                  Disabled="!client.AutoRestartEnabled"
+                                  Label="Unit" />
+                </FluentStack>
+
+                <FluentTimePicker @bind-Value="client!.AutoRestartTimeOfDay"
+                                  RenderStyle="DatePickerRenderStyle.Native"
+                                  Disabled="!client.AutoRestartEnabled"
+                                  Label="At time" />
+
+                <FluentText Typo="Typography.Body" Color="Color.Default">
+                    Monthly restarts run on that day of every month; the "every" count applies to days and weeks only.
+                </FluentText>
+
+                <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
+                    Save
+                </FluentButton>
+            </FluentStack>
+        </EditForm>
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public bool IsShowing { get; set; }
+
+    [Parameter]
+    public Guid? clientId { get; set; }
+
+    private Client? client = null;
+    private string _countStr = "1";
+
+    private static readonly IEnumerable<RestartIntervalUnit> _intervalUnits = Enum.GetValues<RestartIntervalUnit>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsShowing && clientId != null)
+        {
+            await RefreshScheduleAsync();
+        }
+    }
+
+    private async Task RefreshScheduleAsync()
+    {
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId!.Value);
+
+        if (result.IsSuccess)
+        {
+            client = result.Data!;
+            _countStr = client.AutoRestartIntervalCount.ToString();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load client restart schedule, {result.Error}");
+        }
+    }
+
+    private void OnCountChanged(string value)
+    {
+        _countStr = value;
+
+        if (client != null && int.TryParse(value, out int count))
+        {
+            client.AutoRestartIntervalCount = Math.Max(1, count);
+        }
+    }
+
+    private async Task UpdateRestartScheduleAsync()
+    {
+        if (client == null)
+        {
+            return;
+        }
+
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+
+        if (updateResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Restart schedule updated, changes will propagate to this client on next restart.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to update restart schedule, {updateResult.Error}");
+        }
+    }
+
+    private static string UnitLabel(RestartIntervalUnit unit)
+    {
+        return unit switch
+        {
+            RestartIntervalUnit.Day => "Day(s)",
+            RestartIntervalUnit.Week => "Week(s)",
+            RestartIntervalUnit.Month => "Month(s)",
+            _ => unit.ToString()
+        };
+    }
+}

@@ -113,6 +113,7 @@ public class SignalRControlHub(
             await SendMusicSettingsToClientAsync(client);
             await SendDmxSettingsToClientAsync(client);
             await SendZoneScoreboardSettingsToClientAsync(client);
+            await SendRestartScheduleToClientAsync(client);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
@@ -248,6 +249,20 @@ public class SignalRControlHub(
 
         await Clients.Caller.SendAsync("ReceiveMusicSettings", settings);
         _logger.LogInformation("Sent music settings to client {ClientId}: cache limit {CacheLimitMb}MB", client.Id, client.MusicCacheLimitMb);
+    }
+
+    private async Task SendRestartScheduleToClientAsync(Client client)
+    {
+        ClientRestartScheduleDTO schedule = new ClientRestartScheduleDTO
+        {
+            Enabled = client.AutoRestartEnabled,
+            IntervalUnit = client.AutoRestartIntervalUnit,
+            IntervalCount = client.AutoRestartIntervalCount,
+            TimeOfDay = client.AutoRestartTimeOfDay
+        };
+
+        await Clients.Caller.SendAsync("ReceiveRestartSchedule", schedule);
+        _logger.LogInformation("Sent restart schedule to client {ClientId}: enabled {Enabled}, every {IntervalCount} {IntervalUnit} at {TimeOfDay}", client.Id, client.AutoRestartEnabled, client.AutoRestartIntervalCount, client.AutoRestartIntervalUnit, client.AutoRestartTimeOfDay);
     }
 
     private async Task SendZoneScoreboardSettingsToClientAsync(Client client)
