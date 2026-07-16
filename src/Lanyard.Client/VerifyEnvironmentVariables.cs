@@ -8,7 +8,8 @@ public class VerifyEnvironmentVariables
         {
             ("LANYARD_SERVER_URL", "https://localhost:7175"),
             ("LANYARD_CLIENT_ALLOW_INSECURE_SSL", "false"),
-            ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false")
+            ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false"),
+            ("LANYARD_CLIENT_SHARED_SECRET", "changeme")
         };
 
         string configPath = Path.Combine(

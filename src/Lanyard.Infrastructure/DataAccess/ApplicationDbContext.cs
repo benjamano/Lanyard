@@ -19,7 +19,6 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanControlMusicRoleId = "dev-role-can-control-music";
         public const string SeedCanClockInRoleId = "dev-role-can-clock-in";
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
-        public const string SeedAdminPasswordHash = "AQAAAAIAAYagAAAAEJ1AhlJOAablYfFpSBJmkOkqLkqidbamfdrRwkTGjXCnkD30AqM6PNAcAh96mQgYXg==";
         public static readonly DateTime SeedRoleCreateDateUtc = new DateTime(2026, 03, 11, 0, 0, 0, DateTimeKind.Utc);
 
         public ApplicationDbContext() : base() { }
@@ -59,12 +58,24 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
 
+        // Connection string used only when the context is created without configured options —
+        // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
+        // ConnectionStrings__DefaultConnection from the environment and otherwise falls back to
+        // the local Docker Postgres from docker-compose.yml. It must never contain a real/remote
+        // password; runtime connections are configured via DI in the host's Program.cs instead.
+        private const string LocalDesignTimeConnectionString =
+            "Host=localhost;Port=5432;Database=lanyarddb;Username=lanyard_dev;Password=lanyard_dev_password";
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
             {
+                string connectionString =
+                    Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+                    ?? LocalDesignTimeConnectionString;
+
                 optionsBuilder.UseNpgsql(
-                    "Host=100.67.245.90;Port=5432;Database=lanyarddb;Username=psqluser;Password=nFGDcVxzHbn7HsrrcReJtBY",
+                    connectionString,
                     b => b.MigrationsAssembly("Lanyard.Infrastructure"));
             }
 

@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using Microsoft.AspNetCore.Authorization;
@@ -17,10 +18,12 @@ namespace Lanyard.API.Controllers
     public class FilesController : ControllerBase
     {
         private readonly IFileService _fileService;
+        private readonly IClientSecretValidator _clientSecretValidator;
 
-        public FilesController(IFileService fileService)
+        public FilesController(IFileService fileService, IClientSecretValidator clientSecretValidator)
         {
             _fileService = fileService;
+            _clientSecretValidator = clientSecretValidator;
         }
 
         [HttpPost("upload")]
@@ -38,9 +41,11 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpGet("download/{id}")]
-        [AllowAnonymous]
         public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
         {
+            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+                return Unauthorized();
+
             Result<Stream> result = await _fileService.DownloadFileAsync(id, cancellationToken);
             if (!result.Success || result.Data == null)
                 return NotFound(Result<string>.Fail("File not found."));
@@ -51,9 +56,11 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpGet("list")]
-        [AllowAnonymous]
         public async Task<IActionResult> List([FromQuery] Guid? folderId, CancellationToken cancellationToken)
         {
+            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+                return Unauthorized();
+
             Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(folderId, cancellationToken);
             return Ok(result);
         }
@@ -110,9 +117,11 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpGet("folders/list")]
-        [AllowAnonymous]
         public async Task<IActionResult> ListFolders([FromQuery] Guid? parentFolderId, CancellationToken cancellationToken)
         {
+            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+                return Unauthorized();
+
             Result<IReadOnlyList<Folder>> result = await _fileService.ListFoldersAsync(parentFolderId, cancellationToken);
             return Ok(result);
         }

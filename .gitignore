@@ -411,3 +411,11 @@ FodyWeavers.xsd
 *.csproj.lscache
 *.lscache
 scratch_publish/
+
+# Local secrets / environment overrides — never commit real credentials
+appsettings.*.local.json
+appsettings.Local.json
+.env
+.env.*
+!.env.example
+src/Lanyard.Server/LanyardApp/appsettings.json

@@ -3,6 +3,43 @@
     "fluent-ui-blazor": {
       "command": "fluentui-mcp",
       "args": []
+    },
+    "playwright": {
+        "command": "npx",
+        "args": [
+          "@playwright/mcp@latest"
+        ]
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-postgres-server"],
+      "env": {
+        "PG_HOST": "localhost",
+        "PG_PORT": "5432",
+        "PG_USER": "lanyard_dev",
+        "PG_PASSWORD": "lanyard_dev_password",
+        "PG_DATABASE": "lanyarddb"
+      }
+    },
+    "Sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp"
+    },
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": [
+        "mcp",
+        "gateway",
+        "run",
+        "--profile",
+        "my_profile"
+      ],
+      "type": "stdio"
     }
   }
 }

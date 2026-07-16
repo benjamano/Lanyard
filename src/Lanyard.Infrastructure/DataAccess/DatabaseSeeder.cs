@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 public static class DatabaseSeeder
 {
@@ -10,11 +13,13 @@ public static class DatabaseSeeder
     {
         using var scope = services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
 
-        await SeedUsersAndRolesAsync(context);
+        await SeedUsersAndRolesAsync(context, configuration, logger);
     }
 
-    private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context)
+    private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context, IConfiguration configuration, ILogger logger)
     {
         if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId))
         {
@@ -22,7 +27,7 @@ public static class DatabaseSeeder
         }
 
         PasswordHasher<UserProfile> passwordHasher = new();
- 
+
         UserProfile seedAdminUser = new UserProfile
         {
             Id = ApplicationDbContext.SeedAdminUserId,
@@ -37,8 +42,26 @@ public static class DatabaseSeeder
             SecurityStamp = "SEED-ADMIN-SECURITY-STAMP",
             ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP"
         };
+        string? configuredPassword = configuration["Seed:AdminPassword"];
+        string adminPassword;
 
-        seedAdminUser.PasswordHash = passwordHasher.HashPassword(seedAdminUser, "Admin123!");
+        if (!string.IsNullOrWhiteSpace(configuredPassword))
+        {
+            adminPassword = configuredPassword;
+
+            logger.LogInformation("Seeding admin user with the password supplied via Seed:AdminPassword.");
+        }
+        else
+        {
+            adminPassword = GenerateRandomPassword();
+
+            logger.LogWarning(
+                "No Seed:AdminPassword configured. Seeding admin user '{UserName}' with a generated "
+                + "password: {Password}  --  log in and change it immediately, then set Seed__AdminPassword "
+                + "or remove this account.", seedAdminUser.UserName, adminPassword);
+        }
+
+        seedAdminUser.PasswordHash = passwordHasher.HashPassword(seedAdminUser, adminPassword);
 
         await context.Users.AddAsync(seedAdminUser);
 
@@ -114,5 +137,17 @@ public static class DatabaseSeeder
         );
 
         await context.SaveChangesAsync();
+    }
+
+    private static string GenerateRandomPassword()
+    {
+        // 24 URL-safe random characters, with fixed complexity characters appended so the result
+        // always satisfies ASP.NET Identity's default password rules (upper, lower, digit).
+        string random = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        return $"{random}Aa1!";
     }
 }

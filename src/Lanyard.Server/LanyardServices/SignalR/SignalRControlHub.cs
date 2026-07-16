@@ -1,4 +1,5 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Infrastructure.DTO;
@@ -27,9 +28,11 @@ public class SignalRControlHub(
     AutomationEngineService automationEngineService,
     IDmxClientService dmxClientService,
     IClientZoneScoreboardService clientZoneScoreboardService,
-    IVideoStreamTokenService videoStreamTokenService) : Hub, ISignalRProjectionControlHub
+    IVideoStreamTokenService videoStreamTokenService,
+    IClientSecretValidator clientSecretValidator) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
+    private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
 
     private readonly MusicPlayerService _playerService = playerService;
     private readonly IClientService _clientService = clientService;
@@ -56,7 +59,32 @@ public class SignalRControlHub(
             return;
         }
 
-        Guid clientId = Guid.Parse(httpContext?.Request.Query["clientId"].ToString()!);
+        // Kiosk clients have no interactive user login, so they authenticate with the shared
+        // secret. When a secret is configured, reject any connection that does not present it —
+        // this is what stops an anonymous caller from driving clients by guessing a client-ID GUID.
+        if (_clientSecretValidator.IsConfigured)
+        {
+            string providedSecret = httpContext?.Request.Query["secret"].ToString() ?? string.Empty;
+
+            if (!_clientSecretValidator.IsValid(providedSecret))
+            {
+                string rejectedIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+
+                _logger.LogWarning("Client connection from {IpAddress} rejected: missing or invalid shared secret", rejectedIp);
+
+                Context.Abort();
+                return;
+            }
+        }
+
+        if (!Guid.TryParse(httpContext?.Request.Query["clientId"].ToString(), out Guid clientId))
+        {
+            _logger.LogWarning("Client connected with a malformed client ID, disconnecting");
+
+            Context.Abort();
+            return;
+        }
+
         string clientIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId);

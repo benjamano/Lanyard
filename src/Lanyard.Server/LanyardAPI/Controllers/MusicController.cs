@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -9,14 +10,20 @@ namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class MusicController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService) : ControllerBase
+    public class MusicController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService, IClientSecretValidator clientSecretValidator) : ControllerBase
     {
         private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
         private readonly IFileService _fileService = fileService;
+        private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
 
         [HttpGet("audio/{id}")]
         public async Task<IActionResult> GetAudioFile(Guid id, CancellationToken cancellationToken)
         {
+            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            {
+                return Unauthorized();
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
             Song? song = await ctx.Songs

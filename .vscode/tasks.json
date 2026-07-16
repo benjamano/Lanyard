@@ -2,6 +2,26 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Start Dev Database (Docker)",
+            "type": "process",
+            "command": "docker",
+            "args": [
+                "compose",
+                "up",
+                "-d",
+                "--wait",
+                "postgres"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "Build LanyardApp",
             "type": "process",
             "command": "dotnet",
@@ -15,6 +35,15 @@
                 "reveal": "always",
                 "panel": "shared"
             }
+        },
+        {
+            "label": "Start Database and Build LanyardApp",
+            "dependsOn": [
+                "Start Dev Database (Docker)",
+                "Build LanyardApp"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": "$msCompile"
         },
         {
             "label": "Build LanyardClient",
@@ -104,7 +133,7 @@
         },
         {
             "label": "Build Client and App (sequential)",
-            "dependsOn": ["Build LanyardClient", "Build LanyardApp"],
+            "dependsOn": ["Start Dev Database (Docker)", "Build LanyardClient", "Build LanyardApp"],
             "dependsOrder": "sequence",
             "problemMatcher": "$msCompile"
         }

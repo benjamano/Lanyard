@@ -1,0 +1,47 @@
+# Local development stack for Lanyard.
+#
+# This spins up a throwaway Postgres for local development so that no real / remote
+# database credentials are needed on a developer machine. The credentials below are
+# intentionally committed: the service only binds to 127.0.0.1 and the database holds
+# nothing but disposable local test data. Never point this at, or reuse these creds for,
+# a production database.
+#
+# Usage:
+#   docker compose up -d            # start Postgres (and Adminer)
+#   dotnet ef database update \
+#     --project src/Lanyard.Infrastructure \
+#     --startup-project src/Lanyard.Server/LanyardApp
+#   docker compose down             # stop (add -v to also wipe the data volume)
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: lanyard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lanyarddb
+      POSTGRES_USER: lanyard_dev
+      POSTGRES_PASSWORD: lanyard_dev_password
+    ports:
+      # Bind to localhost only so the dev DB is never exposed on the network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - lanyard_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lanyard_dev -d lanyarddb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional lightweight web UI for the dev database at http://localhost:8081
+  adminer:
+    image: adminer:latest
+    container_name: lanyard-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  lanyard_pgdata:

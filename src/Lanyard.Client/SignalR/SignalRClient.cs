@@ -27,7 +27,12 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     {
         string serverUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/websocket";
         string clientId = Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!;
+        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
         bool allowInsecureSsl = ShouldAllowInsecureSsl();
+
+        string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
+            ? string.Empty
+            : $"&secret={Uri.EscapeDataString(sharedSecret)}";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
@@ -45,7 +50,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             try
             {
                 _connection = new HubConnectionBuilder()
-                    .WithUrl(serverUrl + $"?clientId={clientId}", options =>
+                    .WithUrl(serverUrl + $"?clientId={clientId}{secretQuery}", options =>
                     {
                         if (allowInsecureSsl && serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                         {
@@ -118,11 +123,6 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
                     return;
                 };
 
-                _connection.On<string>("ReceiveMessage", (message) =>
-                {
-                    _logger.LogInformation("Received message from server: {Message}", message);
-                });
-
                 foreach (Action<HubConnection> register in registrations)
                 {
                     register(_connection);
@@ -136,6 +136,18 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             }
             catch (HttpRequestException ex)
             {
+                // The server rejects an invalid/missing shared secret with 401 at the negotiate
+                // stage. This is a configuration problem that retrying cannot fix, so stop entirely
+                // (log once) instead of spamming reconnect attempts. Restart the client after fixing
+                // LANYARD_CLIENT_SHARED_SECRET to match the server's Clients:SharedSecret.
+                if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogError("SignalR connection refused (401 Unauthorized): the server rejected this "
+                        + "client's shared secret. Ensure LANYARD_CLIENT_SHARED_SECRET matches the server's "
+                        + "Clients:SharedSecret, then restart the client. Not retrying.");
+                    return;
+                }
+
                 _logger.LogError("Error initializing SignalR connection: {Message}", ex.Message);
 
                 if (ex.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||

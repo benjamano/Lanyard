@@ -25,6 +25,13 @@ using Lanyard.App.Components.Layout;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load local, git-ignored overrides (e.g. Clients:SharedSecret, connection strings) when present.
+// Added after the default sources so it takes precedence for local development; it is optional and
+// absent in production, where environment variables supply these values instead.
+builder.Configuration
+    .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.local.json", optional: true, reloadOnChange: true);
+
 if (builder.Environment.IsDevelopment() == false)
 {
     builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
@@ -38,6 +45,7 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ISecurityService, SecurityService>();
+builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
@@ -85,19 +93,34 @@ builder.Services.AddSingleton(new AppInfo
 });
 
 // Configure Database
-string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Connection string 'DefaultConnection' is not configured. Set the "
+        + "ConnectionStrings__DefaultConnection environment variable (production) or run the "
+        + "local docker-compose Postgres for development.");
+}
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
 
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+}
 
 // Configure Identity with minimal settings
 builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
     options.Password.RequireNonAlphanumeric = false;
+
+    // Brute-force protection: lock an account after repeated failed sign-ins.
+    options.Lockout.AllowedForNewUsers = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddSignInManager()
@@ -108,11 +131,20 @@ builder.Services.AddAuthorization();
 // Configure cookie to persist login across sessions
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(180);
+    options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
     options.LoginPath = "/HandleLogin";
     options.LogoutPath = "/HandleLogout";
     options.AccessDeniedPath = "/HandleLogin";
+
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+
+    // Only send the auth cookie over HTTPS in non-development environments (dev may run on
+    // plain-HTTP localhost). Prevents the session cookie leaking over cleartext in production.
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
 });
 
 if (builder.Environment.IsDevelopment() == false)
@@ -181,22 +213,54 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment() == false)
 {
+    // Honour X-Forwarded-Proto/For from the TLS-terminating proxy so HTTPS redirection and
+    // client-IP logging see the real scheme and address. Must run before UseHttpsRedirection.
     app.UseForwardedHeaders();
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseMigrationsEndPoint();
+    app.UseHsts();
+    app.UseHttpsRedirection();
     app.UseRateLimiter();
 }
 
-// app.UseHsts();
+// Baseline security response headers (applied in every environment).
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+
+    await next();
+});
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-// app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
+
+// Reject unauthenticated kiosk clients at the SignalR negotiate/handshake stage with a 401,
+// rather than letting them connect and then aborting inside the hub. Returning 401 here lets the
+// client distinguish "wrong secret" from a transient network drop and stop retrying immediately.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/websocket"))
+    {
+        IClientSecretValidator validator = context.RequestServices.GetRequiredService<IClientSecretValidator>();
+
+        if (validator.IsConfigured && !validator.IsValid(context.Request.Query["secret"].ToString()))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            // Write a body so UseStatusCodePagesWithReExecute does not re-run the pipeline (which
+            // would turn this into an antiforgery 400) — the client must receive a clean 401.
+            await context.Response.WriteAsync("Invalid or missing client shared secret.");
+            return;
+        }
+    }
+
+    await next();
+});
 
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");

@@ -33,6 +33,40 @@ Lanyard Client is an internal system designed to be used as a single control poi
 
 One-Time setup per Client, all customisable via [Lanyard Server](#LanyardServer).
 
+## Local Development Setup
+
+### Database
+
+Local development uses a throwaway PostgreSQL running in Docker — no remote or shared
+database credentials are needed on a developer machine.
+
+1. Start the database (and optional Adminer UI at http://localhost:8081):
+
+   ```bash
+   docker compose up -d
+   ```
+
+2. Apply the latest migrations:
+
+   ```bash
+   dotnet ef database update \
+     --project src/Lanyard.Infrastructure \
+     --startup-project src/Lanyard.Server/LanyardApp
+   ```
+
+3. Run the server (`dotnet run` in `src/Lanyard.Server/LanyardApp`, or the **Debug LanyardApp**
+   launch config in VS Code, which starts the database container automatically).
+
+The development connection string lives in `appsettings.Development.json` and points at the
+container defined in `docker-compose.yml`. Stop the database with `docker compose down`
+(add `-v` to also wipe the data volume).
+
+### Production configuration
+
+The production database connection string is supplied at runtime via the
+`ConnectionStrings__DefaultConnection` environment variable — it is **never** committed to
+`appsettings.json`. The app will refuse to start if it is not set.
+
 ## Running the Lanyard Client
 
 The Lanyard Client is a Windows desktop application that runs on kiosk machines, handling local music playback, projection programs, and laser game packet sniffing.
