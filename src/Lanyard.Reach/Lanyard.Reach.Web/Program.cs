@@ -12,6 +12,13 @@ builder.Services.AddRazorComponents()
 // Add device-specific services used by the Lanyard.Reach.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
+builder.Services.AddFluentUIComponents(options =>
+{
+    options.ValidateClassNames = true;
+    options.UseTooltipServiceProvider = true;
+    options.HideTooltipOnCursorLeave = true;
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -27,13 +34,6 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
-
-builder.Services.AddFluentUIComponents(options =>
-{
-    options.ValidateClassNames = true;
-    options.UseTooltipServiceProvider = true;
-    options.HideTooltipOnCursorLeave = true;
-});
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

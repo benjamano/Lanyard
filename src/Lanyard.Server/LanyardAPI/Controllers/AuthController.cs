@@ -38,7 +38,12 @@ namespace Lanyard.App.Controllers
                 user,
                 dto.Password,
                 dto.RememberMe,
-                lockoutOnFailure: false);
+                lockoutOnFailure: true);
+
+            if (result.IsLockedOut)
+            {
+                return Unauthorized(new { message = "Account temporarily locked due to repeated failed attempts. Try again later." });
+            }
 
             if (!result.Succeeded)
             {
@@ -62,7 +67,12 @@ namespace Lanyard.App.Controllers
                 user,
                 password,
                 rememberMe,
-                lockoutOnFailure: false);
+                lockoutOnFailure: true);
+
+            if (result.IsLockedOut)
+            {
+                return Redirect($"/login?error={Uri.EscapeDataString("Account temporarily locked due to repeated failed attempts. Try again later.")}");
+            }
 
             if (!result.Succeeded)
             {

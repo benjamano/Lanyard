@@ -182,7 +182,15 @@ public class SongCacheService : ISongCacheService, IDisposable
     private static string BuildApiUrl(Guid songId)
     {
         string apiUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/api";
-        return $"{apiUrl}/music/audio/{songId}";
+
+        // The secret is carried in the query string (not a header) because this URL is also handed
+        // directly to the audio player for streaming, which issues its own request without headers.
+        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
+        string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
+            ? string.Empty
+            : $"?secret={Uri.EscapeDataString(sharedSecret)}";
+
+        return $"{apiUrl}/music/audio/{songId}{secretQuery}";
     }
 
     private void UpdateAccessTime(Guid songId)
