@@ -69,9 +69,14 @@ namespace Lanyard.App.Controllers
                 return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
             }
 
-            // Redirect to return URL or default to /
-            string redirectUrl = !string.IsNullOrEmpty(returnUrl) ? returnUrl : "/";
-            return Redirect(redirectUrl);
+            // Redirect to return URL (only if it is a local path — guards against
+            // open-redirect attacks) or default to /.
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+
+            return Redirect("/");
         }
 
         [HttpPost("logout")]
@@ -82,9 +87,18 @@ namespace Lanyard.App.Controllers
         }
 
         [HttpGet("logout")]
-        public async Task<IActionResult> LogoutGet()
+        public async Task<IActionResult> LogoutGet([FromQuery] string? returnUrl = null)
         {
             await _signInManager.SignOutAsync();
+
+            // Preserve the page the user was on (validated as a local path) so that
+            // re-login can return them there.
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                string loginUrl = $"/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+                return Redirect(loginUrl);
+            }
+
             return Redirect("/login");
         }
     }

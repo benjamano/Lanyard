@@ -3,10 +3,19 @@
 @inject NavigationManager Navigation
 
 @code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     protected override void OnInitialized()
     {
         // Navigate to the API logout endpoint, which calls SignOutAsync() in a real
         // HTTP request/response cycle so the auth cookie is properly cleared.
-        Navigation.NavigateTo("/api/auth/logout", forceLoad: true);
+        string target = string.IsNullOrEmpty(ReturnUrl)
+            ? "/api/auth/logout"
+            : Navigation.GetUriWithQueryParameters(
+                "/api/auth/logout",
+                new Dictionary<string, object?> { ["returnUrl"] = ReturnUrl });
+
+        Navigation.NavigateTo(target, forceLoad: true);
     }
 }
