@@ -30,7 +30,7 @@ public class DmxSceneRunnerService(
     private readonly Dictionary<Guid, RunningScene> _runningScenes = [];
     private readonly object _lock = new();
 
-    public async Task<Result<bool>> StartSceneAsync(Guid clientId, Guid sceneId)
+    public async Task<Result<bool>> StartSceneAsync(Guid clientId, Guid sceneId, TimeSpan? holdFor = null)
     {
         try
         {
@@ -39,7 +39,7 @@ public class DmxSceneRunnerService(
             DmxScene? scene = await context.DmxScenes
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(s => s.Id == sceneId)
+                .Where(s => s.Id == sceneId && s.IsActive)
                 .FirstOrDefaultAsync();
 
             if (scene == null)
@@ -80,9 +80,16 @@ public class DmxSceneRunnerService(
                 };
             }
 
+            // Must happen before the loop starts: the run loop's finally disposes the
+            // CTS, and CancelAfter on a disposed CTS throws.
+            if (holdFor.HasValue && holdFor.Value > TimeSpan.Zero)
+            {
+                cts.CancelAfter(holdFor.Value);
+            }
+
             OnSceneStarted?.Invoke(clientId, sceneId);
 
-            _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop})", sceneId, clientId, steps.Count, scene.Loop);
+            _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop}, hold: {HoldFor})", sceneId, clientId, steps.Count, scene.Loop, holdFor);
 
             _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.Loop, steps, cts.Token));
 

@@ -183,7 +183,7 @@ public class AutomationEngineService(
                     Id = Guid.NewGuid(),
                     AutomationRuleActionId = action.Id,
                     Success = false,
-                    ErrorMessage = $"Music operation failed: {ex.Message}"
+                    ErrorMessage = $"Action '{action.ActionType}' failed: {ex.Message}"
                 });
                 _logger.LogError(ex, "Unhandled error executing action {ActionId} on rule {RuleId}", action.Id, rule.Id);
             }

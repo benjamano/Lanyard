@@ -13,14 +13,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        NavigationManager.NavigateTo("/login");
-@* 
-        if (ReturnUrl?.Contains("/", StringComparison.OrdinalIgnoreCase) == true)
+        if (!string.IsNullOrEmpty(ReturnUrl))
         {
-            
+            string target = NavigationManager.GetUriWithQueryParameters(
+                "/login",
+                new Dictionary<string, object?> { ["returnUrl"] = ReturnUrl });
+            NavigationManager.NavigateTo(target);
         }
-        else{
+        else
+        {
             NavigationManager.NavigateTo("/login");
-        } *@
+        }
     }
 }

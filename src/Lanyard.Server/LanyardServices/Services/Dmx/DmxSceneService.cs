@@ -40,6 +40,7 @@ public class DmxSceneService(
 
             IEnumerable<DmxSceneDTO> scenes = await context.DmxScenes
                 .Where(s => s.ClientId == clientId)
+                .Where(x=> x.IsActive == true)
                 .Include(x=> x.Steps)
                 .Select(s => new DmxSceneDTO
                 {
@@ -47,7 +48,10 @@ public class DmxSceneService(
                     Name = s.Name,
                     ClientId = s.ClientId,
                     Loop = s.Loop,
+                    IsMomentary = s.IsMomentary,
+                    KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
+                    IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
                     CreateDate = s.CreateDate,
                     IsRunning = runningSceneIds.Contains(s.Id),
@@ -94,6 +98,7 @@ public class DmxSceneService(
             {
                 Name = name,
                 ClientId = clientId,
+                IsActive = true,
                 CreateByUserId = currentUserId!,
                 CreateDate = DateTime.UtcNow,
             };
@@ -122,7 +127,7 @@ public class DmxSceneService(
 
             DmxSceneDTO? scene = await context.DmxScenes
                 .TagWithCallSite()
-                .Where(s => s.Id == sceneId)
+                .Where(s => s.Id == sceneId && s.IsActive)
                 .Include(x=> x.Steps)
                 .Select(s => new DmxSceneDTO
                 {
@@ -130,7 +135,10 @@ public class DmxSceneService(
                     Name = s.Name,
                     ClientId = s.ClientId,
                     Loop = s.Loop,
+                    IsMomentary = s.IsMomentary,
+                    KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
+                    IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
                     CreateDate = s.CreateDate,
                     IsRunning = runningSceneIds.Contains(s.Id),
@@ -160,7 +168,7 @@ public class DmxSceneService(
 
             DmxScene? existingScene = await context.DmxScenes
                 .TagWithCallSite()
-                .Where(s => s.Id == scene.Id)
+                .Where(s => s.Id == scene.Id && s.IsActive)
                 .FirstOrDefaultAsync();
 
             if (existingScene == null)
@@ -170,6 +178,8 @@ public class DmxSceneService(
 
             existingScene.Name = scene.Name;
             existingScene.Loop = scene.Loop;
+            existingScene.IsMomentary = scene.IsMomentary;
+            existingScene.KeyBindings = scene.KeyBindings;
 
             await context.SaveChangesAsync();
 
@@ -193,7 +203,7 @@ public class DmxSceneService(
 
             DmxScene? scene = await context.DmxScenes
                 .TagWithCallSite()
-                .Where(s => s.Id == sceneId)
+                .Where(s => s.Id == sceneId && s.IsActive)
                 .FirstOrDefaultAsync();
 
             if (scene == null)
@@ -201,7 +211,7 @@ public class DmxSceneService(
                 return Result<bool>.Fail("Scene not found.");
             }
 
-            context.DmxScenes.Remove(scene);
+            scene.IsActive = false;
             await context.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
@@ -280,7 +290,7 @@ public class DmxSceneService(
 
             DmxScene? scene = await context.DmxScenes
                 .TagWithCallSite()
-                .Where(s => s.Id == sceneId)
+                .Where(s => s.Id == sceneId && s.IsActive)
                 .FirstOrDefaultAsync();
 
             if (scene == null)

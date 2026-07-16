@@ -108,7 +108,13 @@
             await JS.InvokeVoidAsync("autoLogout.dispose");
         }
         catch { }
-        Nav.NavigateTo("/HandleLogout", forceLoad: true);
+
+        // Capture the page the user was on so re-login can return them here.
+        string returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri).TrimStart('/');
+        string target = Nav.GetUriWithQueryParameters(
+            "/HandleLogout",
+            new Dictionary<string, object?> { ["ReturnUrl"] = returnUrl });
+        Nav.NavigateTo(target, forceLoad: true);
     }
 
     public async ValueTask DisposeAsync()

@@ -63,6 +63,7 @@ builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();

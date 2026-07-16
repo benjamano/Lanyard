@@ -1,11 +1,13 @@
 @using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
-@implements IDisposable
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
 
 @inject IDmxSceneService _dmxSceneService
 @inject IDmxSceneRunnerService _sceneRunner
 @inject IDialogService _dialogService
 @inject IToastService _toastService
+@inject IJSRuntime JS
 
 <div>
     <FluentCard Class="mt-2" Height="100%">
@@ -70,11 +72,29 @@
                                 }
                             </FluentStack>
                         </FluentButton>
-                        <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
-                                        Appearance="ButtonAppearance.Transparent"
-                                        Disabled="@(ClientId == null)"
-                                        Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
-                                        OnClick="@(() => ToggleScene(scene, isRunning))" />
+                        @if (scene.IsMomentary)
+                        {
+                            @* Handlers sit on the wrapper, not the FluentButton: the web
+                               component only surfaces OnClick. *@
+                            <div @onpointerdown="@((PointerEventArgs e) => StartMomentaryAsync(scene, e))"
+                                    @onpointerup="@(() => StopMomentary(scene))"
+                                    @onpointerleave="@(() => StopMomentary(scene))"
+                                    @oncontextmenu:preventDefault="true"
+                                    style="touch-action: none;">
+                                <FluentButton IconStart="@(new Icons.Regular.Size20.FlashPlay())"
+                                                Appearance="@(isRunning ? ButtonAppearance.Primary : ButtonAppearance.Transparent)"
+                                                Disabled="@(ClientId == null)"
+                                                Tooltip="Hold to run scene" />
+                            </div>
+                        }
+                        else
+                        {
+                            <FluentButton IconStart="@(isRunning ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                            Appearance="ButtonAppearance.Transparent"
+                                            Disabled="@(ClientId == null)"
+                                            Tooltip="@(isRunning ? "Stop Scene" : "Run Scene")"
+                                            OnClick="@(() => ToggleScene(scene, isRunning))" />
+                        }
                     </div>
                 }
             }
@@ -112,6 +132,16 @@
 
     private Guid? previousDeletedSceneId;
 
+    // The scene currently held down on a momentary button, if any.
+    private Guid? momentaryHeldSceneId;
+
+    // Keyboard-trigger state, kept separate from the pointer path so mouse and
+    // keyboard holds don't clobber each other.
+    private DotNetObjectReference<DmxSceneSelector>? _keybindsRef;
+    private bool _keybindsReady;
+    private readonly HashSet<string> _heldKeybindKeys = [];
+    private readonly HashSet<Guid> _keyboardHeldSceneIds = [];
+
     protected override void OnInitialized()
     {
         _sceneRunner.OnSceneStarted += HandleSceneStarted;
@@ -121,6 +151,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        bool scenesChanged = false;
+
         if (ClientId != previousClientId)
         {
             previousClientId = ClientId;
@@ -134,6 +166,8 @@
                 scenes = [];
                 runningSceneIds = [];
             }
+
+            scenesChanged = true;
         }
 
         if (DeletedSceneId != null && DeletedSceneId != previousDeletedSceneId)
@@ -142,6 +176,8 @@
 
             scenes.RemoveAll(scene => scene.Id == DeletedSceneId.Value);
             runningSceneIds.Remove(DeletedSceneId.Value);
+
+            scenesChanged = true;
         }
 
         if (EditedSceneId != null)
@@ -156,6 +192,8 @@
                 {
                     int index = scenes.FindIndex(scene => scene.Id == EditedSceneId.Value);
                     scenes[index] = result.Data;
+
+                    scenesChanged = true;
                 }
                 else
                 {
@@ -163,7 +201,99 @@
                 }
             }
         }
+
+        if (scenesChanged)
+        {
+            await RefreshKeybindsAsync();
+        }
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _keybindsRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("dmxKeybinds.init", _keybindsRef);
+        _keybindsReady = true;
+
+        // scenes may already be loaded from the first parameter set, before JS init.
+        await RefreshKeybindsAsync();
+    }
+
+    // Pushes the union of all bound keys across the current scenes to JS, so the
+    // listener only round-trips keys that are actually mapped.
+    private async Task RefreshKeybindsAsync()
+    {
+        if (!_keybindsReady)
+        {
+            return;
+        }
+
+        string[] keys = scenes
+            .SelectMany(scene => scene.KeyBindings)
+            .Select(key => key.ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+
+        await JS.InvokeVoidAsync("dmxKeybinds.setKeys", [keys]);
+    }
+
+    [JSInvokable]
+    public async Task OnKeybindDown(string key)
+    {
+        // JS already filters auto-repeat, but guard here too in case a keyup is missed.
+        if (!_heldKeybindKeys.Add(key))
+        {
+            return;
+        }
+
+        foreach (DmxSceneDTO scene in ScenesBoundTo(key))
+        {
+            if (scene.IsMomentary)
+            {
+                if (ClientId == null)
+                {
+                    continue;
+                }
+
+                _keyboardHeldSceneIds.Add(scene.Id);
+
+                Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+
+                if (!startResult.IsSuccess)
+                {
+                    _keyboardHeldSceneIds.Remove(scene.Id);
+
+                    _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+                }
+            }
+            else
+            {
+                await ToggleScene(scene, runningSceneIds.Contains(scene.Id));
+            }
+        }
+    }
+
+    [JSInvokable]
+    public void OnKeybindUp(string key)
+    {
+        _heldKeybindKeys.Remove(key);
+
+        // Only momentary scenes react to release; normal scenes stay toggled.
+        foreach (DmxSceneDTO scene in ScenesBoundTo(key))
+        {
+            if (scene.IsMomentary && _keyboardHeldSceneIds.Remove(scene.Id))
+            {
+                _sceneRunner.StopScene(scene.Id);
+            }
+        }
+    }
+
+    private IEnumerable<DmxSceneDTO> ScenesBoundTo(string key) =>
+        scenes.Where(scene => scene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)));
 
     private async Task LoadScenes(Guid clientId)
     {
@@ -247,6 +377,41 @@
         }
     }
 
+    private async Task StartMomentaryAsync(DmxSceneDTO scene, PointerEventArgs e)
+    {
+        // Button 0 is the left button. Without this, right-clicking fires the scene.
+        if (ClientId == null || e.Button != 0)
+        {
+            return;
+        }
+
+        momentaryHeldSceneId = scene.Id;
+
+        Result<bool> startResult = await _sceneRunner.StartSceneAsync(ClientId.Value, scene.Id);
+
+        if (!startResult.IsSuccess)
+        {
+            momentaryHeldSceneId = null;
+
+            _toastService.ShowError($"Failed to start scene '{scene.Name}': {startResult.Error}");
+        }
+    }
+
+    private void StopMomentary(DmxSceneDTO scene)
+    {
+        // pointerup and pointerleave both fire on a normal release-then-exit, and stray
+        // leaves are common — without this guard the second call would stop whatever
+        // scene happened to be held next.
+        if (momentaryHeldSceneId != scene.Id)
+        {
+            return;
+        }
+
+        momentaryHeldSceneId = null;
+
+        _sceneRunner.StopScene(scene.Id);
+    }
+
     public async Task CreateNewScene()
     {
         DialogResult result = await _dialogService.ShowDialogAsync<CreateNewDmxSceneDialog>(options =>
@@ -270,6 +435,8 @@
                     Name = created.Name,
                     ClientId = created.ClientId,
                     Loop = created.Loop,
+                    IsMomentary = created.IsMomentary,
+                    KeyBindings = created.KeyBindings,
                     CreateByUserId = created.CreateByUserId,
                     CreateDate = created.CreateDate,
                     IsRunning = false,
@@ -285,10 +452,21 @@
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _sceneRunner.OnSceneStarted -= HandleSceneStarted;
         _sceneRunner.OnSceneStopped -= HandleSceneStopped;
         _sceneRunner.OnSceneStepAdvanced -= HandleSceneStepAdvanced;
+
+        try
+        {
+            // The circuit may already be gone on navigation away; ignore if so.
+            await JS.InvokeVoidAsync("dmxKeybinds.dispose");
+        }
+        catch
+        {
+        }
+
+        _keybindsRef?.Dispose();
     }
 }

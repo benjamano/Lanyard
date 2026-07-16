@@ -45,7 +45,7 @@
             </FluentStack>
         </FluentCard>
 
-        <SceneSettings OpenScene="@OpenScene" OnSceneEdited="@OnSceneEdited"/>
+        <DmxSceneSettings OpenScene="@OpenScene" OnSceneEdited="@OnSceneEdited"/>
 
         <FluentCard Height="100%">
                 <FluentDataGrid Items="@sceneSteps?.AsQueryable()"
@@ -311,7 +311,7 @@
             step.Duration = parsed;
             editingStepDuration = null;
             
-            sceneSteps.Where(s => s.Id == step.Id).ToList().ForEach(s => s.Duration = parsed);
+            sceneSteps?.Where(s => s.Id == step.Id).ToList().ForEach(s => s.Duration = parsed);
 
             await OnSceneEdited.InvokeAsync(OpenScene);
 
@@ -321,5 +321,13 @@
         {
             _toastService.ShowError($"Failed to update step duration: {result.Error}");
         }
+    }
+
+    private void CloseEditor()
+    {
+        selectedStep = [];
+        editingStepDuration = null;
+
+        OnClose.InvokeAsync();
     }
 }

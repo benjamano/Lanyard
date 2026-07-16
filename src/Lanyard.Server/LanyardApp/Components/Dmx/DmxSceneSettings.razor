@@ -1,0 +1,179 @@
+@using Lanyard.Infrastructure.Models.Dmx
+@using Microsoft.AspNetCore.Components.Web
+
+@inject IDmxSceneService _dmxSceneService
+@inject IToastService _toastService
+
+<FluentCard>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+            <FluentButton IconStart="@(OpenScene.Loop ? new Icons.Filled.Size20.ArrowRepeatAll(): new Icons.Regular.Size20.ArrowRepeatAll())"
+                            Tooltip="Loop"
+                            Appearance="@(OpenScene.Loop ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                            OnClick="@(() => ToggleLoop(OpenScene))"
+                            Style="width: 100%;">
+                            Loop @(OpenScene.Loop ? "On" : "Off")
+            </FluentButton>
+            <FluentButton IconStart="@(OpenScene.IsMomentary ? new Icons.Filled.Size20.Flash() : new Icons.Regular.Size20.Flash())"
+                            Tooltip="Momentary - hold the scene's play button to run it"
+                            Appearance="@(OpenScene.IsMomentary ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                            OnClick="@(() => ToggleMomentary(OpenScene))"
+                            Style="width: 100%;">
+                            Momentary @(OpenScene.IsMomentary ? "On" : "Off")
+            </FluentButton>
+        </FluentStack>
+
+        <FluentDivider />
+
+        <FluentText Size="TextSize.Size200">Keybinds</FluentText>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="4" VerticalGap="4">
+            @foreach (string key in OpenScene.KeyBindings)
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                                IconEnd="new Icons.Regular.Size16.Dismiss()"
+                                Title="@($"Remove keybind '{DisplayKey(key)}'")"
+                                OnClick="@(() => RemoveKeybind(key))">
+                    @DisplayKey(key)
+                </FluentButton>
+            }
+            @if (_capturing)
+            {
+                <div @ref="_captureField"
+                     tabindex="0"
+                     @onkeydown="OnCaptureKeyDown"
+                     @onkeydown:preventDefault="true"
+                     @onkeydown:stopPropagation="true"
+                     @onblur="CancelCapture"
+                     style="border: 1px dashed var(--accent-fill-rest); border-radius: 4px; padding: 5px 10px; cursor: text; outline: none; min-width: 90px; text-align: center;">
+                    Press a key…
+                </div>
+            }
+            else
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary"
+                                IconStart="new Icons.Regular.Size16.Add()"
+                                OnClick="StartCapture">
+                    Add keybind
+                </FluentButton>
+            }
+        </FluentStack>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required DmxScene OpenScene { get; set; }
+
+    [Parameter]
+    public EventCallback<DmxScene> OnSceneEdited { get; set; }
+
+    private bool _capturing;
+    private bool _focusCaptureField;
+    private ElementReference _captureField;
+
+    private async Task ToggleLoop(DmxScene scene)
+    {
+        scene.Loop = !scene.Loop;
+
+        await SaveSceneAsync(scene, () => scene.Loop = !scene.Loop);
+    }
+
+    private async Task ToggleMomentary(DmxScene scene)
+    {
+        scene.IsMomentary = !scene.IsMomentary;
+
+        await SaveSceneAsync(scene, () => scene.IsMomentary = !scene.IsMomentary);
+    }
+
+    private void StartCapture()
+    {
+        _capturing = true;
+        _focusCaptureField = true;
+    }
+
+    private void CancelCapture()
+    {
+        _capturing = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusCaptureField)
+        {
+            _focusCaptureField = false;
+
+            await _captureField.FocusAsync();
+        }
+    }
+
+    private async Task OnCaptureKeyDown(KeyboardEventArgs e)
+    {
+        // Wait for a real key rather than binding a lone modifier press.
+        if (e.Key is "Shift" or "Control" or "Alt" or "Meta")
+        {
+            return;
+        }
+
+        _capturing = false;
+
+        // Escape backs out of capture without binding anything.
+        if (string.Equals(e.Key, "Escape", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(e.Key))
+        {
+            return;
+        }
+
+        string key = e.Key.ToLowerInvariant();
+
+        if (OpenScene.KeyBindings.Any(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        OpenScene.KeyBindings.Add(key);
+
+        await SaveSceneAsync(OpenScene, () => OpenScene.KeyBindings.RemoveAll(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private async Task RemoveKeybind(string key)
+    {
+        int index = OpenScene.KeyBindings.FindIndex(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+
+        if (index < 0)
+        {
+            return;
+        }
+
+        string removed = OpenScene.KeyBindings[index];
+        OpenScene.KeyBindings.RemoveAt(index);
+
+        await SaveSceneAsync(OpenScene, () => OpenScene.KeyBindings.Insert(Math.Min(index, OpenScene.KeyBindings.Count), removed));
+    }
+
+    // The toggles mutate the scene optimistically, so a failed save has to put the
+    // flag back or the button keeps showing a state the database never took.
+    private async Task SaveSceneAsync(DmxScene scene, Action revert)
+    {
+        Result<bool> result = await _dmxSceneService.UpdateSceneAsync(scene);
+
+        if (!result.IsSuccess)
+        {
+            revert();
+
+            _toastService.ShowError($"Failed to update scene: {result.Error}");
+
+            StateHasChanged();
+
+            return;
+        }
+
+        await OnSceneEdited.InvokeAsync(scene);
+
+        StateHasChanged();
+    }
+
+    private static string DisplayKey(string key) => key switch
+    {
+        " " => "Space",
+        _ => key.Length == 1 ? key.ToUpperInvariant() : key
+    };
+}
