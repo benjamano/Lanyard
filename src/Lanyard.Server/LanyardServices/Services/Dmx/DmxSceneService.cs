@@ -49,6 +49,7 @@ public class DmxSceneService(
                     ClientId = s.ClientId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
+                    KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
                     IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
@@ -135,6 +136,7 @@ public class DmxSceneService(
                     ClientId = s.ClientId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
+                    KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
                     IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
@@ -177,6 +179,7 @@ public class DmxSceneService(
             existingScene.Name = scene.Name;
             existingScene.Loop = scene.Loop;
             existingScene.IsMomentary = scene.IsMomentary;
+            existingScene.KeyBindings = scene.KeyBindings;
 
             await context.SaveChangesAsync();
 

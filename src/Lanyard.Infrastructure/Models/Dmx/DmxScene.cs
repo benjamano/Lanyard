@@ -15,5 +15,8 @@ public class DmxScene : CreateAndUpdateBase
 
     public bool IsMomentary { get; set; }
 
+    // Keys that trigger this scene from the DMX desk. Mapped by Npgsql to text[].
+    public List<string> KeyBindings { get; set; } = [];
+
     public virtual ICollection<DmxSceneStep> Steps { get; set; } = [];
 }
