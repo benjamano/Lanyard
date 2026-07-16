@@ -410,3 +410,4 @@ FodyWeavers.xsd
 
 *.csproj.lscache
 *.lscache
+scratch_publish/
