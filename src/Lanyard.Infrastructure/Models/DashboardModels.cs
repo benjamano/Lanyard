@@ -141,3 +141,34 @@ public class ButtonWidget : DashboardWidget
     // Which monitor the projection opens on; null uses the client's default display.
     public int? DisplayIndex { get; set; }
 }
+
+public class MusicPlaylistSelectorWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public MusicPlaylistSelectorWidget()
+    {
+        Type = WidgetType.MusicPlaylistSelector;
+
+        GridW = 3;
+        GridH = 3;
+    }
+
+    public Guid? ClientId { get; set; }
+}
+
+public class MusicTimelineWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public MusicTimelineWidget()
+    {
+        Type = WidgetType.MusicTimeline;
+
+        GridW = 6;
+        GridH = 2;
+
+        ShowSongTitle = true;
+    }
+
+    public Guid? ClientId { get; set; }
+    public bool ShowSongTitle { get; set; } = true;
+}

@@ -107,6 +107,34 @@
                                     <RenderButtonWidget Widget="buttonWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
+                            case WidgetType.MusicPlaylistSelector:
+                                MusicPlaylistSelectorWidget? playlistSelectorWidget = widget as MusicPlaylistSelectorWidget;
+
+                                if (playlistSelectorWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderMusicPlaylistSelectorWidget Widget="playlistSelectorWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
+                            case WidgetType.MusicTimeline:
+                                MusicTimelineWidget? musicTimelineWidget = widget as MusicTimelineWidget;
+
+                                if (musicTimelineWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderMusicTimelineWidget Widget="musicTimelineWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
                         }
                         @if (!PreviewMode)
                         {
@@ -276,6 +304,63 @@
             case ButtonWidget buttonWidget:
                 await ShowConfigureButtonDialog(buttonWidget);
                 break;
+            case MusicPlaylistSelectorWidget playlistSelectorWidget:
+                await ShowConfigureMusicPlaylistSelectorDialog(playlistSelectorWidget);
+                break;
+            case MusicTimelineWidget musicTimelineWidget:
+                await ShowConfigureMusicTimelineDialog(musicTimelineWidget);
+                break;
+        }
+    }
+
+    // Loads all clients for the music widgets. Deliberately unfiltered by connectivity so a
+    // widget can be pre-configured for a client that is currently offline.
+    private async Task<IEnumerable<Client>> GetMusicClientsAsync()
+    {
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await ClientService.GetClientsWithCapabilitiesAsync();
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            return result.Data
+                .Cast<Client>();
+        }
+
+        _toastService.ShowError($"Failed to load clients, {result.Error}");
+
+        return [];
+    }
+
+    private async Task ShowConfigureMusicPlaylistSelectorDialog(MusicPlaylistSelectorWidget playlistSelectorWidget)
+    {
+        IEnumerable<Client> clients = await GetMusicClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureMusicPlaylistSelectorDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureMusicPlaylistSelectorDialog.Widget), playlistSelectorWidget);
+            options.Parameters.Add(nameof(ConfigureMusicPlaylistSelectorDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureMusicTimelineDialog(MusicTimelineWidget musicTimelineWidget)
+    {
+        IEnumerable<Client> clients = await GetMusicClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureMusicTimelineDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureMusicTimelineDialog.Widget), musicTimelineWidget);
+            options.Parameters.Add(nameof(ConfigureMusicTimelineDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
         }
     }
 

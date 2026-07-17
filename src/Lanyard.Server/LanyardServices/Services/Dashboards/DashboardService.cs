@@ -270,6 +270,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingButton.ProjectionProgramId = incomingButton.ProjectionProgramId;
                     existingButton.DisplayIndex = incomingButton.DisplayIndex;
                     break;
+                case MusicPlaylistSelectorWidget existingPlaylistSelector when widget is MusicPlaylistSelectorWidget incomingPlaylistSelector:
+                    existingPlaylistSelector.ClientId = incomingPlaylistSelector.ClientId;
+                    break;
+                case MusicTimelineWidget existingTimeline when widget is MusicTimelineWidget incomingTimeline:
+                    existingTimeline.ClientId = incomingTimeline.ClientId;
+                    existingTimeline.ShowSongTitle = incomingTimeline.ShowSongTitle;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -322,6 +329,15 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ClientId = buttonWidget.ClientId,
                 ProjectionProgramId = buttonWidget.ProjectionProgramId,
                 DisplayIndex = buttonWidget.DisplayIndex
+            },
+            MusicPlaylistSelectorWidget playlistSelectorWidget => new MusicPlaylistSelectorWidget
+            {
+                ClientId = playlistSelectorWidget.ClientId
+            },
+            MusicTimelineWidget timelineWidget => new MusicTimelineWidget
+            {
+                ClientId = timelineWidget.ClientId,
+                ShowSongTitle = timelineWidget.ShowSongTitle
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -379,6 +395,17 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetButton.ClientId = sourceButton.ClientId;
             targetButton.ProjectionProgramId = sourceButton.ProjectionProgramId;
             targetButton.DisplayIndex = sourceButton.DisplayIndex;
+        }
+
+        if (target is MusicPlaylistSelectorWidget targetPlaylistSelector && source is MusicPlaylistSelectorWidget sourcePlaylistSelector)
+        {
+            targetPlaylistSelector.ClientId = sourcePlaylistSelector.ClientId;
+        }
+
+        if (target is MusicTimelineWidget targetTimeline && source is MusicTimelineWidget sourceTimeline)
+        {
+            targetTimeline.ClientId = sourceTimeline.ClientId;
+            targetTimeline.ShowSongTitle = sourceTimeline.ShowSongTitle;
         }
     }
 }

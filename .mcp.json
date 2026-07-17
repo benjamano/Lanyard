@@ -40,6 +40,15 @@
         "my_profile"
       ],
       "type": "stdio"
+    },
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "NuGet.Mcp.Server": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": ["NuGet.Mcp.Server@1.4.16", "--yes"]
     }
   }
 }

@@ -1,0 +1,162 @@
+@using NAudio.Wave
+
+@implements IDisposable
+
+@inject IPlaylistService PlaylistService
+@inject MusicPlayerService _player
+
+<FluentCard Height="100%">
+    @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to control</FluentBadge>
+        </FluentStack>
+    }
+    else if (_playlists == null)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Vertical" Height="100%" Width="100%" VerticalGap="8">
+            <div style="flex: 1; overflow-y: auto; width: 100%; min-height: 0;">
+                <FluentStack Orientation="@Orientation.Vertical" Width="100%" VerticalGap="4">
+                    @if (!_playlists.Any())
+                    {
+                        <FluentText Color="@Color.Info">No playlists available.</FluentText>
+                    }
+                    @foreach (Playlist playlist in _playlists)
+                    {
+                        <FluentCard Appearance="@(_selectedPlaylistId == playlist.Id ? CardAppearance.Filled : CardAppearance.Outline)"
+                                    Style="width: 100%; cursor: pointer;"
+                                    Padding="@Padding.All2"
+                                    @onclick="() => SelectPlaylist(playlist.Id)">
+                            <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
+                                <FluentText Weight="@TextWeight.Semibold">@playlist.Name</FluentText>
+                                @if (_currentlyPlayingPlaylistId == playlist.Id)
+                                {
+                                    <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.End" VerticalAlignment="@VerticalAlignment.Center" Width="auto" Style="margin-left: auto;">
+                                        <FluentIcon Icon="Icons.Regular.Size20.MusicNote2" />
+                                    </FluentStack>
+                                }
+                            </FluentStack>
+                        </FluentCard>
+                    }
+                </FluentStack>
+            </div>
+
+            <FluentButton Appearance="@ButtonAppearance.Primary"
+                          Style="width: 100%;"
+                          IconStart="@(new Icons.Regular.Size20.Play())"
+                          Disabled="@(!AllowTrigger || _selectedPlaylistId == null || _isStartingPlayback)"
+                          OnClick="PlaySelectedAsync">
+                Play
+            </FluentButton>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required MusicPlaylistSelectorWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private List<Playlist>? _playlists;
+    private Guid? _selectedPlaylistId;
+    private Guid? _currentlyPlayingPlaylistId;
+    private bool _isStartingPlayback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _player.OnSongChanged += HandleSongChanged;
+        _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
+
+        RefreshCurrentlyPlayingPlaylist();
+
+        Result<IEnumerable<Playlist>> playlistsResult = await PlaylistService.GetActivePlaylistsAsync();
+
+        if (!playlistsResult.IsSuccess || playlistsResult.Data == null)
+        {
+            _toastService.ShowError($"Failed to load playlists: {playlistsResult.Error}");
+
+            _playlists = [];
+            return;
+        }
+
+        _playlists = playlistsResult.Data
+            .OrderByDescending(x => x.CreateDate)
+            .ToList();
+    }
+
+    private void HandleSongChanged(Guid clientId, Guid? songId)
+    {
+        if (clientId != Widget.ClientId)
+        {
+            return;
+        }
+
+        RefreshCurrentlyPlayingPlaylist();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandlePlaybackStatusChanged(Guid clientId, PlaybackState state)
+    {
+        if (clientId != Widget.ClientId)
+        {
+            return;
+        }
+
+        RefreshCurrentlyPlayingPlaylist();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshCurrentlyPlayingPlaylist()
+    {
+        _currentlyPlayingPlaylistId = Widget.ClientId is Guid clientId
+            ? _player.GetCurrentPlaylist(clientId)?.Id
+            : null;
+    }
+
+    private void SelectPlaylist(Guid playlistId)
+    {
+        _selectedPlaylistId = playlistId;
+    }
+
+    private async Task PlaySelectedAsync()
+    {
+        if (!AllowTrigger || _isStartingPlayback)
+        {
+            return;
+        }
+
+        if (Widget.ClientId is not Guid clientId || _selectedPlaylistId is not Guid playlistId)
+        {
+            _toastService.ShowWarning("Select a playlist first.");
+
+            return;
+        }
+
+        _isStartingPlayback = true;
+
+        try
+        {
+            await _player.Play(clientId, playlistId);
+        }
+        finally
+        {
+            _isStartingPlayback = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _player.OnSongChanged -= HandleSongChanged;
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStatusChanged;
+    }
+}

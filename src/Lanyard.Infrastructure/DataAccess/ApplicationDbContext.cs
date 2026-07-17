@@ -96,9 +96,11 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<ClientZoneLaserGameStatusWidget>(WidgetType.ClientZoneLaserGameStatus)
                 .HasValue<ClientZoneLaserScoreboardWidget>(WidgetType.ClientZoneLaserScoreboard)
                 .HasValue<ButtonWidget>(WidgetType.Button)
-                .HasValue<TextAreaWidget>(WidgetType.TextArea);
+                .HasValue<TextAreaWidget>(WidgetType.TextArea)
+                .HasValue<MusicPlaylistSelectorWidget>(WidgetType.MusicPlaylistSelector)
+                .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline);
 
-            // Three sibling widget types share a ClientId property in the TPH table; pin the
+            // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
             modelBuilder.Entity<ClientZoneLaserScoreboardWidget>()
                 .Property(x => x.ClientId)
@@ -111,6 +113,14 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ButtonWidget>()
                 .Property(x => x.ClientId)
                 .HasColumnName("ButtonWidget_ClientId");
+
+            modelBuilder.Entity<MusicPlaylistSelectorWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("MusicPlaylistSelectorWidget_ClientId");
+
+            modelBuilder.Entity<MusicTimelineWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("MusicTimelineWidget_ClientId");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
