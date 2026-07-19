@@ -34,7 +34,7 @@
         </FluentButton>
     </FluentStack>
 
-    <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto" Style="width: 100%;">
+    <FluentDataGrid Items="@_rules.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr auto auto" Style="width: 100%;">
         <EmptyContent>
             No automation rules configured.
         </EmptyContent>
@@ -44,6 +44,10 @@
                 @GetClientName(context.TriggerClientId)
             </TemplateColumn>
             <PropertyColumn Title="Trigger Event" Property="@(r => r.TriggerEvent.ToString())" />
+            <TemplateColumn Title="Enabled">
+                <FluentSwitch Value="@context.IsEnabled"
+                              ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(context, isEnabled))" />
+            </TemplateColumn>
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
@@ -189,6 +193,20 @@
 
         string message = _engineEnabled ? "Automation engine enabled" : "Automation engine disabled";
         _toastService.ShowSuccess(message);
+    }
+
+    private async Task OnRuleEnabledToggleChangedAsync(AutomationRule rule, bool isEnabled)
+    {
+        Result<AutomationRule> result = await _ruleService.SetRuleEnabledAsync(rule.Id, isEnabled);
+        if (result.IsSuccess)
+        {
+            rule.IsEnabled = isEnabled;
+            _toastService.ShowSuccess(isEnabled ? "Rule enabled." : "Rule disabled.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to update rule.");
+        }
     }
 
     private async Task OpenAddRuleDialogAsync()

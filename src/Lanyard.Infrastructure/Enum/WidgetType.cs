@@ -9,5 +9,6 @@ public enum WidgetType
     ClientZoneLaserScoreboard = 4,
     Button = 5,
     MusicPlaylistSelector = 6,
-    MusicTimeline = 7
+    MusicTimeline = 7,
+    AutomationRuleStatus = 8
 }

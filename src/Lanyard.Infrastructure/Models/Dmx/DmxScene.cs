@@ -15,6 +15,11 @@ public class DmxScene : CreateAndUpdateBase
 
     public bool IsMomentary { get; set; }
 
+    // When true, running steps advance on the beat grid of the currently playing
+    // song (per-step Beats count) instead of their fixed Duration. Falls back to
+    // Duration whenever no song is playing or its BPM is unknown.
+    public bool BpmSyncEnabled { get; set; }
+
     // Keys that trigger this scene from the DMX desk. Mapped by Npgsql to text[].
     public List<string> KeyBindings { get; set; } = [];
 

@@ -172,3 +172,17 @@ public class MusicTimelineWidget : DashboardWidget
     public Guid? ClientId { get; set; }
     public bool ShowSongTitle { get; set; } = true;
 }
+
+public class AutomationRuleStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public AutomationRuleStatusWidget()
+    {
+        Type = WidgetType.AutomationRuleStatus;
+
+        GridW = 3;
+        GridH = 2;
+    }
+
+    public Guid? AutomationRuleId { get; set; }
+}

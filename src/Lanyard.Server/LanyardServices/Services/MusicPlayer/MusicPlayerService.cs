@@ -164,6 +164,23 @@ public class MusicPlayerService
         }
     }
 
+    /// <summary>
+    /// Anchors the position estimate to a ground-truth reading from the client's
+    /// audio reader. Clients report every second while playing (and immediately
+    /// after play/seek), which keeps <see cref="GetEstimatedPositionSeconds"/>
+    /// accurate enough for beat-synced features.
+    /// </summary>
+    public void UpdatePlaybackPosition(Guid clientId, double positionSeconds)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        lock (_lock)
+        {
+            state.LastKnownPositionSeconds = Math.Max(0, positionSeconds);
+            state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+    }
+
     public void UpdateCurrentSong(Guid clientId, Guid songId)
     {
         Song? songFromQueue;

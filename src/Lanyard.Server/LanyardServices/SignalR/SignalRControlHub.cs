@@ -184,6 +184,20 @@ public class SignalRControlHub(
         _playerService.UpdatePlaybackState(getClientResult.Data, state);
     }
 
+    public async Task PlaybackPositionChanged(double positionSeconds)
+    {
+        // Fires every second while a client is playing — deliberately not logged
+        // per report to keep the server log readable.
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        _playerService.UpdatePlaybackPosition(getClientResult.Data, positionSeconds);
+    }
+
     public async Task SongEnded()
     {
         _logger.LogInformation("Client {ConnectionId} reported its track finished", Context.ConnectionId);

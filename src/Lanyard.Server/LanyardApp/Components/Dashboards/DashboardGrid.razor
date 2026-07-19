@@ -5,6 +5,7 @@
 
 @inject IClientService ClientService
 @inject IProjectionProgramService ProjectionProgramService
+@inject IAutomationRuleService AutomationRuleService
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
@@ -133,6 +134,20 @@
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderMusicTimelineWidget Widget="musicTimelineWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
+                            case WidgetType.AutomationRuleStatus:
+                                AutomationRuleStatusWidget? automationRuleStatusWidget = widget as AutomationRuleStatusWidget;
+
+                                if (automationRuleStatusWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderAutomationRuleStatusWidget Widget="automationRuleStatusWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
                         }
@@ -310,6 +325,40 @@
             case MusicTimelineWidget musicTimelineWidget:
                 await ShowConfigureMusicTimelineDialog(musicTimelineWidget);
                 break;
+            case AutomationRuleStatusWidget automationRuleStatusWidget:
+                await ShowConfigureAutomationRuleStatusDialog(automationRuleStatusWidget);
+                break;
+        }
+    }
+
+    private async Task<IEnumerable<AutomationRule>> GetAutomationRulesAsync()
+    {
+        Result<IEnumerable<AutomationRule>> result = await AutomationRuleService.GetRulesAsync();
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            return result.Data;
+        }
+
+        _toastService.ShowError($"Failed to load automation rules, {result.Error}");
+
+        return [];
+    }
+
+    private async Task ShowConfigureAutomationRuleStatusDialog(AutomationRuleStatusWidget automationRuleStatusWidget)
+    {
+        IEnumerable<AutomationRule> rules = await GetAutomationRulesAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureAutomationRuleStatusDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureAutomationRuleStatusDialog.Widget), automationRuleStatusWidget);
+            options.Parameters.Add(nameof(ConfigureAutomationRuleStatusDialog.Rules), rules);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
         }
     }
 

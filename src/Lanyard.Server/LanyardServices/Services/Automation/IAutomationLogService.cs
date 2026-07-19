@@ -8,4 +8,5 @@ namespace Lanyard.Application.Services;
 public interface IAutomationLogService
 {
     Task<Result<IEnumerable<AutomationRuleExecution>>> GetRecentExecutionsAsync(int count);
+    Task<Result<AutomationRuleExecution?>> GetLatestExecutionForRuleAsync(Guid ruleId);
 }

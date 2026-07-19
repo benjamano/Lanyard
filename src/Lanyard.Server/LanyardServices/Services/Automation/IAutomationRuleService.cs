@@ -14,4 +14,5 @@ public interface IAutomationRuleService
     Task<Result<AutomationRule>> CreateRuleAsync(AutomationRule rule);
     Task<Result<AutomationRule>> UpdateRuleAsync(AutomationRule rule);
     Task<Result<bool>> DeleteRuleAsync(Guid id);
+    Task<Result<AutomationRule>> SetRuleEnabledAsync(Guid id, bool isEnabled);
 }

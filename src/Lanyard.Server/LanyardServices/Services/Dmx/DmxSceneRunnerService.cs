@@ -9,10 +9,12 @@ namespace Lanyard.Application.Services;
 public class DmxSceneRunnerService(
     IDbContextFactory<ApplicationDbContext> factory,
     IDmxService dmxService,
+    IBeatClockService beatClock,
     ILogger<DmxSceneRunnerService> logger) : IDmxSceneRunnerService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IDmxService _dmxService = dmxService;
+    private readonly IBeatClockService _beatClock = beatClock;
     private readonly ILogger<DmxSceneRunnerService> _logger = logger;
 
     public event Action<Guid, Guid>? OnSceneStarted;
@@ -89,9 +91,9 @@ public class DmxSceneRunnerService(
 
             OnSceneStarted?.Invoke(clientId, sceneId);
 
-            _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop}, hold: {HoldFor})", sceneId, clientId, steps.Count, scene.Loop, holdFor);
+            _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop}, bpmSync: {BpmSync}, hold: {HoldFor})", sceneId, clientId, steps.Count, scene.Loop, scene.BpmSyncEnabled, holdFor);
 
-            _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.Loop, steps, cts.Token));
+            _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.Loop, scene.BpmSyncEnabled, steps, cts.Token));
 
             return Result<bool>.Ok(true);
         }
@@ -102,7 +104,7 @@ public class DmxSceneRunnerService(
         }
     }
 
-    private async Task RunSceneLoopAsync(Guid clientId, Guid sceneId, bool loop, List<DmxSceneStep> steps, CancellationToken token)
+    private async Task RunSceneLoopAsync(Guid clientId, Guid sceneId, bool loop, bool bpmSyncEnabled, List<DmxSceneStep> steps, CancellationToken token)
     {
         try
         {
@@ -119,8 +121,29 @@ public class DmxSceneRunnerService(
                         await _dmxService.UpdateChannelValue(clientId, channelValue.ChannelNumber, channelValue.Value);
                     }
 
-                    // The step's duration IS the scheduler: hold the values, then move on.
-                    await Task.Delay(step.Duration, token);
+                    // The delay IS the scheduler: hold the values, then move on.
+                    // BPM sync recomputes from the live playback position every step,
+                    // so timing errors never accumulate. Each delay is one step length
+                    // nudged toward the beat grid by a bounded correction (see
+                    // BeatMath) — the position estimate jitters as client reports
+                    // re-anchor it, and an uncapped chase of the next boundary would
+                    // double-fire steps. The first step fires immediately on start
+                    // (operators start scenes on a downbeat by hand). When nothing is
+                    // playing or the song has no known BPM, the step's fixed Duration
+                    // applies instead.
+                    TimeSpan delay = step.Duration;
+
+                    if (bpmSyncEnabled)
+                    {
+                        TimeSpan? beatDelay = await _beatClock.GetDelayUntilNextStepAsync(clientId, step.Beats);
+
+                        if (beatDelay.HasValue)
+                        {
+                            delay = beatDelay.Value;
+                        }
+                    }
+
+                    await Task.Delay(delay, token);
                 }
             } while (loop && !token.IsCancellationRequested);
         }

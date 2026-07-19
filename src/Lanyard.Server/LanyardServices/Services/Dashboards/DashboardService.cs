@@ -277,6 +277,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingTimeline.ClientId = incomingTimeline.ClientId;
                     existingTimeline.ShowSongTitle = incomingTimeline.ShowSongTitle;
                     break;
+                case AutomationRuleStatusWidget existingRuleStatus when widget is AutomationRuleStatusWidget incomingRuleStatus:
+                    existingRuleStatus.AutomationRuleId = incomingRuleStatus.AutomationRuleId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -338,6 +341,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 ClientId = timelineWidget.ClientId,
                 ShowSongTitle = timelineWidget.ShowSongTitle
+            },
+            AutomationRuleStatusWidget ruleStatusWidget => new AutomationRuleStatusWidget
+            {
+                AutomationRuleId = ruleStatusWidget.AutomationRuleId
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -406,6 +413,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetTimeline.ClientId = sourceTimeline.ClientId;
             targetTimeline.ShowSongTitle = sourceTimeline.ShowSongTitle;
+        }
+
+        if (target is AutomationRuleStatusWidget targetRuleStatus && source is AutomationRuleStatusWidget sourceRuleStatus)
+        {
+            targetRuleStatus.AutomationRuleId = sourceRuleStatus.AutomationRuleId;
         }
     }
 }

@@ -14,6 +14,7 @@ public class AutomationRule
     public GameStatus TriggerEvent { get; set; }
 
     public bool IsActive { get; set; }
+    public bool IsEnabled { get; set; } = true;
 
     public DateTime CreateDate { get; set; }
     public DateTime? LastUpdateDate { get; set; }

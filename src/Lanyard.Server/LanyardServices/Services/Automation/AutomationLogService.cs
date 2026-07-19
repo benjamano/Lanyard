@@ -30,4 +30,23 @@ public class AutomationLogService(IDbContextFactory<ApplicationDbContext> factor
             return Result<IEnumerable<AutomationRuleExecution>>.Fail(ex.Message);
         }
     }
+
+    public async Task<Result<AutomationRuleExecution?>> GetLatestExecutionForRuleAsync(Guid ruleId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            AutomationRuleExecution? execution = await ctx.AutomationRuleExecutions
+                .Where(e => e.AutomationRuleId == ruleId)
+                .OrderByDescending(e => e.ExecutedAt)
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync();
+            return Result<AutomationRuleExecution?>.Ok(execution);
+        }
+        catch (Exception ex)
+        {
+            return Result<AutomationRuleExecution?>.Fail(ex.Message);
+        }
+    }
 }

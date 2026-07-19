@@ -49,6 +49,7 @@ public class DmxSceneService(
                     ClientId = s.ClientId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
+                    BpmSyncEnabled = s.BpmSyncEnabled,
                     KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
                     IsActive = s.IsActive,
@@ -136,6 +137,7 @@ public class DmxSceneService(
                     ClientId = s.ClientId,
                     Loop = s.Loop,
                     IsMomentary = s.IsMomentary,
+                    BpmSyncEnabled = s.BpmSyncEnabled,
                     KeyBindings = s.KeyBindings,
                     Steps = s.Steps,
                     IsActive = s.IsActive,
@@ -179,6 +181,7 @@ public class DmxSceneService(
             existingScene.Name = scene.Name;
             existingScene.Loop = scene.Loop;
             existingScene.IsMomentary = scene.IsMomentary;
+            existingScene.BpmSyncEnabled = scene.BpmSyncEnabled;
             existingScene.KeyBindings = scene.KeyBindings;
 
             await context.SaveChangesAsync();
@@ -309,6 +312,7 @@ public class DmxSceneService(
                 StepNumber = nextStepNumber + 1,
                 Name = $"Step {nextStepNumber + 1}",
                 Duration = TimeSpan.FromSeconds(5),
+                Beats = 1,
                 CreateByUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!),
                 CreateDate = DateTime.UtcNow
             };
@@ -350,6 +354,41 @@ public class DmxSceneService(
         {
             _logger.LogError(ex, "Error updating duration for DMX scene step {StepId}", stepId);
             return Result<bool>.Fail("An error occurred while updating the DMX scene step duration.");
+        }
+    }
+
+    public async Task<Result<bool>> UpdateSceneStepBeatsAsync(Guid stepId, double beats)
+    {
+        // Same clamp as the editor UI: fractions give sub-beat chases, 64 covers
+        // any realistic multi-bar hold.
+        if (beats is < 0.25 or > 64)
+        {
+            return Result<bool>.Fail("Beats must be between 0.25 and 64.");
+        }
+
+        try
+        {
+            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            DmxSceneStep? step = await context.DmxSceneSteps
+                .TagWithCallSite()
+                .Where(s => s.Id == stepId)
+                .FirstOrDefaultAsync();
+
+            if (step == null)
+            {
+                return Result<bool>.Fail("Scene step not found.");
+            }
+
+            step.Beats = beats;
+            await context.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating beats for DMX scene step {StepId}", stepId);
+            return Result<bool>.Fail("An error occurred while updating the DMX scene step beats.");
         }
     }
 

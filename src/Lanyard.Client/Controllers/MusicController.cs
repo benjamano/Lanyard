@@ -6,11 +6,16 @@ using Lanyard.Shared.DTO;
 
 namespace Lanyard.Client.Controllers;
 
-public class MusicControlHandler
+public class MusicControlHandler : IDisposable
 {
+    // The server extrapolates position from wall-clock between reports; one report
+    // per second keeps its estimate accurate enough for beat-synced DMX stepping.
+    private static readonly TimeSpan _positionReportInterval = TimeSpan.FromSeconds(1);
+
     private readonly IMusicPlayer _musicPlayer;
     private readonly ISongCacheService _cacheService;
     private readonly ILogger<MusicControlHandler> _logger;
+    private readonly Timer _positionReportTimer;
     private HubConnection? _connection;
 
     public MusicControlHandler(
@@ -28,6 +33,15 @@ public class MusicControlHandler
         _musicPlayer.PlaylistChanged += OnPlaylistChanged;
         _musicPlayer.QueueChanged += OnQueueChanged;
         _musicPlayer.SongEnded += OnSongEnded;
+
+        _positionReportTimer = new Timer(_ => _ = ReportPlaybackPositionAsync(onlyWhilePlaying: true),
+            null, _positionReportInterval, _positionReportInterval);
+    }
+
+    public void Dispose()
+    {
+        _positionReportTimer.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     public void Register(HubConnection connection)
@@ -65,6 +79,10 @@ public class MusicControlHandler
             if (result.IsSuccess)
             {
                 _logger.LogInformation("Playback started successfully");
+
+                // Re-anchor the server's position estimate immediately on resume
+                // instead of waiting for the next periodic report.
+                await ReportPlaybackPositionAsync(onlyWhilePlaying: false);
             }
             else
             {
@@ -138,7 +156,7 @@ public class MusicControlHandler
             }
         });
 
-        connection.On("Seek", (double seconds) =>
+        connection.On("Seek", async (double seconds) =>
         {
             _logger.LogInformation("Received SEEK command to {Seconds}", seconds);
             Result<bool> result = _musicPlayer.Seek(seconds);
@@ -146,6 +164,9 @@ public class MusicControlHandler
             if (result.IsSuccess)
             {
                 _logger.LogInformation("Seek command applied");
+
+                // Re-anchor the server's position estimate immediately after the jump.
+                await ReportPlaybackPositionAsync(onlyWhilePlaying: false);
             }
             else
             {
@@ -286,6 +307,48 @@ public class MusicControlHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send playlist change to server");
+        }
+    }
+
+    /// <summary>
+    /// Reports the reader's ground-truth position so the server can anchor its
+    /// wall-clock estimate. Runs every second while playing (via the timer) and
+    /// immediately after Play/Seek (with <paramref name="onlyWhilePlaying"/> false).
+    /// </summary>
+    private async Task ReportPlaybackPositionAsync(bool onlyWhilePlaying)
+    {
+        HubConnection? connection = _connection;
+
+        if (connection == null || connection.State != HubConnectionState.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            if (onlyWhilePlaying)
+            {
+                Result<PlaybackState> statusResult = _musicPlayer.GetPlaybackStatus();
+
+                if (!statusResult.IsSuccess || statusResult.Data != PlaybackState.Playing)
+                {
+                    return;
+                }
+            }
+
+            Result<double> positionResult = _musicPlayer.GetPositionSeconds();
+
+            if (!positionResult.IsSuccess)
+            {
+                return;
+            }
+
+            await connection.InvokeAsync("PlaybackPositionChanged", positionResult.Data);
+        }
+        catch (Exception ex)
+        {
+            // Position reports are periodic; the next one covers a transient failure.
+            _logger.LogDebug(ex, "Failed to send playback position to server");
         }
     }
 

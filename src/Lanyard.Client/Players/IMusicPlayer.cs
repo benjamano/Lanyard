@@ -25,6 +25,13 @@ public interface IMusicPlayer
     Result<PlaybackState> GetPlaybackStatus();
     Result<Guid> GetCurrentSongId();
 
+    /// <summary>
+    /// Ground-truth playback position from the audio reader, in seconds. Fails when
+    /// no song is loaded. Reported to the server so beat-synced features can align
+    /// to the real audio clock instead of a wall-clock estimate.
+    /// </summary>
+    Result<double> GetPositionSeconds();
+
     Task<Result<bool>> Load(Guid songId, Guid playlistId);
     void Stop(bool notify = true);
 
