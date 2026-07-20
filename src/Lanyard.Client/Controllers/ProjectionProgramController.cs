@@ -25,17 +25,23 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
             await _projectionProgramsService.StartProjectingAsync(programs);
         });
 
-        connection.On<Guid, int?>("TriggerProjectionProgram", async (projectionProgramId, displayIndex) =>
+        connection.On<Guid, int?>("TriggerProjectionProgram", (projectionProgramId, displayIndex) =>
         {
-            //TODO: I THINK RUNNING THIS, FREEZES THE ENTIRE LANYARD CLIENT, AS ANY SIGNAL R INTERACTIONS DON'T GO THROUGH UNTIL THJE OPEN THING IS CLOSED.
-
             _logger.LogInformation("Received command to trigger projection program {ProgramId} on display {DisplayIndex}", projectionProgramId, displayIndex);
 
-            await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, displayIndex, async () =>
+            // Detached from the hub's message pump: the triggered program can run for as long as the
+            // configured video (e.g. a 30s briefing), and awaiting it here would block delivery of every
+            // other SignalR message (DMX, music, automation) to this client until it finished.
+            _ = Task.Run(async () =>
             {
-                _logger.LogInformation("Triggered projection program {ProgramId} completed, notifying server", projectionProgramId);
-                await _connection!.InvokeAsync("ProjectionProgramCompleted");
+                await _projectionProgramsService.TriggerTemporaryProjectionProgramAsync(projectionProgramId, displayIndex, async () =>
+                {
+                    _logger.LogInformation("Triggered projection program {ProgramId} completed, notifying server", projectionProgramId);
+                    await _connection!.InvokeAsync("ProjectionProgramCompleted");
+                });
             });
+
+            return Task.CompletedTask;
         });
     }
 }
