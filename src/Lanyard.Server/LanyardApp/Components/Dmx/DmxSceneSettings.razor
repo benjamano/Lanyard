@@ -21,6 +21,13 @@
                             Style="width: 100%;">
                             Momentary @(OpenScene.IsMomentary ? "On" : "Off")
             </FluentButton>
+            <FluentButton IconStart="@(OpenScene.BpmSyncEnabled ? new Icons.Filled.Size20.MusicNote2() : new Icons.Regular.Size20.MusicNote2())"
+                            Tooltip="Sync step changes to the beat of the playing song; steps use their fixed duration when nothing is playing"
+                            Appearance="@(OpenScene.BpmSyncEnabled ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                            OnClick="@(() => ToggleBpmSync(OpenScene))"
+                            Style="width: 100%;">
+                            BPM Sync @(OpenScene.BpmSyncEnabled ? "On" : "Off")
+            </FluentButton>
         </FluentStack>
 
         <FluentDivider />
@@ -83,6 +90,13 @@
         scene.IsMomentary = !scene.IsMomentary;
 
         await SaveSceneAsync(scene, () => scene.IsMomentary = !scene.IsMomentary);
+    }
+
+    private async Task ToggleBpmSync(DmxScene scene)
+    {
+        scene.BpmSyncEnabled = !scene.BpmSyncEnabled;
+
+        await SaveSceneAsync(scene, () => scene.BpmSyncEnabled = !scene.BpmSyncEnabled);
     }
 
     private void StartCapture()

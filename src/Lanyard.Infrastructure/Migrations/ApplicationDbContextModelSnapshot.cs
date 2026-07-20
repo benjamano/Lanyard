@@ -216,6 +216,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastUpdateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -589,6 +592,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("BpmSyncEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
@@ -638,6 +644,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<double>("Beats")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("CreateByUserId")
                         .IsRequired()
@@ -997,6 +1006,15 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<double?>("Bpm")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("BpmAnalysisDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("BpmAnalysisStatus")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -1009,6 +1027,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("FilePath")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<double?>("FirstBeatOffsetSeconds")
+                        .HasColumnType("double precision");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -1228,6 +1249,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleStatusWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<Guid?>("AutomationRuleId")
+                        .HasColumnType("uuid");
+
+                    b.HasDiscriminator().HasValue(8);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ButtonWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -1296,6 +1327,31 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(1);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicPlaylistSelectorWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MusicPlaylistSelectorWidget_ClientId");
+
+                    b.HasDiscriminator().HasValue(6);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicTimelineWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MusicTimelineWidget_ClientId");
+
+                    b.Property<bool>("ShowSongTitle")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(7);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TextAreaWidget", b =>

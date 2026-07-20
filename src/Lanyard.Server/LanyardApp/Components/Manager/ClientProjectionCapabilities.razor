@@ -1,45 +1,39 @@
 @inject IClientService _clientService
 @inject IToastService _toastService
 
-@if (IsShowing && clientId != null)
+@if (ClientId != null)
 {
-    <FluentCard Height="100%">
-        <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Margin="@Margin.Bottom2">
-            <FluentText Size="TextSize.Size600">Projection</FluentText>
-            <FluentButton IconStart="new Icons.Regular.Size20.Add()" OnClick="OpenAddProjectionDialog">Add Projection</FluentButton>
-        </FluentStack>
+    <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Right" VerticalAlignment="@VerticalAlignment.Center" Margin="@Margin.Bottom2">
+        <FluentButton IconStart="new Icons.Regular.Size20.Add()" OnClick="OpenAddProjectionDialog">Add Projection</FluentButton>
+    </FluentStack>
 
-        <FluentStack>
-            <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
-                <ChildContent>
-                    <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
-                    <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
-                    <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
-                    <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
-                    <TemplateColumn Title="Size">
-                        @context.Width x @context.Height px
-                    </TemplateColumn>
-                    <TemplateColumn Title="Delete">
-                        <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
-                    </TemplateColumn>
-                </ChildContent>
-                <LoadingContent>
-                    Loading...
-                </LoadingContent>
-                <EmptyContent>
-                    No Projections set for this Client!
-                </EmptyContent>
-            </FluentDataGrid>
-        </FluentStack>
-    </FluentCard>
+    <FluentStack>
+        <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
+            <ChildContent>
+                <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
+                <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
+                <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
+                <TemplateColumn Title="Size">
+                    @context.Width x @context.Height px
+                </TemplateColumn>
+                <TemplateColumn Title="Delete">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
+                </TemplateColumn>
+            </ChildContent>
+            <LoadingContent>
+                Loading...
+            </LoadingContent>
+            <EmptyContent>
+                No Projections set for this Client!
+            </EmptyContent>
+        </FluentDataGrid>
+    </FluentStack>
 }
 
 @code {
     [Parameter]
-    public bool IsShowing { get; set; }
-
-    [Parameter] 
-    public Guid? clientId { get; set; }
+    public Guid? ClientId { get; set; }
 
     [Parameter]
     public EventCallback UpdateClientCapabilities { get; set; }
@@ -48,7 +42,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (IsShowing && clientId != null)
+        if (ClientId != null)
         {
             await RefreshCapabilities();
         }
@@ -56,7 +50,7 @@
 
     public async Task RefreshCapabilities()
     {
-        Result<IEnumerable<ClientProjectionSettings>> result = await _clientService.GetClientProjectionSettingsAsync(clientId!.Value);
+        Result<IEnumerable<ClientProjectionSettings>> result = await _clientService.GetClientProjectionSettingsAsync(ClientId!.Value);
 
         if (result.IsSuccess)
         {
@@ -70,14 +64,14 @@
 
     private async Task OpenAddProjectionDialog()
     {
-        if (clientId != null)
+        if (ClientId != null)
         {
             await _dialogService.ShowDialogAsync<AddNewProjectionDialog>(options =>
             {
                 options.Header.Title = "Add Projection";
                 options.Width = "50%";
                 options.Modal = true;
-                options.Parameters.Add(nameof(AddNewProjectionDialog.Content), clientId.Value);
+                options.Parameters.Add(nameof(AddNewProjectionDialog.Content), ClientId.Value);
             });
 
             await RefreshCapabilities();

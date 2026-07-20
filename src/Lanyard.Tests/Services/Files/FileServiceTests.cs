@@ -22,6 +22,7 @@ public class FileServiceTests
 {
     private Mock<IDbContextFactory<ApplicationDbContext>> _dbFactoryMock = null!;
     private Mock<ISecurityService> _securityServiceMock = null!;
+    private Mock<ISongAnalysisQueue> _analysisQueueMock = null!;
     private Mock<IWebHostEnvironment> _environmentMock = null!;
     private FileService _fileService = null!;
     private ApplicationDbContext _dbContext = null!;
@@ -31,6 +32,7 @@ public class FileServiceTests
     {
         _dbFactoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
         _securityServiceMock = new Mock<ISecurityService>();
+        _analysisQueueMock = new Mock<ISongAnalysisQueue>();
         _environmentMock = new Mock<IWebHostEnvironment>();
         _environmentMock.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -39,7 +41,7 @@ public class FileServiceTests
         _dbContext = new ApplicationDbContext(options);
         _dbFactoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(_dbContext);
-        _fileService = new FileService(_dbFactoryMock.Object, _securityServiceMock.Object, _environmentMock.Object);
+        _fileService = new FileService(_dbFactoryMock.Object, _securityServiceMock.Object, _analysisQueueMock.Object, _environmentMock.Object);
     }
 
     [TestMethod]

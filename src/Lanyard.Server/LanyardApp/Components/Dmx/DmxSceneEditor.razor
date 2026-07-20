@@ -55,7 +55,7 @@
                                 TGridItem="DmxSceneStep"
                                 RowSize="@DataGridRowSize.Medium"
                                 OnRowClick="@((context) => OnRowClick(context.Item))"
-                                GridTemplateColumns="0.5fr 1fr 3fr 1fr"
+                                GridTemplateColumns="@gridTemplateColumns"
                                 AutoItemsPerPage="true">
                     <ChildContent>
                         <SelectColumn TGridItem="DmxSceneStep" 
@@ -75,7 +75,8 @@
                                         <FluentTextInput Value="@durationEditText"
                                                         ValueChanged="@((v) => durationEditText = v)"
                                                         Pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
-                                                        Placeholder="hh:mm:ss" 
+                                                        Placeholder="hh:mm:ss"
+                                                        Style="min-width: 80px;"
                                                         Disabled="@(!IsEditModeEnabled)" />
                                         <FluentButton Appearance="ButtonAppearance.Transparent"
                                                       IconStart="new Icons.Regular.Size20.Checkmark()"
@@ -92,7 +93,7 @@
                                 else
                                 {
                                     <FluentButton Appearance="@ButtonAppearance.Transparent" 
-                                                    OnClick="@(() => { editingStepDuration = context; durationEditText = context.Duration.ToString(@"hh\:mm\:ss"); })"
+                                                    OnClick="@(() => { editingStepBeats = null; editingStepDuration = context; durationEditText = context.Duration.ToString(@"hh\:mm\:ss"); })"
                                                     Disabled="@(!IsEditModeEnabled)"
                                                     Padding="@Padding.Start0"
                                                     Margin="@Margin.Start0">
@@ -101,14 +102,52 @@
                                 }
                             </ChildContent>
                         </TemplateColumn>
+                        <TemplateColumn Title="Beats">
+                            <ChildContent>
+                                @if (editingStepBeats == context && IsEditModeEnabled && OpenScene.BpmSyncEnabled)
+                                {
+                                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="4">
+                                        <FluentNumberInput TValue="double"
+                                                        Value="@beatsEditValue"
+                                                        ValueChanged="@((double v) => beatsEditValue = v)"
+                                                        Min="0.25"
+                                                        Max="64"
+                                                        Step="0.25"
+                                                        Width="70px" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                      IconStart="new Icons.Regular.Size20.Checkmark()"
+                                                      Tooltip="Save"
+                                                      OnClick="@(async () => await OnStepBeatsChanged(context, beatsEditValue))" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                      IconStart="new Icons.Regular.Size20.Dismiss()"
+                                                      Tooltip="Cancel"
+                                                      OnClick="@(() => editingStepBeats = null)" />
+                                    </FluentStack>
+                                }
+                                else
+                                {
+                                    @* Beats only apply while BPM Sync is on; keep the value visible
+                                       but inert (and dimmed) when it is off, so the grid doesn't reflow. *@
+                                    <FluentButton Appearance="@ButtonAppearance.Transparent"
+                                                    OnClick="@(() => { editingStepDuration = null; editingStepBeats = context; beatsEditValue = context.Beats; })"
+                                                    Disabled="@(!IsEditModeEnabled || !OpenScene.BpmSyncEnabled)"
+                                                    Tooltip="@(OpenScene.BpmSyncEnabled ? "Beats this step holds while synced" : "Enable BPM Sync in scene settings to use beats")"
+                                                    Padding="@Padding.Start0"
+                                                    Margin="@Margin.Start0"
+                                                    Style="@(OpenScene.BpmSyncEnabled ? null : "opacity: 0.5;")">
+                                        @context.Beats
+                                    </FluentButton>
+                                }
+                            </ChildContent>
+                        </TemplateColumn>
                         <TemplateColumn>
                             <ChildContent>
-                                <FluentStack Orientation="@Orientation.Horizontal" 
-                                                HorizontalAlignment="HorizontalAlignment.Center" 
+                                <FluentStack Orientation="@Orientation.Horizontal"
+                                                HorizontalAlignment="HorizontalAlignment.Center"
                                                 VerticalAlignment="VerticalAlignment.Center"
                                                 HorizontalGap="4">
-                                    <FluentButton Appearance="ButtonAppearance.Transparent" 
-                                                IconStart="new Icons.Regular.Size20.BinRecycle()" 
+                                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                IconStart="new Icons.Regular.Size20.BinRecycle()"
                                                 Tooltip="Delete Step"
                                                 OnClick="@(() => DeleteStep(context))"
                                                 Disabled="@(!IsEditModeEnabled)" />
@@ -163,7 +202,18 @@
     private List<DmxSceneStep> selectedStep = new();
     private DmxSceneStep? editingStepDuration = null;
     private string durationEditText = string.Empty;
+    private DmxSceneStep? editingStepBeats = null;
+    private double beatsEditValue = 1;
     private Guid? _loadedSceneId;
+
+    // The editor panel is too narrow to fit an inline editor (input + save/cancel buttons)
+    // in both the Duration and Beats columns at once, so the column being edited borrows
+    // width from the other; only one inline editor is ever open at a time. Plain fr units
+    // don't work here: each column's auto (min-content) floor wins in a container this
+    // narrow, so the editor input collapses. minmax() pixel minimums override that floor.
+    private string gridTemplateColumns => editingStepBeats != null
+        ? "36px 56px minmax(70px, 1fr) minmax(150px, 3fr) 44px"
+        : "36px 56px minmax(150px, 3fr) minmax(52px, 1fr) 44px";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -171,6 +221,7 @@
         {
             _loadedSceneId = OpenScene.Id;
             editingStepDuration = null;
+            editingStepBeats = null;
             selectedStep.Clear();
             await OnEditingStepChanged.InvokeAsync(null);
             Result<List<DmxSceneStep>> result = await _dmxSceneService.GetSceneStepsAsync(OpenScene.Id);
@@ -323,10 +374,38 @@
         }
     }
 
+    private async Task OnStepBeatsChanged(DmxSceneStep step, double beats)
+    {
+        if (beats is < 0.25 or > 64)
+        {
+            _toastService.ShowError("Beats must be between 0.25 and 64.");
+            return;
+        }
+
+        Result<bool> result = await _dmxSceneService.UpdateSceneStepBeatsAsync(step.Id, beats);
+
+        if (result.IsSuccess)
+        {
+            step.Beats = beats;
+            editingStepBeats = null;
+
+            sceneSteps?.Where(s => s.Id == step.Id).ToList().ForEach(s => s.Beats = beats);
+
+            await OnSceneEdited.InvokeAsync(OpenScene);
+
+            StateHasChanged();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to update step beats: {result.Error}");
+        }
+    }
+
     private void CloseEditor()
     {
         selectedStep = [];
         editingStepDuration = null;
+        editingStepBeats = null;
 
         OnClose.InvokeAsync();
     }

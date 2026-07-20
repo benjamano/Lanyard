@@ -312,4 +312,210 @@ public class DashboardServiceTests
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.AreEqual(projectionProgramId, dbWidget.ProjectionProgramId);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewMusicPlaylistSelectorWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        dashboard.Widgets =
+        [
+            new MusicPlaylistSelectorWidget
+            {
+                Id = Guid.Empty,
+                ClientId = clientId,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicPlaylistSelectorWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicPlaylistSelectorWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingMusicPlaylistSelectorWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MusicPlaylistSelectorWidget playlistSelectorWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            ClientId = null,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [playlistSelectorWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        Guid clientId = Guid.NewGuid();
+
+        playlistSelectorWidget.ClientId = clientId;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicPlaylistSelectorWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicPlaylistSelectorWidget>().SingleAsync(x => x.Id == playlistSelectorWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesMusicPlaylistSelectorConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MusicPlaylistSelectorWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            ClientId = null,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        MusicPlaylistSelectorWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            ClientId = clientId,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicPlaylistSelectorWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicPlaylistSelectorWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewMusicTimelineWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        dashboard.Widgets =
+        [
+            new MusicTimelineWidget
+            {
+                Id = Guid.Empty,
+                ClientId = clientId,
+                ShowSongTitle = false,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.IsFalse(dbWidget.ShowSongTitle);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingMusicTimelineWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MusicTimelineWidget timelineWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            ClientId = null,
+            ShowSongTitle = false,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [timelineWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        Guid clientId = Guid.NewGuid();
+
+        timelineWidget.ClientId = clientId;
+        timelineWidget.ShowSongTitle = true;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == timelineWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.IsTrue(dbWidget.ShowSongTitle);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesMusicTimelineConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MusicTimelineWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            ClientId = null,
+            ShowSongTitle = true,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        MusicTimelineWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            ClientId = clientId,
+            ShowSongTitle = false,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.IsFalse(dbWidget.ShowSongTitle);
+    }
 }

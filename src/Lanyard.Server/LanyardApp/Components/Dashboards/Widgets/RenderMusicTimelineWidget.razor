@@ -1,0 +1,323 @@
+@using NAudio.Wave
+@using Timer = System.Threading.Timer
+
+@implements IDisposable
+
+@inject MusicPlayerService _player
+
+<FluentCard Height="100%">
+    @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to control</FluentBadge>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Vertical" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%" Width="100%" VerticalGap="8">
+            @if (Widget.ShowSongTitle)
+            {
+                <FluentText Weight="@TextWeight.Semibold" Style="text-align: center;">@(_songTitle ?? "Nothing playing")</FluentText>
+            }
+
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto">
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              Title="Previous (Double-click) / Restart (Single-click)"
+                              OnClick="RestartSongAsync"
+                              @ondblclick="PreviousSongAsync"
+                              Disabled="@(!AllowTrigger)"
+                              Style="border-radius: 50%;"
+                              IconStart="@(new Icons.Regular.Size32.Previous())">
+                </FluentButton>
+
+                @{
+                    Icon playIcon = _isPlaying ? new Icons.Regular.Size32.Pause() : new Icons.Regular.Size32.Play();
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Primary"
+                              Title="@(_isPlaying ? "Pause" : "Play")"
+                              OnClick="TogglePlayAsync"
+                              Disabled="@(!AllowTrigger)"
+                              Style="border-radius: 50%;"
+                              IconStart="playIcon">
+                </FluentButton>
+
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              Title="Next"
+                              OnClick="NextSongAsync"
+                              Disabled="@(!AllowTrigger)"
+                              Style="border-radius: 50%;"
+                              IconStart="@(new Icons.Regular.Size32.Next())">
+                </FluentButton>
+            </FluentStack>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Width="100%">
+                <div @onclick="() => _showTimeLeftInsteadOfElapsed = !_showTimeLeftInsteadOfElapsed" role="button">
+                    @if (_showTimeLeftInsteadOfElapsed)
+                    {
+                        <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(_currentSongLength - _currentSongTime).ToString(@"mm\:ss")</FluentText>
+                    }
+                    else
+                    {
+                        <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongTime).ToString(@"mm\:ss")</FluentText>
+                    }
+                </div>
+
+                <FluentSlider Style="width: 100%;"
+                              Value="_currentSongTime"
+                              Min="0"
+                              Max="@(_currentSongLength != 0 ? _currentSongLength : 1)"
+                              TValue="double"
+                              Orientation="Orientation.Horizontal"
+                              Disabled="@(!AllowTrigger || _currentSongLength == 0)"
+                              @onpointerdown="OnSeekStart"
+                              @onpointerup="OnSeekEnd"
+                              ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
+
+                <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongLength).ToString(@"mm\:ss")</FluentText>
+            </FluentStack>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required MusicTimelineWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private bool _isPlaying = false;
+    private float _currentSongTime = 0.0f;
+    private int _currentSongLength = 0;
+    private string? _songTitle;
+    private bool _showTimeLeftInsteadOfElapsed = false;
+    private bool _isUserSeeking = false;
+    private Timer? _songTimeTimer;
+
+    protected override void OnInitialized()
+    {
+        _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
+        _player.OnSongChanged += HandleSongChanged;
+
+        InitializeFromPlayerState();
+    }
+
+    private void InitializeFromPlayerState()
+    {
+        if (Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        _isPlaying = _player.GetCurrentPlaybackState(clientId) == PlaybackState.Playing;
+        _songTitle = _player.GetCurrentSong(clientId)?.Name;
+        _currentSongTime = _player.GetCurrentSongTime(clientId);
+        _currentSongLength = _player.GetCurrentSongLength(clientId);
+
+        if (_isPlaying)
+        {
+            StartSongTimeTimer();
+        }
+    }
+
+    private void HandlePlaybackStateChanged(Guid clientId, PlaybackState state)
+    {
+        if (Widget.ClientId != clientId)
+        {
+            return;
+        }
+
+        _isPlaying = state == PlaybackState.Playing;
+
+        SyncSongProgressFromServer();
+
+        if (_isPlaying)
+        {
+            StartSongTimeTimer();
+        }
+        else
+        {
+            StopSongTimeTimer();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSongChanged(Guid clientId, Guid? songId)
+    {
+        if (Widget.ClientId != clientId)
+        {
+            return;
+        }
+
+        SyncSongProgressFromServer();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Restart/next/previous reset (or replace) the track without a playback-state transition,
+    // so HandlePlaybackStateChanged won't fire. Pull the fresh position/length so the timeline
+    // reflects the new track immediately instead of the timer counting on from the old value.
+    private void SyncSongProgressFromServer()
+    {
+        if (Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        _songTitle = _player.GetCurrentSong(clientId)?.Name;
+        _currentSongTime = _player.GetCurrentSongTime(clientId);
+        _currentSongLength = _player.GetCurrentSongLength(clientId);
+    }
+
+    private void StopSongTimeTimer()
+    {
+        if (_songTimeTimer != null)
+        {
+            _songTimeTimer.Dispose();
+            _songTimeTimer = null;
+        }
+    }
+
+    private void StartSongTimeTimer()
+    {
+        StopSongTimeTimer();
+
+        _songTimeTimer = new Timer(async _ =>
+        {
+            if (Widget.ClientId.HasValue)
+            {
+                // While the user is dragging the timeline, don't push updates that would
+                // snap the slider thumb back to the playback position.
+                if (_isUserSeeking)
+                {
+                    return;
+                }
+
+                // Advance in whole seconds so the slider (integer step, rounds) and the
+                // elapsed-time text (TimeSpan, truncates) stay on the same value in lockstep.
+                // Never run past the end: the slider clamps its own value to Max and echoes
+                // ValueChanged back, which OnSongTimeChanged would then commit as a seek once
+                // per tick for as long as the timeline sat at the end.
+                _currentSongTime = _currentSongLength > 0
+                    ? Math.Min(_currentSongTime + 1f, _currentSongLength)
+                    : _currentSongTime + 1f;
+
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                StopSongTimeTimer();
+            }
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void OnSeekStart()
+    {
+        _isUserSeeking = true;
+    }
+
+    private async Task OnSeekEnd()
+    {
+        // Only act if this pointer-up ends a drag we started tracking, so a stray
+        // pointer-up doesn't fire a redundant seek.
+        if (!_isUserSeeking)
+        {
+            return;
+        }
+
+        _isUserSeeking = false;
+
+        await CommitSeekAsync();
+    }
+
+    private async Task OnSongTimeChanged(double newTime)
+    {
+        // FluentSlider raises ValueChanged continuously while dragging. Follow the thumb
+        // for display, but defer the actual seek until the user releases (OnSeekEnd) so the
+        // playback timer can't resume mid-drag and yank the thumb back to the playback position.
+        if (_isUserSeeking)
+        {
+            _currentSongTime = (float)newTime;
+            return;
+        }
+
+        // Ignore echo events: re-rendering the slider (e.g. from the playback timer) makes
+        // the underlying web component re-raise ValueChanged with a rounded copy of the value
+        // we just set. Comparing before assigning keeps those echoes from stalling the timeline.
+        if (Math.Abs(newTime - _currentSongTime) < 0.5)
+        {
+            return;
+        }
+
+        // Genuine change from outside a drag (e.g. keyboard adjustment) — commit immediately.
+        _currentSongTime = (float)newTime;
+
+        await CommitSeekAsync();
+    }
+
+    private async Task CommitSeekAsync()
+    {
+        if (!AllowTrigger || Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        await _player.Seek(clientId, _currentSongTime);
+    }
+
+    private async Task TogglePlayAsync()
+    {
+        if (!AllowTrigger || Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        await _player.TogglePlay(clientId);
+    }
+
+    private async Task RestartSongAsync()
+    {
+        if (!AllowTrigger || Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        await _player.RestartOrPrevious(clientId);
+
+        SyncSongProgressFromServer();
+    }
+
+    private async Task PreviousSongAsync()
+    {
+        if (!AllowTrigger || Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        await _player.Previous(clientId);
+
+        SyncSongProgressFromServer();
+    }
+
+    private async Task NextSongAsync()
+    {
+        if (!AllowTrigger || Widget.ClientId is not Guid clientId)
+        {
+            return;
+        }
+
+        await _player.Next(clientId);
+
+        SyncSongProgressFromServer();
+    }
+
+    public void Dispose()
+    {
+        _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
+        _player.OnSongChanged -= HandleSongChanged;
+
+        StopSongTimeTimer();
+    }
+}

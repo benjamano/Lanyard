@@ -14,12 +14,11 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     private List<ClientProjectionSettingsDTO> loadedProjectionPrograms = [];
 
-    private Process? _kioskProcess;
+    // One entry per physical display; triggering/refreshing one display must never touch another's process.
+    private readonly Dictionary<int, (Guid ProgramId, Process Process)> _runningByDisplay = [];
 
     public async Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms)
     {
-        HideWindow();
-
         if (projectionPrograms == null || !projectionPrograms.Any())
         {
             return;
@@ -42,53 +41,71 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     private async Task StartProjectionProgramAsync(ClientProjectionSettingsDTO projectionProgram)
     {
+        int displayIndex = projectionProgram.DisplayIndex;
+        Guid programId = projectionProgram.ProjectionProgram.Id;
+
+        if (_runningByDisplay.TryGetValue(displayIndex, out (Guid ProgramId, Process Process) running)
+            && running.ProgramId == programId
+            && !running.Process.HasExited)
+        {
+            // This display is already showing the desired program - leave it running untouched.
+            return;
+        }
+
         _logger.LogInformation("Starting projection program: {program}", projectionProgram.ProjectionProgram.Name);
         _logger.LogInformation(" - Fullscreen: {isFullScreen}", projectionProgram.IsFullScreen);
         _logger.LogInformation(" - Borderless: {isBorderless}", projectionProgram.IsBorderless);
         _logger.LogInformation(" - Resolution: {width}x{height}", projectionProgram.Width, projectionProgram.Height);
-        _logger.LogInformation(" - Display Index: {displayIndex}", projectionProgram.DisplayIndex);
+        _logger.LogInformation(" - Display Index: {displayIndex}", displayIndex);
 
-        await ShowWindow(projectionProgram.DisplayIndex, projectionProgram.Width, projectionProgram.Height, projectionProgram.IsFullScreen, projectionProgram.ProjectionProgram.Id, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+        HideWindow(displayIndex);
+
+        await ShowWindow(displayIndex, projectionProgram.Width, projectionProgram.Height, projectionProgram.IsFullScreen, programId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
     }
 
-    private void HideWindow()
+    private void HideWindow(int displayIndex)
     {
+        if (!_runningByDisplay.TryGetValue(displayIndex, out (Guid ProgramId, Process Process) running))
+        {
+            return;
+        }
+
         try
         {
-            if (_kioskProcess != null)
-            {
-                _kioskProcess.Kill();
-                _kioskProcess.WaitForExit();
-            }
+            running.Process.Kill();
+            running.Process.WaitForExit();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to kill kiosk process.");
+            _logger.LogWarning(ex, "Failed to kill kiosk process on display {displayIndex}.", displayIndex);
         }
         finally
         {
-            _kioskProcess?.Dispose();
-            _kioskProcess = null;
+            running.Process.Dispose();
+            _runningByDisplay.Remove(displayIndex);
         }
     }
 
     public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted)
     {
-        HideWindow();
+        // A button/automation rule with no explicit target screen defaults to display 0,
+        // rather than guessing from whichever program happened to load first.
+        int resolvedDisplayIndex = displayIndex ?? 0;
 
-        ClientProjectionSettingsDTO? displaySettings = loadedProjectionPrograms.FirstOrDefault();
+        ClientProjectionSettingsDTO? displaySettings = loadedProjectionPrograms
+            .FirstOrDefault(x => x.DisplayIndex == resolvedDisplayIndex);
 
-        // Use the display the button specified; otherwise fall back to the client's default.
-        int resolvedDisplayIndex = displayIndex ?? displaySettings?.DisplayIndex ?? 0;
         int width = displaySettings?.Width ?? 1920;
         int height = displaySettings?.Height ?? 1080;
         bool isFullScreen = displaySettings?.IsFullScreen ?? true;
 
+        HideWindow(resolvedDisplayIndex);
+
         await ShowWindow(resolvedDisplayIndex, width, height, isFullScreen, projectionProgramId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
 
-        if (_kioskProcess != null)
+        if (_runningByDisplay.TryGetValue(resolvedDisplayIndex, out (Guid ProgramId, Process Process) running))
         {
-            await _kioskProcess.WaitForExitAsync();
+            await running.Process.WaitForExitAsync();
         }
 
         await onCompleted();
@@ -98,10 +115,11 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
     {
         Screen[] screens = Screen.AllScreens;
 
-        if (displayIndex < 0 || displayIndex >= screens.Length)
-            displayIndex = 0;
+        int screenIndex = displayIndex;
+        if (screenIndex < 0 || screenIndex >= screens.Length)
+            screenIndex = 0;
 
-        Screen screen = screens[displayIndex];
+        Screen screen = screens[screenIndex];
 
         int x = screen.Bounds.Left;
         int y = screen.Bounds.Top;
@@ -169,11 +187,16 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             $"--autoplay-policy=no-user-gesture-required " +
             (isFullScreen ? "--edge-kiosk-type=fullscreen " : "");
 
-        _kioskProcess = Process.Start(new ProcessStartInfo
+        Process? process = Process.Start(new ProcessStartInfo
         {
             FileName = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
             Arguments = args,
             UseShellExecute = false
         });
+
+        if (process != null)
+        {
+            _runningByDisplay[displayIndex] = (projectionProgramId, process);
+        }
     }
 }

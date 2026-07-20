@@ -23,6 +23,7 @@ public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
     private readonly ISecurityService _securityService;
+    private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
     private readonly bool _isDevelopment;
     private readonly string? _bucketName;
@@ -32,11 +33,13 @@ public class FileService : IFileService
     public FileService(
         IDbContextFactory<ApplicationDbContext> dbFactory,
         ISecurityService securityService,
+        ISongAnalysisQueue analysisQueue,
         IWebHostEnvironment environment)
     {
         _dbFactory = dbFactory;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _securityService = securityService;
+        _analysisQueue = analysisQueue;
         _isDevelopment = environment.IsDevelopment();
 
         if (_isDevelopment)
@@ -204,9 +207,11 @@ public class FileService : IFileService
             // Audio uploads are also registered as songs so they show up in the music library.
             // The file itself lives wherever the upload landed (local disk in dev, Railway bucket in prod);
             // Song.FilePath mirrors FileMetadata.FilePath so MusicService/DownloadFileAsync can resolve it.
+            Song? song = null;
+
             if (isAudio)
             {
-                Song song = new()
+                song = new()
                 {
                     Id = Guid.NewGuid(),
                     Name = Path.GetFileNameWithoutExtension(fileName),
@@ -223,6 +228,13 @@ public class FileService : IFileService
             }
 
             await db.SaveChangesAsync(cancellationToken);
+
+            // Queue BPM analysis only after the row is committed — the background
+            // worker loads the song by ID from a fresh context.
+            if (song != null)
+            {
+                _analysisQueue.Enqueue(song.Id);
+            }
 
             return Result<FileMetadata>.Ok(metadata);
         }

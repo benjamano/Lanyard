@@ -24,6 +24,28 @@ namespace Lanyard.Infrastructure.Models
         One = 2
     }
 
+    /// <summary>
+    /// Outcome of server-side BPM analysis for a song. Terminal states
+    /// (everything except <see cref="NotAnalyzed"/>) are never retried automatically.
+    /// </summary>
+    public enum BpmAnalysisStatus
+    {
+        /// <summary>Not yet analyzed — picked up by the startup backfill.</summary>
+        NotAnalyzed = 0,
+
+        /// <summary>Full onset analysis succeeded: Bpm and FirstBeatOffsetSeconds are set.</summary>
+        Analyzed = 1,
+
+        /// <summary>BPM read from the file's TBPM tag but audio was not decodable — rate is known, beat phase is not.</summary>
+        TagOnly = 2,
+
+        /// <summary>Decode or analysis failed.</summary>
+        Failed = 3,
+
+        /// <summary>Format not decodable on this platform and no TBPM tag present.</summary>
+        Unsupported = 4
+    }
+
     public class Song
     {
         public Guid Id { get; set; }
@@ -38,6 +60,15 @@ namespace Lanyard.Infrastructure.Models
         public DateTime CreateDate { get; set; }
         public bool IsDownloaded { get; set; }
         public bool IsActive { get; set; }
+
+        public double? Bpm { get; set; }
+
+        // Seconds from the start of the track to the first beat, reduced into [0, beatLength).
+        // Null when only the tag BPM is known (TagOnly) — sync then matches rate but not phase.
+        public double? FirstBeatOffsetSeconds { get; set; }
+
+        public BpmAnalysisStatus BpmAnalysisStatus { get; set; }
+        public DateTime? BpmAnalysisDate { get; set; }
 
         // Set when the song originates from a file upload (null for songs discovered by the
         // local dev music-folder scan). Links back to the stored file in the bucket / on disk.

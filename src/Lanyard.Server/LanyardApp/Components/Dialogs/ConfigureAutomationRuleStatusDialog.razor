@@ -1,0 +1,72 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Automation Rule Status
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentSelect TOption="AutomationRule"
+                          TValue="string"
+                          Items="@Rules"
+                          OptionText="@(r => r?.Name ?? string.Empty)"
+                          OptionValue="@(r => r?.Id.ToString())"
+                          Label="Automation Rule"
+                          Placeholder="Select a rule..."
+                          Value="@_ruleValue"
+                          ValueChanged="OnRuleChanged"
+                          Style="width: 100%;" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required AutomationRuleStatusWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<AutomationRule> Rules { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string _ruleValue = string.Empty;
+
+    private Guid? _originalRuleId;
+
+    protected override void OnInitialized()
+    {
+        _originalRuleId = Widget.AutomationRuleId;
+
+        _ruleValue = Widget.AutomationRuleId?.ToString() ?? string.Empty;
+    }
+
+    private void OnRuleChanged(string? newValue)
+    {
+        Widget.AutomationRuleId = Guid.TryParse(newValue, out Guid ruleId) ? ruleId : null;
+        _ruleValue = newValue ?? string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.AutomationRuleId = _originalRuleId;
+
+        await Dialog.CancelAsync();
+    }
+}

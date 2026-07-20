@@ -33,6 +33,9 @@ public class AutomationEngineService(
     public ChannelReader<GameStatusTransitionEvent> Reader => _transitionChannel.Reader;
     public bool IsEnabled => _isEnabled;
 
+    public event Action<Guid, bool>? OnRuleEnabledChanged;
+    public event Action<Guid, DateTime, bool>? OnRuleExecuted;
+
     public void SetEnabled(bool enabled)
     {
         _isEnabled = enabled;
@@ -41,6 +44,11 @@ public class AutomationEngineService(
     public void InvalidateRuleCache()
     {
         _ruleCacheDirty = true;
+    }
+
+    public void NotifyRuleEnabledChanged(Guid ruleId, bool isEnabled)
+    {
+        OnRuleEnabledChanged?.Invoke(ruleId, isEnabled);
     }
 
     public void EnqueueTransition(Guid clientId, GameStatus newStatus)
@@ -81,7 +89,7 @@ public class AutomationEngineService(
             if (!_ruleCacheDirty) return; // double-check inside lock
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             List<AutomationRule> rules = await ctx.AutomationRules
-                .Where(r => r.IsActive)
+                .Where(r => r.IsActive && r.IsEnabled)
                 .Include(r => r.Actions.Where(a => a.IsActive))
                 .AsNoTracking()
                 .ToListAsync(ct);
@@ -207,6 +215,8 @@ public class AutomationEngineService(
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             ctx.AutomationRuleExecutions.Add(execution);
             await ctx.SaveChangesAsync(ct);
+
+            OnRuleExecuted?.Invoke(rule.Id, execution.ExecutedAt, execution.OverallSuccess);
         }
         catch (Exception ex)
         {

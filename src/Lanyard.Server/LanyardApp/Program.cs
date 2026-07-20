@@ -63,6 +63,10 @@ builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
 builder.Services.AddSingleton<MusicPlayerService>();
+builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
+builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
+builder.Services.AddSingleton<IBeatClockService, BeatClockService>();
+builder.Services.AddHostedService<SongAnalysisHostedService>();
 builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());

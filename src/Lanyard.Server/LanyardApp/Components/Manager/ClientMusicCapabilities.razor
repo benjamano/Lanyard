@@ -11,34 +11,27 @@
 
 @if (client != null)
 {
-    <FluentCard Height="100%">
-        <FluentText Typo="Typography.PaneHeader">Music</FluentText>
-
-        <EditForm Model="@client" OnValidSubmit="UpdateClientCapabilitiesAsync" class="mt-2">
-            <FluentStack Orientation="Orientation.Vertical">
-                <div>
-                    <FluentTextInput Value="@_cacheLimitStr"
-                                     ValueChanged="@(v => { _cacheLimitStr = v; if (int.TryParse(v, out int n)) client!.MusicCacheLimitMb = n; })"
-                                     Label="Music Cache Limit (MB)"
-                                     TextInputType="TextInputType.Number" />
-                </div>
-                <FluentButton Type="ButtonType.Button" Appearance="ButtonAppearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
-                    Get Cached Songs
-                </FluentButton>
-                <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
-                    Save
-                </FluentButton>
-            </FluentStack>
-        </EditForm>
-    </FluentCard>
+    <EditForm Model="@client" OnValidSubmit="UpdateClientCapabilitiesAsync" class="mt-2">
+        <FluentStack Orientation="Orientation.Vertical">
+            <div>
+                <FluentTextInput Value="@_cacheLimitStr"
+                                 ValueChanged="@(v => { _cacheLimitStr = v; if (int.TryParse(v, out int n)) client!.MusicCacheLimitMb = n; })"
+                                 Label="Music Cache Limit (MB)"
+                                 TextInputType="TextInputType.Number" />
+            </div>
+            <FluentButton Type="ButtonType.Button" Appearance="ButtonAppearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
+                Get Cached Songs
+            </FluentButton>
+            <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
+                Save
+            </FluentButton>
+        </FluentStack>
+    </EditForm>
 }
 
 @code {
     [Parameter]
-    public bool IsShowing { get; set; }
-
-    [Parameter] 
-    public Guid? clientId { get; set; }
+    public Guid? ClientId { get; set; }
 
     private Client? client = null;
     private bool isClientConnected = false;
@@ -49,7 +42,7 @@
         _signalRProjectionControlHubEvents.OnReceiveCachedSongs -= HandleReceiveCachedSongs;
         _signalRProjectionControlHubEvents.OnReceiveCachedSongs += HandleReceiveCachedSongs;
 
-        if (IsShowing && clientId != null)
+        if (ClientId != null)
         {
             await RefreshCapabilities();
         }
@@ -57,7 +50,7 @@
 
     private async Task RefreshCapabilities()
     {
-        Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId!.Value);
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(ClientId!.Value);
         if (result.IsSuccess)
         {
             client = result.Data!;
@@ -68,7 +61,7 @@
             _toastService.ShowError($"Failed to load client capabilities, {result.Error}");
         }
 
-        Result<bool> connectionResult = await _clientService.IsClientConnectedAsync(clientId!.Value);
+        Result<bool> connectionResult = await _clientService.IsClientConnectedAsync(ClientId!.Value);
         if (connectionResult.IsSuccess)
         {
             isClientConnected = connectionResult.Data!;
@@ -97,12 +90,12 @@
 
     private async Task GetCachedSongs()
     {
-        if (clientId == null)
-        { 
+        if (ClientId == null)
+        {
             return;
         }
 
-        await _musicPlayerService.GetCachedSongsAsync(clientId.Value);
+        await _musicPlayerService.GetCachedSongsAsync(ClientId.Value);
     }
 
     private void HandleReceiveCachedSongs(Result<IEnumerable<CachedSongDTO>> cachedSongsResult)

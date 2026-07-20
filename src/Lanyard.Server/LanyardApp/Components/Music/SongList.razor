@@ -9,6 +9,7 @@
 @inject ApplicationDbContext _context
 @inject IToastService _toastService
 @inject MusicPlayerService _player
+@inject ISongAnalysisQueue _songAnalysisQueue
 
 @implements IDisposable
 
@@ -192,6 +193,10 @@
 
                 _context.Add(existingSong);
                 await _context.SaveChangesAsync();
+
+                // First time this dev-scanned song is persisted — queue BPM analysis
+                // so beat-synced DMX scenes can lock onto it.
+                _songAnalysisQueue.Enqueue(existingSong.Id);
             }
 
             bool alreadyInPlaylist = await _context.PlaylistSongMembers

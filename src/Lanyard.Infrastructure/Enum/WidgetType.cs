@@ -7,5 +7,8 @@ public enum WidgetType
     TextArea = 2,
     ClientZoneLaserGameStatus = 3,
     ClientZoneLaserScoreboard = 4,
-    Button = 5
+    Button = 5,
+    MusicPlaylistSelector = 6,
+    MusicTimeline = 7,
+    AutomationRuleStatus = 8
 }

@@ -1,0 +1,72 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Playlist Selector
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentSelect TOption="Client"
+                          TValue="string"
+                          Items="@Clients"
+                          OptionText="@(c => c?.Name ?? string.Empty)"
+                          OptionValue="@(c => c?.Id.ToString())"
+                          Label="Client"
+                          Placeholder="Select a client..."
+                          Value="@_clientValue"
+                          ValueChanged="OnClientChanged"
+                          Style="width: 100%;" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required MusicPlaylistSelectorWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Client> Clients { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string _clientValue = string.Empty;
+
+    private Guid? _originalClientId;
+
+    protected override void OnInitialized()
+    {
+        _originalClientId = Widget.ClientId;
+
+        _clientValue = Widget.ClientId?.ToString() ?? string.Empty;
+    }
+
+    private void OnClientChanged(string? newValue)
+    {
+        Widget.ClientId = Guid.TryParse(newValue, out Guid clientId) ? clientId : null;
+        _clientValue = newValue ?? string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.ClientId = _originalClientId;
+
+        await Dialog.CancelAsync();
+    }
+}

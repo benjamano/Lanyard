@@ -301,6 +301,26 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         }
     }
 
+    public Result<double> GetPositionSeconds()
+    {
+        try
+        {
+            MediaFoundationReader? reader = _reader;
+
+            if (reader is null)
+            {
+                return Result<double>.Fail("No song loaded.");
+            }
+
+            return Result<double>.Ok(reader.CurrentTime.TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MusicPlayer: Failed to get playback position");
+            return Result<double>.Fail($"Failed to get playback position: {ex.Message}");
+        }
+    }
+
     public Result<bool> Seek(double seconds)
     {
         if (_reader is null)

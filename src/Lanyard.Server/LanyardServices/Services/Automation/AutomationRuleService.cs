@@ -56,7 +56,7 @@ public class AutomationRuleService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
             IEnumerable<AutomationRule> rules = await ctx.AutomationRules
-                .Where(r => r.TriggerClientId == triggerClientId && r.TriggerEvent == triggerEvent && r.IsActive)
+                .Where(r => r.TriggerClientId == triggerClientId && r.TriggerEvent == triggerEvent && r.IsActive && r.IsEnabled)
                 .Include(r => r.Actions.Where(a => a.IsActive))
                 .AsNoTracking()
                 .ToListAsync();
@@ -74,6 +74,7 @@ public class AutomationRuleService(
         {
             rule.CreateDate = DateTime.UtcNow;
             rule.IsActive = true;
+            rule.IsEnabled = true;
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
             ctx.AutomationRules.Add(rule);
             await ctx.SaveChangesAsync();
@@ -122,6 +123,29 @@ public class AutomationRuleService(
         catch (Exception ex)
         {
             return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<AutomationRule>> SetRuleEnabledAsync(Guid id, bool isEnabled)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            AutomationRule? rule = await ctx.AutomationRules.FindAsync(id);
+            if (rule == null)
+            {
+                return Result<AutomationRule>.Fail("Rule not found.");
+            }
+            rule.IsEnabled = isEnabled;
+            rule.LastUpdateDate = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+            _engineService.InvalidateRuleCache();
+            _engineService.NotifyRuleEnabledChanged(id, isEnabled);
+            return Result<AutomationRule>.Ok(rule);
+        }
+        catch (Exception ex)
+        {
+            return Result<AutomationRule>.Fail(ex.Message);
         }
     }
 }

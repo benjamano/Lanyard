@@ -1,0 +1,147 @@
+@implements IDisposable
+
+@inject IAutomationRuleService _ruleService
+@inject IAutomationLogService _logService
+@inject AutomationEngineService _engineService
+
+<FluentCard Height="100%">
+    @if (Widget.AutomationRuleId == null || Widget.AutomationRuleId == Guid.Empty)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select an Automation Rule to control</FluentBadge>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Vertical" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%" Width="100%" VerticalGap="8">
+            <FluentText Weight="@TextWeight.Semibold" Style="text-align: center;">@(_ruleName ?? "Unknown rule")</FluentText>
+
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@(_isEnabled ? BadgeColor.Success : BadgeColor.Danger)">
+                    @(_isEnabled ? "Enabled" : "Disabled")
+                </FluentBadge>
+
+                <FluentButton Appearance="@(_isEnabled ? ButtonAppearance.Outline : ButtonAppearance.Primary)"
+                              Disabled="@(!AllowTrigger || _isExecuting)"
+                              OnClick="ToggleEnabledAsync">
+                    @(_isEnabled ? "Disable" : "Enable")
+                </FluentButton>
+            </FluentStack>
+
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="6">
+                @if (_lastRunAt is DateTime lastRunAt)
+                {
+                    Icon statusIcon = _lastRunSuccess == true ? new Icons.Regular.Size20.CheckmarkCircle() : new Icons.Regular.Size20.DismissCircle();
+
+                    <FluentIcon Value="statusIcon"
+                                Color="@(_lastRunSuccess == true ? Color.Success : Color.Error)" />
+                    <FluentText Color="Color.Info">Last run @(lastRunAt.ToLocalTime().ToString("g"))</FluentText>
+                }
+                else
+                {
+                    <FluentText Color="Color.Info">Never run</FluentText>
+                }
+            </FluentStack>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required AutomationRuleStatusWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private string? _ruleName;
+    private bool _isEnabled;
+    private DateTime? _lastRunAt;
+    private bool? _lastRunSuccess;
+    private bool _isExecuting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _engineService.OnRuleEnabledChanged += HandleRuleEnabledChanged;
+        _engineService.OnRuleExecuted += HandleRuleExecuted;
+
+        if (Widget.AutomationRuleId is not Guid ruleId)
+        {
+            return;
+        }
+
+        Result<AutomationRule?> ruleResult = await _ruleService.GetRuleAsync(ruleId);
+        if (ruleResult.IsSuccess && ruleResult.Data is AutomationRule rule)
+        {
+            _ruleName = rule.Name;
+            _isEnabled = rule.IsEnabled;
+        }
+
+        Result<AutomationRuleExecution?> executionResult = await _logService.GetLatestExecutionForRuleAsync(ruleId);
+        if (executionResult.IsSuccess && executionResult.Data is AutomationRuleExecution execution)
+        {
+            _lastRunAt = execution.ExecutedAt;
+            _lastRunSuccess = execution.OverallSuccess;
+        }
+    }
+
+    private void HandleRuleEnabledChanged(Guid ruleId, bool isEnabled)
+    {
+        if (Widget.AutomationRuleId != ruleId)
+        {
+            return;
+        }
+
+        _isEnabled = isEnabled;
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleRuleExecuted(Guid ruleId, DateTime executedAt, bool overallSuccess)
+    {
+        if (Widget.AutomationRuleId != ruleId)
+        {
+            return;
+        }
+
+        _lastRunAt = executedAt;
+        _lastRunSuccess = overallSuccess;
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleEnabledAsync()
+    {
+        if (!AllowTrigger || _isExecuting || Widget.AutomationRuleId is not Guid ruleId)
+        {
+            return;
+        }
+
+        _isExecuting = true;
+
+        try
+        {
+            bool newEnabled = !_isEnabled;
+            Result<AutomationRule> result = await _ruleService.SetRuleEnabledAsync(ruleId, newEnabled);
+
+            if (result.IsSuccess)
+            {
+                _isEnabled = newEnabled;
+                _toastService.ShowSuccess(newEnabled ? "Rule enabled." : "Rule disabled.");
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to update rule: {result.Error}");
+            }
+        }
+        finally
+        {
+            _isExecuting = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _engineService.OnRuleEnabledChanged -= HandleRuleEnabledChanged;
+        _engineService.OnRuleExecuted -= HandleRuleExecuted;
+    }
+}
