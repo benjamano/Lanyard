@@ -6,54 +6,49 @@
 
 @if (ClientId != null)
 {
-    <FluentCard Appearance="CardAppearance.Default" Height="100%">
-        <FluentStack Orientation="@Orientation.Vertical">
-            <FluentText Size="TextSize.Size600">
-                Zone Scoreboard Settings
-            </FluentText>
-            @if (ZoneScoreboardSettings == null || ClientNetworkInterfaces == null)
-            {
-                <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" Margin="@Margin.Top2">
-                    <FluentSpinner />
-                    <FluentText>Loading Zone Scoreboard Settings...</FluentText>
+    <FluentStack Orientation="@Orientation.Vertical">
+        @if (ZoneScoreboardSettings == null || ClientNetworkInterfaces == null)
+        {
+            <FluentStack Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" Margin="@Margin.Top2">
+                <FluentSpinner />
+                <FluentText>Loading Zone Scoreboard Settings...</FluentText>
+            </FluentStack>
+        }
+        else
+        {
+            <EditForm Model="ZoneScoreboardSettings" class="w-100">
+                <FluentStack Orientation="@Orientation.Vertical">
+                    <FluentTextInput @bind-Value="ZoneScoreboardSettings.SourceIp" Placeholder="192.168.1.1" Label="Source IP" Required="true" />
+                    <FluentTextInput @bind-Value="ZoneScoreboardSettings.DestinationIp" Placeholder="192.168.1.2" Label="Destination IP" />
+
+                    @if (ClientNetworkInterfaces != null && ClientNetworkInterfaces.Any())
+                    {
+                        <FluentSelect Items="ClientNetworkInterfaces"
+                                    @bind-Value="ZoneScoreboardSettings.PreferredDeviceMacAddress"
+                                    Label="Preferred Device MAC Address"
+                                    Required="true"
+                                    OptionValue="x=> x.MacAddress.ToString()"
+                                    OptionText="x=> x.Name"
+                                    Placeholder="Select a network interface">
+                        </FluentSelect>
+                    }
+                    else
+                    {
+                        <FluentText>No network interfaces found for this client.</FluentText>
+                    }
+
                 </FluentStack>
-            }
-            else
-            {
-                <EditForm Model="ZoneScoreboardSettings" class="w-100">
-                    <FluentStack Orientation="@Orientation.Vertical">
-                        <FluentTextInput @bind-Value="ZoneScoreboardSettings.SourceIp" Placeholder="192.168.1.1" Label="Source IP" Required="true" />
-                        <FluentTextInput @bind-Value="ZoneScoreboardSettings.DestinationIp" Placeholder="192.168.1.2" Label="Destination IP" />
-                    
-                        @if (ClientNetworkInterfaces != null && ClientNetworkInterfaces.Any())
-                        {
-                            <FluentSelect Items="ClientNetworkInterfaces" 
-                                        @bind-Value="ZoneScoreboardSettings.PreferredDeviceMacAddress"
-                                        Label="Preferred Device MAC Address" 
-                                        Required="true"
-                                        OptionValue="x=> x.MacAddress.ToString()"
-                                        OptionText="x=> x.Name"
-                                        Placeholder="Select a network interface">
-                            </FluentSelect>
-                        }
-                        else
-                        {
-                            <FluentText>No network interfaces found for this client.</FluentText>
-                        }
 
-                    </FluentStack>
-
-                    <FluentStack Margin="@Margin.Top2" HorizontalAlignment="@HorizontalAlignment.Right" Width="100%">
-                        <FluentButton IconStart="new Icons.Regular.Size24.Save()" 
-                                        OnClick="SaveSettingsAsync"
-                                        Loading="@(_isSaving)">
-                                        Save
-                        </FluentButton>
-                    </FluentStack>
-                </EditForm>
-            }
-        </FluentStack>
-    </FluentCard>
+                <FluentStack Margin="@Margin.Top2" HorizontalAlignment="@HorizontalAlignment.Right" Width="100%">
+                    <FluentButton IconStart="new Icons.Regular.Size24.Save()"
+                                    OnClick="SaveSettingsAsync"
+                                    Loading="@(_isSaving)">
+                                    Save
+                    </FluentButton>
+                </FluentStack>
+            </EditForm>
+        }
+    </FluentStack>
 }
 
 @code {

@@ -1,8 +1,6 @@
 @page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
-@using Lanyard.App.Components.Clients
-@using Lanyard.App.Components.Dmx
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
 
@@ -15,14 +13,10 @@
     <FluentText Typo="Typography.PaneHeader">
         Clients
     </FluentText>
-    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;">
         <ChildContent>
             <PropertyColumn Property="x => x.Id" Title="Client ID"/>
-            <TemplateColumn Sortable="true" Title="Name">
-                @context.Name
-                <FluentIcon OnClick="@(async () => await ShowUpdateClientNameDialog(context.Id))" Icon="Icons.Regular.Size20.Edit"
-                            Class="ms-1" role="button"></FluentIcon>
-            </TemplateColumn>
+            <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
             <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address"/>
             <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
                             Property="x => x.LastLogin" Title="Last Login" />
@@ -36,12 +30,9 @@
                 {
                     <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
                 }
-
-                <FluentIcon OnClick="() => OpenUpdateClientCapabilitiesCard(context.Id)"
-                            Icon="Icons.Regular.Size20.Edit" Class="ms-1" role="button"></FluentIcon>
             </TemplateColumn>
-            <PropertyColumn Sortable="true" Property="x => x.IsCurrentlyConnected" Title="Currently Connected" />
-            <TemplateColumn Title="Session Length">
+            <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
+            <TemplateColumn Title="Current Session Length">
                 @if (context.IsCurrentlyConnected)
                 {
                     <span>
@@ -53,6 +44,10 @@
                     <span>--:--:--</span>
                 }
             </TemplateColumn>
+            <TemplateColumn Title="Settings">
+                <FluentIcon OnClick="() => OpenClientSettingsDialog(context.Id)"
+                            Icon="Icons.Regular.Size20.Settings" Class="ms-1" role="button"></FluentIcon>
+            </TemplateColumn>
         </ChildContent>
         <LoadingContent>
             Loading...
@@ -60,75 +55,7 @@
     </FluentDataGrid>
 </FluentCard>
 
-<FluentDivider Class="my-2"></FluentDivider>
-
-<FluentGrid Spacing="2">
-    <FluentGridItem Xs="12" Sm="12" Md="6">
-        <ClientProjectionCapabilities 
-            UpdateClientCapabilities="GetClientsAsync" 
-            IsShowing="@showClientCapabilitiesCard"
-            clientId="@updatingClientId">
-        </ClientProjectionCapabilities>
-    </FluentGridItem>
-
-    <FluentGridItem Xs="12" Sm="12" Md="6">
-        <ClientMusicCapabilities 
-            IsShowing="@showClientCapabilitiesCard"
-            clientId="@updatingClientId">
-        </ClientMusicCapabilities>
-    </FluentGridItem>
-
-    <FluentGridItem Xs="12" Sm="12" Md="6">
-        <ClientDmxConfig ClientId="@updatingClientId" />
-    </FluentGridItem>
-
-    <FluentGridItem Xs="12" Sm="12" Md="6">
-        <ClientZoneScoreboardSettings ClientId="@updatingClientId" />
-    </FluentGridItem>
-
-    <FluentGridItem Xs="12" Sm="12" Md="6">
-        <ClientRestartSchedule
-            IsShowing="@showClientCapabilitiesCard"
-            clientId="@updatingClientId">
-        </ClientRestartSchedule>
-    </FluentGridItem>
-</FluentGrid>
-
-<FluentDialog @ref="updateClientNameDialog" Modal="true">
-    <FluentDialogBody>
-        <TitleTemplate>
-            <FluentStack VerticalAlignment="VerticalAlignment.Center">
-                <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
-                <FluentText Typo="Typography.PaneHeader">Update Client Name</FluentText>
-            </FluentStack>
-        </TitleTemplate>
-        <ChildContent>
-            <EditForm Model="updateClientModel" OnValidSubmit="SaveNewClientName">
-                <FluentTextInput @bind-Value="updateClientModel.Name" class="w-100" Label="New Client Name"
-                                 Placeholder="Enter new client name..." />
-                <FluentStack Orientation="Orientation.Horizontal" Class="mt-2">
-                    <FluentButton OnClick="CloseUpdateClientNameDialog">Close</FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
-                                  IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
-                </FluentStack>
-            </EditForm>
-        </ChildContent>
-    </FluentDialogBody>
-</FluentDialog>
-
 @code {
-    private bool showClientCapabilitiesCard = false;
-
-    private FluentDialog? updateClientNameDialog;
-    private UpdateClientModel updateClientModel = new();
-
-    private Guid? updatingClientId = null;
-
-    private class UpdateClientModel
-    {
-        public string Name { get; set; } = string.Empty;
-    }
-
     private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
 
     private PeriodicTimer? timer;
@@ -157,19 +84,6 @@
         timer?.Dispose();
     }
 
-    private async Task ShowUpdateClientNameDialog(Guid clientId)
-    {
-        updatingClientId = clientId;
-        updateClientModel.Name = clients.FirstOrDefault(x => x.Id == clientId)?.Name ?? string.Empty;
-        await updateClientNameDialog!.ShowAsync();
-    }
-
-    private async Task CloseUpdateClientNameDialog()
-    {
-        updatingClientId = null;
-        await updateClientNameDialog!.HideAsync();
-    }
-
     private async Task GetClientsAsync()
     {
         Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
@@ -184,40 +98,16 @@
         }
     }
 
-    private async Task SaveNewClientName()
+    private async Task OpenClientSettingsDialog(Guid clientId)
     {
-        if (updatingClientId == null) return;
-
-        Result<Client?> getResult = await _clientService.GetClientFromIdAsync(updatingClientId ?? Guid.Empty);
-
-        if (!getResult.IsSuccess || getResult.Data == null)
+        await _dialogService.ShowDialogAsync<ClientSettingsDialog>(options =>
         {
-            _toastService.ShowError($"An error occured when updating the name of this client, {getResult.Error}");
-        }
-
-        Client client = getResult.Data!;
-
-        client.Name = updateClientModel.Name;
-
-        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
-
-        if (updateResult.IsSuccess)
-        {
-            _toastService.ShowSuccess("Name updated!");
-        }
-        else
-        {
-            _toastService.ShowError($"An error occured when updating the name of this client, {updateResult.Error}");
-        }
+            options.Header.Title = "Client Settings";
+            options.Width = "900px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
+        });
 
         await GetClientsAsync();
-
-        await updateClientNameDialog!.HideAsync();
-    }
-
-    private void OpenUpdateClientCapabilitiesCard(Guid clientId)
-    {
-        updatingClientId = clientId;
-        showClientCapabilitiesCard = true;
     }
 }

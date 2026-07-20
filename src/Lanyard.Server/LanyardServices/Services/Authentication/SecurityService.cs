@@ -56,22 +56,28 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
-        Result<string> getResult = await GetCurrentUserIdAsync();
+        try{
+            Result<string> getResult = await GetCurrentUserIdAsync();
 
-        if (!getResult.IsSuccess || getResult.Data == null)
-        {
-            return Result<UserProfile>.Fail("User ID is not available");
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<UserProfile>.Fail("User ID is not available");
+            }
+
+            using ApplicationDbContext ctx = _factory.CreateDbContext();
+            UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
+
+            if (user is null)
+            {
+                return Result<UserProfile>.Fail("User not found");
+            }
+
+            return Result<UserProfile>.Ok(user);
         }
-
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
-        UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
-
-        if (user is null)
+        catch (Exception ex)
         {
-            return Result<UserProfile>.Fail("User not found");
+            return Result<UserProfile>.Fail(ex.Message);
         }
-
-        return Result<UserProfile>.Ok(user);
     }
     
     public async Task<string?> GetCurrentUserName()

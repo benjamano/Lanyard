@@ -1,0 +1,107 @@
+@using Lanyard.App.Components.Clients
+@using Lanyard.App.Components.Dmx
+
+@inject IClientService _clientService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Settings())" />
+            <FluentText Typo="Typography.PaneHeader">
+                @(string.IsNullOrEmpty(_clientName) ? "Client Settings" : $"{_clientName} Settings")
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentTabs Orientation="Orientation.Vertical" Height="600px">
+            <FluentTab Header="General" IconStart="@(new Icons.Regular.Size16.Person())">
+                <EditForm Model="_updateClientModel" OnValidSubmit="SaveNewClientNameAsync">
+                    <FluentTextInput @bind-Value="_updateClientModel.Name" class="w-100" Label="Client Name"
+                                     Placeholder="Enter new client name..." />
+                    <FluentButton Class="mt-2" Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                  IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
+                </EditForm>
+            </FluentTab>
+            <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
+                <ClientProjectionCapabilities ClientId="@ClientId" />
+            </FluentTab>
+            <FluentTab Header="Music" IconStart="@(new Icons.Regular.Size16.MusicNote2())" DeferredLoading="true">
+                <ClientMusicCapabilities ClientId="@ClientId" />
+            </FluentTab>
+            <FluentTab Header="DMX" IconStart="@(new Icons.Regular.Size16.Lightbulb())" DeferredLoading="true">
+                <ClientDmxConfig ClientId="@ClientId" />
+            </FluentTab>
+            <FluentTab Header="Zone Scoreboard" IconStart="@(new Icons.Regular.Size16.Board())" DeferredLoading="true">
+                <ClientZoneScoreboardSettings ClientId="@ClientId" />
+            </FluentTab>
+            <FluentTab Header="Auto Restart" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())" DeferredLoading="true">
+                <ClientRestartSchedule ClientId="@ClientId" />
+            </FluentTab>
+        </FluentTabs>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="CloseDialog">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    private UpdateClientModel _updateClientModel = new();
+    private string? _clientName;
+
+    private class UpdateClientModel
+    {
+        public string Name { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(ClientId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            _updateClientModel.Name = result.Data.Name;
+            _clientName = result.Data.Name;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load client, {result.Error}");
+        }
+    }
+
+    private async Task SaveNewClientNameAsync()
+    {
+        Result<Client?> getResult = await _clientService.GetClientFromIdAsync(ClientId);
+
+        if (!getResult.IsSuccess || getResult.Data == null)
+        {
+            _toastService.ShowError($"An error occured when updating the name of this client, {getResult.Error}");
+            return;
+        }
+
+        Client client = getResult.Data;
+        client.Name = _updateClientModel.Name;
+
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+
+        if (updateResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Name updated!");
+            _clientName = _updateClientModel.Name;
+        }
+        else
+        {
+            _toastService.ShowError($"An error occured when updating the name of this client, {updateResult.Error}");
+        }
+    }
+
+    private async Task CloseDialog()
+    {
+        await Dialog.CloseAsync();
+    }
+}

@@ -1,14 +1,15 @@
 @using Lanyard.Application.Services
 @using Lanyard.App.Services
+@using Lanyard.App.Components.Kiosk
 
 @inject IProjectionProgramService _projectionService
 @inject IToastService _toastService
 @inject DragStateService DragState
 
 <FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
-    <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical">
+    <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical" VerticalGap="8">
         <FluentText Typo="Typography.PaneHeader">
-            <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" />
+            <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" Margin="@Margin.End2"/>
             Toolbox
         </FluentText>
         <FluentDivider Orientation="Orientation.Horizontal" Class="w-100"></FluentDivider>
@@ -27,18 +28,21 @@
         {
             foreach (ProjectionProgramStepTemplate template in stepTemplates)
             {
-                <FluentCard Appearance="CardAppearance.Subtle" Style="cursor: grab;" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
-                    <FluentText Typo="Typography.H6" Class="text-center">@template.Name</FluentText>
+                <FluentCard Appearance="CardAppearance.Filled" Class="toolbox-card" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Class="toolbox-card-header">
+                        <FluentIcon Value="@GetTemplateIcon(template.Name)" Color="Color.Primary" Class="toolbox-card-icon" />
+                        <FluentText Typo="Typography.H6" Class="toolbox-card-title">@template.Name</FluentText>
+                    </FluentStack>
                     @if (!string.IsNullOrWhiteSpace(template.Description))
                     {
-                        <FluentText Class="text-center" Typo="Typography.Body">@template.Description</FluentText>
+                        <FluentText Class="toolbox-card-description" Typo="Typography.Body">@template.Description</FluentText>
                     }
                 </FluentCard>
             }
         }
     </FluentStack>
 
-    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Right" class="mt-auto">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.Right" class="mt-2">
         <FluentButton Disabled="@(!ShowSaveButton || IsSaving)" 
                      OnClick="HandleSave" 
                      Appearance="ButtonAppearance.Primary" 
@@ -85,6 +89,16 @@
 
         isLoading = false;
     }
+
+    private static Icon GetTemplateIcon(string templateName) => templateName switch
+    {
+        KioskTemplateConstants.TemplateNames.ShowText => new Icons.Regular.Size24.TextFont(),
+        KioskTemplateConstants.TemplateNames.PlayVideo => new Icons.Regular.Size24.Video(),
+        KioskTemplateConstants.TemplateNames.Delay => new Icons.Regular.Size24.Timer(),
+        KioskTemplateConstants.TemplateNames.Dashboard => new Icons.Regular.Size24.SlideGrid(),
+        KioskTemplateConstants.TemplateNames.LiveCapture => new Icons.Regular.Size24.Camera(),
+        _ => new Icons.Regular.Size24.PuzzlePiece()
+    };
 
     private void OnDragStart(DragEventArgs e, ProjectionProgramStepTemplate template)
     {

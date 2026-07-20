@@ -6,29 +6,25 @@
 
 @if (ClientId != null)
 {
-    <FluentCard Height="100%">
-        <FluentText Typo="Typography.H4">DMX Configuration</FluentText>
-
-        <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">
-            <ChildContent>
-                <PropertyColumn Property="x=> x.DeviceIndex" Title="Device Index" />
-                <PropertyColumn Property="x => x.Name" Title="Device Name" />
-                <TemplateColumn Title="Use this Device">
-                    <FluentStack>
-                        <FluentSwitch Value="@(context.IsPrimaryDevice)" ValueChanged="@(e => OnPrimaryDeviceChanged(context, e))" />
-                    </FluentStack>
-                </TemplateColumn>
-            </ChildContent>
-            <LoadingContent>
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
-                    Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
+    <FluentDataGrid Loading="_availableDevices == null" RowSize="DataGridRowSize.Medium" Items="_availableDevices?.AsQueryable()" TGridItem="ClientAvailableDmxDevice" GridTemplateColumns="1fr 2fr 1fr" Style="width: 100%;">
+        <ChildContent>
+            <PropertyColumn Property="x=> x.DeviceIndex" Title="Device Index" />
+            <PropertyColumn Property="x => x.Name" Title="Device Name" />
+            <TemplateColumn Title="Use this Device">
+                <FluentStack>
+                    <FluentSwitch Value="@(context.IsPrimaryDevice)" ValueChanged="@(e => OnPrimaryDeviceChanged(context, e))" />
                 </FluentStack>
-            </LoadingContent>
-            <EmptyContent>
-                No DMX devices found!
-            </EmptyContent>
-        </FluentDataGrid>
-    </FluentCard>
+            </TemplateColumn>
+        </ChildContent>
+        <LoadingContent>
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                Loading... <FluentSpinner Size="SpinnerSize.Tiny"></FluentSpinner>
+            </FluentStack>
+        </LoadingContent>
+        <EmptyContent>
+            No DMX devices found!
+        </EmptyContent>
+    </FluentDataGrid>
 }
 
 @code {
