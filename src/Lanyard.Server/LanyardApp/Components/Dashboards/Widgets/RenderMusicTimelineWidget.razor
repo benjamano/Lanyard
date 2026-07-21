@@ -20,7 +20,7 @@
                 <FluentText Weight="@TextWeight.Semibold" Style="text-align: center;">@(_songTitle ?? "Nothing playing")</FluentText>
             }
 
-            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto">
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto" Margin="@Margin.Top2">
                 <FluentButton Appearance="ButtonAppearance.Outline"
                               Title="Previous (Double-click) / Restart (Single-click)"
                               OnClick="RestartSongAsync"
