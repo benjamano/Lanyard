@@ -9,7 +9,9 @@ public class VerifyEnvironmentVariables
             ("LANYARD_SERVER_URL", "https://localhost:7175"),
             ("LANYARD_CLIENT_ALLOW_INSECURE_SSL", "false"),
             ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false"),
-            ("LANYARD_CLIENT_SHARED_SECRET", "changeme")
+            ("LANYARD_CLIENT_SHARED_SECRET", "changeme"),
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+            ("OTEL_EXPORTER_OTLP_PROTOCOL", "")
         };
 
         string configPath = Path.Combine(
@@ -51,23 +53,25 @@ public class VerifyEnvironmentVariables
                 variable = Environment.GetEnvironmentVariable(envVar);
             }
 
-            while (string.IsNullOrWhiteSpace(variable))
+            if (string.IsNullOrWhiteSpace(variable))
             {
-                // Console.WriteLine($"Please set the {envVar} (Press enter for the default: {defaultValue}): ");
-
-                // variable = Console.ReadLine();
-
-                if (string.IsNullOrWhiteSpace(variable))
+                if (!string.IsNullOrWhiteSpace(defaultValue))
                 {
                     Console.WriteLine($"Using default value for {envVar}: {defaultValue}");
-
-                    variable = defaultValue;
                 }
+
+                variable = defaultValue;
             }
 
-            config[envVar] = variable!;
+            config[envVar] = variable;
 
-            Environment.SetEnvironmentVariable(envVar, variable);
+            // Some vars (e.g. the OTLP ones) are genuinely optional — leave the process
+            // environment untouched rather than setting it to an empty string, which would
+            // override a real value already set at the OS/session level.
+            if (!string.IsNullOrWhiteSpace(variable))
+            {
+                Environment.SetEnvironmentVariable(envVar, variable);
+            }
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
