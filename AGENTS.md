@@ -179,6 +179,7 @@ App runtime defaults:
 - WPF client expected env vars:
   - `SIGNALR_SERVER_URL` (example: `https://localhost:7175/websocket`)
   - `KIOSK_SERVER_URL` (example: `https://localhost:7175/staff/kiosk`)
+  - `OTEL_EXPORTER_OTLP_ENDPOINT` (optional; example: `http://<home-server-ip>:5341`) — exports logs to the self-hosted Seq instance, see `deploy/seq/docker-compose.yml`. Same env var applies to the server app.
 
 ## Development Seeding Notes
 

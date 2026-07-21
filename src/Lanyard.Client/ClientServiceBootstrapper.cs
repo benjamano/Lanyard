@@ -7,6 +7,8 @@ using Lanyard.Client.VideoPublisher;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Resources;
 
 public static class ClientServiceBootstrapper
 {
@@ -24,6 +26,15 @@ public static class ClientServiceBootstrapper
                 options.TimestampFormat = "HH:mm:ss ";
                 options.IncludeScopes = false;
                 options.ColorBehavior = Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Enabled;
+            });
+
+            config.AddOpenTelemetry(otel =>
+            {
+                otel.IncludeFormattedMessage = true;
+                otel.IncludeScopes = true;
+                otel.SetResourceBuilder(ResourceBuilder.CreateDefault()
+                    .AddService(serviceName: "Lanyard.Client", serviceInstanceId: Environment.MachineName));
+                otel.AddOtlpExporter();
             });
         });
 
