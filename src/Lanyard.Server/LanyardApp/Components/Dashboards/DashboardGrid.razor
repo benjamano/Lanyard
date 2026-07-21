@@ -19,9 +19,14 @@
                             HorizontalAlignment="@HorizontalAlignment.Center">
                     @if (!PreviewMode)
                     {
-                        <FluentButton Appearance="@buttonAppearance" 
-                                        IconStart="new Icons.Regular.Size16.ArrowUp()" 
-                                        OnClick="@(() => MoveWidgetUp(widget))"/>
+                        <FluentStack HorizontalAlignment="@HorizontalAlignment.Center">
+                            <FluentButton Appearance="@buttonAppearance" 
+                                            IconStart="new Icons.Regular.Size16.ArrowUp()" 
+                                            OnClick="@(() => MoveWidgetUp(widget))"/>
+                            <FluentButton Appearance="@buttonAppearance" 
+                                            IconStart="new Icons.Regular.Size16.Delete()" 
+                                            OnClick="@(() => RemoveWidget(widget))"/>
+                        </FluentStack>
                     }
                     <FluentStack Orientation="@Orientation.Horizontal" 
                                 Height="100%" 
