@@ -22,7 +22,7 @@ internal class AutoUpdate
             return; 
         }
 
-        Console.WriteLine($"Update available: {update.TargetFullRelease}. Downloading and applying update...");
+        Console.WriteLine($"Update available: {update.TargetFullRelease.Version}. Downloading and applying update...");
 
         await mgr.DownloadUpdatesAsync(update);
         mgr.ApplyUpdatesAndRestart(update);

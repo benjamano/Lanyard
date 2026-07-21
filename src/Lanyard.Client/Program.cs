@@ -19,7 +19,7 @@ if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development
 
     string version = AutoUpdate.GetCurrentVersion() ?? "Unknown Version";
 
-    Console.WriteLine($"Lanyard Client V{version}");
+    Console.WriteLine($"Lanyard Client {version}");
 }
 
 Console.WriteLine("Starting...");
