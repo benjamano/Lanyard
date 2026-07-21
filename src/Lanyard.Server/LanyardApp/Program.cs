@@ -22,6 +22,10 @@ using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.App.Components.Layout;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +40,19 @@ if (builder.Environment.IsDevelopment() == false)
 {
     builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
 }
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(
+        serviceName: "Lanyard.Server",
+        serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString(),
+        serviceInstanceId: Environment.MachineName))
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation())
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddRuntimeInstrumentation())
+    .UseOtlpExporter();
 
 // Add Razor Components with Interactive Server
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
