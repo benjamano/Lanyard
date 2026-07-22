@@ -93,7 +93,7 @@ public class DmxSceneRunnerService(
 
             _logger.LogInformation("Started DMX scene {SceneId} for client {ClientId} ({StepCount} steps, loop: {Loop}, bpmSync: {BpmSync}, hold: {HoldFor})", sceneId, clientId, steps.Count, scene.Loop, scene.BpmSyncEnabled, holdFor);
 
-            _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.Loop, scene.BpmSyncEnabled, steps, cts.Token));
+            _ = Task.Run(() => RunSceneLoopAsync(clientId, sceneId, scene.IsMomentary, scene.Loop, scene.BpmSyncEnabled, steps, cts.Token));
 
             return Result<bool>.Ok(true);
         }
@@ -104,7 +104,7 @@ public class DmxSceneRunnerService(
         }
     }
 
-    private async Task RunSceneLoopAsync(Guid clientId, Guid sceneId, bool loop, bool bpmSyncEnabled, List<DmxSceneStep> steps, CancellationToken token)
+    private async Task RunSceneLoopAsync(Guid clientId, Guid sceneId, bool isMomentary, bool loop, bool bpmSyncEnabled, List<DmxSceneStep> steps, CancellationToken token)
     {
         try
         {
@@ -157,6 +157,24 @@ public class DmxSceneRunnerService(
         }
         finally
         {
+            if (isMomentary)
+            {
+                // Momentary scenes must not leave a channel stuck at its last value once
+                // playback stops for any reason (release, holdFor expiry, scene edited/
+                // deleted while running, or an unexpected fault mid-loop).
+                foreach (int channel in steps.SelectMany(s => s.ChannelValues).Select(cv => cv.ChannelNumber).Distinct())
+                {
+                    try
+                    {
+                        await _dmxService.UpdateChannelValue(clientId, channel, 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error resetting channel {Channel} to 0 after momentary DMX scene {SceneId} stopped for client {ClientId}", channel, sceneId, clientId);
+                    }
+                }
+            }
+
             lock (_lock)
             {
                 if (_runningScenes.TryGetValue(sceneId, out RunningScene? running) && running.Cts.Token == token)
