@@ -13,6 +13,10 @@ public class OpenDmxDevice : IDisposable
     private bool _disposed;
     private readonly ILogger<OpenDmxDevice> _logger;
 
+    private readonly object _ioLock = new();
+    private Timer? _refreshTimer;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(25); // ~40Hz, matches DMX512's expected continuous refresh
+
     public OpenDmxDevice(ILogger<OpenDmxDevice> logger)
     {
         _logger = logger;
@@ -41,6 +45,12 @@ public class OpenDmxDevice : IDisposable
 
         _dmxData[0] = 0x00; // DMX null start code
         _isOpen = true;
+
+        // DMX512 (E1.11) receivers time out (~1s) if the line goes quiet and fall back
+        // to a manufacturer default (often full brightness). Resend the full frame
+        // continuously so held/zero values are never silently dropped.
+        _refreshTimer = new Timer(_ => SendFrame(), null, RefreshInterval, RefreshInterval);
+
         return true;
     }
 
@@ -49,13 +59,20 @@ public class OpenDmxDevice : IDisposable
     {
         if (channel < 1 || channel > 512)
             throw new ArgumentOutOfRangeException(nameof(channel), "Channel must be between 1 and 512.");
-        _dmxData[channel] = value;
+
+        lock (_ioLock)
+        {
+            _dmxData[channel] = value;
+        }
     }
 
     /// <summary>Clears all 512 channels to zero.</summary>
     public void ClearAll()
     {
-        Array.Clear(_dmxData, 1, 512);
+        lock (_ioLock)
+        {
+            Array.Clear(_dmxData, 1, 512);
+        }
     }
 
     /// <summary>
@@ -64,22 +81,32 @@ public class OpenDmxDevice : IDisposable
     /// </summary>
     public void SendFrame()
     {
-        if (!_isOpen) return;
+        lock (_ioLock)
+        {
+            if (!_isOpen) return;
 
-        _ftdi.SetBreak(true);
-        Thread.Sleep(1);
-        _ftdi.SetBreak(false);
+            _ftdi.SetBreak(true);
+            Thread.Sleep(1);
+            _ftdi.SetBreak(false);
 
-        Thread.Sleep(1);
+            Thread.Sleep(1);
 
-        uint written = 0;
-        _ftdi.Write(_dmxData, _dmxData.Length, ref written);
+            uint written = 0;
+            _ftdi.Write(_dmxData, _dmxData.Length, ref written);
+        }
     }
 
     public void Close()
     {
         if (_isOpen)
         {
+            using ManualResetEvent timerStopped = new(false);
+            if (_refreshTimer != null && _refreshTimer.Dispose(timerStopped))
+            {
+                timerStopped.WaitOne(TimeSpan.FromMilliseconds(500));
+            }
+            _refreshTimer = null;
+
             ClearAll();
             SendFrame();
             _ftdi.Close();
