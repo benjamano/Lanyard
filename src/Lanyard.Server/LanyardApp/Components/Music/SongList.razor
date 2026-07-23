@@ -17,60 +17,63 @@
     <FluentStack Orientation="Orientation.Vertical" Class="song-list-stack">
         @if (Songs is not null && Songs.Any())
         {
-            <FluentDataGrid Items="@Songs.AsQueryable()" GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
-                            Style="width: 100%;" 
-                            ShowHover="@(AllowPlaying && SelectedClientId != null)">
-                <ChildContent>
-                    <TemplateColumn Title="#" Align="DataGridCellAlignment.End">
-                        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-                            @if (IsCurrentlyPlaying(context.Song!))
-                            {
-                                <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Color="Color.Primary"
-                                            Style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
-                            }
+            <div class="song-list-wrapper">
+                <FluentDataGrid Items="@Songs.AsQueryable()" GridTemplateColumns="100px 2fr 1.5fr 1fr 100px"
+                                Style="width: 100%;"
+                                Class="song-list-grid"
+                                ShowHover="@(AllowPlaying && SelectedClientId != null)">
+                    <ChildContent>
+                        <TemplateColumn Title="#" Align="DataGridCellAlignment.End">
+                            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                                @if (IsCurrentlyPlaying(context.Song!))
+                                {
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Speaker2())" Color="Color.Primary"
+                                                Style="cursor: pointer;" @onclick="() => PlaySong(context.Song!, context.Playlist!)" />
+                                }
 
-                            <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
-                                <Authorized>
-                                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Primary"
-                                                Style="cursor: pointer;"
-                                                @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
-                                </Authorized>
-                            </AuthorizeView>
+                                <AuthorizeView Roles="Admin,CanManagePlaylists" Context="context_">
+                                    <Authorized>
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Primary"
+                                                    Style="cursor: pointer;"
+                                                    @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
+                                    </Authorized>
+                                </AuthorizeView>
 
-                            <span style="text-align: right;">@(Songs.ToList().IndexOf(context) + 1 != 0 ? Songs.ToList().IndexOf(context) + 1 : "")</span>
-                        </div>
-                    </TemplateColumn>
+                                <span style="text-align: right;">@(Songs.ToList().IndexOf(context) + 1 != 0 ? Songs.ToList().IndexOf(context) + 1 : "")</span>
+                            </div>
+                        </TemplateColumn>
 
-                    <TemplateColumn Title="Title">
-                        <div style="display: flex; align-items: center;"
-                                @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentText Weight="@(IsCurrentlyPlaying(context.Song!) ? TextWeight.Bold : TextWeight.Regular)"
-                                            Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
-                                @context.Song?.Name
-                            </FluentText>
-                        </div>
-                    </TemplateColumn>
+                        <TemplateColumn Title="Title">
+                            <div style="display: flex; align-items: center;"
+                                    @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                                <FluentText Weight="@(IsCurrentlyPlaying(context.Song!) ? TextWeight.Bold : TextWeight.Regular)"
+                                                Style="@(IsCurrentlyPlaying(context.Song!) ? "color: var(--accent-fill-rest);" : "")">
+                                    @context.Song?.Name
+                                </FluentText>
+                            </div>
+                        </TemplateColumn>
 
-                    <TemplateColumn Title="Album">
-                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentText>@context.Song!.AlbumName</FluentText>
-                        </div>
-                    </TemplateColumn>
+                        <TemplateColumn Title="Album" Class="song-list-col-album">
+                            <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                                <FluentText>@context.Song!.AlbumName</FluentText>
+                            </div>
+                        </TemplateColumn>
 
-                    <TemplateColumn Title="Date Added">
-                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentText>@context.Song!.CreateDate.ToString("d")</FluentText>
-                        </div>
-                    </TemplateColumn>
+                        <TemplateColumn Title="Date Added" Class="song-list-col-date">
+                            <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                                <FluentText>@context.Song!.CreateDate.ToString("d")</FluentText>
+                            </div>
+                        </TemplateColumn>
 
-                    <TemplateColumn Title="Length" Align="DataGridCellAlignment.Start">
-                        <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
-                            <FluentText>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
-                            </FluentText>
-                        </div>
-                    </TemplateColumn>
-                </ChildContent>
-            </FluentDataGrid>
+                        <TemplateColumn Title="Length" Align="DataGridCellAlignment.Start">
+                            <div @onclick="() => PlaySong(context.Song!, context.Playlist!)">
+                                <FluentText>@TimeSpan.FromSeconds(context.Song!.DurationSeconds).ToString(@"mm\:ss")
+                                </FluentText>
+                            </div>
+                        </TemplateColumn>
+                    </ChildContent>
+                </FluentDataGrid>
+            </div>
         }
         else
             {
@@ -150,7 +153,7 @@
         DialogResult result = await _dialogService.ShowDialogAsync<AddSongToPlaylistModal>(options =>
         {
             options.Header.Title = $"Add {song.Name} To Playlist";
-            options.Width = "500px";
+            options.Width = "min(500px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(AddSongToPlaylistModal.Content), selection);
         });

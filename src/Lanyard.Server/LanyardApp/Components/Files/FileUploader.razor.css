@@ -1,0 +1,9 @@
+::deep .file-uploader-dropzone {
+    height: 200px;
+}
+
+@media (max-width: 599px) {
+    ::deep .file-uploader-dropzone {
+        height: 140px;
+    }
+}

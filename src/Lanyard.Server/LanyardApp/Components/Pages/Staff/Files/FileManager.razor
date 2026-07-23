@@ -8,19 +8,21 @@
 
 <PageTitle>File Manager</PageTitle>
 
-<FluentCard>
-    <FluentGrid class="h-100 w-100">
-        <FluentGridItem Xs="1">
-            <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChanged" />
-        </FluentGridItem>
-        <FluentGridItem Xs="11" class="w-100">
-            <AuthorizeView>
-                <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
-            </AuthorizeView>
-            <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
-        </FluentGridItem>
-    </FluentGrid>
-</FluentCard>
+<div class="file-manager-page">
+    <FluentCard class="file-manager-card">
+        <FluentGrid class="h-100 w-100">
+            <FluentGridItem Xs="12" Sm="4" Md="3" class="file-manager-sidebar">
+                <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChanged" />
+            </FluentGridItem>
+            <FluentGridItem Xs="12" Sm="8" Md="9" class="w-100 file-manager-content">
+                <AuthorizeView>
+                    <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
+                </AuthorizeView>
+                <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentCard>
+</div>
 
 @code {
     private Guid? selectedFolderId;

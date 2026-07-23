@@ -1,0 +1,17 @@
+.clients-grid-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+@media (max-width: 599px) {
+    ::deep .clients-col-id,
+    ::deep .clients-col-ip,
+    ::deep .clients-col-session {
+        display: none;
+    }
+
+    ::deep .clients-grid {
+        grid-template-columns: 0px 2fr 0px 1fr 1fr 1fr 0px 0.6fr !important;
+    }
+}

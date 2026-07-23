@@ -1,0 +1,35 @@
+.file-list-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+::deep .file-list-grid {
+    min-width: 0;
+}
+
+@media (max-width: 599px) {
+    ::deep .file-list-col-uploaded {
+        display: none;
+    }
+
+    /* FileList uses Virtualize, so FluentDataGrid falls back to grid auto-flow
+       placement instead of fixed per-column grid-column lines (unlike SongList/
+       Clients). Hidden cells are removed from flow entirely, so the template
+       here must list only the still-visible columns' sizes, in DOM order —
+       reserving a 0px slot for a hidden column (as done elsewhere) would push
+       a real column into that empty track instead of collapsing it. */
+    ::deep .file-list-grid {
+        grid-template-columns: 2fr 1fr 1fr 0.6fr !important;
+    }
+}
+
+@media (max-width: 420px) {
+    ::deep .file-list-col-type {
+        display: none;
+    }
+
+    ::deep .file-list-grid {
+        grid-template-columns: 2fr 1fr 0.6fr !important;
+    }
+}

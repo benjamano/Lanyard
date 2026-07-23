@@ -5,24 +5,29 @@
 @inject IToastService _toastService
 @inject IClientService _clientService
 
-<FluentStack Orientation="Orientation.Horizontal"
-            VerticalAlignment="VerticalAlignment.Center"
-            HorizontalAlignment="HorizontalAlignment.Right"
-            HorizontalGap="8">
-    <FluentSelect TOption="Client"
-                  TValue="string"
-                  Items="@clients"
-                  OptionText="@(client => client?.Name ?? string.Empty)"
-                  OptionValue="@(client => client?.Id.ToString())"
-                  Placeholder="@ClientPlaceholder"
-                  Value="@(selectedClientId?.ToString() ?? string.Empty)"
-                  ValueChanged="@OnSelectedClientChanged"
-                  Disabled="@(!clients.Any())" />
+<div class="client-selector-wrapper">
+    <FluentStack Orientation="Orientation.Horizontal"
+                VerticalAlignment="VerticalAlignment.Center"
+                HorizontalAlignment="HorizontalAlignment.Right"
+                HorizontalGap="8"
+                Wrap="true"
+                Class="client-selector-stack">
+        <FluentSelect TOption="Client"
+                      TValue="string"
+                      Items="@clients"
+                      OptionText="@(client => client?.Name ?? string.Empty)"
+                      OptionValue="@(client => client?.Id.ToString())"
+                      Placeholder="@ClientPlaceholder"
+                      Value="@(selectedClientId?.ToString() ?? string.Empty)"
+                      ValueChanged="@OnSelectedClientChanged"
+                      Disabled="@(!clients.Any())"
+                      Class="client-selector-select" />
 
-    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">
-        Refresh
-    </FluentButton>
-</FluentStack>
+        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="RefreshClientsAsync">
+            Refresh
+        </FluentButton>
+    </FluentStack>
+</div>
 
 @code {
     [Parameter]

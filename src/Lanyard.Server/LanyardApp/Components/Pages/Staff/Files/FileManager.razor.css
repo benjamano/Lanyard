@@ -1,0 +1,22 @@
+::deep .file-manager-card {
+    width: 100%;
+}
+
+::deep .file-manager-sidebar {
+    min-width: 0;
+}
+
+::deep .file-manager-content {
+    min-width: 0;
+}
+
+@media (max-width: 599px) {
+    ::deep .file-manager-sidebar {
+        max-height: 220px;
+        overflow-y: auto;
+    }
+
+    ::deep .file-manager-content {
+        margin-top: 0.75rem;
+    }
+}

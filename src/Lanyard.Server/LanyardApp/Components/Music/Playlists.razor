@@ -14,6 +14,7 @@
 
 @implements IDisposable
 
+<div class="playlists-wrapper">
 <FluentStack Width="auto" class="ps-1 h-100 playlists-root" Orientation="Orientation.Vertical">
     @if (playlists == null)
     {
@@ -111,20 +112,7 @@
         </FluentStack>
     }
 </FluentStack>
-
-<style>
-    .playlists-root {
-        min-height: 100%;
-        width: 100%;
-    }
-
-    .playlists-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
-        gap: 16px;
-        align-content: start;
-    }
-</style>
+</div>
 
 @code {
     [Parameter] public EventCallback<(IEnumerable<PlaylistSongMember> Songs, bool IsLocalSongs)> OnSongsSelected { get; set; }
@@ -292,7 +280,7 @@
         DialogResult result = await _dialogService.ShowDialogAsync<NewPlaylistModal>(options =>
         {
             options.Header.Title = "Create New Playlist";
-            options.Width = "500px";
+            options.Width = "min(500px, 95vw)";
             options.Modal = true;
         });
 

@@ -29,7 +29,7 @@
                 <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId" InitialPlaylistId="initialPlaylistId"></Playlists>
             </div>
 
-            <div class="w-100">
+            <div class="w-100 music-songs-pane">
                 <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"></SongList>
             </div>
         </div>
@@ -41,8 +41,8 @@
                      HorizontalGap="12"
                      Class="music-bottom-controls-stack">
 
-            <div style="flex: 1;">
-                <FluentGrid Style="width: 200px;">
+            <div class="music-volume-wrapper">
+                <FluentGrid Class="music-volume-grid">
                     <FluentGridItem Xs="12">
                         <FluentStack Orientation="Orientation.Horizontal"
                                     VerticalAlignment="VerticalAlignment.Center"
@@ -165,7 +165,7 @@
                         }
                     </div>
 
-                    <FluentSlider Style="Width: 750px;"
+                    <FluentSlider Class="music-timeline-slider"
                                     Value="currentSongTime"
                                     Min="0"
                                     Max="@(currentSongLength != 0 ? currentSongLength : 1)"
@@ -180,7 +180,7 @@
                 </FluentStack>
             </FluentStack>
 
-            <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center;">
+            <div class="music-client-controls">
                 <ClientSelector OnClientSelected="SetSelectedClient" />
             </div>
         </FluentStack>

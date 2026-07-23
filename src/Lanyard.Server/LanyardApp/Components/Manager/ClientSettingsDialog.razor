@@ -13,7 +13,7 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
-        <FluentTabs Orientation="Orientation.Vertical" Height="600px">
+        <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Small" Height="min(600px, 70dvh)">
             <FluentTab Header="General" IconStart="@(new Icons.Regular.Size16.Person())">
                 <EditForm Model="_updateClientModel" OnValidSubmit="SaveNewClientNameAsync">
                     <FluentTextInput @bind-Value="_updateClientModel.Name" class="w-100" Label="Client Name"

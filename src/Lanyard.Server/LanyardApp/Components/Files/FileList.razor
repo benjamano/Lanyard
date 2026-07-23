@@ -3,20 +3,22 @@
 @inject IFileService _fileService
 @inject IToastService _toastService
 
-<FluentDataGrid Items="@(files?.AsQueryable())" AutoItemsPerPage="true" ItemSize="46" Virtualize="true">
-    <ChildContent>
-        <PropertyColumn Property="x => x.FileName" Title="Name" />
-        <PropertyColumn Property="x => x.FileSize" Title="Size" />
-        <PropertyColumn Property="x => x.ContentType" Title="Type" />
-        <PropertyColumn Property="x => x.UploadedAt" Title="Uploaded" />
-        <TemplateColumn Title="Actions" Align="DataGridCellAlignment.End">
-            <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
-        </TemplateColumn>
-    </ChildContent>
-    @* <LoadingContent>
-        Loading... <FluentSpinner></FluentSpinner>
-    </LoadingContent> *@
-</FluentDataGrid>
+<div class="file-list-wrapper w-100">
+    <FluentDataGrid Items="@(files?.AsQueryable())" AutoItemsPerPage="true" ItemSize="46" Virtualize="true" GridTemplateColumns="2fr 1fr 1fr 1fr 0.6fr" class="file-list-grid w-100">
+        <ChildContent>
+            <PropertyColumn Property="x => x.FileName" Title="Name" />
+            <PropertyColumn Property="x => x.FileSize" Title="Size" Class="file-list-col-size" />
+            <PropertyColumn Property="x => x.ContentType" Title="Type" Class="file-list-col-type" />
+            <PropertyColumn Property="x => x.UploadedAt" Title="Uploaded" Class="file-list-col-uploaded" />
+            <TemplateColumn Title="Actions" Align="DataGridCellAlignment.End">
+                <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+            </TemplateColumn>
+        </ChildContent>
+        <LoadingContent>
+            Loading... <FluentSpinner></FluentSpinner>
+        </LoadingContent>
+    </FluentDataGrid>
+</div>
 
 @code {
     [Parameter] public Guid? FolderId { get; set; }

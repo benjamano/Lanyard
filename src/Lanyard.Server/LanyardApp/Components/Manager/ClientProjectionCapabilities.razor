@@ -8,26 +8,28 @@
     </FluentStack>
 
     <FluentStack>
-        <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
-            <ChildContent>
-                <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
-                <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
-                <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
-                <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
-                <TemplateColumn Title="Size">
-                    @context.Width x @context.Height px
-                </TemplateColumn>
-                <TemplateColumn Title="Delete">
-                    <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
-                </TemplateColumn>
-            </ChildContent>
-            <LoadingContent>
-                Loading...
-            </LoadingContent>
-            <EmptyContent>
-                No Projections set for this Client!
-            </EmptyContent>
-        </FluentDataGrid>
+        <div class="client-projection-grid-wrapper">
+            <FluentDataGrid ShowHover="true" Items="@projectionSettings.OrderBy(x => x.DisplayIndex).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr" Style="width: 100%;"">
+                <ChildContent>
+                    <PropertyColumn Property="x => x.DisplayIndex" Title="Display" />
+                    <PropertyColumn Property="x => x.ProjectionProgram!.Name" Title="Program Name" />
+                    <PropertyColumn Property="x => x.IsFullScreen" Title="Is Full Screen" />
+                    <PropertyColumn Property="x => x.IsBorderless" Title="Is Borderless" />
+                    <TemplateColumn Title="Size">
+                        @context.Width x @context.Height px
+                    </TemplateColumn>
+                    <TemplateColumn Title="Delete">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.BinRecycle())" OnClick="() => DeleteClientProjectionSettings(context.Id)"></FluentIcon>
+                    </TemplateColumn>
+                </ChildContent>
+                <LoadingContent>
+                    Loading...
+                </LoadingContent>
+                <EmptyContent>
+                    No Projections set for this Client!
+                </EmptyContent>
+            </FluentDataGrid>
+        </div>
     </FluentStack>
 }
 

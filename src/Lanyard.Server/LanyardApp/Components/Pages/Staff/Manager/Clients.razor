@@ -13,46 +13,48 @@
     <FluentText Typo="Typography.PaneHeader">
         Clients
     </FluentText>
-    <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;">
-        <ChildContent>
-            <PropertyColumn Property="x => x.Id" Title="Client ID"/>
-            <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
-            <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address"/>
-            <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
-                            Property="x => x.LastLogin" Title="Last Login" />
-            <TemplateColumn Title="Capabilities">
-                @if (context.ProjectionEnabled)
-                {
-                    <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">Projection</FluentBadge>
-                }
+    <div class="clients-grid-wrapper">
+        <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;" Class="clients-grid">
+            <ChildContent>
+                <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
+                <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
+                <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
+                <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
+                                Property="x => x.LastLogin" Title="Last Login" />
+                <TemplateColumn Title="Capabilities">
+                    @if (context.ProjectionEnabled)
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">Projection</FluentBadge>
+                    }
 
-                @if (context.DmxEnabled)
-                {
-                    <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
-                }
-            </TemplateColumn>
-            <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
-            <TemplateColumn Title="Current Session Length">
-                @if (context.IsCurrentlyConnected)
-                {
-                    <span>
-                        @(((TimeSpan)(now - context.LastLogin)!).ToString(@"hh\:mm\:ss"))s
-                    </span>
-                }
-                else
-                {
-                    <span>--:--:--</span>
-                }
-            </TemplateColumn>
-            <TemplateColumn Title="Settings">
-                <FluentIcon OnClick="() => OpenClientSettingsDialog(context.Id)"
-                            Icon="Icons.Regular.Size20.Settings" Class="ms-1" role="button"></FluentIcon>
-            </TemplateColumn>
-        </ChildContent>
-        <LoadingContent>
-            Loading...
-        </LoadingContent>
-    </FluentDataGrid>
+                    @if (context.DmxEnabled)
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
+                    }
+                </TemplateColumn>
+                <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
+                <TemplateColumn Title="Current Session Length" Class="clients-col-session">
+                    @if (context.IsCurrentlyConnected)
+                    {
+                        <span>
+                            @(((TimeSpan)(now - context.LastLogin)!).ToString(@"hh\:mm\:ss"))s
+                        </span>
+                    }
+                    else
+                    {
+                        <span>--:--:--</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Settings">
+                    <FluentIcon OnClick="() => OpenClientSettingsDialog(context.Id)"
+                                Icon="Icons.Regular.Size20.Settings" Class="ms-1" role="button"></FluentIcon>
+                </TemplateColumn>
+            </ChildContent>
+            <LoadingContent>
+                Loading...
+            </LoadingContent>
+        </FluentDataGrid>
+    </div>
 </FluentCard>
 
 @code {
@@ -103,7 +105,7 @@
         await _dialogService.ShowDialogAsync<ClientSettingsDialog>(options =>
         {
             options.Header.Title = "Client Settings";
-            options.Width = "900px";
+            options.Width = "min(900px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(ClientSettingsDialog.ClientId), clientId);
         });

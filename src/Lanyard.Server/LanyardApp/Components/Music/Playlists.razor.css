@@ -1,0 +1,22 @@
+.playlists-wrapper {
+    height: 100%;
+    width: 100%;
+}
+
+::deep .playlists-root {
+    min-height: 100%;
+    width: 100%;
+}
+
+::deep .playlists-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 280px));
+    gap: 16px;
+    align-content: start;
+}
+
+@media (max-width: 599px) {
+    ::deep .playlists-grid {
+        grid-template-columns: 1fr;
+    }
+}

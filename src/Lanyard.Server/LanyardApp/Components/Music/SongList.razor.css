@@ -1,0 +1,16 @@
+.song-list-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+@media (max-width: 599px) {
+    ::deep .song-list-col-album,
+    ::deep .song-list-col-date {
+        display: none;
+    }
+
+    ::deep .song-list-grid {
+        grid-template-columns: 50px 1fr 0px 0px 60px !important;
+    }
+}
