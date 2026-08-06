@@ -18,5 +18,12 @@
         "**/Releases": true,
         "**/publish": true,
         "**/build": true,
-    }
+    },
+    "files.autoSave": "afterDelay",
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
+    "editor.formatOnSave": true,
+    "editor.wordWrap": "off",
+    "editor.mouseWheelZoom": true,
+    "editor.formatOnPaste": true,
+    "editor.minimap.enabled": true
 }

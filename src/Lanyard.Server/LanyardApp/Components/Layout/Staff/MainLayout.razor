@@ -7,8 +7,13 @@
 <FluentLayout>
     <FluentLayoutItem Area="LayoutArea.Header">
         <FluentStack VerticalAlignment="VerticalAlignment.Top">
-            <FluentLayoutHamburger Visible="true"/>
-            <FluentSpacer Width="10px"></FluentSpacer>
+            <AuthorizeView>
+                <Authorized>
+                    <FluentLayoutHamburger Visible="true" />
+                    <FluentSpacer Width="10px"></FluentSpacer>
+                </Authorized>
+            </AuthorizeView>
+
             <FluentLink Href="/" Class="nav-brand">
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
@@ -20,7 +25,11 @@
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Navigation" Height="auto">
-        <NavMenu />
+        <AuthorizeView>
+            <Authorized>
+                <NavMenu />
+            </Authorized>
+        </AuthorizeView>
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Content" Margin="@Margin.All3">
@@ -30,39 +39,38 @@
                 @Body
             </ChildContent>
             <ErrorContent Context="ex">
-                <FluentStack Orientation="Orientation.Vertical"
-                        HorizontalAlignment="HorizontalAlignment.Center"
-                        VerticalGap="0"
-                        Style="padding: 3rem 1rem; max-width: 480px; margin: 0 auto; text-align: center;">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                             VerticalGap="0" Style="padding: 3rem 1rem; max-width: 480px; margin: 0 auto; text-align: center;">
 
-                <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())"
-                            Color="Color.Error"
-                            Style="margin-bottom: 1rem;" />
+                    <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error"
+                                Style="margin-bottom: 1rem;" />
 
-                <FluentText Size="TextSize.Size800" Style="margin-bottom: 0.5rem; display: block;">
-                    Something went wrong
-                </FluentText>
+                    <FluentText Size="TextSize.Size800" Style="margin-bottom: 0.5rem; display: block;">
+                        Something went wrong
+                    </FluentText>
 
-                <FluentText Size="TextSize.Size400" Color="Color.Default" Style="margin-bottom: 1.5rem; display: block;">
-                    An unexpected error occurred. Try refreshing the page or come back later.
-                </FluentText>
+                    <FluentText Size="TextSize.Size400" Color="Color.Default"
+                                Style="margin-bottom: 1.5rem; display: block;">
+                        An unexpected error occurred. Try refreshing the page or come back later.
+                    </FluentText>
 
-                <FluentMessageBar Intent="MessageBarIntent.Error"
-                                Style="text-align: left; width: 100%; margin-bottom: 1.5rem;">
-                    @ex.Message
-                </FluentMessageBar>
+                    <FluentMessageBar Intent="MessageBarIntent.Error"
+                                      Style="text-align: left; width: 100%; margin-bottom: 1.5rem;">
+                        @ex.Message
+                    </FluentMessageBar>
 
-                <FluentStack HorizontalGap="8">
-                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Recover">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Slot="start" />
-                        Try again
-                    </FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => NavigationManager.NavigateTo("/", true))">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Home())" Slot="start" />
-                        Go home
-                    </FluentButton>
+                    <FluentStack HorizontalGap="8">
+                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="Recover">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowCounterclockwise())" Slot="start" />
+                            Try again
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      OnClick="@(() => NavigationManager.NavigateTo("/", true))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Home())" Slot="start" />
+                            Go home
+                        </FluentButton>
+                    </FluentStack>
                 </FluentStack>
-            </FluentStack>
             </ErrorContent>
         </ErrorBoundary>
     </FluentLayoutItem>
