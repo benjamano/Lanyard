@@ -14,7 +14,8 @@
 <FluentCard Height="auto">
     <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center">
         <FluentText Typo="Typography.PaneHeader">Training Courses</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateCourseAsync" Class="ms-auto">
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                      OnClick="CreateCourseAsync" Class="ms-auto">
             New Course
         </FluentButton>
     </FluentStack>
@@ -27,14 +28,18 @@
     }
     else
     {
-        <FluentDataGrid ShowHover="true" Items="@courses.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100">
+        <FluentDataGrid ShowHover="true" Items="@courses.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100"
+                        RowSize="@DataGridRowSize.Medium">
             <ChildContent>
                 <PropertyColumn Property="x => x.Name" Title="Course" Sortable="true" />
                 <PropertyColumn Property="x => x.PassMarkPercent" Title="Pass Mark %" />
                 <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
                 <TemplateColumn Title="">
-                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => EditCourse(context.Id))">Edit</FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Edit())"
+                                  OnClick="@(() => EditCourse(context.Id))">Edit
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                  OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
                 </TemplateColumn>
             </ChildContent>
             <EmptyContent>
@@ -74,7 +79,12 @@
 
     private async Task CreateCourseAsync()
     {
-        Result<Course> result = await _courseService.SaveCourseAsync(new Course { Id = Guid.Empty, Name = "New Course", PassMarkPercent = 80 });
+        Result<Course> result = await _courseService.SaveCourseAsync(new Course
+        {
+            Id = Guid.Empty,
+            Name = "New Course",
+            PassMarkPercent = 80
+        });
 
         if (!result.IsSuccess || result.Data is null)
         {
