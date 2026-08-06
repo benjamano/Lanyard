@@ -146,4 +146,68 @@ public class CourseServiceTests
 
         Assert.IsFalse(result.Success);
     }
+
+    [TestMethod]
+    public async Task CourseService_SaveSection_CreatesSectionWithNextSortOrder()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
+
+        Assert.IsTrue(first.Success, first.Error);
+        Assert.IsTrue(second.Success, second.Error);
+        Assert.AreEqual(0, first.Data!.SortOrder);
+        Assert.AreEqual(1, second.Data!.SortOrder);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveSection_UpdatesExistingSectionTitleAndBody()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Assert.IsTrue(created.Success, created.Error);
+
+        created.Data!.Title = "Footwear";
+        created.Data!.BodyHtml = "<p>Closed toe only.</p>";
+
+        Result<CourseSection> updated = await service.SaveSectionAsync(created.Data!);
+
+        Assert.IsTrue(updated.Success, updated.Error);
+        Assert.AreEqual("Footwear", updated.Data!.Title);
+        Assert.AreEqual("<p>Closed toe only.</p>", updated.Data!.BodyHtml);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveSection_FailsWhenTitleMissing()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseSection> result = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = " " });
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CourseService_DeleteSection_SetsInactiveAndExcludesFromGetCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+
+        Result<bool> deleteResult = await service.DeleteSectionAsync(created.Data!.Id);
+        Assert.IsTrue(deleteResult.Success, deleteResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.HasCount(0, reloaded.Data!.Sections);
+    }
 }

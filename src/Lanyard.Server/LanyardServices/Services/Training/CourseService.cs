@@ -146,8 +146,88 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public Task<Result<CourseSection>> SaveSectionAsync(CourseSection section) => throw new NotImplementedException();
-    public Task<Result<bool>> DeleteSectionAsync(Guid sectionId) => throw new NotImplementedException();
+    public async Task<Result<CourseSection>> SaveSectionAsync(CourseSection section)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(section.Title))
+            {
+                return Result<CourseSection>.Fail("Section title is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == section.CourseId);
+
+            if (!courseExists)
+            {
+                return Result<CourseSection>.Fail("Course not found.");
+            }
+
+            CourseSection? existingSection = section.Id == Guid.Empty
+                ? null
+                : await ctx.CourseSections.FirstOrDefaultAsync(x => x.Id == section.Id);
+
+            CourseSection targetSection;
+
+            if (existingSection is null)
+            {
+                int nextSortOrder = await ctx.CourseSections.CountAsync(x => x.CourseId == section.CourseId && x.IsActive);
+
+                targetSection = new CourseSection
+                {
+                    Id = section.Id == Guid.Empty ? Guid.NewGuid() : section.Id,
+                    CourseId = section.CourseId,
+                    Title = section.Title.Trim(),
+                    BodyHtml = section.BodyHtml,
+                    SortOrder = nextSortOrder,
+                    IsActive = true
+                };
+
+                ctx.CourseSections.Add(targetSection);
+            }
+            else
+            {
+                targetSection = existingSection;
+                targetSection.Title = section.Title.Trim();
+                targetSection.BodyHtml = section.BodyHtml;
+                targetSection.IsActive = true;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<CourseSection>.Ok(targetSection);
+        }
+        catch (Exception ex)
+        {
+            return Result<CourseSection>.Fail($"Failed to save section: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DeleteSectionAsync(Guid sectionId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CourseSection? section = await ctx.CourseSections.FirstOrDefaultAsync(x => x.Id == sectionId);
+
+            if (section is null)
+            {
+                return Result<bool>.Fail("Section not found.");
+            }
+
+            section.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to delete section: {ex.Message}");
+        }
+    }
     public Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question) => throw new NotImplementedException();
     public Task<Result<bool>> DeleteQuestionAsync(Guid questionId) => throw new NotImplementedException();
 }
