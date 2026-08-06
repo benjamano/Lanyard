@@ -330,19 +330,15 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             await ctx.SaveChangesAsync();
 
-            ctx.ChangeTracker.Clear();
-
             CourseQuestion? savedQuestion = await ctx.CourseQuestions
                 .AsNoTracking()
-                .Include(x => x.Options)
+                .Include(x => x.Options.Where(o => o.IsActive))
                 .FirstOrDefaultAsync(x => x.Id == targetQuestion.Id);
 
             if (savedQuestion is null)
             {
                 return Result<CourseQuestion>.Fail("Question saved but could not be reloaded.");
             }
-
-            savedQuestion.Options = [.. savedQuestion.Options.Where(o => o.IsActive)];
 
             return Result<CourseQuestion>.Ok(savedQuestion);
         }
