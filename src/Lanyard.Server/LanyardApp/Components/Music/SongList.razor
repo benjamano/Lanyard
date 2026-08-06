@@ -1,4 +1,5 @@
 @using System.Threading.Tasks
+@using Lanyard.App.Components.Dialogs
 @using Lanyard.App.Components.Music;
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
@@ -10,6 +11,7 @@
 @inject IToastService _toastService
 @inject MusicPlayerService _player
 @inject ISongAnalysisQueue _songAnalysisQueue
+@inject IPlaylistService _playlistService
 
 @implements IDisposable
 
@@ -36,6 +38,13 @@
                                         <FluentIcon Value="@(new Icons.Regular.Size16.Add())" Color="Color.Primary"
                                                     Style="cursor: pointer;"
                                                     @onclick="@((MouseEventArgs e) => HandleAddSongClick(e, context.Song!))" />
+
+                                        @if (context.PlaylistId != Guid.Empty)
+                                        {
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" Color="Color.Primary"
+                                                        Style="cursor: pointer;"
+                                                        @onclick="@((MouseEventArgs e) => HandleDeleteSongClick(e, context))" />
+                                        }
                                     </Authorized>
                                 </AuthorizeView>
 
@@ -234,6 +243,40 @@
     private async Task HandleAddSongClick(MouseEventArgs e, Song song)
     {
         await OpenAddSongToPlaylistDialog(song);
+    }
+
+    private async Task HandleDeleteSongClick(MouseEventArgs e, PlaylistSongMember member)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove Song";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Are you sure you want to remove '{member.Song?.Name}' from '{member.Playlist?.Name}'?");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (result.Cancelled || result.Value is not true)
+        {
+            return;
+        }
+
+        await RemoveSongFromPlaylist(member);
+    }
+
+    private async Task RemoveSongFromPlaylist(PlaylistSongMember member)
+    {
+        Result<bool> result = await _playlistService.RemoveSongFromPlaylistAsync(member.PlaylistId, member.SongId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to remove song: {result.Error}");
+            return;
+        }
+
+        Songs = Songs?.Where(x => !(x.SongId == member.SongId && x.PlaylistId == member.PlaylistId)).ToList();
+
+        _toastService.ShowSuccess($"Removed '{member.Song?.Name}' from '{member.Playlist?.Name}'");
     }
 
     public void Dispose()

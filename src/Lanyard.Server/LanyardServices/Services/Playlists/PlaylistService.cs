@@ -38,9 +38,10 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
 
             IEnumerable<PlaylistSongMember> members = await context.PlaylistSongMembers
                 .AsNoTracking()
+                .TagWithCallSite()
                 .Include(x=> x.Song)
                 .Include(x=> x.Playlist)
-                .Where(x => x.PlaylistId == playlistId)
+                .Where(x => x.PlaylistId == playlistId && x.DeleteDate == null)
                 .ToListAsync();
 
             return Result<IEnumerable<PlaylistSongMember>>.Ok(members);
@@ -48,6 +49,34 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
         catch (Exception ex)
         {
             return Result<IEnumerable<PlaylistSongMember>>.Fail($"An error occurred while retrieving the playlist members: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RemoveSongFromPlaylistAsync(Guid playlistId, Guid songId)
+    {
+        try
+        {
+            ApplicationDbContext context = _factory.CreateDbContext();
+
+            PlaylistSongMember? member = await context.PlaylistSongMembers
+                .TagWithCallSite()
+                .Where(x => x.PlaylistId == playlistId && x.SongId == songId && x.DeleteDate == null)
+                .FirstOrDefaultAsync();
+
+            if (member is null)
+            {
+                return Result<bool>.Fail("Song is not in this playlist.");
+            }
+
+            member.DeleteDate = DateTime.UtcNow;
+
+            await context.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"An error occurred while removing the song from the playlist: {ex.Message}");
         }
     }
 }
