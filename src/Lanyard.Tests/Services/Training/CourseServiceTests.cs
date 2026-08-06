@@ -210,4 +210,123 @@ public class CourseServiceTests
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.HasCount(0, reloaded.Data!.Sections);
     }
+
+    private static CourseQuestion BuildQuestion(Guid courseId, params (string text, bool isCorrect)[] options)
+    {
+        return new CourseQuestion
+        {
+            Id = Guid.Empty,
+            CourseId = courseId,
+            QuestionText = "If I am ill I should...",
+            Options = [.. options.Select(o => new CourseQuestionOption { Id = Guid.Empty, QuestionId = Guid.Empty, OptionText = o.text, IsCorrect = o.isCorrect })]
+        };
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_CreatesQuestionWithOptions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        CourseQuestion question = BuildQuestion(course.Id,
+            ("Ring Play2Day and tell a manager.", true),
+            ("Say nothing.", false));
+
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!.Options);
+        Assert.AreEqual("Ring Play2Day and tell a manager.", result.Data!.Options.Single(x => x.IsCorrect).OptionText);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_FailsWhenFewerThanTwoActiveOptions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        CourseQuestion question = BuildQuestion(course.Id, ("Only option.", true));
+
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_FailsWhenNoOptionMarkedCorrect()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        CourseQuestion question = BuildQuestion(course.Id, ("A", false), ("B", false));
+
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_FailsWhenMultipleOptionsMarkedCorrect()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        CourseQuestion question = BuildQuestion(course.Id, ("A", true), ("B", true));
+
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_UpdatesOptionsAndSoftDeletesRemoved()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+        Assert.IsTrue(created.Success, created.Error);
+
+        CourseQuestionOption keep = created.Data!.Options.Single(x => x.OptionText == "A");
+
+        CourseQuestion update = new()
+        {
+            Id = created.Data!.Id,
+            CourseId = course.Id,
+            QuestionText = "Updated question text",
+            Options =
+            [
+                new CourseQuestionOption { Id = keep.Id, QuestionId = created.Data!.Id, OptionText = "A", IsCorrect = true },
+                new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = created.Data!.Id, OptionText = "C", IsCorrect = false }
+            ]
+        };
+
+        Result<CourseQuestion> updated = await service.SaveQuestionAsync(update);
+
+        Assert.IsTrue(updated.Success, updated.Error);
+        Assert.HasCount(2, updated.Data!.Options);
+        Assert.IsTrue(updated.Data!.Options.Any(x => x.OptionText == "C"));
+        Assert.IsFalse(updated.Data!.Options.Any(x => x.OptionText == "B"));
+    }
+
+    [TestMethod]
+    public async Task CourseService_DeleteQuestion_SetsInactiveAndExcludesFromGetCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+
+        Result<bool> deleteResult = await service.DeleteQuestionAsync(created.Data!.Id);
+        Assert.IsTrue(deleteResult.Success, deleteResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.HasCount(0, reloaded.Data!.Questions);
+    }
 }

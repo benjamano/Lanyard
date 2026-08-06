@@ -228,6 +228,152 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             return Result<bool>.Fail($"Failed to delete section: {ex.Message}");
         }
     }
-    public Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question) => throw new NotImplementedException();
-    public Task<Result<bool>> DeleteQuestionAsync(Guid questionId) => throw new NotImplementedException();
+    public async Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(question.QuestionText))
+            {
+                return Result<CourseQuestion>.Fail("Question text is required.");
+            }
+
+            List<CourseQuestionOption> incomingOptions = question.Options
+                .Where(x => !string.IsNullOrWhiteSpace(x.OptionText))
+                .ToList();
+
+            if (incomingOptions.Count < 2)
+            {
+                return Result<CourseQuestion>.Fail("A question needs at least two answer options.");
+            }
+
+            if (incomingOptions.Count(x => x.IsCorrect) != 1)
+            {
+                return Result<CourseQuestion>.Fail("Exactly one option must be marked as the correct answer.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == question.CourseId);
+
+            if (!courseExists)
+            {
+                return Result<CourseQuestion>.Fail("Course not found.");
+            }
+
+            CourseQuestion? existingQuestion = question.Id == Guid.Empty
+                ? null
+                : await ctx.CourseQuestions
+                    .Include(x => x.Options)
+                    .FirstOrDefaultAsync(x => x.Id == question.Id);
+
+            CourseQuestion targetQuestion;
+
+            if (existingQuestion is null)
+            {
+                int nextSortOrder = await ctx.CourseQuestions.CountAsync(x => x.CourseId == question.CourseId && x.IsActive);
+
+                targetQuestion = new CourseQuestion
+                {
+                    Id = question.Id == Guid.Empty ? Guid.NewGuid() : question.Id,
+                    CourseId = question.CourseId,
+                    QuestionText = question.QuestionText.Trim(),
+                    SortOrder = nextSortOrder,
+                    IsActive = true,
+                    Options = []
+                };
+
+                ctx.CourseQuestions.Add(targetQuestion);
+            }
+            else
+            {
+                targetQuestion = existingQuestion;
+                targetQuestion.QuestionText = question.QuestionText.Trim();
+                targetQuestion.IsActive = true;
+            }
+
+            Dictionary<Guid, CourseQuestionOption> existingOptions = targetQuestion.Options.ToDictionary(x => x.Id);
+            HashSet<Guid> seenOptionIds = [];
+
+            foreach (CourseQuestionOption incomingOption in incomingOptions)
+            {
+                Guid optionId = incomingOption.Id == Guid.Empty ? Guid.NewGuid() : incomingOption.Id;
+
+                if (existingOptions.TryGetValue(optionId, out CourseQuestionOption? existingOption))
+                {
+                    existingOption.OptionText = incomingOption.OptionText.Trim();
+                    existingOption.IsCorrect = incomingOption.IsCorrect;
+                    existingOption.SortOrder = incomingOption.SortOrder;
+                    existingOption.IsActive = true;
+                }
+                else
+                {
+                    CourseQuestionOption newOption = new CourseQuestionOption
+                    {
+                        Id = optionId,
+                        QuestionId = targetQuestion.Id,
+                        OptionText = incomingOption.OptionText.Trim(),
+                        IsCorrect = incomingOption.IsCorrect,
+                        SortOrder = incomingOption.SortOrder,
+                        IsActive = true
+                    };
+                    ctx.CourseQuestionOptions.Add(newOption);
+                    targetQuestion.Options.Add(newOption);
+                }
+
+                seenOptionIds.Add(optionId);
+            }
+
+            foreach (CourseQuestionOption optionToRemove in targetQuestion.Options.Where(x => x.IsActive && !seenOptionIds.Contains(x.Id)))
+            {
+                optionToRemove.IsActive = false;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            ctx.ChangeTracker.Clear();
+
+            CourseQuestion? savedQuestion = await ctx.CourseQuestions
+                .AsNoTracking()
+                .Include(x => x.Options)
+                .FirstOrDefaultAsync(x => x.Id == targetQuestion.Id);
+
+            if (savedQuestion is null)
+            {
+                return Result<CourseQuestion>.Fail("Question saved but could not be reloaded.");
+            }
+
+            savedQuestion.Options = [.. savedQuestion.Options.Where(o => o.IsActive)];
+
+            return Result<CourseQuestion>.Ok(savedQuestion);
+        }
+        catch (Exception ex)
+        {
+            return Result<CourseQuestion>.Fail($"Failed to save question: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DeleteQuestionAsync(Guid questionId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CourseQuestion? question = await ctx.CourseQuestions.FirstOrDefaultAsync(x => x.Id == questionId);
+
+            if (question is null)
+            {
+                return Result<bool>.Fail("Question not found.");
+            }
+
+            question.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to delete question: {ex.Message}");
+        }
+    }
 }
