@@ -8,12 +8,13 @@ namespace Lanyard.Application.Services.Authentication
     {
         Task<Result<string>> GetCurrentUserIdAsync();
         Task<bool> IsUserLoggedIn();
+        Task<bool> IsCurrentUserInRoleAsync(string role);
         Task<Result<UserProfile>> GetCurrentUserProfileAsync();
         Task<string?> GetCurrentUserName();
         Task<IEnumerable<UserProfile>> GetAllUsersAsync();
         Task UpdateUserProfileAsync(UserProfile updatedUserProfile);
         Task<IEnumerable<UserProfile>> GetActiveUsersAsync();
-        Task<Result<UserProfile>> CreateUserAsync(UserProfile user);
+        Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user);
         Task<Result<bool>> DeleteUserAsync(string userId);
         Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword);
     }

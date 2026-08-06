@@ -250,6 +250,22 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
+    // This app has no public-facing pages — everything is staff/kiosk tooling — so it should
+    // never be crawled or indexed even if it ends up reachable from the open internet.
+    context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+
+    // Scoped to what App.razor actually loads today: Bootstrap CSS/JS from jsdelivr (with SRI),
+    // the FontAwesome kit script, two inline <script> blocks (boot-cloak + theme detection) and
+    // an inline <style> block, plus FluentUI's dynamically-injected stylesheet.
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' https://cdn.jsdelivr.net https://kit.fontawesome.com 'unsafe-inline'; " +
+        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        "font-src 'self' https://kit.fontawesome.com https://ka-f.fontawesome.com data:; " +
+        "img-src 'self' data:; " +
+        "connect-src 'self' wss: https://kit.fontawesome.com https://ka-f.fontawesome.com; " +
+        "frame-ancestors 'self';";
+
     await next();
 });
 

@@ -54,6 +54,12 @@ public class SecurityService : ISecurityService
         return authState.User?.Identity?.IsAuthenticated == true;
     }
 
+    public async Task<bool> IsCurrentUserInRoleAsync(string role)
+    {
+        AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
+        return authState.User?.Identity?.IsAuthenticated == true && authState.User.IsInRole(role);
+    }
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
         try{
@@ -122,28 +128,31 @@ public class SecurityService : ISecurityService
         return await ctx.Users.ToListAsync();
     }
 
-    public async Task<Result<UserProfile>> CreateUserAsync(UserProfile user)
+    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user)
     {
         try
         {
             if ((await GetActiveUsersAsync()).Any())
             {
-                if (!await IsUserLoggedIn())
+                // Once at least one account exists, only an Admin may create further accounts —
+                // being merely logged in is not enough (any Staff-level account could otherwise
+                // create new accounts, including admin ones, for itself).
+                if (!await IsCurrentUserInRoleAsync("Admin"))
                 {
-                    return Result<UserProfile>.Fail("You must be logged in to perform this action!");
+                    return Result<UserCreationResult>.Fail("You must be an administrator to perform this action!");
                 }
             }
 
             if (string.IsNullOrWhiteSpace(user.FirstName) || string.IsNullOrWhiteSpace(user.LastName))
             {
-                return Result<UserProfile>.Fail("The new user's first and last names are required!");
+                return Result<UserCreationResult>.Fail("The new user's first and last names are required!");
             }
 
             string initial = user.FirstName.ToLowerInvariant()[..1];
             string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
 
-            string generatedPassword = "changeME1234!";
+            string generatedPassword = GenerateRandomPassword();
 
             user.EmailConfirmed = true;
 
@@ -152,24 +161,36 @@ public class SecurityService : ISecurityService
             if (!result.Succeeded)
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                return Result<UserProfile>.Fail($"Failed to create user: {errors}");
+                return Result<UserCreationResult>.Fail($"Failed to create user: {errors}");
             }
 
-            return Result<UserProfile>.Ok(user);
+            return Result<UserCreationResult>.Ok(new UserCreationResult(user, generatedPassword));
         }
         catch (Exception ex)
         {
-            return Result<UserProfile>.Fail(ex.Message);
+            return Result<UserCreationResult>.Fail(ex.Message);
         }
+    }
+
+    private static string GenerateRandomPassword()
+    {
+        // 24 URL-safe random characters, with fixed complexity characters appended so the result
+        // always satisfies ASP.NET Identity's default password rules (upper, lower, digit).
+        string random = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        return $"{random}Aa1!";
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
         try
         {
-            if (!await IsUserLoggedIn())
+            if (!await IsCurrentUserInRoleAsync("Admin"))
             {
-                return Result<bool>.Fail("You must be logged in to perform this action!");
+                return Result<bool>.Fail("You must be an administrator to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);

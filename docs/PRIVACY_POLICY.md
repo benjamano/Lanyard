@@ -1,15 +1,14 @@
 # Privacy Policy
 
-> **Template — review with a legal advisor before publishing.** This document is a starting
-> point that reflects the personal data Lanyard actually processes. Replace the bracketed
-> placeholders (`[…]`) and confirm the legal bases and retention periods with your DPO/legal
-> counsel. Last updated: [DATE].
+> **Filled in from known operational details — still get a final legal read before relying on
+> this in a dispute.** This document reflects the personal data Lanyard actually processes.
+> Last updated: 6 August 2026.
 
 ## 1. Who we are
 
 Play2Day ("we", "us") operates the Lanyard system to run our entertainment venue(s). For the
-purposes of UK GDPR / EU GDPR, the data controller is **[Legal entity name, address]**. Our
-contact for data protection matters is **[privacy@play2day.com / DPO name]**.
+purposes of UK GDPR / EU GDPR, the data controller is **Benjamin Mercer**. Our contact for data
+protection matters is **Benjamin Mercer, benmercer76@btinternet.com**.
 
 ## 2. What personal data we process
 
@@ -41,19 +40,21 @@ Personal data is retained only as long as necessary for the purposes above. See
 
 We do not sell personal data. We share it only with:
 
-- Hosting/infrastructure providers acting as our processors (e.g. `[hosting provider]`).
+- Hosting/infrastructure providers acting as our processors (**Railway**, hosted in the West
+  Europe region).
 - Authorities where required by law.
 
 ## 6. Where it is stored
 
-Personal data is stored in our PostgreSQL database hosted at **[region/provider]**. [State
-whether any transfers occur outside the UK/EEA and the safeguards used.]
+Personal data is stored in our PostgreSQL database hosted on **Railway, West Europe region**.
+Data does not leave the UK/EU — no international transfers outside the UK/EEA occur.
 
 ## 7. Your rights
 
 Subject to law, you have the right to access, rectify, erase, restrict, or object to processing
 of your personal data, and to data portability. To exercise these rights, contact
-**[privacy@play2day.com]**. You also have the right to complain to the **[ICO]**.
+**Benjamin Mercer, benmercer76@btinternet.com**. You also have the right to complain to the
+**Information Commissioner's Office (ICO)**.
 
 ## 8. Cookies
 

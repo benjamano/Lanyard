@@ -419,3 +419,5 @@ appsettings.Local.json
 .env.*
 !.env.example
 src/Lanyard.Server/LanyardApp/appsettings.json
+.playwright-mcp/
+.superpowers/

@@ -1,4 +1,5 @@
 ﻿@page "/manage/roles"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication

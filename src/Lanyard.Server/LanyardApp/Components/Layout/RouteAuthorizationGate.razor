@@ -1,0 +1,58 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+@* Default-deny wrapper around AuthorizeRouteView. Blazor's [Authorize] attribute only takes
+   effect for pages that carry it; a page with no [Authorize]/[AllowAnonymous] attribute at all
+   renders unprotected by default. This gate flips that default: any page reached through it must
+   either be authenticated or be explicitly marked [AllowAnonymous]. Role/policy-specific checks on
+   pages that do carry [Authorize(Roles = "...")] are still enforced by AuthorizeRouteView itself. *@
+
+@* No DefaultLayout is passed to AuthorizeRouteView here — the caller (Routes.razor) already
+   wraps this component in a <LayoutView>, so passing a layout through as well would apply it
+   a second time, nesting the whole page chrome inside itself. *@
+@if (_allowAnonymous || _isAuthenticated)
+{
+    <AuthorizeRouteView RouteData="@RouteData">
+        <NotAuthorized>
+            <p class="p-4">You don't have permission to view this page.</p>
+        </NotAuthorized>
+        <Authorizing>
+            <p class="p-4">Checking access&hellip;</p>
+        </Authorizing>
+    </AuthorizeRouteView>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public RouteData RouteData { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _allowAnonymous;
+    private bool _isAuthenticated;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
+
+        if (_allowAnonymous)
+        {
+            _isAuthenticated = false;
+            return;
+        }
+
+        AuthenticationState authState = AuthenticationStateTask is null
+            ? throw new InvalidOperationException("Authentication state is not available.")
+            : await AuthenticationStateTask;
+
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+        if (!_isAuthenticated)
+        {
+            string returnUrl = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+            Navigation.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
+        }
+    }
+}
