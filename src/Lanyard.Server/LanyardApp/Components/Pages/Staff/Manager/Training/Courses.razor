@@ -1,0 +1,105 @@
+@page "/manage/training/courses"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Training
+
+@inject ICourseService _courseService
+@inject IToastService _toastService
+@inject NavigationManager _navigationManager
+
+<PageTitle>Training Courses</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center">
+        <FluentText Typo="Typography.PaneHeader">Training Courses</FluentText>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="CreateCourseAsync" Class="ms-auto">
+            New Course
+        </FluentButton>
+    </FluentStack>
+
+    @if (isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else
+    {
+        <FluentDataGrid ShowHover="true" Items="@courses.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100">
+            <ChildContent>
+                <PropertyColumn Property="x => x.Name" Title="Course" Sortable="true" />
+                <PropertyColumn Property="x => x.PassMarkPercent" Title="Pass Mark %" />
+                <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
+                <TemplateColumn Title="">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => EditCourse(context.Id))">Edit</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" OnClick="@(() => DeleteCourseAsync(context.Id))">Delete</FluentButton>
+                </TemplateColumn>
+            </ChildContent>
+            <EmptyContent>
+                No courses yet — click "New Course" to build one.
+            </EmptyContent>
+        </FluentDataGrid>
+    }
+</FluentCard>
+
+@code {
+    private List<Course> courses = [];
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCoursesAsync();
+    }
+
+    private async Task LoadCoursesAsync()
+    {
+        isLoading = true;
+
+        Result<List<Course>> result = await _courseService.GetCoursesAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load courses: {result.Error}");
+            courses = [];
+        }
+        else
+        {
+            courses = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private async Task CreateCourseAsync()
+    {
+        Result<Course> result = await _courseService.SaveCourseAsync(new Course { Id = Guid.Empty, Name = "New Course", PassMarkPercent = 80 });
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to create course: {result.Error}");
+            return;
+        }
+
+        _navigationManager.NavigateTo($"/manage/training/courses/{result.Data.Id}");
+    }
+
+    private void EditCourse(Guid courseId)
+    {
+        _navigationManager.NavigateTo($"/manage/training/courses/{courseId}");
+    }
+
+    private async Task DeleteCourseAsync(Guid courseId)
+    {
+        Result<bool> result = await _courseService.DeleteCourseAsync(courseId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to delete course: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("Course deleted.");
+        await LoadCoursesAsync();
+    }
+}
