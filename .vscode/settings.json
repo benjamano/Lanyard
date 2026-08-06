@@ -2,7 +2,6 @@
     "editor.fontFamily": "'Monocraft', monospace",
     "editor.fontLigatures": true,
     "files.exclude": {
-        "**/.git": true,
         "**/.svn": true,
         "**/.hg": true,
         "**/.DS_Store": true,
@@ -10,10 +9,6 @@
         "**/bin": true,
         "**/obj": true,
         "**/TestResults": true,
-        "**/docs": true,
-        "**/*.vs": true,
-        "**/.gitattributes": true,
-        "**/LICENSE": true,
         "**/*.slnLaunch": true,
         "**/*.VisualStudio.json": true,
         "**/artifacts": true,
@@ -23,6 +18,5 @@
         "**/Releases": true,
         "**/publish": true,
         "**/build": true,
-        "**/.dockerignore" : true
     }
 }

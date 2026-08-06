@@ -421,3 +421,4 @@ appsettings.Local.json
 src/Lanyard.Server/LanyardApp/appsettings.json
 .playwright-mcp/
 .superpowers/
+docs/superpowers/plans/
