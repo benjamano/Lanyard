@@ -24,27 +24,30 @@ else
             <FluentGridItem Xs="3">
                 <FluentStack HorizontalGap="6">
                     <div style="width: 60%;">
-                        <FluentTextInput Width="100%" @bind-Value="course.Name" Label="Course Name" Appearance="TextInputAppearance.Outline" Required="true" />
+                        <FluentTextInput Width="100%" @bind-Value="course.Name" Label="Course Name"
+                                         Appearance="TextInputAppearance.Outline" Required="true" />
                     </div>
                     <div style="width: 40%;">
-                        <FluentNumberInput TValue="int" Width="100%" @bind-Value="course.PassMarkPercent" Label="Pass Mark %" Min="1" Max="100" />
+                        <FluentNumberInput TValue="int" Width="100%" @bind-Value="course.PassMarkPercent"
+                                           Label="Pass Mark %" Min="1" Max="100" />
                     </div>
                 </FluentStack>
                 <div class="w-100">
-                    <FluentTextArea Width="100%" @bind-Value="course.Description" Label="Description" Appearance="TextAreaAppearance.Outline" />
+                    <FluentTextArea Width="100%" @bind-Value="course.Description" Label="Description"
+                                    Appearance="TextAreaAppearance.Outline" />
                 </div>
             </FluentGridItem>
             <FluentGridItem Xs="3">
                 <div class="w-100 mt-5">
-                    <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation"
-                                    Disabled="true"
+                    <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation" Disabled="true"
                                     Message="Coming soon — auto-assignment isn't active yet.">
                         Auto-assign to new users
                     </FluentCheckbox>
                 </div>
             </FluentGridItem>
         </FluentGrid>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                      Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
             Save Course Details
         </FluentButton>
     </FluentCard>
@@ -56,13 +59,14 @@ else
                     <FluentText Typo="Typography.PaneHeader">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
-                        <FluentButton Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                      Class="w-100"
-                                      OnClick="@(() => SelectSection(courseSection))">
+                        <FluentButton
+                            Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                            Class="w-100" OnClick="@(() => SelectSection(courseSection))">
                             @courseSection.Title
                         </FluentButton>
                     }
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewSection">
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                                  OnClick="StartNewSection">
                         Add Section
                     </FluentButton>
 
@@ -71,13 +75,14 @@ else
                     <FluentText Typo="Typography.PaneHeader">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
-                        <FluentButton Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                      Class="w-100"
-                                      OnClick="@(() => SelectQuestion(question))">
+                        <FluentButton
+                            Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                            Class="w-100" OnClick="@(() => SelectQuestion(question))">
                             @question.QuestionText
                         </FluentButton>
                     }
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewQuestion">
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                                  OnClick="StartNewQuestion">
                         Add Question
                     </FluentButton>
                 </FluentStack>
@@ -87,7 +92,8 @@ else
                 @if (selectedSection is not null)
                 {
                     <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
-                        <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title" Appearance="TextInputAppearance.Outline" Required="true" />
+                        <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title"
+                                         Appearance="TextInputAppearance.Outline" Required="true" />
                         <div class="quill-editor-host">
                             <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
                                 <ToolbarContent>
@@ -104,10 +110,13 @@ else
                             </BlazoredTextEditor>
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingSection" OnClick="SaveSelectedSectionAsync">
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                                          Loading="@isSavingSection" OnClick="SaveSelectedSectionAsync">
                                 Save
                             </FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" Disabled="@(selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                          Disabled="@(selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
                                 Delete
                             </FluentButton>
                         </FluentStack>
@@ -115,18 +124,24 @@ else
                 }
                 else if (selectedQuestion is not null)
                 {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
-                        <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question" Appearance="TextAreaAppearance.Outline" Required="true" />
+                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="6px">
+                        <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question"
+                                        Appearance="TextAreaAppearance.Outline" Required="true" />
 
                         <div class="option-radio-host">
-                            <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId" Class="w-100">
+                            <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId"
+                                              Class="w-100" Margin="@Margin.Top0">
                                 @foreach (CourseQuestionOption option in selectedQuestion.Options)
                                 {
                                     <FluentRadio Value="@option.Id">
                                         <LabelTemplate>
-                                            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
-                                                <FluentTextInput Class="w-100" @bind-Value="option.OptionText" Placeholder="Option text" />
-                                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@(() => RemoveOption(option))" />
+                                            <FluentStack Orientation="Orientation.Horizontal"
+                                                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                                <FluentTextInput Class="w-100" @bind-Value="option.OptionText"
+                                                                 Placeholder="Option text" />
+                                                <FluentButton Appearance="ButtonAppearance.Outline"
+                                                              IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                                              OnClick="@(() => RemoveOption(option))" />
                                             </FluentStack>
                                         </LabelTemplate>
                                     </FluentRadio>
@@ -134,23 +149,33 @@ else
                             </FluentRadioGroup>
                         </div>
 
-                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="AddOption">
-                            Add Option
-                        </FluentButton>
+                        <div class="question-actions-group">
+                            <div class="question-actions-add">
+                                <FluentButton Appearance="ButtonAppearance.Outline"
+                                              IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="AddOption">
+                                    Add Option
+                                </FluentButton>
+                            </div>
 
-                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion" OnClick="SaveSelectedQuestionAsync">
-                                Save
-                            </FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" Disabled="@(selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
-                                Delete
-                            </FluentButton>
-                        </FluentStack>
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                                <FluentButton Appearance="ButtonAppearance.Primary"
+                                              IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion"
+                                              OnClick="SaveSelectedQuestionAsync">
+                                    Save
+                                </FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Outline"
+                                              IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                              Disabled="@(selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
+                                    Delete
+                                </FluentButton>
+                            </FluentStack>
+                        </div>
                     </FluentStack>
                 }
                 else
                 {
-                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Height="100%">
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                                 VerticalAlignment="VerticalAlignment.Center" Height="100%">
                         <FluentText>Select a section or question, or add a new one.</FluentText>
                     </FluentStack>
                 }
@@ -269,7 +294,14 @@ else
     {
         selectedQuestion = null;
         loadedSectionEditorId = null;
-        selectedSection = new CourseSection { Id = Guid.Empty, CourseId = CourseId, Title = "New Section", BodyHtml = string.Empty };
+        selectedSection = new CourseSection
+        {
+            Id = Guid.Empty,
+            CourseId = CourseId,
+            Title = "New Section",
+            BodyHtml =
+string.Empty
+        };
     }
 
     private async Task SaveSelectedSectionAsync()
@@ -297,7 +329,8 @@ else
 
         _toastService.ShowSuccess("Section saved.");
         await LoadCourseAsync();
-        selectedSection = course!.Sections.FirstOrDefault(x => x.Id == result.Data.Id) is { } saved ? CloneSection(saved) : null;
+        selectedSection = course!.Sections.FirstOrDefault(x => x.Id == result.Data.Id) is { } saved ? CloneSection(saved) :
+null;
         loadedSectionEditorId = null;
         isSavingSection = false;
     }
@@ -355,15 +388,23 @@ else
             QuestionText = "New question",
             Options =
             [
-                new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = Guid.Empty, OptionText = "Correct answer", IsCorrect = true },
-                new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = Guid.Empty, OptionText = "Wrong answer", IsCorrect = false }
+                new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = Guid.Empty, OptionText = "Correct answer", IsCorrect = true
+},
+                new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = Guid.Empty, OptionText = "Wrong answer", IsCorrect = false
+}
             ]
         };
     }
 
     private void AddOption()
     {
-        selectedQuestion?.Options.Add(new CourseQuestionOption { Id = Guid.NewGuid(), QuestionId = selectedQuestion.Id, OptionText = string.Empty, IsCorrect = false });
+        selectedQuestion?.Options.Add(new CourseQuestionOption
+        {
+            Id = Guid.NewGuid(),
+            QuestionId = selectedQuestion.Id,
+            OptionText = string.Empty,
+            IsCorrect = false
+        });
     }
 
     private void RemoveOption(CourseQuestionOption option)
@@ -396,7 +437,8 @@ else
 
         _toastService.ShowSuccess("Question saved.");
         await LoadCourseAsync();
-        selectedQuestion = course!.Questions.FirstOrDefault(x => x.Id == result.Data.Id) is { } saved ? CloneQuestion(saved) : null;
+        selectedQuestion = course!.Questions.FirstOrDefault(x => x.Id == result.Data.Id) is { } saved ? CloneQuestion(saved) :
+null;
         isSavingQuestion = false;
     }
 

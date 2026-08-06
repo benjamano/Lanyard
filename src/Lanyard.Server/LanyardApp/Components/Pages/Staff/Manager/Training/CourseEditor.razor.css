@@ -80,10 +80,20 @@
    ::deep on a tag selector still matches it regardless. */
 .option-radio-host ::deep fluent-field {
     width: 100%;
+    /* Each option's own <fluent-field> lays out its radio input and label in a
+       2-column grid (radio | label) with no gap between them by default, so
+       the radio dot sits flush against the option text box. */
+    column-gap: 10px;
 }
 
 .option-radio-host ::deep fluent-radio-group {
     width: 100%;
+    /* fluent-radio-group ships a built-in 8px left/right margin. width:100% is
+       resolved against the container regardless of margin, so that default
+       margin pushed the whole group 8px past the pane's right edge (an actual
+       overflow requiring horizontal scroll to reach the delete button) instead
+       of being absorbed anywhere. */
+    margin: 0;
 }
 
 .option-radio-host ::deep fluent-radio {
@@ -95,11 +105,41 @@
    custom elements each shrink-wrap their content one level further down —
    same quirk, one more layer of nesting. */
 .option-radio-host ::deep label fluent-field {
-    width: 100%;
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .option-radio-host ::deep label fluent-text-input {
+    /* width: 100% (not flex/auto) is what actually fills the parent
+       <fluent-field>'s box — that field isn't itself a flex container for
+       its own children, so "flex:" on the input here is a no-op and leaves
+       it content-sized, floating with a visible gap before the delete
+       button (which tracks the *field's* now-stretched right edge, not
+       the input's own). */
     width: 100%;
     max-width: none;
+    /* The real fix for the delete button getting clipped/needing a scroll:
+       a flex item's default min-width is "auto" (its content's intrinsic
+       width), which blocks the browser from ever shrinking a long option's
+       text input to make room for the delete button next to it — the row
+       overflows instead. min-width: 0 lets it actually shrink. */
+    min-width: 0;
+}
+
+/* Match "Add Option"'s width to the Save+Delete row below it: both become
+   grid items in a single max-content column, so the column (and therefore
+   both rows) take on the width of whichever is naturally wider — here,
+   Save+Delete — while Save and Delete keep their own relative sizes. */
+.question-actions-group {
+    display: inline-grid;
+    grid-template-columns: max-content;
+    row-gap: 16px;
+}
+
+.question-actions-add ::deep fluent-button {
+    width: 100%;
+}
+
+.question-actions-group ::deep .fluent-stack-horizontal {
+    width: 100%;
 }
