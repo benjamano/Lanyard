@@ -242,6 +242,7 @@ else
     private void StartNewSection()
     {
         selectedQuestion = null;
+        loadedSectionEditorId = null;
         selectedSection = new CourseSection { Id = Guid.Empty, CourseId = CourseId, Title = "New Section", BodyHtml = string.Empty };
     }
 
