@@ -57,6 +57,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableVideoDevice> ClientAvailableVideoDevices { get; set; }
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
+        public DbSet<Course> Courses { get; set; }
+        public DbSet<CourseSection> CourseSections { get; set; }
+        public DbSet<CourseQuestion> CourseQuestions { get; set; }
+        public DbSet<CourseQuestionOption> CourseQuestionOptions { get; set; }
 
         // Connection string used only when the context is created without configured options —
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
