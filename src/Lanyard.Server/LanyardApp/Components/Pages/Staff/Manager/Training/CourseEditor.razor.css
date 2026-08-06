@@ -1,0 +1,48 @@
+/* Quill (via Blazored.TextEditor) renders its own plain-HTML DOM dynamically via JS,
+   so it never receives this file's scope attribute — ::deep plus this plain-div
+   ancestor is required for any of these rules to actually match. */
+.quill-editor-host ::deep .ql-toolbar.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host ::deep .ql-container.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host ::deep .ql-editor {
+    color: var(--colorNeutralForeground1);
+    min-height: 150px;
+}
+
+.quill-editor-host ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+.quill-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-snow .ql-picker {
+    color: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}

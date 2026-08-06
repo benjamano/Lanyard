@@ -21,21 +21,27 @@ else
 {
     <FluentCard Height="auto" Class="mb-3">
         <FluentGrid Class="w-100" Spacing="3">
-            <FluentGridItem Xs="4">
-                <FluentTextInput Class="w-100" @bind-Value="course.Name" Label="Course Name" Appearance="TextInputAppearance.Outline" Required="true" />
+            <FluentGridItem Xs="3">
+                <FluentStack HorizontalGap="6">
+                    <div style="width: 60%;">
+                        <FluentTextInput Width="100%" @bind-Value="course.Name" Label="Course Name" Appearance="TextInputAppearance.Outline" Required="true" />
+                    </div>
+                    <div style="width: 40%;">
+                        <FluentNumberInput TValue="int" Width="100%" @bind-Value="course.PassMarkPercent" Label="Pass Mark %" Min="1" Max="100" />
+                    </div>
+                </FluentStack>
+                <div class="w-100">
+                    <FluentTextArea Width="100%" @bind-Value="course.Description" Label="Description" Appearance="TextAreaAppearance.Outline" />
+                </div>
             </FluentGridItem>
-            <FluentGridItem Xs="4">
-                <FluentTextArea Class="w-100" @bind-Value="course.Description" Label="Description" Appearance="TextAreaAppearance.Outline" />
-            </FluentGridItem>
-            <FluentGridItem Xs="2">
-                <FluentNumberInput TValue="int" Class="w-100" @bind-Value="course.PassMarkPercent" Label="Pass Mark %" Min="1" Max="100" />
-            </FluentGridItem>
-            <FluentGridItem Xs="2">
-                <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation"
-                                Disabled="true"
-                                Message="Coming soon — auto-assignment isn't active yet.">
-                    Auto-assign to new users
-                </FluentCheckbox>
+            <FluentGridItem Xs="3">
+                <div class="w-100 mt-5">
+                    <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation"
+                                    Disabled="true"
+                                    Message="Coming soon — auto-assignment isn't active yet.">
+                        Auto-assign to new users
+                    </FluentCheckbox>
+                </div>
             </FluentGridItem>
         </FluentGrid>
         <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
@@ -43,10 +49,10 @@ else
         </FluentButton>
     </FluentCard>
 
-    <FluentCard Height="600px">
+    <FluentCard Height="640px">
         <FluentMultiSplitter Height="100%">
-            <FluentMultiSplitterPane Size="30%">
-                <FluentStack Orientation="Orientation.Vertical" Height="100%">
+            <FluentMultiSplitterPane Size="30%" Class="px-2">
+                <FluentStack Orientation="Orientation.Vertical" Height="100%" VerticalGap="18px">
                     <FluentText Typo="Typography.PaneHeader">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
@@ -60,7 +66,7 @@ else
                         Add Section
                     </FluentButton>
 
-                    <FluentDivider Class="my-2" />
+                    <FluentDivider Class="my-3" />
 
                     <FluentText Typo="Typography.PaneHeader">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
@@ -77,25 +83,27 @@ else
                 </FluentStack>
             </FluentMultiSplitterPane>
 
-            <FluentMultiSplitterPane Size="70%" Class="px-2">
+            <FluentMultiSplitterPane Size="70%" Class="px-3">
                 @if (selectedSection is not null)
                 {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="12px">
+                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
                         <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title" Appearance="TextInputAppearance.Outline" Required="true" />
-                        <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
-                            <ToolbarContent>
-                                <span class="ql-formats">
-                                    <button class="ql-bold"></button>
-                                    <button class="ql-italic"></button>
-                                </span>
-                                <span class="ql-formats">
-                                    <button class="ql-list" value="ordered"></button>
-                                    <button class="ql-list" value="bullet"></button>
-                                </span>
-                            </ToolbarContent>
-                            <EditorContent></EditorContent>
-                        </BlazoredTextEditor>
-                        <FluentStack Orientation="Orientation.Horizontal">
+                        <div class="quill-editor-host">
+                            <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
+                                <ToolbarContent>
+                                    <span class="ql-formats">
+                                        <button class="ql-bold"></button>
+                                        <button class="ql-italic"></button>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <button class="ql-list" value="ordered"></button>
+                                        <button class="ql-list" value="bullet"></button>
+                                    </span>
+                                </ToolbarContent>
+                                <EditorContent></EditorContent>
+                            </BlazoredTextEditor>
+                        </div>
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingSection" OnClick="SaveSelectedSectionAsync">
                                 Save
                             </FluentButton>
@@ -107,7 +115,7 @@ else
                 }
                 else if (selectedQuestion is not null)
                 {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="12px">
+                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
                         <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question" Appearance="TextAreaAppearance.Outline" Required="true" />
 
                         <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId" Class="w-100">
@@ -115,7 +123,7 @@ else
                             {
                                 <FluentRadio Value="@option.Id">
                                     <LabelTemplate>
-                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center">
+                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
                                             <FluentTextInput Class="w-100" @bind-Value="option.OptionText" Placeholder="Option text" />
                                             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@(() => RemoveOption(option))" />
                                         </FluentStack>
@@ -128,7 +136,7 @@ else
                             Add Option
                         </FluentButton>
 
-                        <FluentStack Orientation="Orientation.Horizontal">
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion" OnClick="SaveSelectedQuestionAsync">
                                 Save
                             </FluentButton>
