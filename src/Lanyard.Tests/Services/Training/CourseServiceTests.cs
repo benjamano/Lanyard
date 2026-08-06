@@ -315,6 +315,58 @@ public class CourseServiceTests
     }
 
     [TestMethod]
+    public async Task CourseService_SaveQuestion_ReturnsAndReloadsOptionsOrderedBySortOrder()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        // Options are supplied out of SortOrder order to prove the ordering is driven by
+        // SortOrder (as CourseEditor.razor now assigns by list index) rather than by
+        // insertion/list order, which is what silently broke before this fix.
+        CourseQuestion question = new()
+        {
+            Id = Guid.Empty,
+            CourseId = course.Id,
+            QuestionText = "Order test",
+            Options =
+            [
+                new CourseQuestionOption { Id = Guid.Empty, QuestionId = Guid.Empty, OptionText = "Second", IsCorrect = false, SortOrder = 1 },
+                new CourseQuestionOption { Id = Guid.Empty, QuestionId = Guid.Empty, OptionText = "First", IsCorrect = true, SortOrder = 0 }
+            ]
+        };
+
+        Result<CourseQuestion> saved = await service.SaveQuestionAsync(question);
+
+        Assert.IsTrue(saved.Success, saved.Error);
+        Assert.HasCount(2, saved.Data!.Options);
+        Assert.AreEqual("First", saved.Data!.Options[0].OptionText);
+        Assert.AreEqual("Second", saved.Data!.Options[1].OptionText);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        CourseQuestion reloadedQuestion = reloaded.Data!.Questions.Single(x => x.Id == saved.Data!.Id);
+        Assert.AreEqual("First", reloadedQuestion.Options[0].OptionText);
+        Assert.AreEqual("Second", reloadedQuestion.Options[1].OptionText);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourse_ReturnsFailWhenCourseIsSoftDeleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<bool> deleteResult = await service.DeleteCourseAsync(course.Id);
+        Assert.IsTrue(deleteResult.Success, deleteResult.Error);
+
+        Result<Course> result = await service.GetCourseAsync(course.Id);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
     public async Task CourseService_DeleteQuestion_SetsInactiveAndExcludesFromGetCourse()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

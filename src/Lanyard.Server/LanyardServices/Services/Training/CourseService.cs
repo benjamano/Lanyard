@@ -42,7 +42,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .Include(x => x.Sections.Where(s => s.IsActive))
                 .Include(x => x.Questions.Where(q => q.IsActive))
                     .ThenInclude(x => x.Options.Where(o => o.IsActive))
-                .FirstOrDefaultAsync(x => x.Id == courseId);
+                .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
             if (course is null)
             {
@@ -339,6 +339,8 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             {
                 return Result<CourseQuestion>.Fail("Question saved but could not be reloaded.");
             }
+
+            savedQuestion.Options = [.. savedQuestion.Options.OrderBy(x => x.SortOrder)];
 
             return Result<CourseQuestion>.Ok(savedQuestion);
         }

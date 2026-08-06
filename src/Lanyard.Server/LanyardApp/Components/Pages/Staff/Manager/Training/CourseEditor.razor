@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Training
+@using Lanyard.App.Components.Manager
 
 @inject ICourseService _courseService
 @inject IToastService _toastService
@@ -30,7 +31,11 @@ else
                 <FluentNumberInput TValue="int" Class="w-100" @bind-Value="course.PassMarkPercent" Label="Pass Mark %" Min="1" Max="100" />
             </FluentGridItem>
             <FluentGridItem Xs="2">
-                <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation">Auto-assign to new users</FluentCheckbox>
+                <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation"
+                                Disabled="true"
+                                Message="Coming soon — auto-assignment isn't active yet.">
+                    Auto-assign to new users
+                </FluentCheckbox>
             </FluentGridItem>
         </FluentGrid>
         <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
@@ -75,7 +80,7 @@ else
             <FluentMultiSplitterPane Size="70%" Class="px-2">
                 @if (selectedSection is not null)
                 {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" Style="gap: 12px;">
+                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="12px">
                         <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title" Appearance="TextInputAppearance.Outline" Required="true" />
                         <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
                             <ToolbarContent>
@@ -102,7 +107,7 @@ else
                 }
                 else if (selectedQuestion is not null)
                 {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" Style="gap: 12px;">
+                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="12px">
                         <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question" Appearance="TextAreaAppearance.Outline" Required="true" />
 
                         <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId" Class="w-100">
@@ -203,6 +208,7 @@ else
         {
             _toastService.ShowError($"Failed to load course: {result.Error}");
             isLoading = false;
+            _navigationManager.NavigateTo("/manage/training/courses");
             return;
         }
 
@@ -283,6 +289,19 @@ else
             return;
         }
 
+        DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), selectedSection.Title);
+        });
+
+        if (confirmResult.Cancelled)
+        {
+            return;
+        }
+
         Result<bool> result = await _courseService.DeleteSectionAsync(selectedSection.Id);
 
         if (!result.IsSuccess)
@@ -341,6 +360,11 @@ else
 
         isSavingQuestion = true;
 
+        for (int i = 0; i < selectedQuestion.Options.Count; i++)
+        {
+            selectedQuestion.Options[i].SortOrder = i;
+        }
+
         Result<CourseQuestion> result = await _courseService.SaveQuestionAsync(selectedQuestion);
 
         if (!result.IsSuccess || result.Data is null)
@@ -359,6 +383,19 @@ else
     private async Task DeleteSelectedQuestionAsync()
     {
         if (selectedQuestion is null || selectedQuestion.Id == Guid.Empty)
+        {
+            return;
+        }
+
+        DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), selectedQuestion.QuestionText);
+        });
+
+        if (confirmResult.Cancelled)
         {
             return;
         }

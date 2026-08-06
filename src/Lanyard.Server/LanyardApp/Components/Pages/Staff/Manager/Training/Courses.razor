@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Training
+@using Lanyard.App.Components.Manager
 
 @inject ICourseService _courseService
 @inject IToastService _toastService
@@ -33,7 +34,7 @@
                 <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
                 <TemplateColumn Title="">
                     <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => EditCourse(context.Id))">Edit</FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" OnClick="@(() => DeleteCourseAsync(context.Id))">Delete</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())" OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
                 </TemplateColumn>
             </ChildContent>
             <EmptyContent>
@@ -89,8 +90,21 @@
         _navigationManager.NavigateTo($"/manage/training/courses/{courseId}");
     }
 
-    private async Task DeleteCourseAsync(Guid courseId)
+    private async Task DeleteCourseAsync(Guid courseId, string courseName)
     {
+        DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), courseName);
+        });
+
+        if (confirmResult.Cancelled)
+        {
+            return;
+        }
+
         Result<bool> result = await _courseService.DeleteCourseAsync(courseId);
 
         if (!result.IsSuccess)
