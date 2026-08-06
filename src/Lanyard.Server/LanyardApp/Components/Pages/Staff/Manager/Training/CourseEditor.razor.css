@@ -14,6 +14,7 @@
     flex-direction: column;
     height: 320px;
     flex-shrink: 0;
+    width: 100%;
 }
 
 .quill-editor-host ::deep .ql-toolbar.ql-snow {
@@ -64,4 +65,41 @@
 .quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
 .quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
     fill: var(--colorCompoundBrandStroke);
+}
+
+/* This plain div sits in the same non-stretching (align-items: start) flex
+   column as .quill-editor-host above, so it shrinks to its content's width
+   unless forced — the same root cause, different element. */
+.option-radio-host {
+    width: 100%;
+}
+
+/* FluentRadioGroup's Class="w-100" lands on a wrapping <fluent-field>, not on
+   the real <fluent-radio-group> element (which renders with an empty class
+   attribute) — same Fluent Web Component quirk as the Quill host above.
+   ::deep on a tag selector still matches it regardless. */
+.option-radio-host ::deep fluent-field {
+    width: 100%;
+}
+
+.option-radio-host ::deep fluent-radio-group {
+    width: 100%;
+}
+
+.option-radio-host ::deep fluent-radio {
+    width: 100%;
+}
+
+/* Each radio's label (our option-text row) is properly full-width by this
+   point, but the nested FluentTextInput's own <fluent-field>/<fluent-text-input>
+   custom elements each shrink-wrap their content one level further down —
+   same quirk, one more layer of nesting. */
+.option-radio-host ::deep label fluent-field {
+    width: 100%;
+    flex: 1 1 auto;
+}
+
+.option-radio-host ::deep label fluent-text-input {
+    width: 100%;
+    max-width: none;
 }
