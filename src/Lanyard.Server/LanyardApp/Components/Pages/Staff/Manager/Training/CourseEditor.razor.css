@@ -1,7 +1,23 @@
 /* Quill (via Blazored.TextEditor) renders its own plain-HTML DOM dynamically via JS,
    so it never receives this file's scope attribute — ::deep plus this plain-div
    ancestor is required for any of these rules to actually match. */
+
+/* This div's own content-based height was silently undercounting the toolbar's
+   height (a reproducible ~toolbar-height shortfall regardless of block/flow-root/
+   max-content sizing — never fully root-caused), which let the editor visually
+   overlap the Save/Delete button row rendered right after it. Sidestepping the
+   whole "size to content" approach: give this wrapper an authoritative fixed
+   height and let flexbox split it between the toolbar (auto) and the editor
+   (fills the rest) — that's immune to whatever was miscounting content height. */
+.quill-editor-host {
+    display: flex;
+    flex-direction: column;
+    height: 320px;
+    flex-shrink: 0;
+}
+
 .quill-editor-host ::deep .ql-toolbar.ql-snow {
+    flex: 0 0 auto;
     border-color: var(--colorNeutralStroke1);
     background-color: var(--colorNeutralBackground3);
     border-top-left-radius: var(--borderRadiusMedium);
@@ -9,6 +25,8 @@
 }
 
 .quill-editor-host ::deep .ql-container.ql-snow {
+    flex: 1 1 auto;
+    min-height: 0;
     border-color: var(--colorNeutralStroke1);
     background-color: var(--colorNeutralBackground1);
     border-bottom-left-radius: var(--borderRadiusMedium);
@@ -17,7 +35,8 @@
 
 .quill-editor-host ::deep .ql-editor {
     color: var(--colorNeutralForeground1);
-    min-height: 150px;
+    height: 100%;
+    overflow-y: auto;
 }
 
 .quill-editor-host ::deep .ql-editor.ql-blank::before {
