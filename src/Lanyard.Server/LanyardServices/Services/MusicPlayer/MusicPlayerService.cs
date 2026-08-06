@@ -554,6 +554,7 @@ public class MusicPlayerService
 
         if (GetCurrentSong(clientId) is null)
         {
+            _logger.LogWarning("Client {ClientId} reported song ended but has no current song", clientId);
             return;
         }
 
