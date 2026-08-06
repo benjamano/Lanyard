@@ -193,8 +193,18 @@ else
     {
         if (selectedSection is not null && sectionEditor is not null && loadedSectionEditorId != selectedSection.Id)
         {
-            await sectionEditor.LoadHTMLContent(selectedSection.BodyHtml);
-            loadedSectionEditorId = selectedSection.Id;
+            try
+            {
+                await sectionEditor.LoadHTMLContent(selectedSection.BodyHtml);
+                loadedSectionEditorId = selectedSection.Id;
+            }
+            catch (JSException)
+            {
+                // The BlazoredTextEditor's underlying Quill instance may not have finished
+                // its own JS-side registration on the render pass immediately after it mounts.
+                // Don't mark as loaded — retry on the next render pass instead of crashing.
+                StateHasChanged();
+            }
         }
     }
 
