@@ -1,0 +1,190 @@
+@page "/training/{AssignmentId:guid}"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Training
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<PageTitle>@(assignment?.Course?.Name ?? "Training")</PageTitle>
+
+@if (isLoading || assignment is null)
+{
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+        <FluentSpinner />
+    </FluentStack>
+}
+else
+{
+    <FluentCard Height="auto">
+        <FluentText Typo="Typography.PaneHeader">@assignment.Course!.Name</FluentText>
+
+        <div class="take-course-wizard-host">
+            <FluentWizard StepperPosition="@stepperPosition" Height="auto" OnFinish="HandleFinishAsync">
+                <Steps>
+                    @foreach (CourseSection courseSection in assignment.Course.Sections)
+                    {
+                        <FluentWizardStep Label="@courseSection.Title">
+                            <div class="take-course-section-body">
+                                @((MarkupString)courseSection.BodyHtml)
+                            </div>
+                        </FluentWizardStep>
+                    }
+                    <FluentWizardStep Label="Quiz">
+                        @if (assignment.Course.Questions.Count == 0)
+                        {
+                            <FluentText>This course doesn't have a quiz yet.</FluentText>
+                        }
+                        else
+                        {
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="24px">
+                                @if (quizSubmitted && lastGradeResult is not null)
+                                {
+                                    @if (lastGradeResult.Passed)
+                                    {
+                                        <FluentMessageBar Intent="MessageBarIntent.Success">
+                                            You passed with a score of @lastGradeResult.ScorePercent%.
+                                        </FluentMessageBar>
+                                    }
+                                    else
+                                    {
+                                        <FluentMessageBar Intent="MessageBarIntent.Warning">
+                                            You scored @lastGradeResult.ScorePercent% — you need @assignment.Course.PassMarkPercent% to pass. Review the marked questions below and try again.
+                                        </FluentMessageBar>
+                                    }
+                                }
+
+                                @foreach (CourseQuestion question in assignment.Course.Questions)
+                                {
+                                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                            <FluentText Weight="TextWeight.Semibold">@question.QuestionText</FluentText>
+                                            @if (quizSubmitted)
+                                            {
+                                                <FluentIcon Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
+                                                            Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
+                                            }
+                                        </FluentStack>
+                                        <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
+                                                          Value="@GetSelectedOptionId(question.Id)"
+                                                          ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
+                                                          Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
+                                            @foreach (CourseQuestionOption option in question.Options)
+                                            {
+                                                <FluentRadio Value="@option.Id" Label="@option.OptionText" />
+                                            }
+                                        </FluentRadioGroup>
+                                    </FluentStack>
+                                }
+
+                                @if (quizSubmitted && lastGradeResult is not null && !lastGradeResult.Passed)
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="RetryQuiz">
+                                        Retry
+                                    </FluentButton>
+                                }
+                            </FluentStack>
+                        }
+                    </FluentWizardStep>
+                </Steps>
+            </FluentWizard>
+        </div>
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public Guid AssignmentId { get; set; }
+
+    protected StepperPosition stepperPosition = StepperPosition.Left;
+
+    private CourseAssignment? assignment;
+    private bool isLoading;
+    private string currentUserId = string.Empty;
+    private readonly Dictionary<Guid, Guid> selectedAnswers = [];
+    private bool quizSubmitted;
+    private QuizGradeResult? lastGradeResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!currentUserResult.IsSuccess || currentUserResult.Data is null)
+        {
+            _toastService.ShowError("Could not determine the current user.");
+            isLoading = false;
+            _navigationManager.NavigateTo("/training");
+            return;
+        }
+
+        currentUserId = currentUserResult.Data;
+
+        Result<CourseAssignment> startResult = await _courseAssignmentService.StartAssignmentAsync(AssignmentId, currentUserId);
+
+        if (!startResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to open training: {startResult.Error}");
+            isLoading = false;
+            _navigationManager.NavigateTo("/training");
+            return;
+        }
+
+        Result<CourseAssignment> loadResult = await _courseAssignmentService.GetAssignmentAsync(AssignmentId, currentUserId);
+
+        if (!loadResult.IsSuccess || loadResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load training: {loadResult.Error}");
+            isLoading = false;
+            _navigationManager.NavigateTo("/training");
+            return;
+        }
+
+        assignment = loadResult.Data;
+        isLoading = false;
+    }
+
+    private async Task HandleFinishAsync()
+    {
+        if (assignment?.Course is null || assignment.Course.Questions.Count == 0)
+        {
+            return;
+        }
+
+        Result<QuizGradeResult> result = await _courseAssignmentService.SubmitQuizAttemptAsync(AssignmentId, currentUserId, selectedAnswers);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to submit quiz: {result.Error}");
+            return;
+        }
+
+        lastGradeResult = result.Data;
+        quizSubmitted = true;
+
+        if (lastGradeResult.Passed)
+        {
+            _toastService.ShowSuccess("Course completed!");
+        }
+    }
+
+    private void RetryQuiz()
+    {
+        selectedAnswers.Clear();
+        quizSubmitted = false;
+        lastGradeResult = null;
+    }
+
+    private Guid GetSelectedOptionId(Guid questionId) =>
+        selectedAnswers.TryGetValue(questionId, out Guid optionId) ? optionId : Guid.Empty;
+
+    private void SetSelectedOptionId(Guid questionId, Guid optionId)
+    {
+        selectedAnswers[questionId] = optionId;
+    }
+
+    private bool WasQuestionCorrect(Guid questionId) =>
+        lastGradeResult?.QuestionResults.FirstOrDefault(x => x.QuestionId == questionId)?.WasCorrect ?? false;
+}

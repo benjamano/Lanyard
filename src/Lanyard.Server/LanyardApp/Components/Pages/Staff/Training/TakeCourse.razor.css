@@ -1,0 +1,17 @@
+.take-course-wizard-host {
+    width: 100%;
+}
+
+.take-course-section-body {
+    max-width: 100%;
+}
+
+.take-course-section-body ::deep p {
+    margin: 0 0 12px 0;
+}
+
+.take-course-section-body ::deep ul,
+.take-course-section-body ::deep ol {
+    margin: 0 0 12px 0;
+    padding-left: 24px;
+}
