@@ -70,7 +70,8 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
-        try{
+        try
+        {
             Result<string> getResult = await GetCurrentUserIdAsync();
 
             if (!getResult.IsSuccess || getResult.Data == null)
@@ -93,7 +94,7 @@ public class SecurityService : ISecurityService
             return Result<UserProfile>.Fail(ex.Message);
         }
     }
-    
+
     public async Task<string?> GetCurrentUserName()
     {
         Result<UserProfile> getResult = await GetCurrentUserProfileAsync();
@@ -142,7 +143,7 @@ public class SecurityService : ISecurityService
         {
             if ((await GetActiveUsersAsync()).Any())
             {
-                // Once at least one account exists, only an Admin may create further accounts —
+                // Once at least one account exists, only an Admin may create further accounts -
                 // being merely logged in is not enough (any Staff-level account could otherwise
                 // create new accounts, including admin ones, for itself).
                 if (!await IsCurrentUserInRoleAsync("Admin"))
@@ -188,7 +189,7 @@ public class SecurityService : ISecurityService
             }
             catch (Exception ex)
             {
-                // Auto-assigning training courses must never block account creation —
+                // Auto-assigning training courses must never block account creation -
                 // a new hire needs their login regardless of whether their induction
                 // course could be auto-assigned.
                 _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
@@ -236,6 +237,29 @@ public class SecurityService : ISecurityService
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<bool>.Fail($"Failed to delete user: {errors}");
+            }
+
+            try
+            {
+                await using ApplicationDbContext cleanupCtx = await _factory.CreateDbContextAsync();
+
+                List<CourseAssignment> orphanedAssignments = await cleanupCtx.CourseAssignments
+                    .Where(x => x.UserId == userId && x.IsActive)
+                    .ToListAsync();
+
+                foreach (CourseAssignment assignment in orphanedAssignments)
+                {
+                    assignment.IsActive = false;
+                }
+
+                await cleanupCtx.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                // The user is already deleted at this point — this is best-effort
+                // cleanup of their now-orphaned CourseAssignments rows and must
+                // never undo or fail the deletion that already succeeded.
+                _logger.LogWarning(ex, "Failed to clean up CourseAssignments for deleted user {UserId}", userId);
             }
 
             return Result<bool>.Ok(true);

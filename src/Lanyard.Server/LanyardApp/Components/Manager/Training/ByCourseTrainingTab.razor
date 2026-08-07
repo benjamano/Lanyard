@@ -4,18 +4,13 @@
 
 @inject ICourseService _courseService
 @inject ICourseAssignmentService _courseAssignmentService
+@inject IJSRuntime JS
 
 <div class="by-course-tab">
     <div class="course-picker-host">
-        <FluentSelect TOption="Course"
-                      TValue="Guid"
-                      Items="@courses.OrderBy(x => x.Name)"
-                      OptionText="@(i => i?.Name ?? string.Empty)"
-                      OptionValue="@(i => i!.Id)"
-                      Placeholder="Select a course..."
-                      Label="Course"
-                      Value="@selectedCourseId"
-                      ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
+        <FluentSelect TOption="Course" TValue="Guid" Items="@courses.OrderBy(x => x.Name)"
+                      OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i!.Id)" Placeholder="Select a course..."
+                      Label="Course" Value="@selectedCourseId" ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
                       Width="100%">
         </FluentSelect>
     </div>
@@ -42,20 +37,29 @@
                 <ChildContent>
                     <PropertyColumn Property="@(x => GetUserName(x.UserId))" Title="Person" />
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)" Appearance="BadgeAppearance.Filled" />
+                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                                     Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
                         @GetLatestScore(context)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "—")
+                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                     <TemplateColumn Title="">
                         <div class="assignment-row-actions">
-                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarEdit())"
-                                          OnClick="@(() => OpenEditDueDateDialogAsync(context))">Due Date</FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonDelete())"
-                                          OnClick="@(() => UnassignAsync(context))">Unassign</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
+                                          Tooltip="Copy link to this assignment"
+                                          OnClick="@(() => CopyLinkAsync(context))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
+                                          Tooltip="Edit due date"
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(context))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
+                                          Tooltip="Unassign"
+                                          OnClick="@(() => UnassignAsync(context))" />
                         </div>
                     </TemplateColumn>
                 </ChildContent>
@@ -128,7 +132,7 @@
     private static string GetLatestScore(CourseAssignment assignment)
     {
         CourseQuizAttempt? latest = assignment.Attempts.OrderByDescending(x => x.AttemptNumber).FirstOrDefault();
-        return latest is null ? "—" : $"{latest.ScorePercent}%";
+        return latest is null ? "-" : $"{latest.ScorePercent}%";
     }
 
     private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
@@ -148,6 +152,21 @@
         CourseAssignmentStatus.Overdue => BadgeColor.Danger,
         _ => BadgeColor.Subtle
     };
+
+    private async Task CopyLinkAsync(CourseAssignment assignment)
+    {
+        string link = $"{_navigationManager.BaseUri}training/{assignment.Id}";
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", link);
+            _toastService.ShowSuccess("Link copied to clipboard.");
+        }
+        catch (Exception)
+        {
+            _toastService.ShowError("Could not copy the link. Your browser may be blocking clipboard access.");
+        }
+    }
 
     private async Task OpenBulkAssignDialogAsync()
     {
