@@ -40,6 +40,18 @@
     overflow-y: auto;
 }
 
+/* Content pasted into Quill (e.g. from Word) frequently carries its source's
+   own inline `style="color: ..."` on the pasted spans — inline styles beat
+   any stylesheet rule regardless of selector specificity, so the plain
+   .ql-editor color rule above silently loses to a pasted-in black/near-black
+   color, leaving typed-over-paste text unreadable in dark mode. !important
+   on a rule that also matches every descendant is the only way to force the
+   theme color to win over an arbitrary inline style we don't control. */
+.quill-editor-host ::deep .ql-editor,
+.quill-editor-host ::deep .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
 .quill-editor-host ::deep .ql-editor.ql-blank::before {
     color: var(--colorNeutralForeground3);
     font-style: normal;

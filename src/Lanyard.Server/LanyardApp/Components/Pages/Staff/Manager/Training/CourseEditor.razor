@@ -47,7 +47,7 @@ else
     <FluentCard Height="640px">
         <FluentMultiSplitter Height="100%">
             <FluentMultiSplitterPane Size="30%" Class="px-2">
-                <FluentStack Orientation="Orientation.Vertical" Height="100%" VerticalGap="18px">
+                <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
                     <FluentText Typo="Typography.PaneHeader">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
@@ -213,7 +213,7 @@ else
     }
 
     // BlazoredTextEditor (v1.1.3, confirmed via assembly reflection) does not accept its
-    // initial content as a bound parameter — content must be pushed in via LoadHTMLContent()
+    // initial content as a bound parameter - content must be pushed in via LoadHTMLContent()
     // after the component has mounted. Without this, re-opening an existing section would
     // show a blank editor and silently wipe out the saved BodyHtml on the next Save.
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -229,7 +229,7 @@ else
             {
                 // The BlazoredTextEditor's underlying Quill instance may not have finished
                 // its own JS-side registration on the render pass immediately after it mounts.
-                // Don't mark as loaded — retry on the next render pass instead of crashing.
+                // Don't mark as loaded - retry on the next render pass instead of crashing.
                 StateHasChanged();
             }
         }
