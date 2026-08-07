@@ -12,7 +12,7 @@ namespace Lanyard.Application.Services;
 /// Background worker for BPM analysis. Songs reach it two ways: creation points
 /// (file upload, playlist add) enqueue directly, and a periodic sweep picks up
 /// any NotAnalyzed songs those paths missed. Terminal statuses are never
-/// re-enqueued, so both are idempotent. The queue drains serially — analysis is
+/// re-enqueued, so both are idempotent. The queue drains serially - analysis is
 /// CPU-and-IO heavy and there is no urgency, so one song at a time is deliberate.
 /// </summary>
 public class SongAnalysisHostedService(
@@ -76,7 +76,7 @@ public class SongAnalysisHostedService(
     /// Sweeps immediately on startup (the original backfill) and then every few
     /// minutes, so songs created by paths that don't enqueue directly still get
     /// analyzed within one interval. Re-enqueueing an already-processed song is a
-    /// no-op — the analysis service skips anything not in NotAnalyzed.
+    /// no-op - the analysis service skips anything not in NotAnalyzed.
     /// </summary>
     private async Task RunPeriodicSweepAsync(CancellationToken stoppingToken)
     {
@@ -125,7 +125,7 @@ public class SongAnalysisHostedService(
         }
         catch (Exception ex)
         {
-            // A failed backfill only delays analysis until the next restart —
+            // A failed backfill only delays analysis until the next restart -
             // don't take the whole worker down over it.
             _logger.LogError(ex, "BPM analysis backfill failed");
         }

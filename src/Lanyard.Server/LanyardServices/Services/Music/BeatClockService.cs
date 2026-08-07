@@ -19,7 +19,7 @@ public class BeatClockService(
     private readonly ILogger<BeatClockService> _logger = logger;
 
     // BPM data is immutable once analyzed, but the analyzer may finish while a
-    // song is queued/playing — a short cache picks that up without a DB round
+    // song is queued/playing - a short cache picks that up without a DB round
     // trip on every scene step.
     private static readonly TimeSpan _bpmCacheDuration = TimeSpan.FromSeconds(30);
 

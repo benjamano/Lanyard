@@ -27,7 +27,7 @@ public class DmxSceneRunnerService(
         public required CancellationTokenSource Cts { get; init; }
     }
 
-    // Key: sceneId. Multiple scenes may run concurrently per client — the last
+    // Key: sceneId. Multiple scenes may run concurrently per client - the last
     // write to a channel wins, so no channel arbitration is needed.
     private readonly Dictionary<Guid, RunningScene> _runningScenes = [];
     private readonly object _lock = new();
@@ -125,7 +125,7 @@ public class DmxSceneRunnerService(
                     // BPM sync recomputes from the live playback position every step,
                     // so timing errors never accumulate. Each delay is one step length
                     // nudged toward the beat grid by a bounded correction (see
-                    // BeatMath) — the position estimate jitters as client reports
+                    // BeatMath) - the position estimate jitters as client reports
                     // re-anchor it, and an uncapped chase of the next boundary would
                     // double-fire steps. The first step fires immediately on start
                     // (operators start scenes on a downbeat by hand). When nothing is

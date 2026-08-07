@@ -55,7 +55,7 @@ public class BeatMathTests
     public void SecondsUntilNextStep_FiredVeryLate_CorrectionIsCapped()
     {
         // Fired 0.2s late (beyond the 0.125s cap): the delay shortens only to
-        // 0.375s — never further, so a position-estimate jump backwards across a
+        // 0.375s - never further, so a position-estimate jump backwards across a
         // boundary cannot double-fire a step.
         double? result = BeatMath.SecondsUntilNextStep(0.2, 120, 0, 1);
 

@@ -23,7 +23,8 @@ else
         <FluentText Typo="Typography.PaneHeader">@assignment.Course!.Name</FluentText>
 
         <div class="take-course-wizard-host">
-            <FluentWizard StepperPosition="@stepperPosition" Height="calc(100vh - 260px)" OnFinish="HandleFinishAsync">
+            <FluentWizard @ref="wizardRef" StepperPosition="@stepperPosition" Height="@wizardHeight"
+                          OnFinish="HandleFinishAsync">
                 <Steps>
                     @foreach (CourseSection courseSection in assignment.Course.Sections)
                     {
@@ -85,25 +86,11 @@ else
                                                       Value="@GetSelectedOptionId(question.Id)"
                                                       ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
                                                       Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
-                                        @foreach (CourseQuestionOption option in question.Options)
+                                        @foreach (CourseQuestionOption option in GetDisplayOptions(question))
                                         {
                                             <FluentRadio Value="@option.Id" Label="@option.OptionText" />
                                         }
                                     </FluentRadioGroup>
-                                </FluentStack>
-
-                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                                  IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
-                                                  Disabled="@(currentQuestionIndex == 0)" OnClick="GoToPreviousQuestion">
-                                        Previous Question
-                                    </FluentButton>
-                                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                                  IconEnd="@(new Icons.Regular.Size20.ArrowRight())"
-                                                  Disabled="@(currentQuestionIndex == assignment.Course.Questions.Count - 1)"
-                                                  OnClick="GoToNextQuestion">
-                                        Next Question
-                                    </FluentButton>
                                 </FluentStack>
 
                                 @if (quizSubmitted && lastGradeResult is not null && !lastGradeResult.Passed)
@@ -116,6 +103,38 @@ else
                         }
                     </FluentWizardStep>
                 </Steps>
+                <ButtonTemplate>
+                    @{
+                        int stepIndex = context;
+                        bool isQuizStep = stepIndex == assignment.Course.Sections.Count;
+                        bool hasQuestions = assignment.Course.Questions.Count > 0;
+                        bool onLastQuestion = !hasQuestions || currentQuestionIndex == assignment.Course.Questions.Count - 1;
+                        bool showPrevious = isQuizStep ? (currentQuestionIndex > 0 || stepIndex > 0) : stepIndex > 0;
+                    }
+                    <div>
+                        @if (showPrevious)
+                        {
+                            <FluentButton OnClick="@(() => HandleWizardPreviousAsync(stepIndex))">Previous</FluentButton>
+                        }
+                    </div>
+                    <FluentSpacer />
+                    <div>
+                        @if (isQuizStep && !onLastQuestion)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="GoToNextQuestion">Next</FluentButton>
+                        }
+                        else if (isQuizStep)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Primary"
+                                          OnClick="@(() => wizardRef!.FinishAsync(false))">Done</FluentButton>
+                        }
+                        else
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Primary"
+                                          OnClick="@(() => wizardRef!.GoToStepAsync(stepIndex + 1, false))">Next</FluentButton>
+                        }
+                    </div>
+                </ButtonTemplate>
             </FluentWizard>
         </div>
     </FluentCard>
@@ -127,6 +146,11 @@ else
 
     protected StepperPosition stepperPosition = StepperPosition.Left;
 
+    // On mobile the stepper moves to the Top and the page itself scrolls, so there's no "side"
+    // stepper affordance to keep a constant height for - a fixed calc(100vh - ...) height there
+    // just clips content taller than the viewport instead of letting the card grow with it.
+    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 260px)";
+
     private CourseAssignment? assignment;
     private bool isLoading;
     private string currentUserId = string.Empty;
@@ -134,6 +158,9 @@ else
     private bool quizSubmitted;
     private QuizGradeResult? lastGradeResult;
     private int currentQuestionIndex;
+    private FluentWizard? wizardRef;
+    private readonly Dictionary<Guid, List<CourseQuestionOption>> shuffledOptionsByQuestionId = [];
+    private readonly Random optionShuffleRandom = new();
 
     private DotNetObjectReference<TakeCourse>? _viewportRef;
 
@@ -227,7 +254,13 @@ selectedAnswers);
 
         if (lastGradeResult.Passed)
         {
-            _toastService.ShowSuccess("Course completed!");
+            await _dialogService.ShowDialogAsync<CourseCompletedDialog>(options =>
+            {
+                options.Header.Title = "Course Completed";
+                options.Width = "min(420px, 95vw)";
+                options.Modal = true;
+                options.Parameters.Add(nameof(CourseCompletedDialog.CourseName), assignment.Course.Name);
+            });
         }
     }
 
@@ -239,11 +272,19 @@ selectedAnswers);
         currentQuestionIndex = 0;
     }
 
-    private void GoToPreviousQuestion()
+    private async Task HandleWizardPreviousAsync(int stepIndex)
     {
-        if (currentQuestionIndex > 0)
+        bool isQuizStep = assignment?.Course is not null && stepIndex == assignment.Course.Sections.Count;
+
+        if (isQuizStep && currentQuestionIndex > 0)
         {
             currentQuestionIndex--;
+            return;
+        }
+
+        if (wizardRef is not null)
+        {
+            await wizardRef.GoToStepAsync(stepIndex - 1, false);
         }
     }
 
@@ -253,6 +294,24 @@ selectedAnswers);
         {
             currentQuestionIndex++;
         }
+    }
+
+    private List<CourseQuestionOption> GetDisplayOptions(CourseQuestion question)
+    {
+        if (!shuffledOptionsByQuestionId.TryGetValue(question.Id, out List<CourseQuestionOption>? options))
+        {
+            options = [.. question.Options];
+
+            for (int i = options.Count - 1; i > 0; i--)
+            {
+                int j = optionShuffleRandom.Next(i + 1);
+                (options[i], options[j]) = (options[j], options[i]);
+            }
+
+            shuffledOptionsByQuestionId[question.Id] = options;
+        }
+
+        return options;
     }
 
     private Guid GetSelectedOptionId(Guid questionId) =>

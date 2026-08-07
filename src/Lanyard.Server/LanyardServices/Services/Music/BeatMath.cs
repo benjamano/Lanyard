@@ -7,12 +7,12 @@ namespace Lanyard.Application.Services;
 public static class BeatMath
 {
     // The playback position is an estimate that gets re-anchored by periodic client
-    // reports, and the client's reader position moves in audio-buffer-sized chunks —
+    // reports, and the client's reader position moves in audio-buffer-sized chunks -
     // so between two step computations the position can jump by a few hundred ms in
     // either direction. Chasing the next grid boundary exactly therefore double-fires
     // (a backwards jump re-exposes a boundary that already fired) or skips. Instead,
     // each step lasts one nominal step length, corrected toward the grid by at most
-    // this fraction — delays stay within [1-f, 1+f] × step length, so jitter can
+    // this fraction - delays stay within [1-f, 1+f] × step length, so jitter can
     // never double-fire or skip, and the phase error shrinks every step until the
     // advances sit on the beat.
     private const double MaxPhaseCorrectionFraction = 0.25;
@@ -22,7 +22,7 @@ public static class BeatMath
     /// beat grid (boundaries every <paramref name="beats"/> × beat-length seconds,
     /// anchored at <paramref name="firstBeatOffsetSeconds"/>). Call at the moment a
     /// step fires, passing the playback position at that moment. Null for
-    /// non-positive bpm/beats — callers fall back to the step's fixed Duration.
+    /// non-positive bpm/beats - callers fall back to the step's fixed Duration.
     /// </summary>
     public static double? SecondsUntilNextStep(
         double positionSeconds,

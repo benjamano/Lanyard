@@ -212,7 +212,7 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("ip-fixed", httpContext =>
     {
         var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        
+
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 50,
@@ -253,7 +253,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
-    // This app has no public-facing pages — everything is staff/kiosk tooling — so it should
+    // This app has no public-facing pages - everything is staff/kiosk tooling - so it should
     // never be crawled or indexed even if it ends up reachable from the open internet.
     context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
 
@@ -293,7 +293,7 @@ app.Use(async (context, next) =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             // Write a body so UseStatusCodePagesWithReExecute does not re-run the pipeline (which
-            // would turn this into an antiforgery 400) — the client must receive a clean 401.
+            // would turn this into an antiforgery 400) - the client must receive a clean 401.
             await context.Response.WriteAsync("Invalid or missing client shared secret.");
             return;
         }

@@ -229,7 +229,7 @@ public class FileService : IFileService
 
             await db.SaveChangesAsync(cancellationToken);
 
-            // Queue BPM analysis only after the row is committed — the background
+            // Queue BPM analysis only after the row is committed - the background
             // worker loads the song by ID from a fresh context.
             if (song != null)
             {

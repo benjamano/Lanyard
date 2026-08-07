@@ -79,7 +79,7 @@ namespace Lanyard.App.Controllers
                 return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
             }
 
-            // Redirect to return URL (only if it is a local path — guards against
+            // Redirect to return URL (only if it is a local path - guards against
             // open-redirect attacks) or default to /.
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             {

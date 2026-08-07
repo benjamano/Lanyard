@@ -17,24 +17,31 @@
                             IconActive="new Icons.Filled.Size28.Home()"
                             Text="Home" />
 
-                        <FluentAppBarItem Href="/rota/clockin"
-                            Match="NavLinkMatch.All"
-                            IconRest="new Icons.Regular.Size28.Clock()"
-                            IconActive="new Icons.Filled.Size28.Clock()"
-                            Text="Clock In" />
+                        <AuthorizeView Roles="Admin,CanClockIn" Context="clockInAuthContext">
+                            <FluentAppBarItem Href="/rota/clockin"
+                                Match="NavLinkMatch.All"
+                                IconRest="new Icons.Regular.Size28.Clock()"
+                                IconActive="new Icons.Filled.Size28.Clock()"
+                                Text="Clock In" />
+                        </AuthorizeView>
+                        <AuthorizeView Roles="Admin,Staff" Context="trainingAuthContext">
+                            <FluentAppBarItem Href="/training" Match="NavLinkMatch.All"
+                                              IconRest="new Icons.Regular.Size28.Book()" IconActive="new Icons.Filled.Size28.Book()"
+                                              Text="Training" />
+                        </AuthorizeView>
 
-                        <FluentAppBarItem Href="/messages"
+                        @* <FluentAppBarItem Href="/messages"
                             Match="NavLinkMatch.All"
                             Count="3"
                             IconRest="new Icons.Regular.Size28.Mail()"
                             IconActive="new Icons.Filled.Size28.Mail()"
-                            Text="Messages" />
+                            Text="Messages" /> *@
                     </div>
                     <div style="flex: 1;" class="d-flex justify-content-end">
                         <FluentAppBarItem Href="/api/auth/logout"
                             Match="NavLinkMatch.All"
-                            IconRest="new Icons.Regular.Size28.HomeEmpty()"
-                            IconActive="new Icons.Filled.Size28.HomeEmpty()"
+                            IconRest="new Icons.Regular.Size20.SignOut()"
+                            IconActive="new Icons.Filled.Size20.SignOut()"
                             Text="Logout" />
                     </div>
                 </div>

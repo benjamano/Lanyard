@@ -27,7 +27,7 @@ public class SongBpmAnalyzerTests
 
             for (int i = 0; i < clickLengthSamples && start + i < totalSamples; i++)
             {
-                // Decaying noise burst — a percussive attack with a sharp energy rise.
+                // Decaying noise burst - a percussive attack with a sharp energy rise.
                 double decay = 1.0 - ((double)i / clickLengthSamples);
                 samples[start + i] = (float)(((random.NextDouble() * 2) - 1) * decay * 0.9);
             }

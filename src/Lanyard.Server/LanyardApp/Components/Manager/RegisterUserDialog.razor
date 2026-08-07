@@ -17,45 +17,28 @@
             <EditForm EditContext="@_editContext" OnValidSubmit="HandleRegisterUser">
                 <DataAnnotationsValidator />
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                    <FluentTextInput @bind-Value="model.FirstName"
-                                     Label="First Name"
-                                     Required="true"
-                                     Placeholder="Ben"
-                                     Style="width: 100%;"
-                                     Message="@GetValidationMessage(() => model.FirstName)"
-                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                     MessageState="MessageState.Error">
+                    <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true" Placeholder="Ben"
+                                     Style="width: 100%;" Message="@GetValidationMessage(() => model.FirstName)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
-                    <FluentTextInput @bind-Value="model.LastName"
-                                     Label="Last Name"
-                                     Required="true"
-                                     Placeholder="Mercer"
-                                     Style="width: 100%;"
-                                     Message="@GetValidationMessage(() => model.LastName)"
-                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                                     MessageState="MessageState.Error">
+                    <FluentTextInput @bind-Value="model.LastName" Label="Last Name" Required="true" Placeholder="Mercer"
+                                     Style="width: 100%;" Message="@GetValidationMessage(() => model.LastName)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
-                    <FluentTextInput @bind-Value="model.Email"
-                                     Label="Email"
-                                     Placeholder="ben.mercer@lanyard.com"
+                    <FluentTextInput @bind-Value="model.Email" Label="Email" Placeholder="ben.mercer@lanyard.com"
                                      Style="width: 100%;">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
                     </FluentTextInput>
-                    <FluentTextInput @bind-Value="model.PhoneNumber"
-                                     Label="Phone Number"
-                                     Placeholder="07860603962"
-                                     TextInputType="TextInputType.Telephone"
-                                     Style="width: 100%;">
+                    <FluentTextInput @bind-Value="model.PhoneNumber" Label="Phone Number" Placeholder="07860603962"
+                                     TextInputType="TextInputType.Telephone" Style="width: 100%;">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
                     </FluentTextInput>
 
                     <FluentStack Orientation="Orientation.Horizontal">
-                        <FluentButton Appearance="ButtonAppearance.Primary"
-                                      Type="ButtonType.Submit"
-                                      Disabled="@isSubmitting"
-                                      IconStart="@(new Icons.Regular.Size20.PersonAdd())">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      Disabled="@isSubmitting" IconStart="@(new Icons.Regular.Size20.PersonAdd())">
                             @if (isSubmitting)
                             {
                                 <FluentSpinner Style="width: 16px; height: 16px;" />
@@ -66,8 +49,7 @@
                                 <span>Create User</span>
                             }
                         </FluentButton>
-                        <FluentButton Appearance="ButtonAppearance.Default"
-                                      OnClick="@CancelDialog"
+                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
                                       Disabled="@isSubmitting">
                             Cancel
                         </FluentButton>
@@ -79,12 +61,10 @@
         {
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
                 <FluentMessageBar Intent="MessageBarIntent.Success">
-                    User '@createdUserName' was created. This password is shown only once — copy it now and pass it to the new user.
+                    User '@createdUserName' was created. This password is shown only once - copy it now and pass it to the
+                    new user.
                 </FluentMessageBar>
-                <FluentTextInput Value="@createdPassword"
-                                  Label="Temporary Password"
-                                  ReadOnly="true"
-                                  Style="width: 100%;" />
+                <FluentTextInput Value="@createdPassword" Label="Temporary Password" ReadOnly="true" Style="width: 100%;" />
                 <FluentStack Orientation="Orientation.Horizontal">
                     <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@CloseDialog">
                         Done

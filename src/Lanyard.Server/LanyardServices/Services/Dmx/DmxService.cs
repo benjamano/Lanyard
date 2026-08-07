@@ -11,9 +11,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services;
 
-public class DmxService(IDbContextFactory<ApplicationDbContext> factory, 
-    IHubContext<SignalRControlHub> hubContext, 
-    ILogger<DmxService> logger, 
+public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
+    IHubContext<SignalRControlHub> hubContext,
+    ILogger<DmxService> logger,
     IMemoryCache cache,
     IServiceScopeFactory scopeFactory) : IDmxService, IDmxClientService
 {
@@ -55,7 +55,7 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
     public async Task UpdateChannelValue(Guid clientId, int channelAddress, byte value)
     {
         // Keep the server-side universe in sync and notify subscribers (e.g. the
-        // virtual desk) — previously only SetChannelValue (ingest) did this, so
+        // virtual desk) - previously only SetChannelValue (ingest) did this, so
         // server-originated changes were invisible to the UI and lost on reload.
         lock (_lock)
         {
@@ -103,7 +103,7 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
             }
         }
     }
-    
+
     public async Task<Result<IEnumerable<DmxChannel>>> GetDmxChannelsAsync(Guid clientId)
     {
         try

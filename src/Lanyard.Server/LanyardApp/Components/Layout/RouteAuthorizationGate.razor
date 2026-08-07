@@ -8,7 +8,7 @@
    either be authenticated or be explicitly marked [AllowAnonymous]. Role/policy-specific checks on
    pages that do carry [Authorize(Roles = "...")] are still enforced by AuthorizeRouteView itself. *@
 
-@* No DefaultLayout is passed to AuthorizeRouteView here — the caller (Routes.razor) already
+@* No DefaultLayout is passed to AuthorizeRouteView here - the caller (Routes.razor) already
    wraps this component in a <LayoutView>, so passing a layout through as well would apply it
    a second time, nesting the whole page chrome inside itself. *@
 @if (_allowAnonymous || _isAuthenticated)
