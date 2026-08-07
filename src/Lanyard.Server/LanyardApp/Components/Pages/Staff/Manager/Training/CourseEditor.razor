@@ -46,10 +46,16 @@ else
                 </div>
             </FluentGridItem>
         </FluentGrid>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                      Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
-            Save Course Details
-        </FluentButton>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                          Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync">
+                Save Course Details
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonAdd())"
+                          OnClick="OpenAssignDialogAsync">
+                Assign
+            </FluentButton>
+        </FluentStack>
     </FluentCard>
 
     <FluentCard Height="640px">
@@ -282,6 +288,17 @@ else
         }
 
         isSavingCourse = false;
+    }
+
+    private async Task OpenAssignDialogAsync()
+    {
+        await _dialogService.ShowDialogAsync<AssignCourseDialog>(options =>
+        {
+            options.Header.Title = "Assign Course";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AssignCourseDialog.CourseId), CourseId);
+        });
     }
 
     private void SelectSection(CourseSection section)
