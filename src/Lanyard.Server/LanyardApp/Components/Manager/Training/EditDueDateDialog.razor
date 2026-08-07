@@ -1,0 +1,55 @@
+@using Lanyard.Application.Services.Training
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentDatePicker TValue="DateTime?" @bind-Value="dueDate" Label="Due Date" Width="100%">
+        </FluentDatePicker>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSaving" OnClick="SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="CancelAsync" Disabled="@isSaving">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid AssignmentId { get; set; }
+
+    [Parameter]
+    public DateTime? CurrentDueDate { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private DateTime? dueDate;
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        dueDate = CurrentDueDate;
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+
+        Result<CourseAssignment> result = await _courseAssignmentService.UpdateAssignmentDueDateAsync(AssignmentId, dueDate);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to update due date: {result.Error}");
+            isSaving = false;
+            return;
+        }
+
+        _toastService.ShowSuccess("Due date updated.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

@@ -1,0 +1,207 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.App.Components.Manager
+
+@inject ICourseService _courseService
+@inject ICourseAssignmentService _courseAssignmentService
+
+<div class="by-course-tab">
+    <FluentSelect TOption="Course"
+                  TValue="Guid"
+                  Items="@courses.OrderBy(x => x.Name)"
+                  OptionText="@(i => i?.Name ?? string.Empty)"
+                  OptionValue="@(i => i!.Id)"
+                  Placeholder="Select a course..."
+                  Label="Course"
+                  Value="@selectedCourseId"
+                  ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
+                  Width="400px">
+    </FluentSelect>
+
+    @if (selectedCourseId != Guid.Empty)
+    {
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" Class="mt-2 mb-2">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonAdd())"
+                          OnClick="OpenBulkAssignDialogAsync">
+                Bulk assign…
+            </FluentButton>
+        </FluentStack>
+
+        @if (isLoadingAssignments)
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+                <FluentSpinner />
+            </FluentStack>
+        }
+        else
+        {
+            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
+                            RowSize="@DataGridRowSize.Medium">
+                <ChildContent>
+                    <PropertyColumn Property="@(x => GetUserName(x.UserId))" Title="Person" />
+                    <TemplateColumn Title="Status">
+                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)" Appearance="BadgeAppearance.Filled" />
+                    </TemplateColumn>
+                    <TemplateColumn Title="Latest Score">
+                        @GetLatestScore(context)
+                    </TemplateColumn>
+                    <TemplateColumn Title="Due Date">
+                        @(context.DueDate?.ToString("d MMM yyyy") ?? "—")
+                    </TemplateColumn>
+                    <TemplateColumn Title="">
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarEdit())"
+                                      OnClick="@(() => OpenEditDueDateDialogAsync(context))">Due Date</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonDelete())"
+                                      OnClick="@(() => UnassignAsync(context))">Unassign</FluentButton>
+                    </TemplateColumn>
+                </ChildContent>
+                <EmptyContent>
+                    No one is assigned to this course yet.
+                </EmptyContent>
+            </FluentDataGrid>
+        }
+    }
+</div>
+
+@code {
+    private List<Course> courses = [];
+    private List<CourseAssignment> assignments = [];
+    private Dictionary<string, string> userNamesById = [];
+    private Guid selectedCourseId = Guid.Empty;
+    private bool isLoadingAssignments;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+
+        if (!coursesResult.IsSuccess || coursesResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load courses: {coursesResult.Error}");
+            courses = [];
+        }
+        else
+        {
+            courses = coursesResult.Data;
+        }
+
+        IEnumerable<UserProfile> allUsers = await _securityService.GetAllUsersAsync();
+        userNamesById = allUsers.ToDictionary(x => x.Id, x => x.GetName());
+    }
+
+    private async Task OnCourseSelectedAsync(Guid value)
+    {
+        selectedCourseId = value;
+        await LoadAssignmentsAsync();
+    }
+
+    private async Task LoadAssignmentsAsync()
+    {
+        if (selectedCourseId == Guid.Empty)
+        {
+            assignments = [];
+            return;
+        }
+
+        isLoadingAssignments = true;
+
+        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForCourseAsync(selectedCourseId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load assignments: {result.Error}");
+            assignments = [];
+        }
+        else
+        {
+            assignments = result.Data;
+        }
+
+        isLoadingAssignments = false;
+    }
+
+    private string GetUserName(string userId) => userNamesById.TryGetValue(userId, out string? name) ? name : userId;
+
+    private static string GetLatestScore(CourseAssignment assignment)
+    {
+        CourseQuizAttempt? latest = assignment.Attempts.OrderByDescending(x => x.AttemptNumber).FirstOrDefault();
+        return latest is null ? "—" : $"{latest.ScorePercent}%";
+    }
+
+    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => "Not Started",
+        CourseAssignmentStatus.InProgress => "In Progress",
+        CourseAssignmentStatus.Completed => "Completed",
+        CourseAssignmentStatus.Overdue => "Overdue",
+        _ => "Unknown"
+    };
+
+    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
+        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
+        CourseAssignmentStatus.Completed => BadgeColor.Success,
+        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+
+    private async Task OpenBulkAssignDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<BulkAssignDialog>(options =>
+        {
+            options.Header.Title = "Bulk Assign Course";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(BulkAssignDialog.CourseId), selectedCourseId);
+        });
+
+        if (!result.Cancelled)
+        {
+            await LoadAssignmentsAsync();
+        }
+    }
+
+    private async Task OpenEditDueDateDialogAsync(CourseAssignment assignment)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<EditDueDateDialog>(options =>
+        {
+            options.Header.Title = "Edit Due Date";
+            options.Width = "400px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(EditDueDateDialog.AssignmentId), assignment.Id);
+            options.Parameters.Add(nameof(EditDueDateDialog.CurrentDueDate), assignment.DueDate);
+        });
+
+        if (!result.Cancelled)
+        {
+            await LoadAssignmentsAsync();
+        }
+    }
+
+    private async Task UnassignAsync(CourseAssignment assignment)
+    {
+        DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), GetUserName(assignment.UserId));
+        });
+
+        if (confirmResult.Cancelled)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseAssignmentService.UnassignAsync(assignment.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to unassign: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("Unassigned.");
+        await LoadAssignmentsAsync();
+    }
+}

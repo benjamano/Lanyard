@@ -37,25 +37,11 @@ else
                                     Appearance="TextAreaAppearance.Outline" />
                 </div>
             </FluentGridItem>
-            <FluentGridItem Xs="3">
-                <div class="w-100 mt-5">
-                    <FluentCheckbox @bind-Value="course.AutoAssignOnUserCreation" Disabled="true"
-                                    Message="Coming soon — auto-assignment isn't active yet.">
-                        Auto-assign to new users
-                    </FluentCheckbox>
-                </div>
-            </FluentGridItem>
         </FluentGrid>
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
-            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                          Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync">
-                Save Course Details
-            </FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonAdd())"
-                          OnClick="OpenAssignDialogAsync">
-                Assign
-            </FluentButton>
-        </FluentStack>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                      Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
+            Save Course Details
+        </FluentButton>
     </FluentCard>
 
     <FluentCard Height="640px">
@@ -288,17 +274,6 @@ else
         }
 
         isSavingCourse = false;
-    }
-
-    private async Task OpenAssignDialogAsync()
-    {
-        await _dialogService.ShowDialogAsync<AssignCourseDialog>(options =>
-        {
-            options.Header.Title = "Assign Course";
-            options.Width = "500px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(AssignCourseDialog.CourseId), CourseId);
-        });
     }
 
     private void SelectSection(CourseSection section)

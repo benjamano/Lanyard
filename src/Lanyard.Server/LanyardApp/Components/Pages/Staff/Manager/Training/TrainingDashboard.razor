@@ -1,0 +1,23 @@
+@page "/manage/training"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.Manager.Training
+
+<PageTitle>Training Dashboard</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentText Typo="Typography.PaneHeader">Training Dashboard</FluentText>
+
+    <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
+        <FluentTab Header="By Course" IconStart="@(new Icons.Regular.Size16.Board())">
+            <ByCourseTrainingTab />
+        </FluentTab>
+        <FluentTab Header="By Person" IconStart="@(new Icons.Regular.Size16.Person())" DeferredLoading="true">
+            <ByPersonTrainingTab />
+        </FluentTab>
+        <FluentTab Header="Auto-assign rules" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())" DeferredLoading="true">
+            <AutoAssignRulesTab />
+        </FluentTab>
+    </FluentTabs>
+</FluentCard>

@@ -1,0 +1,67 @@
+@using Lanyard.Application.Services.Training
+
+@inject ICourseService _courseService
+
+<div class="auto-assign-rules-tab">
+    @if (isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (courses.Count == 0)
+    {
+        <FluentText>No courses exist yet.</FluentText>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="mt-2">
+            @foreach (Course course in courses)
+            {
+                <FluentSwitch Value="@course.AutoAssignOnUserCreation"
+                              ValueChanged="@((bool v) => ToggleAutoAssignAsync(course, v))"
+                              Label="@course.Name" />
+            }
+        </FluentStack>
+    }
+</div>
+
+@code {
+    private List<Course> courses = [];
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<List<Course>> result = await _courseService.GetCoursesAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load courses: {result.Error}");
+            courses = [];
+        }
+        else
+        {
+            courses = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private async Task ToggleAutoAssignAsync(Course course, bool newValue)
+    {
+        course.AutoAssignOnUserCreation = newValue;
+
+        Result<Course> result = await _courseService.SaveCourseAsync(course);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to update auto-assign rule: {result.Error}");
+            course.AutoAssignOnUserCreation = !newValue;
+            return;
+        }
+
+        _toastService.ShowSuccess($"Auto-assign {(newValue ? "enabled" : "disabled")} for {course.Name}.");
+    }
+}
