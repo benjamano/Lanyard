@@ -6,6 +6,8 @@ using Lanyard.Infrastructure.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Cryptography;
+using Lanyard.Application.Services.Training;
+using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Authentication;
 
@@ -14,15 +16,21 @@ public class SecurityService : ISecurityService
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
+    private readonly ICourseAssignmentService _courseAssignmentService;
+    private readonly ILogger<SecurityService> _logger;
 
     public SecurityService(
-        AuthenticationStateProvider authStateProvider, 
+        AuthenticationStateProvider authStateProvider,
         IDbContextFactory<ApplicationDbContext> factory,
-        UserManager<UserProfile> userManager)
+        UserManager<UserProfile> userManager,
+        ICourseAssignmentService courseAssignmentService,
+        ILogger<SecurityService> logger)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
         _userManager = userManager;
+        _courseAssignmentService = courseAssignmentService;
+        _logger = logger;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -162,6 +170,28 @@ public class SecurityService : ISecurityService
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<UserCreationResult>.Fail($"Failed to create user: {errors}");
+            }
+
+            try
+            {
+                await using ApplicationDbContext autoAssignCtx = await _factory.CreateDbContextAsync();
+
+                List<Guid> autoAssignCourseIds = await autoAssignCtx.Courses
+                    .Where(x => x.IsActive && x.AutoAssignOnUserCreation)
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                foreach (Guid courseId in autoAssignCourseIds)
+                {
+                    await _courseAssignmentService.AssignCourseToUsersAsync(courseId, [user.Id], null, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Auto-assigning training courses must never block account creation —
+                // a new hire needs their login regardless of whether their induction
+                // course could be auto-assigned.
+                _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
             }
 
             return Result<UserCreationResult>.Ok(new UserCreationResult(user, generatedPassword));
