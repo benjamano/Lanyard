@@ -31,9 +31,9 @@
             {
                 <div class="training-assignment-row" @onclick="@(() => OpenAssignment(assignment.Id))">
                     <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Class="w-100">
-                        <FluentText Weight="TextWeight.Bold">@assignment.Course?.Name</FluentText>
-                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="true" Class="w-100 training-assignment-row-inner">
+                        <FluentText Weight="TextWeight.Bold" Class="training-assignment-name">@assignment.Course?.Name</FluentText>
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px" Wrap="true" Width="auto">
                             @if (assignment.DueDate is not null)
                             {
                                 <FluentText>Due @assignment.DueDate.Value.ToString("d MMM yyyy")</FluentText>
