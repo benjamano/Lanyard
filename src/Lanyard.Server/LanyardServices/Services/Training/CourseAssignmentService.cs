@@ -169,6 +169,8 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             }
 
             List<CourseQuestion> questions = await ctx.CourseQuestions
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Include(x => x.Options)
                 .Where(x => x.CourseId == assignment.CourseId && x.IsActive)
                 .ToListAsync();

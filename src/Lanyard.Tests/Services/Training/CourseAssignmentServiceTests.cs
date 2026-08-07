@@ -359,4 +359,37 @@ public class CourseAssignmentServiceTests
 
         Assert.IsFalse(result.Success);
     }
+
+    [TestMethod]
+    public async Task SubmitQuizAttemptAsync_CalculatesFractionalScoreCorrectly()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options, passMarkPercent: 60);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        CourseQuestionOption correctOption1 = await SeedQuestionAsync(options, course.Id, "Correct1", "Wrong1");
+        CourseQuestionOption correctOption2 = await SeedQuestionAsync(options, course.Id, "Correct2", "Wrong2");
+        CourseQuestionOption correctOption3 = await SeedQuestionAsync(options, course.Id, "Correct3", "Wrong3");
+
+        CourseQuestionOption wrongOption;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            wrongOption = await ctx.CourseQuestionOptions.SingleAsync(x => x.QuestionId == correctOption3.QuestionId && !x.IsCorrect);
+        }
+
+        Dictionary<Guid, Guid> answers = new()
+        {
+            [correctOption1.QuestionId] = correctOption1.Id,
+            [correctOption2.QuestionId] = correctOption2.Id,
+            [correctOption3.QuestionId] = wrongOption.Id
+        };
+
+        Result<QuizGradeResult> result = await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(67, result.Data!.ScorePercent);
+        Assert.IsTrue(result.Data!.Passed);
+    }
 }
