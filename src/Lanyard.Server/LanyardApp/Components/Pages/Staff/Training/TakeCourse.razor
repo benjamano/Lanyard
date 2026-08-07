@@ -6,6 +6,8 @@
 @using Lanyard.Infrastructure.DTO.Training
 
 @inject ICourseAssignmentService _courseAssignmentService
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 <PageTitle>@(assignment?.Course?.Name ?? "Training")</PageTitle>
 
@@ -105,6 +107,35 @@ else
     private readonly Dictionary<Guid, Guid> selectedAnswers = [];
     private bool quizSubmitted;
     private QuizGradeResult? lastGradeResult;
+
+    private DotNetObjectReference<TakeCourse>? _viewportRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _viewportRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isNarrow)
+    {
+        stepperPosition = isNarrow ? StepperPosition.Top : StepperPosition.Left;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _viewportRef?.Dispose();
+
+        try
+        {
+            await JS.InvokeVoidAsync("viewportWatcher.dispose");
+        }
+        catch { }
+    }
 
     protected override async Task OnInitializedAsync()
     {
