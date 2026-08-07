@@ -1,0 +1,15 @@
+/* Course picker fills the available width on a narrow (phone) viewport instead
+   of the old fixed 400px overflowing it, but is capped so it doesn't stretch
+   absurdly wide on a large desktop screen. */
+.course-picker-host {
+    max-width: 400px;
+}
+
+/* The "Due Date" / "Unassign" action buttons in the assignments grid's last
+   column have no room to sit side-by-side on a narrow viewport — let them
+   wrap onto a second line instead of overflowing the grid cell. */
+.assignment-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}

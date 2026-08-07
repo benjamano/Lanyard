@@ -4,17 +4,19 @@
 @inject ICourseAssignmentService _courseAssignmentService
 
 <div class="by-person-tab">
-    <FluentSelect TOption="UserProfile"
-                  TValue="string"
-                  Items="@users.OrderBy(x => x.GetName())"
-                  OptionText="@(i => i?.GetName() ?? string.Empty)"
-                  OptionValue="@(i => i?.Id)"
-                  Placeholder="Select a person..."
-                  Label="Person"
-                  @bind-Value="selectedUserId"
-                  @bind-Value:after="LoadAssignmentsAsync"
-                  Width="400px">
-    </FluentSelect>
+    <div class="person-picker-host">
+        <FluentSelect TOption="UserProfile"
+                      TValue="string"
+                      Items="@users.OrderBy(x => x.GetName())"
+                      OptionText="@(i => i?.GetName() ?? string.Empty)"
+                      OptionValue="@(i => i?.Id)"
+                      Placeholder="Select a person..."
+                      Label="Person"
+                      @bind-Value="selectedUserId"
+                      @bind-Value:after="LoadAssignmentsAsync"
+                      Width="100%">
+        </FluentSelect>
+    </div>
 
     @if (!string.IsNullOrEmpty(selectedUserId))
     {

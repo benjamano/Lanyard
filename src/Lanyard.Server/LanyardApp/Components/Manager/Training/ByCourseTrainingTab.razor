@@ -6,17 +6,19 @@
 @inject ICourseAssignmentService _courseAssignmentService
 
 <div class="by-course-tab">
-    <FluentSelect TOption="Course"
-                  TValue="Guid"
-                  Items="@courses.OrderBy(x => x.Name)"
-                  OptionText="@(i => i?.Name ?? string.Empty)"
-                  OptionValue="@(i => i!.Id)"
-                  Placeholder="Select a course..."
-                  Label="Course"
-                  Value="@selectedCourseId"
-                  ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
-                  Width="400px">
-    </FluentSelect>
+    <div class="course-picker-host">
+        <FluentSelect TOption="Course"
+                      TValue="Guid"
+                      Items="@courses.OrderBy(x => x.Name)"
+                      OptionText="@(i => i?.Name ?? string.Empty)"
+                      OptionValue="@(i => i!.Id)"
+                      Placeholder="Select a course..."
+                      Label="Course"
+                      Value="@selectedCourseId"
+                      ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
+                      Width="100%">
+        </FluentSelect>
+    </div>
 
     @if (selectedCourseId != Guid.Empty)
     {
@@ -49,10 +51,12 @@
                         @(context.DueDate?.ToString("d MMM yyyy") ?? "—")
                     </TemplateColumn>
                     <TemplateColumn Title="">
-                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarEdit())"
-                                      OnClick="@(() => OpenEditDueDateDialogAsync(context))">Due Date</FluentButton>
-                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonDelete())"
-                                      OnClick="@(() => UnassignAsync(context))">Unassign</FluentButton>
+                        <div class="assignment-row-actions">
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarEdit())"
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(context))">Due Date</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonDelete())"
+                                          OnClick="@(() => UnassignAsync(context))">Unassign</FluentButton>
+                        </div>
                     </TemplateColumn>
                 </ChildContent>
                 <EmptyContent>
@@ -150,7 +154,7 @@
         DialogResult result = await _dialogService.ShowDialogAsync<BulkAssignDialog>(options =>
         {
             options.Header.Title = "Bulk Assign Course";
-            options.Width = "500px";
+            options.Width = "min(500px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(BulkAssignDialog.CourseId), selectedCourseId);
         });
@@ -166,7 +170,7 @@
         DialogResult result = await _dialogService.ShowDialogAsync<EditDueDateDialog>(options =>
         {
             options.Header.Title = "Edit Due Date";
-            options.Width = "400px";
+            options.Width = "min(400px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(EditDueDateDialog.AssignmentId), assignment.Id);
             options.Parameters.Add(nameof(EditDueDateDialog.CurrentDueDate), assignment.DueDate);
