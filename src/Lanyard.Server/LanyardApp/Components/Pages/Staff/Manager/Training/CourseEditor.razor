@@ -51,11 +51,17 @@ else
                     <FluentText Typo="Typography.PaneHeader">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
-                        <FluentButton
-                            Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                            Class="w-100" OnClick="@(() => SelectSection(courseSection))">
-                            @courseSection.Title
-                        </FluentButton>
+                        <div class="reorder-item" draggable="true"
+                             @ondragstart="@(() => draggedSection = courseSection)"
+                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
+                             @ondrop="@(() => OnSectionDropAsync(courseSection))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
+                            <FluentButton
+                                Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                Class="reorder-item-button" OnClick="@(() => SelectSection(courseSection))">
+                                @courseSection.Title
+                            </FluentButton>
+                        </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
                                   OnClick="StartNewSection">
@@ -67,11 +73,17 @@ else
                     <FluentText Typo="Typography.PaneHeader">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
-                        <FluentButton
-                            Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                            Class="w-100" OnClick="@(() => SelectQuestion(question))">
-                            @question.QuestionText
-                        </FluentButton>
+                        <div class="reorder-item" draggable="true"
+                             @ondragstart="@(() => draggedQuestion = question)"
+                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
+                             @ondrop="@(() => OnQuestionDropAsync(question))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
+                            <FluentButton
+                                Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                Class="reorder-item-button" OnClick="@(() => SelectQuestion(question))">
+                                @question.QuestionText
+                            </FluentButton>
+                        </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
                                   OnClick="StartNewQuestion">
@@ -89,6 +101,14 @@ else
                         <div class="quill-editor-host">
                             <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
                                 <ToolbarContent>
+                                    <span class="ql-formats">
+                                        <select class="ql-header">
+                                            <option value="1"></option>
+                                            <option value="2"></option>
+                                            <option value="3"></option>
+                                            <option selected></option>
+                                        </select>
+                                    </span>
                                     <span class="ql-formats">
                                         <button class="ql-bold"></button>
                                         <button class="ql-italic"></button>
@@ -185,6 +205,8 @@ else
     private CourseQuestion? selectedQuestion;
     private BlazoredTextEditor? sectionEditor;
     private Guid? loadedSectionEditorId;
+    private CourseSection? draggedSection;
+    private CourseQuestion? draggedQuestion;
     private bool isLoading;
     private bool isSavingCourse;
     private bool isSavingSection;
@@ -274,6 +296,78 @@ else
         }
 
         isSavingCourse = false;
+    }
+
+    private async Task OnSectionDropAsync(CourseSection targetSection)
+    {
+        if (course is null || draggedSection is null || draggedSection.Id == targetSection.Id)
+        {
+            draggedSection = null;
+            return;
+        }
+
+        List<CourseSection> ordered = [.. course.Sections.OrderBy(x => x.SortOrder)];
+        int fromIndex = ordered.FindIndex(x => x.Id == draggedSection.Id);
+        int toIndex = ordered.FindIndex(x => x.Id == targetSection.Id);
+        draggedSection = null;
+
+        if (fromIndex < 0 || toIndex < 0)
+        {
+            return;
+        }
+
+        CourseSection moved = ordered[fromIndex];
+        ordered.RemoveAt(fromIndex);
+        ordered.Insert(toIndex, moved);
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortOrder = i;
+        }
+
+        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to reorder sections: {result.Error}");
+            await LoadCourseAsync();
+        }
+    }
+
+    private async Task OnQuestionDropAsync(CourseQuestion targetQuestion)
+    {
+        if (course is null || draggedQuestion is null || draggedQuestion.Id == targetQuestion.Id)
+        {
+            draggedQuestion = null;
+            return;
+        }
+
+        List<CourseQuestion> ordered = [.. course.Questions.OrderBy(x => x.SortOrder)];
+        int fromIndex = ordered.FindIndex(x => x.Id == draggedQuestion.Id);
+        int toIndex = ordered.FindIndex(x => x.Id == targetQuestion.Id);
+        draggedQuestion = null;
+
+        if (fromIndex < 0 || toIndex < 0)
+        {
+            return;
+        }
+
+        CourseQuestion moved = ordered[fromIndex];
+        ordered.RemoveAt(fromIndex);
+        ordered.Insert(toIndex, moved);
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            ordered[i].SortOrder = i;
+        }
+
+        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to reorder questions: {result.Error}");
+            await LoadCourseAsync();
+        }
     }
 
     private void SelectSection(CourseSection section)

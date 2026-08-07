@@ -6,7 +6,24 @@
     max-width: 100%;
 }
 
+/* Section content is saved verbatim from the Quill editor, which frequently
+   carries pasted-from-Word inline `style="color: ..."` spans - those inline
+   styles beat any plain stylesheet rule regardless of selector specificity,
+   so without !important a pasted black/near-black color renders unreadable
+   here in dark mode, same root cause as the equivalent override in
+   CourseEditor.razor.css. */
+.take-course-section-body,
+.take-course-section-body ::deep * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
 .take-course-section-body ::deep p {
+    margin: 0 0 12px 0;
+}
+
+.take-course-section-body ::deep h1,
+.take-course-section-body ::deep h2,
+.take-course-section-body ::deep h3 {
     margin: 0 0 12px 0;
 }
 

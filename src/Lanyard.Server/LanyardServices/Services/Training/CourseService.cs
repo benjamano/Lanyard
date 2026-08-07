@@ -228,6 +228,36 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             return Result<bool>.Fail($"Failed to delete section: {ex.Message}");
         }
     }
+    public async Task<Result<bool>> ReorderSectionsAsync(Guid courseId, List<Guid> orderedSectionIds)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CourseSection> sections = await ctx.CourseSections
+                .Where(x => x.CourseId == courseId && x.IsActive)
+                .ToListAsync();
+
+            for (int i = 0; i < orderedSectionIds.Count; i++)
+            {
+                CourseSection? section = sections.FirstOrDefault(x => x.Id == orderedSectionIds[i]);
+
+                if (section is not null)
+                {
+                    section.SortOrder = i;
+                }
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to reorder sections: {ex.Message}");
+        }
+    }
+
     public async Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question)
     {
         try
@@ -372,6 +402,36 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to delete question: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> ReorderQuestionsAsync(Guid courseId, List<Guid> orderedQuestionIds)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CourseQuestion> questions = await ctx.CourseQuestions
+                .Where(x => x.CourseId == courseId && x.IsActive)
+                .ToListAsync();
+
+            for (int i = 0; i < orderedQuestionIds.Count; i++)
+            {
+                CourseQuestion? question = questions.FirstOrDefault(x => x.Id == orderedQuestionIds[i]);
+
+                if (question is not null)
+                {
+                    question.SortOrder = i;
+                }
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to reorder questions: {ex.Message}");
         }
     }
 }

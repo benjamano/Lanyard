@@ -79,6 +79,36 @@
     fill: var(--colorCompoundBrandStroke);
 }
 
+.reorder-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.reorder-item ::deep .reorder-handle {
+    flex-shrink: 0;
+    cursor: grab;
+    color: var(--colorNeutralForeground3);
+}
+
+/* FluentButton renders its own <fluent-button> host from the library's own
+   component, so it never receives CourseEditor's scope attribute - a bare
+   .reorder-item-button rule silently no-ops. ::deep from the scoped .reorder-item
+   ancestor is required, same quirk as .quill-editor-host/.option-radio-host above.
+   Also: fluent-button's shadow host is itself display:flex; justify-content:center,
+   which centers its (content-width) inner span regardless of the host's own
+   width - so a plain flex-grow here just makes the host wider without moving
+   the text. Overriding the host's own justify-content is what actually left-
+   aligns the label; ::part(content) alone (targeting the inner span) has no
+   visible effect since that span isn't what's being centered. */
+.reorder-item ::deep .reorder-item-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+}
+
 /* This plain div sits in the same non-stretching (align-items: start) flex
    column as .quill-editor-host above, so it shrinks to its content's width
    unless forced — the same root cause, different element. */

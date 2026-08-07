@@ -23,7 +23,7 @@ else
         <FluentText Typo="Typography.PaneHeader">@assignment.Course!.Name</FluentText>
 
         <div class="take-course-wizard-host">
-            <FluentWizard StepperPosition="@stepperPosition" Height="auto" OnFinish="HandleFinishAsync">
+            <FluentWizard StepperPosition="@stepperPosition" Height="calc(100vh - 260px)" OnFinish="HandleFinishAsync">
                 <Steps>
                     @foreach (CourseSection courseSection in assignment.Course.Sections)
                     {
@@ -52,7 +52,8 @@ else
                                     else
                                     {
                                         <FluentMessageBar Intent="MessageBarIntent.Warning">
-                                            You scored @lastGradeResult.ScorePercent% — you need @assignment.Course.PassMarkPercent% to pass. Review the marked questions below and try again.
+                                            You scored @lastGradeResult.ScorePercent% - you need @assignment.Course.PassMarkPercent% to
+                                            pass. Review the marked questions below and try again.
                                         </FluentMessageBar>
                                     }
                                 }
@@ -60,12 +61,14 @@ else
                                 @foreach (CourseQuestion question in assignment.Course.Questions)
                                 {
                                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
-                                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                        <FluentStack Orientation="Orientation.Horizontal"
+                                                     VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
                                             <FluentText Weight="TextWeight.Semibold">@question.QuestionText</FluentText>
                                             @if (quizSubmitted)
                                             {
-                                                <FluentIcon Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
-                                                            Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
+                                                <FluentIcon
+                                                Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
+                                                Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
                                             }
                                         </FluentStack>
                                         <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
@@ -133,6 +136,7 @@ else
             await JS.InvokeVoidAsync("viewportWatcher.dispose");
         }
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (InvalidOperationException) {}
 
         _viewportRef?.Dispose();
     }
@@ -185,7 +189,8 @@ else
             return;
         }
 
-        Result<QuizGradeResult> result = await _courseAssignmentService.SubmitQuizAttemptAsync(AssignmentId, currentUserId, selectedAnswers);
+        Result<QuizGradeResult> result = await _courseAssignmentService.SubmitQuizAttemptAsync(AssignmentId, currentUserId,
+selectedAnswers);
 
         if (!result.IsSuccess || result.Data is null)
         {

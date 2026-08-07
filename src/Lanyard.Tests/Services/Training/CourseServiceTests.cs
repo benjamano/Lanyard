@@ -381,4 +381,42 @@ public class CourseServiceTests
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.HasCount(0, reloaded.Data!.Questions);
     }
+
+    [TestMethod]
+    public async Task CourseService_ReorderSections_AppliesNewSortOrderFromGivenIdSequence()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
+
+        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Assert.IsTrue(reorderResult.Success, reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual("Jewellery", reloaded.Data!.Sections[0].Title);
+        Assert.AreEqual("Shoes", reloaded.Data!.Sections[1].Title);
+    }
+
+    [TestMethod]
+    public async Task CourseService_ReorderQuestions_AppliesNewSortOrderFromGivenIdSequence()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+
+        Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+        Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)));
+
+        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Assert.IsTrue(reorderResult.Success, reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[0].Id);
+        Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[1].Id);
+    }
 }

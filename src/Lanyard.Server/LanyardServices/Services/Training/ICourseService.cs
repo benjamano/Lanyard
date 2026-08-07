@@ -12,7 +12,9 @@ public interface ICourseService
 
     Task<Result<CourseSection>> SaveSectionAsync(CourseSection section);
     Task<Result<bool>> DeleteSectionAsync(Guid sectionId);
+    Task<Result<bool>> ReorderSectionsAsync(Guid courseId, List<Guid> orderedSectionIds);
 
     Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question);
     Task<Result<bool>> DeleteQuestionAsync(Guid questionId);
+    Task<Result<bool>> ReorderQuestionsAsync(Guid courseId, List<Guid> orderedQuestionIds);
 }
