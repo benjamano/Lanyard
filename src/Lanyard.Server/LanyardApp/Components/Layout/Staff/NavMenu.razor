@@ -13,6 +13,12 @@
                 Home
             </FluentNavItem>
 
+            <FluentNavItem Href="/training"
+                            IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                            IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                My Training
+            </FluentNavItem>
+
             @if (_canClockIn)
             {
                 <FluentNavCategory Title="Rota"

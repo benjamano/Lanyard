@@ -1,0 +1,10 @@
+.training-assignment-row {
+    cursor: pointer;
+    padding: 12px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+}
+
+.training-assignment-row:hover {
+    background-color: var(--colorNeutralBackground2);
+}
