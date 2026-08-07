@@ -429,4 +429,193 @@ public class CourseAssignmentServiceTests
         Assert.AreEqual(67, result.Data!.ScorePercent);
         Assert.IsTrue(result.Data!.Passed);
     }
+
+    [TestMethod]
+    public async Task GetAssignmentsForCourseAsync_ReturnsOnlyActiveAssignmentsForThatCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course courseA = await SeedCourseAsync(options);
+        Course courseB = await SeedCourseAsync(options, passMarkPercent: 70);
+        UserProfile userA = await SeedUserAsync(options, "user-a");
+        UserProfile userB = await SeedUserAsync(options, "user-b");
+
+        await SeedAssignmentAsync(options, courseA.Id, userA.Id);
+        await SeedAssignmentAsync(options, courseB.Id, userB.Id);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(courseA.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(userA.Id, result.Data![0].UserId);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_AssignsToAllNewUsers_ReturnsCorrectCounts()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile userA = await SeedUserAsync(options, "user-a");
+        UserProfile userB = await SeedUserAsync(options, "user-b");
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            course.Id, [userA.Id, userB.Id], "manager-1", null);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(2, result.Data!.AssignedCount);
+        Assert.AreEqual(0, result.Data!.SkippedDuplicateCount);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.HasCount(2, await ctx.CourseAssignments.Where(x => x.CourseId == course.Id).ToListAsync());
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_SkipsAlreadyAssignedUsers_CountsThemAsSkipped()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile userA = await SeedUserAsync(options, "user-a");
+        UserProfile userB = await SeedUserAsync(options, "user-b");
+
+        await SeedAssignmentAsync(options, course.Id, userA.Id);
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            course.Id, [userA.Id, userB.Id], "manager-1", null);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(1, result.Data!.AssignedCount);
+        Assert.AreEqual(1, result.Data!.SkippedDuplicateCount);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_FailsWhenCourseNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            Guid.NewGuid(), [user.Id], "manager-1", null);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_NormalizesDueDateToEndOfDayUtc()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        DateTime unspecifiedDueDate = new(2026, 12, 25, 0, 0, 0, DateTimeKind.Unspecified);
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            course.Id, [user.Id], "manager-1", unspecifiedDueDate);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        CourseAssignment dbAssignment = await ctx.CourseAssignments.SingleAsync(x => x.CourseId == course.Id);
+        Assert.AreEqual(DateTimeKind.Utc, dbAssignment.DueDate!.Value.Kind);
+        Assert.AreEqual(25, dbAssignment.DueDate!.Value.Day);
+        Assert.AreEqual(23, dbAssignment.DueDate!.Value.Hour);
+        Assert.AreEqual(59, dbAssignment.DueDate!.Value.Minute);
+    }
+
+    [TestMethod]
+    public async Task UpdateAssignmentDueDateAsync_UpdatesExistingDueDate()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Result<CourseAssignment> result = await service.UpdateAssignmentDueDateAsync(
+            assignment.Id, new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Unspecified));
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNotNull(result.Data!.DueDate);
+        Assert.AreEqual(1, result.Data!.DueDate!.Value.Day);
+        Assert.AreEqual(DateTimeKind.Utc, result.Data!.DueDate!.Value.Kind);
+    }
+
+    [TestMethod]
+    public async Task UpdateAssignmentDueDateAsync_CanClearDueDateToNull()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Result<CourseAssignment> withDueDate = await service.UpdateAssignmentDueDateAsync(
+            assignment.Id, DateTime.UtcNow.AddDays(5));
+        Assert.IsTrue(withDueDate.Success, withDueDate.Error);
+
+        Result<CourseAssignment> cleared = await service.UpdateAssignmentDueDateAsync(assignment.Id, null);
+
+        Assert.IsTrue(cleared.Success, cleared.Error);
+        Assert.IsNull(cleared.Data!.DueDate);
+    }
+
+    [TestMethod]
+    public async Task UpdateAssignmentDueDateAsync_FailsWhenAssignmentNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+
+        Result<CourseAssignment> result = await service.UpdateAssignmentDueDateAsync(Guid.NewGuid(), null);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task UnassignAsync_SetsInactive()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Result<bool> result = await service.UnassignAsync(assignment.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        CourseAssignment dbAssignment = await ctx.CourseAssignments.SingleAsync(x => x.Id == assignment.Id);
+        Assert.IsFalse(dbAssignment.IsActive);
+    }
+
+    [TestMethod]
+    public async Task UnassignAsync_FailsWhenAssignmentNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+
+        Result<bool> result = await service.UnassignAsync(Guid.NewGuid());
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task UnassignAsync_ExcludesFromGetAssignmentsForCourseAsync()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Result<bool> unassignResult = await service.UnassignAsync(assignment.Id);
+        Assert.IsTrue(unassignResult.Success, unassignResult.Error);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(course.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(0, result.Data!);
+    }
 }

@@ -37,9 +37,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 return Result<CourseAssignment>.Fail("This course is already assigned to that user.");
             }
 
-            DateTime? normalizedDueDate = dueDate.HasValue
-                ? DateTime.SpecifyKind(dueDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc)
-                : null;
+            DateTime? normalizedDueDate = NormalizeDueDate(dueDate);
 
             CourseAssignment assignment = new()
             {
@@ -254,6 +252,139 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         catch (Exception ex)
         {
             return Result<QuizGradeResult>.Fail($"Failed to submit quiz attempt: {ex.Message}");
+        }
+    }
+
+    private static DateTime? NormalizeDueDate(DateTime? dueDate) =>
+        dueDate.HasValue ? DateTime.SpecifyKind(dueDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc) : null;
+
+    public async Task<Result<List<CourseAssignment>>> GetAssignmentsForCourseAsync(Guid courseId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CourseAssignment> assignments = await ctx.CourseAssignments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.CourseId == courseId && x.IsActive)
+                .Include(x => x.Attempts)
+                .OrderBy(x => x.AssignedDate)
+                .ToListAsync();
+
+            return Result<List<CourseAssignment>>.Ok(assignments);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<CourseAssignment>>.Fail($"Failed to retrieve assignments: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == courseId && x.IsActive);
+
+            if (!courseExists)
+            {
+                return Result<BulkAssignResult>.Fail("Course not found.");
+            }
+
+            DateTime? normalizedDueDate = NormalizeDueDate(dueDate);
+            List<string> distinctUserIds = [.. userIds.Distinct()];
+
+            HashSet<string> alreadyAssignedUserIds = (await ctx.CourseAssignments
+                .Where(x => x.CourseId == courseId && x.IsActive && distinctUserIds.Contains(x.UserId))
+                .Select(x => x.UserId)
+                .ToListAsync())
+                .ToHashSet();
+
+            int assignedCount = 0;
+
+            // userIds are sourced from GetAllUsersAsync (individual picks) or
+            // GetUsersInRoleAsync (role members) by the caller — both already
+            // resolve to real Identity users, so no per-user existence check here.
+            foreach (string userId in distinctUserIds)
+            {
+                if (alreadyAssignedUserIds.Contains(userId))
+                {
+                    continue;
+                }
+
+                ctx.CourseAssignments.Add(new CourseAssignment
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = courseId,
+                    UserId = userId,
+                    AssignedByUserId = assignedByUserId,
+                    AssignedDate = DateTime.UtcNow,
+                    DueDate = normalizedDueDate,
+                    IsActive = true
+                });
+
+                assignedCount++;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<BulkAssignResult>.Ok(new BulkAssignResult(assignedCount, distinctUserIds.Count - assignedCount));
+        }
+        catch (Exception ex)
+        {
+            return Result<BulkAssignResult>.Fail($"Failed to bulk assign course: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<CourseAssignment>> UpdateAssignmentDueDateAsync(Guid assignmentId, DateTime? newDueDate)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CourseAssignment? assignment = await ctx.CourseAssignments.FirstOrDefaultAsync(x => x.Id == assignmentId && x.IsActive);
+
+            if (assignment is null)
+            {
+                return Result<CourseAssignment>.Fail("Assignment not found.");
+            }
+
+            assignment.DueDate = NormalizeDueDate(newDueDate);
+
+            await ctx.SaveChangesAsync();
+
+            return Result<CourseAssignment>.Ok(assignment);
+        }
+        catch (Exception ex)
+        {
+            return Result<CourseAssignment>.Fail($"Failed to update due date: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> UnassignAsync(Guid assignmentId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CourseAssignment? assignment = await ctx.CourseAssignments.FirstOrDefaultAsync(x => x.Id == assignmentId);
+
+            if (assignment is null)
+            {
+                return Result<bool>.Fail("Assignment not found.");
+            }
+
+            assignment.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to unassign course: {ex.Message}");
         }
     }
 }
