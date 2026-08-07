@@ -30,8 +30,15 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 return Result<CourseAssignment>.Fail("User not found.");
             }
 
+            bool alreadyAssigned = await ctx.CourseAssignments.AnyAsync(x => x.CourseId == courseId && x.UserId == userId && x.IsActive);
+
+            if (alreadyAssigned)
+            {
+                return Result<CourseAssignment>.Fail("This course is already assigned to that user.");
+            }
+
             DateTime? normalizedDueDate = dueDate.HasValue
-                ? DateTime.SpecifyKind(dueDate.Value, DateTimeKind.Utc)
+                ? DateTime.SpecifyKind(dueDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc)
                 : null;
 
             CourseAssignment assignment = new()
@@ -65,7 +72,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             List<CourseAssignment> assignments = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.UserId == userId && x.IsActive)
+                .Where(x => x.UserId == userId && x.IsActive && (x.Course!.IsActive || x.CompletedDate != null))
                 .Include(x => x.Course)
                 .Include(x => x.Attempts)
                 .OrderBy(x => x.AssignedDate)
@@ -91,7 +98,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 .Include(x => x.Course!).ThenInclude(c => c.Sections.Where(s => s.IsActive))
                 .Include(x => x.Course!).ThenInclude(c => c.Questions.Where(q => q.IsActive)).ThenInclude(q => q.Options.Where(o => o.IsActive))
                 .Include(x => x.Attempts).ThenInclude(a => a.Answers)
-                .FirstOrDefaultAsync(x => x.Id == assignmentId && x.IsActive);
+                .FirstOrDefaultAsync(x => x.Id == assignmentId && x.IsActive && (x.Course!.IsActive || x.CompletedDate != null));
 
             if (assignment is null)
             {

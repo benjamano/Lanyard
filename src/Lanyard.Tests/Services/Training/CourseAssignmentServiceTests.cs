@@ -264,6 +264,20 @@ public class CourseAssignmentServiceTests
     }
 
     [TestMethod]
+    public async Task StartAssignmentAsync_FailsWhenRequestingUserIsNotOwner()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile owner = await SeedUserAsync(options, "owner");
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, owner.Id);
+
+        Result<CourseAssignment> result = await service.StartAssignmentAsync(assignment.Id, "someone-else");
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
     public async Task SubmitQuizAttemptAsync_GradesCorrectlyAndPassesWhenAboveThreshold()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

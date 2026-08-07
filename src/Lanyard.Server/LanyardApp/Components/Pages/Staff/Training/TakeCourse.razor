@@ -128,13 +128,13 @@ else
 
     public async ValueTask DisposeAsync()
     {
-        _viewportRef?.Dispose();
-
         try
         {
             await JS.InvokeVoidAsync("viewportWatcher.dispose");
         }
-        catch { }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+
+        _viewportRef?.Dispose();
     }
 
     protected override async Task OnInitializedAsync()
@@ -181,6 +181,7 @@ else
     {
         if (assignment?.Course is null || assignment.Course.Questions.Count == 0)
         {
+            _toastService.ShowError("This course can't be completed until it has quiz questions.");
             return;
         }
 

@@ -46,4 +46,12 @@ public class CourseAssignmentStatusTests
 
         Assert.AreEqual(CourseAssignmentStatus.Completed, assignment.GetStatus());
     }
+
+    [TestMethod]
+    public void GetStatus_DoesNotReturnOverdue_WhenDueDateIsEndOfTodayButTimeOfDayHasPassed()
+    {
+        CourseAssignment assignment = new() { Id = Guid.NewGuid(), CourseId = Guid.NewGuid(), UserId = "u1", DueDate = DateTime.UtcNow.Date.AddDays(1).AddTicks(-1) };
+
+        Assert.AreNotEqual(CourseAssignmentStatus.Overdue, assignment.GetStatus());
+    }
 }

@@ -13,7 +13,7 @@
     <ChildContent>
         <EditForm EditContext="@_editContext" OnValidSubmit="HandleAssignAsync">
             <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
                 <FluentSelect TOption="UserProfile"
                               TValue="string"
                               Items="@userProfiles.OrderBy(x => x.GetName())"
@@ -33,16 +33,9 @@
                     <FluentButton Appearance="ButtonAppearance.Primary"
                                   Type="ButtonType.Submit"
                                   Disabled="@isSubmitting"
+                                  Loading="@isSubmitting"
                                   IconStart="@(new Icons.Regular.Size20.PersonAdd())">
-                        @if (isSubmitting)
-                        {
-                            <FluentSpinner Style="width: 16px; height: 16px;" />
-                            <span class="ms-2">Assigning...</span>
-                        }
-                        else
-                        {
-                            <span>Assign</span>
-                        }
+                        Assign
                     </FluentButton>
                     <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isSubmitting">
                         Cancel

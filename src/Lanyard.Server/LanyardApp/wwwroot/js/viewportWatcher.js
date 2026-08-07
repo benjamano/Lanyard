@@ -3,10 +3,16 @@
 window.viewportWatcher = (() => {
     let dotNetRef = null;
     let breakpoint = 768;
+    let lastReported = null;
 
     function reportState() {
         if (dotNetRef) {
-            dotNetRef.invokeMethodAsync('OnViewportChanged', window.innerWidth < breakpoint);
+            const isNarrow = window.innerWidth < breakpoint;
+
+            if (isNarrow !== lastReported) {
+                lastReported = isNarrow;
+                dotNetRef.invokeMethodAsync('OnViewportChanged', isNarrow);
+            }
         }
     }
 
@@ -14,6 +20,7 @@ window.viewportWatcher = (() => {
         init(ref, breakpointPx) {
             dotNetRef = ref;
             breakpoint = breakpointPx;
+            lastReported = null;
             window.addEventListener('resize', reportState, { passive: true });
             reportState();
         },
