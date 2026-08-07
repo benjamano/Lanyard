@@ -58,30 +58,53 @@ else
                                     }
                                 }
 
-                                @foreach (CourseQuestion question in assignment.Course.Questions)
-                                {
-                                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
-                                        <FluentStack Orientation="Orientation.Horizontal"
-                                                     VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
-                                            <FluentText Weight="TextWeight.Semibold">@question.QuestionText</FluentText>
-                                            @if (quizSubmitted)
-                                            {
-                                                <FluentIcon
-                                                Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
-                                                Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
-                                            }
-                                        </FluentStack>
-                                        <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
-                                                          Value="@GetSelectedOptionId(question.Id)"
-                                                          ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
-                                                          Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
-                                            @foreach (CourseQuestionOption option in question.Options)
-                                            {
-                                                <FluentRadio Value="@option.Id" Label="@option.OptionText" />
-                                            }
-                                        </FluentRadioGroup>
-                                    </FluentStack>
+                                <div class="quiz-progress-host">
+                                    <FluentText Weight="TextWeight.Semibold">
+                                        Question @(currentQuestionIndex + 1) of @assignment.Course.Questions.Count
+                                    </FluentText>
+                                    <FluentProgressBar Min="0" Max="@assignment.Course.Questions.Count"
+                                                        Value="@(currentQuestionIndex + 1)" />
+                                </div>
+
+                                @{
+                                    CourseQuestion question = assignment.Course.Questions[currentQuestionIndex];
                                 }
+
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                                    <FluentStack Orientation="Orientation.Horizontal"
+                                                 VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                        <FluentText Weight="TextWeight.Semibold">@question.QuestionText</FluentText>
+                                        @if (quizSubmitted)
+                                        {
+                                            <FluentIcon
+                                            Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
+                                            Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
+                                        }
+                                    </FluentStack>
+                                    <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
+                                                      Value="@GetSelectedOptionId(question.Id)"
+                                                      ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
+                                                      Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
+                                        @foreach (CourseQuestionOption option in question.Options)
+                                        {
+                                            <FluentRadio Value="@option.Id" Label="@option.OptionText" />
+                                        }
+                                    </FluentRadioGroup>
+                                </FluentStack>
+
+                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                                  IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                                                  Disabled="@(currentQuestionIndex == 0)" OnClick="GoToPreviousQuestion">
+                                        Previous Question
+                                    </FluentButton>
+                                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                                  IconEnd="@(new Icons.Regular.Size20.ArrowRight())"
+                                                  Disabled="@(currentQuestionIndex == assignment.Course.Questions.Count - 1)"
+                                                  OnClick="GoToNextQuestion">
+                                        Next Question
+                                    </FluentButton>
+                                </FluentStack>
 
                                 @if (quizSubmitted && lastGradeResult is not null && !lastGradeResult.Passed)
                                 {
@@ -110,6 +133,7 @@ else
     private readonly Dictionary<Guid, Guid> selectedAnswers = [];
     private bool quizSubmitted;
     private QuizGradeResult? lastGradeResult;
+    private int currentQuestionIndex;
 
     private DotNetObjectReference<TakeCourse>? _viewportRef;
 
@@ -212,6 +236,23 @@ selectedAnswers);
         selectedAnswers.Clear();
         quizSubmitted = false;
         lastGradeResult = null;
+        currentQuestionIndex = 0;
+    }
+
+    private void GoToPreviousQuestion()
+    {
+        if (currentQuestionIndex > 0)
+        {
+            currentQuestionIndex--;
+        }
+    }
+
+    private void GoToNextQuestion()
+    {
+        if (assignment?.Course is not null && currentQuestionIndex < assignment.Course.Questions.Count - 1)
+        {
+            currentQuestionIndex++;
+        }
     }
 
     private Guid GetSelectedOptionId(Guid questionId) =>
