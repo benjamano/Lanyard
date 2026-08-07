@@ -305,7 +305,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             int assignedCount = 0;
 
             // userIds are sourced from GetAllUsersAsync (individual picks) or
-            // GetUsersInRoleAsync (role members) by the caller — both already
+            // GetUsersInRoleAsync (role members) by the caller - both already
             // resolve to real Identity users, so no per-user existence check here.
             foreach (string userId in distinctUserIds)
             {
@@ -385,6 +385,31 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to unassign course: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<int>> UnassignAllForUserAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CourseAssignment> assignments = await ctx.CourseAssignments
+                .Where(x => x.UserId == userId && x.IsActive)
+                .ToListAsync();
+
+            foreach (CourseAssignment assignment in assignments)
+            {
+                assignment.IsActive = false;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<int>.Ok(assignments.Count);
+        }
+        catch (Exception ex)
+        {
+            return Result<int>.Fail($"Failed to unassign courses for user: {ex.Message}");
         }
     }
 }

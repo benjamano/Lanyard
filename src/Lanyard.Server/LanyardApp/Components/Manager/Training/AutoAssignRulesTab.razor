@@ -51,6 +51,10 @@
 
     private async Task ToggleAutoAssignAsync(Course course, bool newValue)
     {
+        // Must be set before the await below so Blazor renders the new value first -
+        // Blazor diffs against the previous render tree, not the live DOM, so if this
+        // assignment is moved after the await, the revert on failure further down
+        // becomes a silent no-op (there is no "old" rendered value left to diff back to).
         course.AutoAssignOnUserCreation = newValue;
 
         Result<Course> result = await _courseService.SaveCourseAsync(course);

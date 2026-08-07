@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
@@ -17,6 +18,7 @@ public class SecurityService : ISecurityService
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
     private readonly ICourseAssignmentService _courseAssignmentService;
+    private readonly ICourseService _courseService;
     private readonly ILogger<SecurityService> _logger;
 
     public SecurityService(
@@ -24,12 +26,14 @@ public class SecurityService : ISecurityService
         IDbContextFactory<ApplicationDbContext> factory,
         UserManager<UserProfile> userManager,
         ICourseAssignmentService courseAssignmentService,
+        ICourseService courseService,
         ILogger<SecurityService> logger)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
         _userManager = userManager;
         _courseAssignmentService = courseAssignmentService;
+        _courseService = courseService;
         _logger = logger;
     }
 
@@ -175,16 +179,19 @@ public class SecurityService : ISecurityService
 
             try
             {
-                await using ApplicationDbContext autoAssignCtx = await _factory.CreateDbContextAsync();
+                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
 
-                List<Guid> autoAssignCourseIds = await autoAssignCtx.Courses
-                    .Where(x => x.IsActive && x.AutoAssignOnUserCreation)
-                    .Select(x => x.Id)
-                    .ToListAsync();
-
-                foreach (Guid courseId in autoAssignCourseIds)
+                if (coursesResult.IsSuccess && coursesResult.Data is not null)
                 {
-                    await _courseAssignmentService.AssignCourseToUsersAsync(courseId, [user.Id], null, null);
+                    foreach (Course course in coursesResult.Data.Where(x => x.AutoAssignOnUserCreation))
+                    {
+                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null);
+
+                        if (!assignResult.IsSuccess)
+                        {
+                            _logger.LogWarning("Failed to auto-assign course {CourseId} to new user {UserId}: {Error}", course.Id, user.Id, assignResult.Error);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -241,18 +248,12 @@ public class SecurityService : ISecurityService
 
             try
             {
-                await using ApplicationDbContext cleanupCtx = await _factory.CreateDbContextAsync();
+                Result<int> cleanupResult = await _courseAssignmentService.UnassignAllForUserAsync(userId);
 
-                List<CourseAssignment> orphanedAssignments = await cleanupCtx.CourseAssignments
-                    .Where(x => x.UserId == userId && x.IsActive)
-                    .ToListAsync();
-
-                foreach (CourseAssignment assignment in orphanedAssignments)
+                if (!cleanupResult.IsSuccess)
                 {
-                    assignment.IsActive = false;
+                    _logger.LogWarning("Failed to clean up CourseAssignments for deleted user {UserId}: {Error}", userId, cleanupResult.Error);
                 }
-
-                await cleanupCtx.SaveChangesAsync();
             }
             catch (Exception ex)
             {

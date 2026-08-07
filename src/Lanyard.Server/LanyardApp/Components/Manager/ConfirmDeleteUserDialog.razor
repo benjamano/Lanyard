@@ -2,10 +2,17 @@
 
 <FluentDialogBody>
     <ChildContent>
-        <p>Are you sure you want to delete '<strong>@(DisplayName ?? Content?.GetName() ?? "this item")</strong>'? This action cannot be undone.</p>
+        @if (Message is not null)
+        {
+            <p>@Message</p>
+        }
+        else
+        {
+            <p>Are you sure you want to delete '<strong>@(DisplayName ?? Content?.GetName() ?? "this item")</strong>'? This action cannot be undone.</p>
+        }
     </ChildContent>
     <ActionTemplate>
-        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ConfirmAsync">Delete</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ConfirmAsync">@ConfirmLabel</FluentButton>
         <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
     </ActionTemplate>
 </FluentDialogBody>
@@ -16,6 +23,12 @@
 
     [Parameter]
     public string? DisplayName { get; set; }
+
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public string ConfirmLabel { get; set; } = "Delete";
 
     [CascadingParameter]
     public required IDialogInstance Dialog { get; set; }

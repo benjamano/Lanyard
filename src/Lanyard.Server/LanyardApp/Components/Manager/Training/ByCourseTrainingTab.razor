@@ -35,7 +35,9 @@
             <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
                             RowSize="@DataGridRowSize.Medium">
                 <ChildContent>
-                    <PropertyColumn Property="@(x => GetUserName(x.UserId))" Title="Person" />
+                    <TemplateColumn Title="Person">
+                        @GetUserName(context.UserId)
+                    </TemplateColumn>
                     <TemplateColumn Title="Status">
                         <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
                                      Appearance="BadgeAppearance.Filled" />
@@ -50,15 +52,15 @@
                         <div class="assignment-row-actions">
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
-                                          Tooltip="Copy link to this assignment"
+                                          Tooltip="Copy link to this assignment" Title="Copy link to this assignment"
                                           OnClick="@(() => CopyLinkAsync(context))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
-                                          Tooltip="Edit due date"
+                                          Tooltip="Edit due date" Title="Edit due date"
                                           OnClick="@(() => OpenEditDueDateDialogAsync(context))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
-                                          Tooltip="Unassign"
+                                          Tooltip="Unassign" Title="Unassign"
                                           OnClick="@(() => UnassignAsync(context))" />
                         </div>
                     </TemplateColumn>
@@ -205,10 +207,12 @@
     {
         DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
         {
-            options.Header.Title = "Are you sure?";
-            options.Width = "500px";
+            options.Header.Title = "Unassign course?";
+            options.Width = "min(500px, 95vw)";
             options.Modal = true;
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), GetUserName(assignment.UserId));
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Message),
+                $"Unassign this course from {GetUserName(assignment.UserId)}? They will lose access, but you can re-assign it at any time.");
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.ConfirmLabel), "Unassign");
         });
 
         if (confirmResult.Cancelled)

@@ -15,4 +15,5 @@ public interface ICourseAssignmentService
     Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate);
     Task<Result<CourseAssignment>> UpdateAssignmentDueDateAsync(Guid assignmentId, DateTime? newDueDate);
     Task<Result<bool>> UnassignAsync(Guid assignmentId);
+    Task<Result<int>> UnassignAllForUserAsync(string userId);
 }

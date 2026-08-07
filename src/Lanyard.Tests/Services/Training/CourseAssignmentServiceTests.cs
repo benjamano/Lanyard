@@ -618,4 +618,44 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(0, result.Data!);
     }
+
+    [TestMethod]
+    public async Task UnassignAllForUserAsync_DeactivatesAllActiveAssignmentsForThatUser()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course courseA = await SeedCourseAsync(options);
+        Course courseB = await SeedCourseAsync(options, passMarkPercent: 70);
+        UserProfile user = await SeedUserAsync(options);
+        UserProfile otherUser = await SeedUserAsync(options, "other-user");
+
+        await SeedAssignmentAsync(options, courseA.Id, user.Id);
+        await SeedAssignmentAsync(options, courseB.Id, user.Id);
+        await SeedAssignmentAsync(options, courseA.Id, otherUser.Id);
+
+        Result<int> result = await service.UnassignAllForUserAsync(user.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(2, result.Data);
+
+        await using ApplicationDbContext ctx = new(options);
+        List<CourseAssignment> userAssignments = await ctx.CourseAssignments.Where(x => x.UserId == user.Id).ToListAsync();
+        Assert.HasCount(2, userAssignments);
+        Assert.IsTrue(userAssignments.All(x => !x.IsActive));
+
+        CourseAssignment otherAssignment = await ctx.CourseAssignments.SingleAsync(x => x.UserId == otherUser.Id);
+        Assert.IsTrue(otherAssignment.IsActive);
+    }
+
+    [TestMethod]
+    public async Task UnassignAllForUserAsync_ReturnsZero_WhenUserHasNoAssignments()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+
+        Result<int> result = await service.UnassignAllForUserAsync("no-such-user");
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(0, result.Data);
+    }
 }

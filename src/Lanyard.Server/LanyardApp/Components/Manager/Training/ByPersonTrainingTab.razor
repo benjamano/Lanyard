@@ -5,16 +5,10 @@
 
 <div class="by-person-tab">
     <div class="person-picker-host">
-        <FluentSelect TOption="UserProfile"
-                      TValue="string"
-                      Items="@users.OrderBy(x => x.GetName())"
-                      OptionText="@(i => i?.GetName() ?? string.Empty)"
-                      OptionValue="@(i => i?.Id)"
-                      Placeholder="Select a person..."
-                      Label="Person"
-                      @bind-Value="selectedUserId"
-                      @bind-Value:after="LoadAssignmentsAsync"
-                      Width="100%">
+        <FluentSelect TOption="UserProfile" TValue="string" Items="@users.OrderBy(x => x.GetName())"
+                      OptionText="@(i => i?.GetName() ?? string.Empty)" OptionValue="@(i => i?.Id)"
+                      Placeholder="Select a person..." Label="Person" @bind-Value="selectedUserId"
+                      @bind-Value:after="LoadAssignmentsAsync" Width="100%">
         </FluentSelect>
     </div>
 
@@ -33,13 +27,14 @@
                 <ChildContent>
                     <PropertyColumn Property="@(x => x.Course!.Name)" Title="Course" Sortable="true" />
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)" Appearance="BadgeAppearance.Filled" />
+                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                                     Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
                         @GetLatestScore(context)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "—")
+                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                 </ChildContent>
                 <EmptyContent>
@@ -89,7 +84,7 @@
     private static string GetLatestScore(CourseAssignment assignment)
     {
         CourseQuizAttempt? latest = assignment.Attempts.OrderByDescending(x => x.AttemptNumber).FirstOrDefault();
-        return latest is null ? "—" : $"{latest.ScorePercent}%";
+        return latest is null ? "-" : $"{latest.ScorePercent}%";
     }
 
     private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
