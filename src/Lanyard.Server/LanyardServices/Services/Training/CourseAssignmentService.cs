@@ -30,6 +30,10 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 return Result<CourseAssignment>.Fail("User not found.");
             }
 
+            DateTime? normalizedDueDate = dueDate.HasValue
+                ? DateTime.SpecifyKind(dueDate.Value, DateTimeKind.Utc)
+                : null;
+
             CourseAssignment assignment = new()
             {
                 Id = Guid.NewGuid(),
@@ -37,7 +41,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 UserId = userId,
                 AssignedByUserId = assignedByUserId,
                 AssignedDate = DateTime.UtcNow,
-                DueDate = dueDate,
+                DueDate = normalizedDueDate,
                 IsActive = true
             };
 

@@ -164,6 +164,29 @@ public class CourseAssignmentServiceTests
     }
 
     [TestMethod]
+    public async Task AssignCourseAsync_NormalizesDueDateToUtc()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        DateTime unspecifiedDueDate = new(2026, 12, 25, 0, 0, 0, DateTimeKind.Unspecified);
+        Assert.AreEqual(DateTimeKind.Unspecified, unspecifiedDueDate.Kind);
+
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", unspecifiedDueDate);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNotNull(result.Data!.DueDate);
+        Assert.AreEqual(DateTimeKind.Utc, result.Data!.DueDate!.Value.Kind);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        CourseAssignment dbAssignment = await verifyCtx.CourseAssignments.SingleAsync(x => x.Id == result.Data!.Id);
+        Assert.IsNotNull(dbAssignment.DueDate);
+        Assert.AreEqual(DateTimeKind.Utc, dbAssignment.DueDate!.Value.Kind);
+    }
+
+    [TestMethod]
     public async Task GetAssignmentsForUserAsync_ReturnsOnlyThatUsersActiveAssignments()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
