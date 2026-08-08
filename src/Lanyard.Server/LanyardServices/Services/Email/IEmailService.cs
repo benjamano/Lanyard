@@ -5,5 +5,5 @@ namespace Lanyard.Application.Services.Email;
 
 public interface IEmailService
 {
-    Task<Result<bool>> SendWelcomeEmailAsync(UserProfile user, string setPasswordUrl);
+    Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl);
 }

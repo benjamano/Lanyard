@@ -105,7 +105,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -147,7 +147,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("email", result.Error);
-            emailServiceMock.Verify(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Never);
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Never);
         }
 
         [TestMethod]
@@ -157,7 +157,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Fail("Email provider unreachable"));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -179,13 +179,13 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
-        public async Task CompleteInviteAsync_ValidToken_SetsPasswordAndDate()
+        public async Task SetPasswordFromTokenAsync_ValidToken_SetsPasswordAndDate()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -202,7 +202,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             string token = await userManager.GeneratePasswordResetTokenAsync(user);
 
-            Result<bool> completeResult = await service.CompleteInviteAsync(user.Id, token, "NewPassw0rd!");
+            Result<bool> completeResult = await service.SetPasswordFromTokenAsync(user.Id, token, "NewPassw0rd!");
 
             Assert.IsTrue(completeResult.IsSuccess, completeResult.Error);
 
@@ -213,13 +213,13 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
-        public async Task CompleteInviteAsync_AlreadyCompleted_Fails()
+        public async Task SetPasswordFromTokenAsync_ReusedToken_Fails()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -233,24 +233,64 @@ namespace Lanyard.Tests.Services.Authentication
 
             UserProfile user = createResult.Data!.User;
             string token = await userManager.GeneratePasswordResetTokenAsync(user);
-            Result<bool> firstComplete = await service.CompleteInviteAsync(user.Id, token, "NewPassw0rd!");
+            Result<bool> firstComplete = await service.SetPasswordFromTokenAsync(user.Id, token, "NewPassw0rd!");
             Assert.IsTrue(firstComplete.IsSuccess, firstComplete.Error);
 
-            string secondToken = await userManager.GeneratePasswordResetTokenAsync(user);
-            Result<bool> secondComplete = await service.CompleteInviteAsync(user.Id, secondToken, "AnotherPassw0rd!");
+            // Completing a reset rotates the user's security stamp, which the token's own
+            // validation is tied to - so replaying the exact same token must fail even though
+            // no explicit "already used" check exists anymore.
+            Result<bool> secondComplete = await service.SetPasswordFromTokenAsync(user.Id, token, "AnotherPassw0rd!");
 
             Assert.IsFalse(secondComplete.IsSuccess);
-            Assert.Contains("already been used", secondComplete.Error);
+            Assert.Contains("invalid or has expired", secondComplete.Error);
         }
 
         [TestMethod]
-        public async Task CompleteInviteAsync_BadToken_Fails()
+        public async Task SetPasswordFromTokenAsync_ActiveUser_FreshToken_Succeeds()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+
+            Result<UserCreationResult> createResult = await service.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            });
+
+            UserProfile user = createResult.Data!.User;
+            string firstToken = await userManager.GeneratePasswordResetTokenAsync(user);
+            Result<bool> firstComplete = await service.SetPasswordFromTokenAsync(user.Id, firstToken, "NewPassw0rd!");
+            Assert.IsTrue(firstComplete.IsSuccess, firstComplete.Error);
+
+            // A freshly generated token for an already-active user (e.g. an admin-triggered
+            // password reset) must still work - this is the whole point of no longer gating
+            // on PasswordSetDate.
+            UserProfile? active = await userManager.FindByIdAsync(user.Id);
+            string secondToken = await userManager.GeneratePasswordResetTokenAsync(active!);
+            Result<bool> secondComplete = await service.SetPasswordFromTokenAsync(user.Id, secondToken, "ResetPassw0rd!");
+
+            Assert.IsTrue(secondComplete.IsSuccess, secondComplete.Error);
+
+            UserProfile? persisted = await userManager.FindByIdAsync(user.Id);
+            Assert.IsNotNull(persisted);
+            Assert.IsTrue(await userManager.CheckPasswordAsync(persisted, "ResetPassw0rd!"));
+        }
+
+        [TestMethod]
+        public async Task SetPasswordFromTokenAsync_BadToken_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -264,20 +304,20 @@ namespace Lanyard.Tests.Services.Authentication
 
             UserProfile user = createResult.Data!.User;
 
-            Result<bool> completeResult = await service.CompleteInviteAsync(user.Id, "not-a-real-token", "NewPassw0rd!");
+            Result<bool> completeResult = await service.SetPasswordFromTokenAsync(user.Id, "not-a-real-token", "NewPassw0rd!");
 
             Assert.IsFalse(completeResult.IsSuccess);
             Assert.Contains("invalid or has expired", completeResult.Error);
         }
 
         [TestMethod]
-        public async Task ResendInviteAsync_PendingUser_SendsNewEmail()
+        public async Task SendSetPasswordLinkAsync_PendingUser_SendsNewEmail()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
@@ -291,20 +331,20 @@ namespace Lanyard.Tests.Services.Authentication
 
             UserProfile user = createResult.Data!.User;
 
-            Result<bool> resendResult = await service.ResendInviteAsync(user.Id);
+            Result<bool> resendResult = await service.SendSetPasswordLinkAsync(user.Id);
 
             Assert.IsTrue(resendResult.IsSuccess, resendResult.Error);
-            emailServiceMock.Verify(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Exactly(2));
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Exactly(2));
         }
 
         [TestMethod]
-        public async Task ResendInviteAsync_AlreadyCompletedUser_Fails()
+        public async Task SendSetPasswordLinkAsync_ActiveUser_StillSendsEmail()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendWelcomeEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
@@ -318,13 +358,43 @@ namespace Lanyard.Tests.Services.Authentication
 
             UserProfile user = createResult.Data!.User;
             string token = await userManager.GeneratePasswordResetTokenAsync(user);
-            Result<bool> completeResult = await service.CompleteInviteAsync(user.Id, token, "NewPassw0rd!");
+            Result<bool> completeResult = await service.SetPasswordFromTokenAsync(user.Id, token, "NewPassw0rd!");
             Assert.IsTrue(completeResult.IsSuccess, completeResult.Error);
 
-            Result<bool> resendResult = await service.ResendInviteAsync(user.Id);
+            // The whole point of this feature: an admin can trigger this for an already-active
+            // user (e.g. "I forgot my password") and it must still succeed.
+            Result<bool> resendResult = await service.SendSetPasswordLinkAsync(user.Id);
+
+            Assert.IsTrue(resendResult.IsSuccess, resendResult.Error);
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Exactly(2));
+        }
+
+        [TestMethod]
+        public async Task SendSetPasswordLinkAsync_NonAdmin_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            });
+
+            UserProfile user = createResult.Data!.User;
+
+            SecurityService nonAdminService = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+            Result<bool> resendResult = await nonAdminService.SendSetPasswordLinkAsync(user.Id);
 
             Assert.IsFalse(resendResult.IsSuccess);
-            Assert.Contains("already set their password", resendResult.Error);
+            Assert.Contains("administrator", resendResult.Error);
         }
     }
 }

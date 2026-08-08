@@ -56,11 +56,11 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendWelcomeEmailAsync_SuccessResponse_ReturnsOk()
+        public async Task SendSetPasswordEmailAsync_SuccessResponse_ReturnsOk()
         {
             EmailService service = BuildService(HttpStatusCode.OK, ValidOptions());
 
-            Result<bool> result = await service.SendWelcomeEmailAsync(
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
                 "https://lanyard.example.com/set-password?userId=1&token=abc");
 
@@ -69,11 +69,11 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendWelcomeEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        public async Task SendSetPasswordEmailAsync_NonSuccessStatusCode_ReturnsFail()
         {
             EmailService service = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
 
-            Result<bool> result = await service.SendWelcomeEmailAsync(
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
                 "https://lanyard.example.com/set-password?userId=1&token=abc");
 
@@ -82,7 +82,7 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendWelcomeEmailAsync_MissingApiKey_ReturnsFail()
+        public async Task SendSetPasswordEmailAsync_MissingApiKey_ReturnsFail()
         {
             EmailService service = BuildService(HttpStatusCode.OK, new EmailOptions
             {
@@ -90,7 +90,7 @@ namespace Lanyard.Tests.Services.Email
                 FromAddress = "noreply@example.com"
             });
 
-            Result<bool> result = await service.SendWelcomeEmailAsync(
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
                 "https://lanyard.example.com/set-password");
 
@@ -99,7 +99,7 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendWelcomeEmailAsync_MissingFromAddress_ReturnsFail()
+        public async Task SendSetPasswordEmailAsync_MissingFromAddress_ReturnsFail()
         {
             EmailService service = BuildService(HttpStatusCode.OK, new EmailOptions
             {
@@ -107,7 +107,7 @@ namespace Lanyard.Tests.Services.Email
                 FromAddress = ""
             });
 
-            Result<bool> result = await service.SendWelcomeEmailAsync(
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
                 "https://lanyard.example.com/set-password");
 
@@ -116,11 +116,11 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendWelcomeEmailAsync_UserHasNoEmail_ReturnsFail()
+        public async Task SendSetPasswordEmailAsync_UserHasNoEmail_ReturnsFail()
         {
             EmailService service = BuildService(HttpStatusCode.OK, ValidOptions());
 
-            Result<bool> result = await service.SendWelcomeEmailAsync(
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = null },
                 "https://lanyard.example.com/set-password");
 

@@ -32,10 +32,9 @@
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
                     <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary" OnClick="@(() => OpenChangePasswordDialog(context))" />
-                    @if (context.PasswordSetDate is null)
-                    {
-                        <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary" OnClick="@(() => ResendInvite(context))" title="Resend Invite" />
-                    }
+                    <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
+                                OnClick="@(() => SendSetPasswordLink(context))"
+                                title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
                 </div>
             </TemplateColumn>
         </ChildContent>
@@ -145,17 +144,20 @@
         });
     }
 
-    private async Task ResendInvite(UserProfile user)
+    private async Task SendSetPasswordLink(UserProfile user)
     {
-        Result<bool> result = await _securityService.ResendInviteAsync(user.Id);
+        bool wasPending = user.PasswordSetDate is null;
+        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(user.Id);
 
         if (result.IsSuccess)
         {
-            ToastService.ShowSuccess($"Invite resent to {user.Email}.");
+            ToastService.ShowSuccess(wasPending
+                ? $"Invite resent to {user.Email}."
+                : $"Password reset email sent to {user.Email}.");
         }
         else
         {
-            ToastService.ShowError($"Failed to resend invite: {result.Error}");
+            ToastService.ShowError($"Failed to send email: {result.Error}");
         }
 
         await GetUsers();

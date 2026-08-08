@@ -214,7 +214,7 @@ public class SecurityService : ISecurityService
                 _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
             }
 
-            Result<bool> emailResult = await SendInviteEmailAsync(user);
+            Result<bool> emailResult = await SendSetPasswordLinkEmailAsync(user);
 
             return Result<UserCreationResult>.Ok(
                 emailResult.IsSuccess
@@ -227,7 +227,7 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<bool>> ResendInviteAsync(string userId)
+    public async Task<Result<bool>> SendSetPasswordLinkAsync(string userId)
     {
         try
         {
@@ -242,16 +242,11 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (user.PasswordSetDate is not null)
-            {
-                return Result<bool>.Fail("This user has already set their password.");
-            }
-
             user.InvitedDate = DateTime.UtcNow;
-            Result<bool> emailResult = await SendInviteEmailAsync(user);
+            Result<bool> emailResult = await SendSetPasswordLinkEmailAsync(user);
             if (!emailResult.IsSuccess)
             {
-                return Result<bool>.Fail($"Failed to resend invite: {emailResult.Error}");
+                return Result<bool>.Fail($"Failed to send email: {emailResult.Error}");
             }
 
             await _userManager.UpdateAsync(user);
@@ -263,27 +258,27 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<bool>> CompleteInviteAsync(string userId, string token, string newPassword)
+    public async Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword)
     {
         try
         {
             UserProfile? user = await _userManager.FindByIdAsync(userId);
             if (user is null)
             {
-                return Result<bool>.Fail("This invite link is invalid or has expired.");
+                return Result<bool>.Fail("This link is invalid or has expired.");
             }
 
-            if (user.PasswordSetDate is not null)
-            {
-                return Result<bool>.Fail("This invite link has already been used. Log in, or ask an administrator for a new invite if you've forgotten your password.");
-            }
-
+            // No "already used" gate here by design: a successful ResetPasswordAsync rotates the
+            // user's security stamp, which is baked into the token's own validation - so a given
+            // token is inherently single-use regardless of PasswordSetDate. This is what lets the
+            // same link mechanism serve both first-time invites and later admin-triggered password
+            // resets for already-active accounts.
             IdentityResult result = await _userManager.ResetPasswordAsync(user, token, newPassword);
             if (!result.Succeeded)
             {
                 bool isTokenError = result.Errors.Any(e => e.Code is "InvalidToken");
                 string message = isTokenError
-                    ? "This invite link is invalid or has expired. Ask an administrator to resend your invite."
+                    ? "This link is invalid or has expired. Ask an administrator to send you a new one."
                     : string.Join(", ", result.Errors.Select(e => e.Description));
 
                 return Result<bool>.Fail(message);
@@ -300,23 +295,23 @@ public class SecurityService : ISecurityService
         }
     }
 
-    public async Task<Result<string>> GetPendingInviteUsernameAsync(string userId)
+    public async Task<Result<string>> GetUsernameForSetPasswordAsync(string userId)
     {
         UserProfile? user = await _userManager.FindByIdAsync(userId);
 
-        if (user is null || user.PasswordSetDate is not null || string.IsNullOrEmpty(user.UserName))
+        if (user is null || string.IsNullOrEmpty(user.UserName))
         {
-            return Result<string>.Fail("This invite link is invalid or has expired.");
+            return Result<string>.Fail("This link is invalid or has expired.");
         }
 
         return Result<string>.Ok(user.UserName);
     }
 
-    private async Task<Result<bool>> SendInviteEmailAsync(UserProfile user)
+    private async Task<Result<bool>> SendSetPasswordLinkEmailAsync(UserProfile user)
     {
         string token = await _userManager.GeneratePasswordResetTokenAsync(user);
         string setPasswordUrl = $"{_navigationManager.BaseUri}set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
-        return await _emailService.SendWelcomeEmailAsync(user, setPasswordUrl);
+        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)

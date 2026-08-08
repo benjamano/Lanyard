@@ -21,7 +21,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task<Result<bool>> SendWelcomeEmailAsync(UserProfile user, string setPasswordUrl)
+    public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl)
     {
         try
         {
@@ -34,10 +34,10 @@ public class EmailService : IEmailService
 
             if (string.IsNullOrWhiteSpace(user.Email))
             {
-                return Result<bool>.Fail("User has no email address to send an invite to.");
+                return Result<bool>.Fail("User has no email address to send a link to.");
             }
 
-            string html = BuildWelcomeHtml(user.UserName ?? user.Email, setPasswordUrl);
+            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl);
 
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
@@ -45,7 +45,7 @@ public class EmailService : IEmailService
                 {
                     from = $"{config.FromName} <{config.FromAddress}>",
                     to = new[] { user.Email },
-                    subject = "You're invited to Lanyard: set your password",
+                    subject = "Set your Lanyard password",
                     html
                 })
             };
@@ -64,25 +64,24 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception sending welcome email to {UserId}", user.Id);
+            _logger.LogError(ex, "Exception sending set-password email to {UserId}", user.Id);
             return Result<bool>.Fail(ex.Message);
         }
     }
 
-    private static string BuildWelcomeHtml(string username, string setPasswordUrl)
+    private static string BuildSetPasswordHtml(string username, string setPasswordUrl)
     {
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2>Welcome to Lanyard</h2>
-          <p>An account has been created for you. Your username is:</p>
+          <h2>Lanyard</h2>
+          <p>Use the button below to set your password. Your username is:</p>
           <p style="font-size: 18px; font-weight: bold;">{WebUtility.HtmlEncode(username)}</p>
-          <p>Click below to set your password and finish setting up your account:</p>
           <p>
             <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: #0F6CBD; color: #fff; text-decoration: none; border-radius: 4px;">
               Set Your Password
             </a>
           </p>
-          <p style="color: #666; font-size: 13px;">This link expires in 7 days. If it has expired, ask an administrator to resend your invite.</p>
+          <p style="color: #666; font-size: 13px;">This link expires in 7 days. If it has expired, ask an administrator to send you a new one.</p>
         </div>
         """;
     }
