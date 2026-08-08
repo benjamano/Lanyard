@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 
 @inject NavigationManager NavigationManager
+@inject IThemeService ThemeService
 
 <FluentProviders />
 
@@ -86,6 +87,38 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
+    }
+
+    // ThemeSelector.razor only mounts on the Account page, so a brand-new session
+    // rendered FluentUI's own factory-default blue on every other page until the
+    // user happened to visit Account, at which point ThemeSelector's own default
+    // kicked in and got persisted - after that it looked fine from then on, which
+    // made the bug easy to miss. MainLayout renders on every authenticated page,
+    // so applying the same "no explicit choice yet" default here instead makes it
+    // the very first thing a new session sees, everywhere, not just after a detour
+    // through Account.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            string? storedColour = await ThemeService.GetBrandColorAsync();
+
+            // GetBrandColorAsync() never actually returns null/empty - with no explicit
+            // choice yet it returns FluentUI's own factory-default blue (#0f6cbd).
+            bool hasExplicitChoice = !string.IsNullOrEmpty(storedColour)
+                && !string.Equals(storedColour, "#0f6cbd", StringComparison.OrdinalIgnoreCase);
+
+            if (!hasExplicitChoice)
+            {
+                await ThemeService.SetThemeAsync("#CC6633", true);
+            }
+        }
+        catch { }
     }
 
     private void Recover() => _errorBoundary?.Recover();
