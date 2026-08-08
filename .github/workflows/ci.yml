@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: windows-latest
@@ -18,8 +21,25 @@ jobs:
         with:
           dotnet-version: '10.x'
 
+      # Uses LanyardApp.CI.slnf, not LanyardApp.sln: the filter excludes
+      # Lanyard.Reach (a MAUI app targeting net10.0-maccatalyst, which only
+      # builds on macOS). Everything else in the solution is included.
       - name: Restore
         run: dotnet restore LanyardApp.CI.slnf
+
+      - name: Verify solution filter has no unexpected drift
+        shell: pwsh
+        run: |
+          $slnProjects = dotnet sln LanyardApp.sln list | Select-Object -Skip 2 | ForEach-Object { $_.Trim() -replace '\\', '/' } | Where-Object { $_ -ne '' } | Sort-Object
+          $slnfProjects = dotnet sln LanyardApp.CI.slnf list | Select-Object -Skip 2 | ForEach-Object { $_.Trim() -replace '\\', '/' } | Where-Object { $_ -ne '' } | Sort-Object
+          $missing = Compare-Object -ReferenceObject $slnProjects -DifferenceObject $slnfProjects -PassThru | Where-Object { $_ -notlike '*Lanyard.Reach/Lanyard.Reach.csproj' }
+          if ($missing) {
+            Write-Host "Unexpected drift between LanyardApp.sln and LanyardApp.CI.slnf:"
+            $missing | ForEach-Object { Write-Host "  $_" }
+            Write-Host "If this is a new project, add it to LanyardApp.CI.slnf's projects list (unless it's macOS-only like Lanyard.Reach)."
+            exit 1
+          }
+          Write-Host "No unexpected drift."
 
       - name: Build
         run: dotnet build LanyardApp.CI.slnf -c Release --no-restore
