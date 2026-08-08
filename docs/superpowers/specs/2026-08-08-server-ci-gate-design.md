@@ -30,10 +30,12 @@ Runs on `windows-latest`. Windows is required (not just inherited from `release.
 
 Steps:
 1. `actions/checkout@v4`
-2. `actions/setup-dotnet@v4`, `dotnet-version: '10.x'`, with NuGet caching enabled
-3. `dotnet restore LanyardApp.sln`
-4. `dotnet build LanyardApp.sln -c Release --no-restore`
+2. `actions/setup-dotnet@v4`, `dotnet-version: '10.x'` (NuGet caching is not enabled — there are no `packages.lock.json` files in the repo for `cache: true` to key on)
+3. `dotnet restore LanyardApp.CI.slnf`
+4. `dotnet build LanyardApp.CI.slnf -c Release --no-restore`
 5. `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj -c Release --no-build`
+
+`LanyardApp.sln` includes `Lanyard.Reach`, a MAUI app whose `TargetFrameworks` includes `net10.0-maccatalyst`, which only builds on macOS. `LanyardApp.CI.slnf` is a solution filter that includes every project in `LanyardApp.sln` except `Lanyard.Reach.csproj`, so `windows-latest` can build everything else. This was discovered when the workflow's first version was merged and then failed on its first real run — not something the original design could have anticipated from static analysis alone.
 
 ### Job 2 — `docker-build`
 
