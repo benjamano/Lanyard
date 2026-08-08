@@ -1,12 +1,14 @@
-﻿using Microsoft.AspNetCore.Components.Authorization;
+﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
-using System.Security.Cryptography;
+using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +22,8 @@ public class SecurityService : ISecurityService
     private readonly ICourseAssignmentService _courseAssignmentService;
     private readonly ICourseService _courseService;
     private readonly ILogger<SecurityService> _logger;
+    private readonly NavigationManager _navigationManager;
+    private readonly IEmailService _emailService;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -27,7 +31,9 @@ public class SecurityService : ISecurityService
         UserManager<UserProfile> userManager,
         ICourseAssignmentService courseAssignmentService,
         ICourseService courseService,
-        ILogger<SecurityService> logger)
+        ILogger<SecurityService> logger,
+        NavigationManager navigationManager,
+        IEmailService emailService)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
@@ -35,6 +41,8 @@ public class SecurityService : ISecurityService
         _courseAssignmentService = courseAssignmentService;
         _courseService = courseService;
         _logger = logger;
+        _navigationManager = navigationManager;
+        _emailService = emailService;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -161,15 +169,19 @@ public class SecurityService : ISecurityService
                 return Result<UserCreationResult>.Fail("The new user's first and last names are required!");
             }
 
+            if (string.IsNullOrWhiteSpace(user.Email) || !new EmailAddressAttribute().IsValid(user.Email))
+            {
+                return Result<UserCreationResult>.Fail("A valid email address is required to invite a new user.");
+            }
+
             string initial = user.FirstName.ToLowerInvariant()[..1];
             string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
-
-            string generatedPassword = GenerateRandomPassword();
-
             user.EmailConfirmed = true;
+            user.InvitedDate = DateTime.UtcNow;
 
-            IdentityResult result = await _userManager.CreateAsync(user, generatedPassword);
+            // No password is set here — the invitee sets their own via the emailed link.
+            IdentityResult result = await _userManager.CreateAsync(user);
 
             if (!result.Succeeded)
             {
@@ -202,7 +214,12 @@ public class SecurityService : ISecurityService
                 _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
             }
 
-            return Result<UserCreationResult>.Ok(new UserCreationResult(user, generatedPassword));
+            Result<bool> emailResult = await SendInviteEmailAsync(user);
+
+            return Result<UserCreationResult>.Ok(
+                emailResult.IsSuccess
+                    ? new UserCreationResult(user, EmailSent: true)
+                    : new UserCreationResult(user, EmailSent: false, EmailError: emailResult.Error));
         }
         catch (Exception ex)
         {
@@ -210,16 +227,96 @@ public class SecurityService : ISecurityService
         }
     }
 
-    private static string GenerateRandomPassword()
+    public async Task<Result<bool>> ResendInviteAsync(string userId)
     {
-        // 24 URL-safe random characters, with fixed complexity characters appended so the result
-        // always satisfies ASP.NET Identity's default password rules (upper, lower, digit).
-        string random = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
+        try
+        {
+            if (!await IsCurrentUserInRoleAsync("Admin"))
+            {
+                return Result<bool>.Fail("You must be an administrator to perform this action!");
+            }
 
-        return $"{random}Aa1!";
+            UserProfile? user = await _userManager.FindByIdAsync(userId);
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found!");
+            }
+
+            if (user.PasswordSetDate is not null)
+            {
+                return Result<bool>.Fail("This user has already set their password.");
+            }
+
+            user.InvitedDate = DateTime.UtcNow;
+            Result<bool> emailResult = await SendInviteEmailAsync(user);
+            if (!emailResult.IsSuccess)
+            {
+                return Result<bool>.Fail($"Failed to resend invite: {emailResult.Error}");
+            }
+
+            await _userManager.UpdateAsync(user);
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> CompleteInviteAsync(string userId, string token, string newPassword)
+    {
+        try
+        {
+            UserProfile? user = await _userManager.FindByIdAsync(userId);
+            if (user is null)
+            {
+                return Result<bool>.Fail("This invite link is invalid or has expired.");
+            }
+
+            if (user.PasswordSetDate is not null)
+            {
+                return Result<bool>.Fail("This invite link has already been used. Log in, or ask an administrator for a new invite if you've forgotten your password.");
+            }
+
+            IdentityResult result = await _userManager.ResetPasswordAsync(user, token, newPassword);
+            if (!result.Succeeded)
+            {
+                bool isTokenError = result.Errors.Any(e => e.Code is "InvalidToken");
+                string message = isTokenError
+                    ? "This invite link is invalid or has expired. Ask an administrator to resend your invite."
+                    : string.Join(", ", result.Errors.Select(e => e.Description));
+
+                return Result<bool>.Fail(message);
+            }
+
+            user.PasswordSetDate = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<string>> GetPendingInviteUsernameAsync(string userId)
+    {
+        UserProfile? user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null || user.PasswordSetDate is not null || string.IsNullOrEmpty(user.UserName))
+        {
+            return Result<string>.Fail("This invite link is invalid or has expired.");
+        }
+
+        return Result<string>.Ok(user.UserName);
+    }
+
+    private async Task<Result<bool>> SendInviteEmailAsync(UserProfile user)
+    {
+        string token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        string setPasswordUrl = $"{_navigationManager.BaseUri}set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
+        return await _emailService.SendWelcomeEmailAsync(user, setPasswordUrl);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)

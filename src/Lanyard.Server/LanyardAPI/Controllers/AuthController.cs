@@ -28,7 +28,7 @@ namespace Lanyard.App.Controllers
                 return BadRequest(ModelState);
             }
 
-            UserProfile? user = await _userManager.FindByNameAsync(dto.Username);
+            UserProfile? user = await FindUserByUsernameOrEmailAsync(dto.Username);
             if (user is null)
             {
                 return Unauthorized(new { message = "Invalid username or password." });
@@ -57,7 +57,7 @@ namespace Lanyard.App.Controllers
         [Consumes("application/x-www-form-urlencoded")]
         public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null)
         {
-            UserProfile? user = await _userManager.FindByNameAsync(username);
+            UserProfile? user = await FindUserByUsernameOrEmailAsync(username);
             if (user is null)
             {
                 return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
@@ -110,6 +110,12 @@ namespace Lanyard.App.Controllers
             }
 
             return Redirect("/login");
+        }
+
+        private async Task<UserProfile?> FindUserByUsernameOrEmailAsync(string identifier)
+        {
+            return await _userManager.FindByNameAsync(identifier)
+                ?? await _userManager.FindByEmailAsync(identifier);
         }
     }
 }

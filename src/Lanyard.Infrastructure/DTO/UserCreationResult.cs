@@ -2,5 +2,5 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Infrastructure.DTO
 {
-    public record UserCreationResult(UserProfile User, string GeneratedPassword);
+    public record UserCreationResult(UserProfile User, bool EmailSent, string? EmailError = null);
 }

@@ -11,6 +11,9 @@ namespace Lanyard.Infrastructure.Models
 
         public string? PreferredCulture { get; set; }
 
+        public DateTime? InvitedDate { get; set; }
+        public DateTime? PasswordSetDate { get; set; }
+
         public string GetName()
         {
             return FirstName + " " + LastName;
