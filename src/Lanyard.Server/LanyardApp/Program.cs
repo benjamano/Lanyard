@@ -2,6 +2,7 @@ using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
@@ -150,6 +151,14 @@ builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
 .AddSignInManager()
 .AddDefaultTokenProviders();
 
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    // Default token lifespan is 1 day; extended for the invite-email use case, where the
+    // email may sit unread longer than a same-session password reset. ChangePasswordAsync
+    // (admin-driven) generates and consumes its token in the same call, so this is safe there too.
+    options.TokenLifespan = TimeSpan.FromDays(7);
+});
+
 builder.Services.AddAuthorization();
 
 // Configure cookie to persist login across sessions
@@ -196,6 +205,12 @@ builder.Services.AddScoped(sp =>
 {
     NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
     return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
+});
+
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/");
 });
 
 // Add FluentUI Components

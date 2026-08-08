@@ -17,5 +17,8 @@ namespace Lanyard.Application.Services.Authentication
         Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user);
         Task<Result<bool>> DeleteUserAsync(string userId);
         Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword);
+        Task<Result<bool>> SendSetPasswordLinkAsync(string userId);
+        Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword);
+        Task<Result<string>> GetUsernameForSetPasswordAsync(string userId);
     }
 }

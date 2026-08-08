@@ -17,7 +17,7 @@
         <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
     </FluentStack>
 
-    <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
         <EmptyContent>
             No Users Found
         </EmptyContent>
@@ -27,10 +27,14 @@
             <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" />
             <PropertyColumn Property="@(r => r.PhoneNumber ?? "Not Set")" Title="Phone Number" />
             <PropertyColumn Property="@(r => r.DateOfBirth != null ? r.DateOfBirth.Value.ToString("d") : "Not Set")" Title="DOB" />
+            <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
                     <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary" OnClick="@(() => OpenChangePasswordDialog(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
+                                OnClick="@(() => SendSetPasswordLink(context))"
+                                title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
                 </div>
             </TemplateColumn>
         </ChildContent>
@@ -138,5 +142,24 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ChangePasswordDialog.Content), user);
         });
+    }
+
+    private async Task SendSetPasswordLink(UserProfile user)
+    {
+        bool wasPending = user.PasswordSetDate is null;
+        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(user.Id);
+
+        if (result.IsSuccess)
+        {
+            ToastService.ShowSuccess(wasPending
+                ? $"Invite resent to {user.Email}."
+                : $"Password reset email sent to {user.Email}.");
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to send email: {result.Error}");
+        }
+
+        await GetUsers();
     }
 }
