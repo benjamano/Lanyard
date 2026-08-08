@@ -1,0 +1,6 @@
+/* Person picker fills the available width on a narrow (phone) viewport instead
+   of the old fixed 400px overflowing it, but is capped so it doesn't stretch
+   absurdly wide on a large desktop screen. */
+.person-picker-host {
+    max-width: 400px;
+}

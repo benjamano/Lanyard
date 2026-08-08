@@ -1,4 +1,5 @@
 @page "/login"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
 @using Lanyard.Infrastructure.DTO
 
@@ -6,14 +7,14 @@
 
 <PageTitle>Login</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" 
-              VerticalAlignment="VerticalAlignment.Center"
-              HorizontalAlignment="HorizontalAlignment.Center"
-              Style="min-height: 70vh; padding: 16px;">
-    
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center"
+             HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
+
     <FluentCard Style="width: 300px; max-width: 90vw; padding: 32px;">
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24" HorizontalAlignment="HorizontalAlignment.Center">
-            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold" Style="text-align: center; margin-bottom: 8px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
+                     HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
+                        Style="text-align: center; margin-bottom: 8px;">
                 Please Login
             </FluentText>
 
@@ -26,25 +27,19 @@
 
             <form method="post" class="col-12" action="/api/auth/login-form">
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-                
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" HorizontalAlignment="HorizontalAlignment.Center">
+
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16"
+                             HorizontalAlignment="HorizontalAlignment.Center">
                     <div>
-                        <FluentTextInput Name="username"
-                                        Label="Username"
-                                        Required="true"
-                                        Placeholder="Enter your username"
-                                        Style="width: 100%;">
+                        <FluentTextInput Name="username" Label="Username" Required="true"
+                                         Placeholder="Enter your username" Style="width: 100%;">
                             <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                         </FluentTextInput>
                     </div>
-    
+
                     <div>
-                        <FluentTextInput Name="password"
-                                        Label="Password"
-                                        TextInputType="TextInputType.Password"
-                                        Required="true"
-                                        Placeholder="Enter your password"
-                                        Style="width: 100%;">
+                        <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
+                                         Required="true" Placeholder="Enter your password" Style="width: 100%;">
                             <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                         </FluentTextInput>
                     </div>
@@ -52,12 +47,10 @@
                     @* <FluentCheckbox Name="rememberMe"
                                     Label="Remember Me" /> *@
 
-                    <FluentStack Orientation="Orientation.Horizontal"
-                                 HorizontalAlignment="HorizontalAlignment.Center"
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
                                  Style="margin-top: 8px;">
-                        <FluentButton Appearance="ButtonAppearance.Primary"
-                                      Type="ButtonType.Submit">
-                            <FluentIcon Color="Color.Default" Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit">
+                            <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
                             Login
                         </FluentButton>
                     </FluentStack>

@@ -13,6 +13,12 @@
                 Home
             </FluentNavItem>
 
+            <FluentNavItem Href="/training"
+                            IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                            IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                My Training
+            </FluentNavItem>
+
             @if (_canClockIn)
             {
                 <FluentNavCategory Title="Rota"
@@ -38,6 +44,13 @@
                                     IconActive="@(new Icons.Filled.Size20.Settings())">
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
+                </FluentNavCategory>
+
+                <FluentNavCategory Title="Training"
+                                    IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                                    IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                    <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
+                    <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
             }
 

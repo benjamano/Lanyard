@@ -1,0 +1,104 @@
+@page "/training"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.Enum
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<PageTitle>My Training</PageTitle>
+
+<FluentCard Height="auto">
+    <FluentText As="TextTag.H4" Size="TextSize.Size500">My Training</FluentText>
+
+    @if (isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (assignments.Count == 0)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentText>No training assigned yet.</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="mt-3">
+            @foreach (CourseAssignment assignment in assignments)
+            {
+                <div class="training-assignment-row" @onclick="@(() => OpenAssignment(assignment.Id))">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
+                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="true" Class="w-100 training-assignment-row-inner">
+                        <FluentText Weight="TextWeight.Bold" Class="training-assignment-name">@assignment.Course?.Name</FluentText>
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px" Wrap="true" Width="auto">
+                            @if (assignment.DueDate is not null)
+                            {
+                                <FluentText>Due @assignment.DueDate.Value.ToString("d MMM yyyy")</FluentText>
+                            }
+                            <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
+                        </FluentStack>
+                    </FluentStack>
+                </div>
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private List<CourseAssignment> assignments = [];
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!currentUserResult.IsSuccess || currentUserResult.Data is null)
+        {
+            _toastService.ShowError("Could not determine the current user.");
+            isLoading = false;
+            return;
+        }
+
+        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load training: {result.Error}");
+            assignments = [];
+        }
+        else
+        {
+            assignments = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private void OpenAssignment(Guid assignmentId)
+    {
+        _navigationManager.NavigateTo($"/training/{assignmentId}");
+    }
+
+    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => "Not Started",
+        CourseAssignmentStatus.InProgress => "In Progress",
+        CourseAssignmentStatus.Completed => "Completed",
+        CourseAssignmentStatus.Overdue => "Overdue",
+        _ => "Unknown"
+    };
+
+    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
+        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
+        CourseAssignmentStatus.Completed => BadgeColor.Success,
+        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+}

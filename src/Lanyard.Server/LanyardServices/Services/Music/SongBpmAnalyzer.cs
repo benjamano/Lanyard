@@ -11,7 +11,7 @@ public sealed record BpmAnalysisResult(double Bpm, double FirstBeatOffsetSeconds
 /// no NAudio dependency, so it is unit-testable with synthetic buffers.
 ///
 /// Method: an onset-strength envelope is built from half-wave-rectified frame
-/// energy differences (energy flux — adequate for the beat-driven material this
+/// energy differences (energy flux - adequate for the beat-driven material this
 /// feature targets, and needs no FFT). Tempo comes from autocorrelating that
 /// envelope across the 60-200 BPM lag range with an octave-error preference for
 /// 90-180 BPM; beat phase comes from folding the envelope at the beat period and

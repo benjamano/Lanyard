@@ -30,13 +30,13 @@ namespace Lanyard.Infrastructure.Models
     /// </summary>
     public enum BpmAnalysisStatus
     {
-        /// <summary>Not yet analyzed — picked up by the startup backfill.</summary>
+        /// <summary>Not yet analyzed - picked up by the startup backfill.</summary>
         NotAnalyzed = 0,
 
         /// <summary>Full onset analysis succeeded: Bpm and FirstBeatOffsetSeconds are set.</summary>
         Analyzed = 1,
 
-        /// <summary>BPM read from the file's TBPM tag but audio was not decodable — rate is known, beat phase is not.</summary>
+        /// <summary>BPM read from the file's TBPM tag but audio was not decodable - rate is known, beat phase is not.</summary>
         TagOnly = 2,
 
         /// <summary>Decode or analysis failed.</summary>
@@ -64,7 +64,7 @@ namespace Lanyard.Infrastructure.Models
         public double? Bpm { get; set; }
 
         // Seconds from the start of the track to the first beat, reduced into [0, beatLength).
-        // Null when only the tag BPM is known (TagOnly) — sync then matches rate but not phase.
+        // Null when only the tag BPM is known (TagOnly) - sync then matches rate but not phase.
         public double? FirstBeatOffsetSeconds { get; set; }
 
         public BpmAnalysisStatus BpmAnalysisStatus { get; set; }
@@ -82,11 +82,11 @@ namespace Lanyard.Infrastructure.Models
 
         public required string Name { get; set; }
         public string? Description { get; set; }
-        
+
         public UserProfile? CreateByUser { get; set; }
         public string? CreateByUserId { get; set; }
         public DateTime CreateDate { get; set; }
-        
+
         public UserProfile? DeleteByUser { get; set; }
         public string? DeleteByUserId { get; set; }
         public DateTime? DeleteDate { get; set; }

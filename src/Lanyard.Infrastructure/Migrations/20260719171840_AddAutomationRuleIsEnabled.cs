@@ -17,7 +17,7 @@ namespace Lanyard.Infrastructure.Migrations
                 type: "uuid",
                 nullable: true);
 
-            // Existing rules were implicitly "enabled" before this column existed — default
+            // Existing rules were implicitly "enabled" before this column existed - default
             // them to true so the migration doesn't silently disable every rule already in use.
             migrationBuilder.AddColumn<bool>(
                 name: "IsEnabled",

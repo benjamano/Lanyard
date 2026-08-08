@@ -8,77 +8,67 @@
 <FluentCard Height="100%">
     @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
     {
-        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
-            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to control</FluentBadge>
+        <FluentStack Orientation="@Orientation.Horizontal" VerticalAlignment="@VerticalAlignment.Center"
+                     HorizontalAlignment="@HorizontalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to control
+            </FluentBadge>
         </FluentStack>
     }
     else
     {
-        <FluentStack Orientation="@Orientation.Vertical" VerticalAlignment="@VerticalAlignment.Center" HorizontalAlignment="@HorizontalAlignment.Center" Height="100%" Width="100%" VerticalGap="8">
+        <FluentStack Orientation="@Orientation.Vertical" VerticalAlignment="@VerticalAlignment.Center"
+                     HorizontalAlignment="@HorizontalAlignment.Center" Height="100%" Width="100%" VerticalGap="8">
             @if (Widget.ShowSongTitle)
             {
-                <FluentText Weight="@TextWeight.Semibold" Style="text-align: center;">@(_songTitle ?? "Nothing playing")</FluentText>
+                <FluentText Weight="@TextWeight.Semibold" Style="text-align: center;">@(_songTitle ?? "Nothing playing")
+                </FluentText>
             }
 
-            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto" Margin="@Margin.Top2">
-                <FluentButton Appearance="ButtonAppearance.Outline"
-                              Title="Previous (Double-click) / Restart (Single-click)"
-                              OnClick="RestartSongAsync"
-                              @ondblclick="PreviousSongAsync"
-                              Disabled="@(!AllowTrigger)"
-                              Style="border-radius: 50%;"
-                              IconStart="@(new Icons.Regular.Size32.Previous())">
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center"
+                         VerticalAlignment="@VerticalAlignment.Center" HorizontalGap="8" Width="auto" Margin="@Margin.Top2">
+                <FluentButton Appearance="ButtonAppearance.Outline" Title="Previous (Double-click) / Restart (Single-click)"
+                              OnClick="RestartSongAsync" @ondblclick="PreviousSongAsync" Disabled="@(!AllowTrigger)"
+                              Style="border-radius: 50%;" IconStart="@(new Icons.Regular.Size32.Previous())">
                 </FluentButton>
 
                 @{
                     Icon playIcon = _isPlaying ? new Icons.Regular.Size32.Pause() : new Icons.Regular.Size32.Play();
                 }
 
-                <FluentButton Appearance="ButtonAppearance.Primary"
-                              Title="@(_isPlaying ? "Pause" : "Play")"
-                              OnClick="TogglePlayAsync"
-                              Disabled="@(!AllowTrigger)"
-                              Style="border-radius: 50%;"
-                              IconStart="playIcon">
+                <FluentButton Appearance="ButtonAppearance.Primary" Title="@(_isPlaying ? "Pause" : "Play")"
+                              OnClick="TogglePlayAsync" Disabled="@(!AllowTrigger)" Style="border-radius: 50%;" IconStart="playIcon">
                 </FluentButton>
 
-                <FluentButton Appearance="ButtonAppearance.Outline"
-                              Title="Next"
-                              OnClick="NextSongAsync"
-                              Disabled="@(!AllowTrigger)"
-                              Style="border-radius: 50%;"
-                              IconStart="@(new Icons.Regular.Size32.Next())">
+                <FluentButton Appearance="ButtonAppearance.Outline" Title="Next" OnClick="NextSongAsync"
+                              Disabled="@(!AllowTrigger)" Style="border-radius: 50%;" IconStart="@(new Icons.Regular.Size32.Next())">
                 </FluentButton>
             </FluentStack>
 
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Width="100%">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
+                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Width="100%">
                 <div @onclick="() => _showTimeLeftInsteadOfElapsed = !_showTimeLeftInsteadOfElapsed" role="button">
                     @if (_showTimeLeftInsteadOfElapsed)
                     {
-                        <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(_currentSongLength - _currentSongTime).ToString(@"mm\:ss")</FluentText>
-                    }
+                        <FluentText Color="Color.Info">-@TimeSpan.FromSeconds(_currentSongLength -
+                                                _currentSongTime).ToString(@"mm\:ss")</FluentText>
+                        }
                     else
-                    {
-                        <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongTime).ToString(@"mm\:ss")</FluentText>
-                    }
-                </div>
+                        {
+                            <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongTime).ToString(@"mm\:ss")</FluentText>
+                        }
+                    </div>
 
-                <FluentSlider Style="width: 100%;"
-                              Value="_currentSongTime"
-                              Min="0"
-                              Max="@(_currentSongLength != 0 ? _currentSongLength : 1)"
-                              TValue="double"
-                              Orientation="Orientation.Horizontal"
-                              Disabled="@(!AllowTrigger || _currentSongLength == 0)"
-                              @onpointerdown="OnSeekStart"
-                              @onpointerup="OnSeekEnd"
-                              ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
+                    <FluentSlider Style="width: 100%;" Value="_currentSongTime" Min="0"
+                                  Max="@(_currentSongLength != 0 ? _currentSongLength : 1)" TValue="double"
+                                  Orientation="Orientation.Horizontal" Disabled="@(!AllowTrigger || _currentSongLength == 0)"
+                                  @onpointerdown="OnSeekStart" @onpointerup="OnSeekEnd"
+                                  ValueChanged="(double newValue) => OnSongTimeChanged(newValue)" />
 
-                <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongLength).ToString(@"mm\:ss")</FluentText>
+                    <FluentText Color="Color.Info">@TimeSpan.FromSeconds(_currentSongLength).ToString(@"mm\:ss")</FluentText>
+                </FluentStack>
             </FluentStack>
-        </FluentStack>
-    }
-</FluentCard>
+        }
+    </FluentCard>
 
 @code {
     [Parameter]
@@ -251,7 +241,7 @@
             return;
         }
 
-        // Genuine change from outside a drag (e.g. keyboard adjustment) — commit immediately.
+        // Genuine change from outside a drag (e.g. keyboard adjustment) - commit immediately.
         _currentSongTime = (float)newTime;
 
         await CommitSeekAsync();

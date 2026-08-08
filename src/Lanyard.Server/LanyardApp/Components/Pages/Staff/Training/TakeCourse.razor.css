@@ -1,0 +1,88 @@
+.take-course-wizard-host {
+    width: 100%;
+}
+
+/* FluentWizard lays out stepper/content/buttons as a 2-row CSS grid (content
+   row, then the Previous/Next/Done row), with the content row meant to take
+   whatever's left of the wizard's own fixed height - but a grid item's default
+   min-height is "auto" (its own content size), which lets a tall section
+   silently outgrow that row instead of respecting it, pushing the button row
+   down by however much taller that step's content is. Forcing min-height: 0
+   makes the row genuinely fixed regardless of content, with overflow-y: auto
+   so a tall section scrolls internally instead of pushing the buttons - same
+   root cause/fix shape as the toolbar-height issue in CourseEditor.razor.css. */
+.take-course-wizard-host ::deep .fluent-wizard-content {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* On mobile the page itself scrolls (see cardHeight/wizardHeight in the
+   code-behind), so the Previous/Next/Done row would otherwise sit wherever
+   that step's content happens to end - requiring a scroll to even find it.
+   Pin it as its own bar just above the fixed mobile nav (58px tall) instead,
+   so it's always reachable without hunting for it. MobileNavMenu.razor is a
+   sibling layout piece, not a descendant of this component, so its height
+   is duplicated here rather than shared - only one screen width away from
+   drift, but there's nowhere to source it from at this end. */
+@media (max-width: 767.98px) {
+    .take-course-wizard-host ::deep .fluent-wizard-buttons {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 58px;
+        z-index: 60;
+        background-color: var(--colorNeutralBackground1);
+        padding: 12px 0;
+        border-top: 1px solid var(--colorNeutralStroke1);
+    }
+}
+
+.take-course-section-body {
+    max-width: 100%;
+}
+
+/* Section content is saved verbatim from the Quill editor, which frequently
+   carries pasted-from-Word inline `style="color: ..."` spans - those inline
+   styles beat any plain stylesheet rule regardless of selector specificity,
+   so without !important a pasted black/near-black color renders unreadable
+   here in dark mode, same root cause as the equivalent override in
+   CourseEditor.razor.css. */
+.take-course-section-body,
+.take-course-section-body ::deep * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.take-course-section-body ::deep p {
+    margin: 0 0 12px 0;
+}
+
+.take-course-section-body ::deep h1,
+.take-course-section-body ::deep h2,
+.take-course-section-body ::deep h3 {
+    margin: 0 0 12px 0;
+}
+
+.take-course-section-body ::deep ul,
+.take-course-section-body ::deep ol {
+    margin: 0 0 12px 0;
+    padding-left: 24px;
+}
+
+.quiz-progress-host {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+/* fluent-radio carries an internal "touched" state that, once a radio has ever
+   been checked, keeps its label at full brightness even after the user picks a
+   different option in the group - the option's actual checked state (verified
+   via :state(checked)) is correct, only the label color sticks. That makes a
+   previously-selected-then-deselected option look different from one that was
+   never touched, for no reason tied to anything currently true. Forcing every
+   label in the group to the same color regardless of that internal state is
+   the direct fix. */
+.quiz-option-radio-host ::deep fluent-field label {
+    color: var(--colorNeutralForeground1) !important;
+}

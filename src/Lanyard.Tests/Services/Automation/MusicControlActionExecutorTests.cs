@@ -21,7 +21,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldCallPlay_WhenOperationIsPlay()
         {
             // Full mock setup for MusicPlayerService will be added during implementation
@@ -30,7 +30,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldCallPause_WhenOperationIsPause()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -38,7 +38,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldReturnClientNotConnected_WhenConnectionIdAbsentFromConnectedIds()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -46,7 +46,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldReturnClientNotConnected_WhenClientNotFoundInDatabase()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -54,7 +54,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldReturnActionTypeNotSupported_WhenOperationIsUnknown()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -62,7 +62,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public async Task ExecuteAsync_ShouldReturnMusicOperationFailed_WhenExceptionThrown()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -70,14 +70,14 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public void CanHandle_ShouldReturnTrue_ForMusicControl()
         {
             Assert.Inconclusive("Not yet implemented");
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after MusicControlActionExecutor is complete")]
+        [Ignore("Wave 0 stub - implement after MusicControlActionExecutor is complete")]
         public void CanHandle_ShouldReturnFalse_ForOtherActionTypes()
         {
             Assert.Inconclusive("Not yet implemented");

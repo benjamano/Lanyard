@@ -1,0 +1,35 @@
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                <FluentIcon Value="@(new Icons.Filled.Size24.CheckmarkCircle())" Color="Color.Success" />
+                <FluentText As="TextTag.H4">Course completed!</FluentText>
+            </FluentStack>
+            <FluentText>
+                You've completed @CourseName. No further action is needed - you're all set.
+            </FluentText>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="GoHomeAsync">Back to Home</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public string CourseName { get; set; } = string.Empty;
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Inject]
+    public required NavigationManager NavigationManager { get; set; }
+
+    private async Task GoHomeAsync()
+    {
+        await Dialog.CloseAsync(true);
+        NavigationManager.NavigateTo("/training");
+    }
+}

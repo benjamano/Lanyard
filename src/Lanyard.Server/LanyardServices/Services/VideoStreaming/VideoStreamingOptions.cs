@@ -4,7 +4,7 @@ namespace Lanyard.Application.Services.VideoStreaming;
 
 /// <summary>
 /// Bound from the "VideoStreaming" section of appsettings. Lets a deployment point the
-/// cross-client WebRTC streams at a STUN and/or TURN server without a rebuild — the reliable
+/// cross-client WebRTC streams at a STUN and/or TURN server without a rebuild - the reliable
 /// fix when direct peer-to-peer is blocked by a firewall, client isolation, or routing.
 /// </summary>
 public class VideoStreamingOptions

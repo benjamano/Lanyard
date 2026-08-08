@@ -60,7 +60,7 @@ public class SignalRControlHub(
         }
 
         // Kiosk clients have no interactive user login, so they authenticate with the shared
-        // secret. When a secret is configured, reject any connection that does not present it —
+        // secret. When a secret is configured, reject any connection that does not present it -
         // this is what stops an anonymous caller from driving clients by guessing a client-ID GUID.
         if (_clientSecretValidator.IsConfigured)
         {
@@ -186,7 +186,7 @@ public class SignalRControlHub(
 
     public async Task PlaybackPositionChanged(double positionSeconds)
     {
-        // Fires every second while a client is playing — deliberately not logged
+        // Fires every second while a client is playing - deliberately not logged
         // per report to keep the server log readable.
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)
@@ -527,7 +527,7 @@ public class SignalRControlHub(
         _logger.LogInformation("Client {ConnectionId} reported available video devices: {Devices}", Context.ConnectionId, devices.Select(d => d.DeviceName));
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
-        
+
         if (!getClientResult.IsSuccess)
         {
             _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);

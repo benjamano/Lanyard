@@ -2,10 +2,13 @@
 using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using System.Security.Cryptography;
+using Lanyard.Application.Services.Training;
+using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Authentication;
 
@@ -14,15 +17,24 @@ public class SecurityService : ISecurityService
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
+    private readonly ICourseAssignmentService _courseAssignmentService;
+    private readonly ICourseService _courseService;
+    private readonly ILogger<SecurityService> _logger;
 
     public SecurityService(
-        AuthenticationStateProvider authStateProvider, 
+        AuthenticationStateProvider authStateProvider,
         IDbContextFactory<ApplicationDbContext> factory,
-        UserManager<UserProfile> userManager)
+        UserManager<UserProfile> userManager,
+        ICourseAssignmentService courseAssignmentService,
+        ICourseService courseService,
+        ILogger<SecurityService> logger)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
         _userManager = userManager;
+        _courseAssignmentService = courseAssignmentService;
+        _courseService = courseService;
+        _logger = logger;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -54,9 +66,16 @@ public class SecurityService : ISecurityService
         return authState.User?.Identity?.IsAuthenticated == true;
     }
 
+    public async Task<bool> IsCurrentUserInRoleAsync(string role)
+    {
+        AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
+        return authState.User?.Identity?.IsAuthenticated == true && authState.User.IsInRole(role);
+    }
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
-        try{
+        try
+        {
             Result<string> getResult = await GetCurrentUserIdAsync();
 
             if (!getResult.IsSuccess || getResult.Data == null)
@@ -79,7 +98,7 @@ public class SecurityService : ISecurityService
             return Result<UserProfile>.Fail(ex.Message);
         }
     }
-    
+
     public async Task<string?> GetCurrentUserName()
     {
         Result<UserProfile> getResult = await GetCurrentUserProfileAsync();
@@ -122,28 +141,31 @@ public class SecurityService : ISecurityService
         return await ctx.Users.ToListAsync();
     }
 
-    public async Task<Result<UserProfile>> CreateUserAsync(UserProfile user)
+    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user)
     {
         try
         {
             if ((await GetActiveUsersAsync()).Any())
             {
-                if (!await IsUserLoggedIn())
+                // Once at least one account exists, only an Admin may create further accounts -
+                // being merely logged in is not enough (any Staff-level account could otherwise
+                // create new accounts, including admin ones, for itself).
+                if (!await IsCurrentUserInRoleAsync("Admin"))
                 {
-                    return Result<UserProfile>.Fail("You must be logged in to perform this action!");
+                    return Result<UserCreationResult>.Fail("You must be an administrator to perform this action!");
                 }
             }
 
             if (string.IsNullOrWhiteSpace(user.FirstName) || string.IsNullOrWhiteSpace(user.LastName))
             {
-                return Result<UserProfile>.Fail("The new user's first and last names are required!");
+                return Result<UserCreationResult>.Fail("The new user's first and last names are required!");
             }
 
             string initial = user.FirstName.ToLowerInvariant()[..1];
             string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
 
-            string generatedPassword = "changeME1234!";
+            string generatedPassword = GenerateRandomPassword();
 
             user.EmailConfirmed = true;
 
@@ -152,24 +174,61 @@ public class SecurityService : ISecurityService
             if (!result.Succeeded)
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                return Result<UserProfile>.Fail($"Failed to create user: {errors}");
+                return Result<UserCreationResult>.Fail($"Failed to create user: {errors}");
             }
 
-            return Result<UserProfile>.Ok(user);
+            try
+            {
+                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+
+                if (coursesResult.IsSuccess && coursesResult.Data is not null)
+                {
+                    foreach (Course course in coursesResult.Data.Where(x => x.AutoAssignOnUserCreation))
+                    {
+                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null);
+
+                        if (!assignResult.IsSuccess)
+                        {
+                            _logger.LogWarning("Failed to auto-assign course {CourseId} to new user {UserId}: {Error}", course.Id, user.Id, assignResult.Error);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Auto-assigning training courses must never block account creation -
+                // a new hire needs their login regardless of whether their induction
+                // course could be auto-assigned.
+                _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
+            }
+
+            return Result<UserCreationResult>.Ok(new UserCreationResult(user, generatedPassword));
         }
         catch (Exception ex)
         {
-            return Result<UserProfile>.Fail(ex.Message);
+            return Result<UserCreationResult>.Fail(ex.Message);
         }
+    }
+
+    private static string GenerateRandomPassword()
+    {
+        // 24 URL-safe random characters, with fixed complexity characters appended so the result
+        // always satisfies ASP.NET Identity's default password rules (upper, lower, digit).
+        string random = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        return $"{random}Aa1!";
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
         try
         {
-            if (!await IsUserLoggedIn())
+            if (!await IsCurrentUserInRoleAsync("Admin"))
             {
-                return Result<bool>.Fail("You must be logged in to perform this action!");
+                return Result<bool>.Fail("You must be an administrator to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -185,6 +244,23 @@ public class SecurityService : ISecurityService
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<bool>.Fail($"Failed to delete user: {errors}");
+            }
+
+            try
+            {
+                Result<int> cleanupResult = await _courseAssignmentService.UnassignAllForUserAsync(userId);
+
+                if (!cleanupResult.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to clean up CourseAssignments for deleted user {UserId}: {Error}", userId, cleanupResult.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                // The user is already deleted at this point — this is best-effort
+                // cleanup of their now-orphaned CourseAssignments rows and must
+                // never undo or fail the deletion that already succeeded.
+                _logger.LogWarning(ex, "Failed to clean up CourseAssignments for deleted user {UserId}", userId);
             }
 
             return Result<bool>.Ok(true);

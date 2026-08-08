@@ -1,0 +1,107 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.Enum
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<div class="by-person-tab">
+    <div class="person-picker-host">
+        <FluentSelect TOption="UserProfile" TValue="string" Items="@users.OrderBy(x => x.GetName())"
+                      OptionText="@(i => i?.GetName() ?? string.Empty)" OptionValue="@(i => i?.Id)"
+                      Placeholder="Select a person..." Label="Person" @bind-Value="selectedUserId"
+                      @bind-Value:after="LoadAssignmentsAsync" Width="100%">
+        </FluentSelect>
+    </div>
+
+    @if (!string.IsNullOrEmpty(selectedUserId))
+    {
+        @if (isLoading)
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+                <FluentSpinner />
+            </FluentStack>
+        }
+        else
+        {
+            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100 mt-2"
+                            RowSize="@DataGridRowSize.Medium">
+                <ChildContent>
+                    <PropertyColumn Property="@(x => x.Course!.Name)" Title="Course" Sortable="true" />
+                    <TemplateColumn Title="Status">
+                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                                     Appearance="BadgeAppearance.Filled" />
+                    </TemplateColumn>
+                    <TemplateColumn Title="Latest Score">
+                        @GetLatestScore(context)
+                    </TemplateColumn>
+                    <TemplateColumn Title="Due Date">
+                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                    </TemplateColumn>
+                </ChildContent>
+                <EmptyContent>
+                    This person has no training assigned.
+                </EmptyContent>
+            </FluentDataGrid>
+        }
+    }
+</div>
+
+@code {
+    private IEnumerable<UserProfile> users = [];
+    private List<CourseAssignment> assignments = [];
+    private string selectedUserId = string.Empty;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await _securityService.GetAllUsersAsync();
+    }
+
+    private async Task LoadAssignmentsAsync()
+    {
+        if (string.IsNullOrEmpty(selectedUserId))
+        {
+            assignments = [];
+            return;
+        }
+
+        isLoading = true;
+
+        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(selectedUserId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load training record: {result.Error}");
+            assignments = [];
+        }
+        else
+        {
+            assignments = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private static string GetLatestScore(CourseAssignment assignment)
+    {
+        CourseQuizAttempt? latest = assignment.Attempts.OrderByDescending(x => x.AttemptNumber).FirstOrDefault();
+        return latest is null ? "-" : $"{latest.ScorePercent}%";
+    }
+
+    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => "Not Started",
+        CourseAssignmentStatus.InProgress => "In Progress",
+        CourseAssignmentStatus.Completed => "Completed",
+        CourseAssignmentStatus.Overdue => "Overdue",
+        _ => "Unknown"
+    };
+
+    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
+        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
+        CourseAssignmentStatus.Completed => BadgeColor.Success,
+        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+}

@@ -20,7 +20,9 @@
     <script src="@Assets["video-stream.js"]"></script>
     <script src="@Assets["js/autoLogout.js"]"></script>
     <script src="@Assets["js/dmxKeybinds.js"]"></script>
+    <script src="@Assets["js/viewportWatcher.js"]"></script>
     <link rel="stylesheet" href="@Assets["Lanyard.App.styles.css"]" />
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
     <HeadOutlet @rendermode="PageRenderMode" />
 
     <style>
@@ -51,6 +53,23 @@
 
         @@media (prefers-reduced-motion: reduce) {
             .app-splash-spinner { animation: none; }
+        }
+    </style>
+
+    <style>
+        /* FluentLayoutItem's Content area can't be reached by scoped CSS - every
+           element between MainLayout.razor's own template and this one is a Fluent
+           library component, none of which carry MainLayout's scope attribute (nor
+           is there a plain wrapping element anywhere in the chain for a ::deep
+           anchor). MobileNavMenu is `position: fixed`, so it takes no space in the
+           document flow and never pushes scrolled content up to clear it - without
+           this, a long page's last ~60px (including a FluentCard's own bottom
+           border) ends up flush against, or effectively hidden behind, the fixed
+           mobile nav bar. */
+        @@media (max-width: 767.98px) {
+            [area="content"] {
+                padding-bottom: 80px;
+            }
         }
     </style>
 
@@ -118,7 +137,10 @@
 
     <Routes @rendermode="PageRenderMode" />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
-    <script src="https://kit.fontawesome.com/9d35a24d36.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/imask@7.6.1/dist/imask.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+    <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js"></script>
+    <script src="_content/Blazored.TextEditor/Blazored-BlazorQuill.js"></script>
     <script src="/_framework/aspnetcore-browser-refresh.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <ReconnectModal />

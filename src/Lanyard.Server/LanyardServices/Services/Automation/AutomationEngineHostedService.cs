@@ -28,7 +28,7 @@ public class AutomationEngineHostedService(
                 catch (Exception ex)
                 {
                     _logger.LogError(ex,
-                        "Unhandled error processing transition event for client {ClientId} — new status {NewStatus}",
+                        "Unhandled error processing transition event for client {ClientId} - new status {NewStatus}",
                         transitionEvent.ClientId, transitionEvent.NewStatus);
                 }
             }

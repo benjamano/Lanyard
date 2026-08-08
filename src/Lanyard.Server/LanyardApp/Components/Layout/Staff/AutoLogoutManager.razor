@@ -27,6 +27,12 @@
         if (!firstRender || _initialized)
             return;
 
+        // Kiosks run unattended for hours showing rotating content - never even start
+        // the ticker/activity listeners there rather than relying solely on the
+        // IsExemptPage() check inside CheckTimers().
+        if (IsExemptPage())
+            return;
+
         AuthenticationState auth = await AuthStateProvider.GetAuthenticationStateAsync();
         if (auth.User.Identity?.IsAuthenticated != true)
             return;
@@ -36,12 +42,19 @@
         _lastActivity = DateTime.UtcNow;
 
         _selfRef = DotNetObjectReference.Create(this);
-        
+
         try
         {
             await JS.InvokeVoidAsync("autoLogout.dispose");
         }
         catch { }
+
+        // This was the actual bug: dispose() was called to clear out any listeners
+        // from a previous circuit, but init() - the call that wires OnUserActivity()
+        // up to real mousemove/keydown/etc. events - was never made. _lastActivity
+        // was set once above and then never touched again, so the timeout counted
+        // down from page load instead of from the user's last real interaction.
+        await JS.InvokeVoidAsync("autoLogout.init", _selfRef);
 
         _ticker = new System.Threading.Timer(
             _ => InvokeAsync(CheckTimers),

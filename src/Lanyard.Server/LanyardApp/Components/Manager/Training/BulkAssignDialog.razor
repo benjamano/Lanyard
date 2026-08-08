@@ -1,0 +1,172 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Application.Services.ApplicationRoles
+@using Lanyard.Infrastructure.DTO.Training
+
+@inject ICourseAssignmentService _courseAssignmentService
+@inject ApplicationRolesService _rolesService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
+            <FluentText As="TextTag.H4" Size="TextSize.Size500">Bulk Assign Course</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+            @if (isAdmin)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                    <FluentButton Appearance="@(mode == AssignMode.Individually ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                  OnClick="@(() => mode = AssignMode.Individually)">
+                        Individually
+                    </FluentButton>
+                    <FluentButton Appearance="@(mode == AssignMode.ByRole ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                  OnClick="@(() => mode = AssignMode.ByRole)">
+                        By Role
+                    </FluentButton>
+                </FluentStack>
+            }
+
+            @if (mode == AssignMode.Individually)
+            {
+                <FluentListbox TOption="UserProfile"
+                               TValue="string"
+                               Items="@users.OrderBy(x => x.GetName())"
+                               OptionText="@(i => i?.GetName() ?? string.Empty)"
+                               OptionValue="@(i => i?.Id)"
+                               @bind-SelectedItems="selectedUsers"
+                               Multiple="true"
+                               Label="Select users"
+                               Height="220px"
+                               Width="100%">
+                </FluentListbox>
+            }
+            else
+            {
+                <FluentSelect TOption="ApplicationRole"
+                              TValue="string"
+                              Items="@roles.OrderBy(x => x.Name)"
+                              OptionText="@(i => i?.Name ?? string.Empty)"
+                              OptionValue="@(i => i?.Id)"
+                              Placeholder="Select a role..."
+                              Label="Role"
+                              @bind-Value="selectedRoleId"
+                              Width="100%">
+                </FluentSelect>
+            }
+
+            <FluentDatePicker TValue="DateTime?" @bind-Value="dueDate" Label="Due Date (optional)" Width="100%">
+            </FluentDatePicker>
+
+            <FluentStack Orientation="Orientation.Horizontal">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSubmitting" OnClick="SubmitAsync">
+                    Assign
+                </FluentButton>
+                <FluentButton OnClick="CancelAsync" Disabled="@isSubmitting">Cancel</FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    private enum AssignMode { Individually, ByRole }
+
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private AssignMode mode = AssignMode.Individually;
+    private bool isAdmin;
+    private IEnumerable<UserProfile> users = [];
+    private IEnumerable<UserProfile> selectedUsers = [];
+    private List<ApplicationRole> roles = [];
+    private string? selectedRoleId;
+    private DateTime? dueDate;
+    private bool isSubmitting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
+        users = await _securityService.GetAllUsersAsync();
+
+        if (isAdmin)
+        {
+            Result<List<ApplicationRole>> rolesResult = await _rolesService.GetAllApplicationRolesAsync();
+
+            if (rolesResult.IsSuccess && rolesResult.Data is not null)
+            {
+                roles = rolesResult.Data;
+            }
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        List<string> userIds;
+
+        if (mode == AssignMode.ByRole)
+        {
+            if (string.IsNullOrEmpty(selectedRoleId))
+            {
+                _toastService.ShowError("Select a role.");
+                return;
+            }
+
+            Result<List<UserProfile>> usersInRoleResult = await _rolesService.GetUsersInRoleAsync(selectedRoleId);
+
+            if (!usersInRoleResult.IsSuccess || usersInRoleResult.Data is null)
+            {
+                _toastService.ShowError($"Failed to resolve role members: {usersInRoleResult.Error}");
+                return;
+            }
+
+            userIds = [.. usersInRoleResult.Data.Select(x => x.Id)];
+        }
+        else
+        {
+            userIds = [.. selectedUsers.Select(x => x.Id)];
+        }
+
+        if (userIds.Count == 0)
+        {
+            _toastService.ShowError("Select at least one person.");
+            return;
+        }
+
+        isSubmitting = true;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!currentUserResult.IsSuccess || currentUserResult.Data is null)
+        {
+            _toastService.ShowError("Could not determine the current user.");
+            isSubmitting = false;
+            return;
+        }
+
+        Result<BulkAssignResult> result = await _courseAssignmentService.AssignCourseToUsersAsync(
+            CourseId, userIds, currentUserResult.Data, dueDate);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to assign course: {result.Error}");
+            isSubmitting = false;
+            return;
+        }
+
+        string message = result.Data.SkippedDuplicateCount > 0
+            ? $"Assigned to {result.Data.AssignedCount} people ({result.Data.SkippedDuplicateCount} already had this course)."
+            : $"Assigned to {result.Data.AssignedCount} people.";
+
+        _toastService.ShowSuccess(message);
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

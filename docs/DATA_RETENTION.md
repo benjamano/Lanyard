@@ -1,6 +1,9 @@
 # Data Retention & Erasure Policy
 
-> **Template — confirm periods with legal/HR before adopting.** Replace bracketed values.
+> **Filled in from known operational details — still get a final legal/HR read before adopting.**
+> Last updated: 6 August 2026. Data controller / contact: Benjamin Mercer,
+> benmercer76@btinternet.com. Hosted on Railway (West Europe region); data does not leave the
+> UK/EU.
 
 ## Retention periods
 

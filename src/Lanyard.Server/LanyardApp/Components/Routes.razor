@@ -9,7 +9,7 @@
     <LayoutView Layout="@GetLayout()">
         <Router AppAssembly="@typeof(Program).Assembly" NotFoundPage="typeof(StaffNotFound)">
             <Found Context="routeData">
-                <RouteView RouteData="@routeData" />
+                <RouteAuthorizationGate RouteData="@routeData" />
             </Found>
         </Router>
     </LayoutView>

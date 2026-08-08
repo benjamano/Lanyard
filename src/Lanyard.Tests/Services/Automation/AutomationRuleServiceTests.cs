@@ -34,7 +34,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task CreateRuleAsync_ShouldAddRuleToDatabase()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -42,7 +42,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task CreateRuleAsync_ShouldInvalidateRuleCache()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -50,7 +50,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task GetRuleAsync_ShouldReturnRule()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -58,7 +58,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task GetRuleAsync_ShouldReturnNullWhenNotFound()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -66,7 +66,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task GetRulesByTriggerAsync_ShouldReturnMatchingRules()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -74,7 +74,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task GetRulesByTriggerAsync_ShouldNotReturnInactiveRules()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -82,7 +82,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task UpdateRuleAsync_ShouldUpdateRule()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -90,7 +90,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task UpdateRuleAsync_ShouldInvalidateRuleCache()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -98,7 +98,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task DeleteRuleAsync_ShouldSoftDeleteRule()
         {
             Assert.Inconclusive("Not yet implemented");
@@ -106,7 +106,7 @@ namespace Lanyard.Tests.Services.Automation
         }
 
         [TestMethod]
-        [Ignore("Wave 0 stub — implement after AutomationRuleService is complete")]
+        [Ignore("Wave 0 stub - implement after AutomationRuleService is complete")]
         public async Task DeleteRuleAsync_ShouldReturnFailureWhenNotFound()
         {
             Assert.Inconclusive("Not yet implemented");

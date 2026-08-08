@@ -57,8 +57,15 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableVideoDevice> ClientAvailableVideoDevices { get; set; }
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
+        public DbSet<Course> Courses { get; set; }
+        public DbSet<CourseSection> CourseSections { get; set; }
+        public DbSet<CourseQuestion> CourseQuestions { get; set; }
+        public DbSet<CourseQuestionOption> CourseQuestionOptions { get; set; }
+        public DbSet<CourseAssignment> CourseAssignments { get; set; }
+        public DbSet<CourseQuizAttempt> CourseQuizAttempts { get; set; }
+        public DbSet<CourseQuizAttemptAnswer> CourseQuizAttemptAnswers { get; set; }
 
-        // Connection string used only when the context is created without configured options —
+        // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
         // ConnectionStrings__DefaultConnection from the environment and otherwise falls back to
         // the local Docker Postgres from docker-compose.yml. It must never contain a real/remote

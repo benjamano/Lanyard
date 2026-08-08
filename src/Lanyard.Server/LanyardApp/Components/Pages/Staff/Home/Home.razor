@@ -4,6 +4,7 @@
 
 @using Lanyard.App.Components.ClockIn
 @using Lanyard.App.Components.Home
+@using Lanyard.App.Components.Training
 @using Lanyard.Application.Services.Authentication
 @using Microsoft.AspNetCore.Authorization
 
@@ -11,8 +12,7 @@
 
 <PageTitle>Staff Home</PageTitle>
 
-
-<div class="px-1">
+<div class="mx-3">
     <FluentGrid AdaptiveRendering="true" Spacing="3">
         <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
             <FluentCard Appearance="CardAppearance.Filled" Height="100%">
@@ -22,50 +22,57 @@
                     </FluentText>
                     @if (_showPreviewContent)
                     {
-                        <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in use</FluentText>
-                    }
-                </FluentStack>
-            </FluentCard>
-        </FluentGridItem>
-        <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
-            @if (_showPreviewContent)
-            {
-                <MyTasksToday />
-            }
-            else
-            {
-                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Class="h-100 gap-3">
-                    <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="ButtonAppearance.Primary" @onclick="() => _showPreviewContent = true">
-                        Show Preview Content
-                    </FluentButton>
-                </FluentStack>
-            }
-        </FluentGridItem>
-        <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
-            <DigitalClock />
-        </FluentGridItem>
-    </FluentGrid>
-    @if (_showPreviewContent)
-    {
-        <FluentGrid Spacing="3">
-            <FluentGridItem Lg="7" Md="12" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
-                    <ClockinPortable />
+                        <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in
+                            use</FluentText>
+                        }
+                    </FluentStack>
                 </FluentCard>
             </FluentGridItem>
-            <FluentGridItem Lg="3" Md="5" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
-                    <UpcomingShifts />
-                </FluentCard>
+            <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
+                @if (_showPreviewContent)
+                {
+                    <MyTasksToday />
+                }
+                else
+                {
+                    @* Preview-content toggle - may want this back later, so commenting out
+                       rather than deleting. Replaced with the always-visible training card
+                       below in the meantime. *@
+                    @* <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
+                                 Class="h-100 gap-3">
+                        <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="ButtonAppearance.Primary"
+                                      @onclick="() => _showPreviewContent = true">
+                            Show Preview Content
+                        </FluentButton>
+                    </FluentStack> *@
+                    <OutstandingTrainingCard />
+                }
             </FluentGridItem>
-            <FluentGridItem Lg="2" Md="7" Sm="12" Xs="12">
-                <FluentCard Appearance="CardAppearance.Filled" Height="100%">
-                    <ShiftCalendar />
-                </FluentCard>
+            <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
+                <DigitalClock />
             </FluentGridItem>
         </FluentGrid>
-    }
-</div>
+        @if (_showPreviewContent)
+        {
+            <FluentGrid Spacing="3">
+                <FluentGridItem Lg="7" Md="12" Sm="12" Xs="12">
+                    <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+                        <ClockinPortable />
+                    </FluentCard>
+                </FluentGridItem>
+                <FluentGridItem Lg="3" Md="5" Sm="12" Xs="12">
+                    <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+                        <UpcomingShifts />
+                    </FluentCard>
+                </FluentGridItem>
+                <FluentGridItem Lg="2" Md="7" Sm="12" Xs="12">
+                    <FluentCard Appearance="CardAppearance.Filled" Height="100%">
+                        <ShiftCalendar />
+                    </FluentCard>
+                </FluentGridItem>
+            </FluentGrid>
+        }
+    </div>
 
 @code {
     private string? _currentUserName;

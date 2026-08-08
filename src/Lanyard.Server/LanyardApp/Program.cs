@@ -2,6 +2,7 @@ using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Training;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
@@ -69,6 +70,8 @@ builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
+builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
@@ -209,7 +212,7 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("ip-fixed", httpContext =>
     {
         var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        
+
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 50,
@@ -250,6 +253,22 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
+    // This app has no public-facing pages - everything is staff/kiosk tooling - so it should
+    // never be crawled or indexed even if it ends up reachable from the open internet.
+    context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+
+    // Scoped to what App.razor actually loads today: Bootstrap CSS/JS from jsdelivr (with SRI),
+    // two inline <script> blocks (boot-cloak + theme detection) and an inline <style> block,
+    // plus FluentUI's dynamically-injected stylesheet.
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
+        "font-src 'self' data:; " +
+        "img-src 'self' data:; " +
+        "connect-src 'self' wss:; " +
+        "frame-ancestors 'self';";
+
     await next();
 });
 
@@ -274,7 +293,7 @@ app.Use(async (context, next) =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             // Write a body so UseStatusCodePagesWithReExecute does not re-run the pipeline (which
-            // would turn this into an antiforgery 400) — the client must receive a clean 401.
+            // would turn this into an antiforgery 400) - the client must receive a clean 401.
             await context.Response.WriteAsync("Invalid or missing client shared secret.");
             return;
         }

@@ -237,7 +237,7 @@ public class MusicPlayerService
         ApplicationDbContext _context = await _contextFactory.CreateDbContextAsync();
 
         Playlist? playlist = await _context.Playlists
-            .Where(x=> x.Id == playlistId)
+            .Where(x => x.Id == playlistId)
             .FirstOrDefaultAsync();
 
         lock (_lock)
@@ -262,7 +262,7 @@ public class MusicPlayerService
         songs = await context.Songs
             .AsNoTracking()
             .Where(x => songIds.Contains(x.Id))
-            .OrderByDescending(x=> x.CreateDate)
+            .OrderByDescending(x => x.CreateDate)
             .ToListAsync();
 
         await SetQueue(clientId, songs, playlistId);
@@ -332,7 +332,7 @@ public class MusicPlayerService
 
     /// <param name="isAutomaticAdvance">
     /// True when the current track ended by itself, false when the user pressed Next.
-    /// Only an automatic advance honours <see cref="RepeatMode.One"/> — an explicit skip
+    /// Only an automatic advance honours <see cref="RepeatMode.One"/> - an explicit skip
     /// means the user wants to move on, so it advances regardless.
     /// </param>
     private static int? GetNextQueueIndex(ClientMusicState state, bool isAutomaticAdvance)
@@ -466,7 +466,7 @@ public class MusicPlayerService
         List<Song> playlistSongs = await context.PlaylistSongMembers
             .Where(x => x.PlaylistId == playlistId)
             .Select(x => x.Song!)
-            .OrderByDescending(x=> x.CreateDate)
+            .OrderByDescending(x => x.CreateDate)
             .ToListAsync();
 
         if (GetShuffleEnabled(clientId))
@@ -554,6 +554,7 @@ public class MusicPlayerService
 
         if (GetCurrentSong(clientId) is null)
         {
+            _logger.LogWarning("Client {ClientId} reported song ended but has no current song", clientId);
             return;
         }
 
@@ -673,7 +674,7 @@ public class MusicPlayerService
     public async Task RestartOrPrevious(Guid clientId)
     {
         Song? currentSong = GetCurrentSong(clientId);
-        
+
         if (currentSong != null)
         {
             ClientMusicState state = GetOrCreateState(clientId);

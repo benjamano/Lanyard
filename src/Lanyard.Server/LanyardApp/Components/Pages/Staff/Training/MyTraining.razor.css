@@ -1,0 +1,25 @@
+.training-assignment-row {
+    cursor: pointer;
+    padding: 12px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.training-assignment-row:hover {
+    background-color: var(--colorNeutralBackground2);
+}
+
+/* FluentStack's Class="..." lands on the fluent-stack-horizontal element itself,
+   which does not receive this file's scope attribute (Fluent v5 component root
+   quirk) -- ::deep is required, hooked off the plain .training-assignment-row
+   ancestor div above. */
+::deep .training-assignment-row-inner {
+    row-gap: 8px;
+}
+
+::deep .training-assignment-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}

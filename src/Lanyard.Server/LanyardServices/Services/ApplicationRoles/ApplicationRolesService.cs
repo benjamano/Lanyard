@@ -28,6 +28,11 @@ public class ApplicationRolesService
 
     public async Task<Result<List<ApplicationRole>>> GetAllApplicationRolesAsync()
     {
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        {
+            return Result<List<ApplicationRole>>.Fail("You must be an administrator to perform this action!");
+        }
+
         try
         {
             using ApplicationDbContext ctx = _factory.CreateDbContext();
@@ -45,11 +50,37 @@ public class ApplicationRolesService
         }
     }
 
+    public async Task<Result<List<UserProfile>>> GetUsersInRoleAsync(string roleId)
+    {
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        {
+            return Result<List<UserProfile>>.Fail("You must be an administrator to perform this action!");
+        }
+
+        try
+        {
+            ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
+
+            if (role is null)
+            {
+                return Result<List<UserProfile>>.Fail("Role not found.");
+            }
+
+            IList<UserProfile> usersInRole = await _umApi.GetUsersInRoleAsync(role.Name!);
+
+            return Result<List<UserProfile>>.Ok([.. usersInRole]);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<UserProfile>>.Fail($"Failed to retrieve users in role: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> CreateNewRoleAsync(string roleName)
     {
-        if (!await _sApi.IsUserLoggedIn())
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
         {
-            return Result<bool>.Fail("You must be logged in to perform this action!");
+            return Result<bool>.Fail("You must be an administrator to perform this action!");
         }
 
         try
@@ -163,9 +194,9 @@ public class ApplicationRolesService
 
     public async Task<Result<string>> AssignRoleToUserAsync(string userId, string roleId)
     {
-        if (!await _sApi.IsUserLoggedIn())
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
         {
-            return Result<string>.Fail("You must be logged in to perform this action!");
+            return Result<string>.Fail("You must be an administrator to perform this action!");
         }
 
         try
@@ -211,9 +242,9 @@ public class ApplicationRolesService
 
     public async Task<Result<string>> RemoveRoleFromUserAsync(string userId, string roleId)
     {
-        if (!await _sApi.IsUserLoggedIn())
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
         {
-            return Result<string>.Fail("You must be logged in to perform this action!");
+            return Result<string>.Fail("You must be an administrator to perform this action!");
         }
 
         try
@@ -254,9 +285,9 @@ public class ApplicationRolesService
 
     public async Task<Result<List<string>>> DeleteRoleAsync(string roleId)
     {
-        if (!await _sApi.IsUserLoggedIn())
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
         {
-            return Result<List<string>>.Fail("You must be logged in to perform this action!");
+            return Result<List<string>>.Fail("You must be an administrator to perform this action!");
         }
 
         try

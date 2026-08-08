@@ -1,25 +1,17 @@
 @inject IThemeService ThemeService
 
-<FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Start" VerticalAlignment="@VerticalAlignment.Center">
-    <FluentSelect Items="colours"
-                    OptionText="@(x => x.Key)"
-                    OptionValue="@(x => x.Value.ToUpper())"
-                    @bind-Value="selectedColour"
-                    @bind-Value:after="OnColourChanged">
+<FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Start"
+             VerticalAlignment="@VerticalAlignment.Center">
+    <FluentSelect Items="colours" OptionText="@(x => x.Key)" OptionValue="@(x => x.Value.ToUpper())"
+                  @bind-Value="selectedColour" @bind-Value:after="OnColourChanged">
     </FluentSelect>
 
-    <FluentButton Appearance="ButtonAppearance.Transparent"
-                    IconOnly="true"
-                    Class="fluent-header-hover"
-                    Tooltip="Switch to Light/Dark theme"
-                    BackgroundColor="transparent"
-                    OnClick="ToggleDarkMode">
+    <FluentButton Appearance="ButtonAppearance.Transparent" IconOnly="true" Class="fluent-header-hover"
+                  Tooltip="Switch to Light/Dark theme" BackgroundColor="transparent" OnClick="ToggleDarkMode">
 
-        <FluentIcon Class="hidden-if-light"
-                    Value="@(new Icons.Filled.Size20.WeatherSunny())" />
+        <FluentIcon Class="hidden-if-light" Value="@(new Icons.Filled.Size20.WeatherSunny())" />
 
-        <FluentIcon Class="hidden-if-dark"
-                    Value="@(new Icons.Filled.Size20.WeatherMoon())" />
+        <FluentIcon Class="hidden-if-dark" Value="@(new Icons.Filled.Size20.WeatherMoon())" />
     </FluentButton>
 </FluentStack>
 
@@ -29,7 +21,7 @@
 
     private Dictionary<string, string> colours = new Dictionary<string, string>
     {
-        { "Red", "#930524" }, 
+        { "Red", "#930524" },
         { "Orange", "#cc6633" },
         { "Yellow", "#9f861f" },
         { "Green", "#167a47" },
@@ -41,17 +33,31 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        @* colours = colours.Select(x=> new 
+        @* colours = colours.Select(x=> new
             KeyValuePair<string, string>(x.Key, x.Value.ToLower())).ToDictionary(x=> x.Key, x=> x.Value); *@
 
         if (firstRender)
         {
             try
             {
-                selectedColour = await ThemeService.GetBrandColorAsync() 
-                    ?? colours
-                        .Where(x => x.Key == "Pink")
-                        .FirstOrDefault().Value;
+                string? storedColour = await ThemeService.GetBrandColorAsync();
+
+                // GetBrandColorAsync() never actually returns null/empty - with no explicit
+                // choice yet it returns FluentUI's own factory-default blue (#0f6cbd), which
+                // isn't one of our palette swatches. Treat "not one of ours" as "unset" too.
+                bool isKnownColour = !string.IsNullOrEmpty(storedColour)
+                    && colours.Values.Any(v => string.Equals(v, storedColour, StringComparison.OrdinalIgnoreCase));
+
+                if (!isKnownColour)
+                {
+                    // OptionValue upper-cases the hex string, so selectedColour must match.
+                    selectedColour = colours["Orange"].ToUpper();
+                    await ThemeService.SetThemeAsync(selectedColour, true);
+                }
+                else
+                {
+                    selectedColour = storedColour!.ToUpper();
+                }
 
                 isDarkMode = await ThemeService.IsDarkModeAsync();
 

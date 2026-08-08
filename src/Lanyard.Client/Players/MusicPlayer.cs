@@ -47,10 +47,22 @@ public class MusicPlayer : IMusicPlayer, IDisposable
             MediaFoundationReader? reader = _reader;
 
             // Stop (and the Stop inside Load) disposes the reader before the playback thread
-            // gets here and reports the state itself, so a live reader that has consumed its
-            // whole stream is a track that ended on its own.
-            if (reader is null || reader.Position < reader.Length)
+            // gets here, so a null reader means this was an explicit stop, not a natural end.
+            if (reader is null)
             {
+                _logger.LogInformation("MusicPlayer: Stop was explicit, not treating as track end");
+                return;
+            }
+
+            // MediaFoundationReader.Length is an estimate and can run slightly longer than what
+            // actually gets played for some files (e.g. VBR MP3), so Position rarely reaches it
+            // exactly on a natural end. A short tolerance avoids missing genuine track-end events.
+            TimeSpan remaining = reader.TotalTime - reader.CurrentTime;
+            if (remaining > TimeSpan.FromMilliseconds(750))
+            {
+                _logger.LogInformation(
+                    "MusicPlayer: Playback stopped with {Remaining}ms remaining - not treating as track end",
+                    remaining.TotalMilliseconds);
                 return;
             }
 

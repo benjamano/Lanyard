@@ -1,0 +1,205 @@
+/* Quill (via Blazored.TextEditor) renders its own plain-HTML DOM dynamically via JS,
+   so it never receives this file's scope attribute — ::deep plus this plain-div
+   ancestor is required for any of these rules to actually match. */
+
+/* This div's own content-based height was silently undercounting the toolbar's
+   height (a reproducible ~toolbar-height shortfall regardless of block/flow-root/
+   max-content sizing — never fully root-caused), which let the editor visually
+   overlap the Save/Delete button row rendered right after it. Sidestepping the
+   whole "size to content" approach: give this wrapper an authoritative fixed
+   height and let flexbox split it between the toolbar (auto) and the editor
+   (fills the rest) — that's immune to whatever was miscounting content height. */
+.quill-editor-host {
+    display: flex;
+    flex-direction: column;
+    height: 320px;
+    flex-shrink: 0;
+    width: 100%;
+}
+
+.quill-editor-host ::deep .ql-toolbar.ql-snow {
+    flex: 0 0 auto;
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host ::deep .ql-container.ql-snow {
+    flex: 1 1 auto;
+    min-height: 0;
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host ::deep .ql-editor {
+    color: var(--colorNeutralForeground1);
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Content pasted into Quill (e.g. from Word) frequently carries its source's
+   own inline `style="color: ..."` on the pasted spans — inline styles beat
+   any stylesheet rule regardless of selector specificity, so the plain
+   .ql-editor color rule above silently loses to a pasted-in black/near-black
+   color, leaving typed-over-paste text unreadable in dark mode. !important
+   on a rule that also matches every descendant is the only way to force the
+   theme color to win over an arbitrary inline style we don't control. */
+.quill-editor-host ::deep .ql-editor,
+.quill-editor-host ::deep .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.quill-editor-host ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+.quill-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-snow .ql-picker {
+    color: var(--colorNeutralForeground2);
+}
+
+/* The picker's closed-state label picks up the theme color above, but Quill's
+   snow theme hardcodes the OPEN dropdown panel to a plain white background
+   with dark grey text regardless of surrounding page theme - in dark mode
+   that's a jarring bright-white popup with barely-readable grey text. */
+.quill-editor-host ::deep .ql-snow .ql-picker-options {
+    background-color: var(--colorNeutralBackground1);
+    border-color: var(--colorNeutralStroke1) !important;
+}
+
+.quill-editor-host ::deep .ql-snow .ql-picker-item {
+    color: var(--colorNeutralForeground1);
+}
+
+.quill-editor-host ::deep .ql-snow .ql-picker-item:hover,
+.quill-editor-host ::deep .ql-snow .ql-picker-item.ql-selected {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}
+
+.reorder-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.reorder-item ::deep .reorder-handle {
+    flex-shrink: 0;
+    cursor: grab;
+    color: var(--colorNeutralForeground3);
+}
+
+/* FluentButton renders its own <fluent-button> host from the library's own
+   component, so it never receives CourseEditor's scope attribute - a bare
+   .reorder-item-button rule silently no-ops. ::deep from the scoped .reorder-item
+   ancestor is required, same quirk as .quill-editor-host/.option-radio-host above.
+   Also: fluent-button's shadow host is itself display:flex; justify-content:center,
+   which centers its (content-width) inner span regardless of the host's own
+   width - so a plain flex-grow here just makes the host wider without moving
+   the text. Overriding the host's own justify-content is what actually left-
+   aligns the label; ::part(content) alone (targeting the inner span) has no
+   visible effect since that span isn't what's being centered. */
+.reorder-item ::deep .reorder-item-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+}
+
+/* This plain div sits in the same non-stretching (align-items: start) flex
+   column as .quill-editor-host above, so it shrinks to its content's width
+   unless forced — the same root cause, different element. */
+.option-radio-host {
+    width: 100%;
+}
+
+/* FluentRadioGroup's Class="w-100" lands on a wrapping <fluent-field>, not on
+   the real <fluent-radio-group> element (which renders with an empty class
+   attribute) — same Fluent Web Component quirk as the Quill host above.
+   ::deep on a tag selector still matches it regardless. */
+.option-radio-host ::deep fluent-field {
+    width: 100%;
+    /* Each option's own <fluent-field> lays out its radio input and label in a
+       2-column grid (radio | label) with no gap between them by default, so
+       the radio dot sits flush against the option text box. */
+    column-gap: 10px;
+}
+
+.option-radio-host ::deep fluent-radio-group {
+    width: 100%;
+    /* fluent-radio-group ships a built-in 8px left/right margin. width:100% is
+       resolved against the container regardless of margin, so that default
+       margin pushed the whole group 8px past the pane's right edge (an actual
+       overflow requiring horizontal scroll to reach the delete button) instead
+       of being absorbed anywhere. */
+    margin: 0;
+}
+
+.option-radio-host ::deep fluent-radio {
+    width: 100%;
+}
+
+/* Each radio's label (our option-text row) is properly full-width by this
+   point, but the nested FluentTextInput's own <fluent-field>/<fluent-text-input>
+   custom elements each shrink-wrap their content one level further down —
+   same quirk, one more layer of nesting. */
+.option-radio-host ::deep label fluent-field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.option-radio-host ::deep label fluent-text-input {
+    /* width: 100% (not flex/auto) is what actually fills the parent
+       <fluent-field>'s box — that field isn't itself a flex container for
+       its own children, so "flex:" on the input here is a no-op and leaves
+       it content-sized, floating with a visible gap before the delete
+       button (which tracks the *field's* now-stretched right edge, not
+       the input's own). */
+    width: 100%;
+    max-width: none;
+    /* The real fix for the delete button getting clipped/needing a scroll:
+       a flex item's default min-width is "auto" (its content's intrinsic
+       width), which blocks the browser from ever shrinking a long option's
+       text input to make room for the delete button next to it — the row
+       overflows instead. min-width: 0 lets it actually shrink. */
+    min-width: 0;
+}
+
+/* Match "Add Option"'s width to the Save+Delete row below it: both become
+   grid items in a single max-content column, so the column (and therefore
+   both rows) take on the width of whichever is naturally wider — here,
+   Save+Delete — while Save and Delete keep their own relative sizes. */
+.question-actions-group {
+    display: inline-grid;
+    grid-template-columns: max-content;
+    row-gap: 16px;
+}
+
+.question-actions-add ::deep fluent-button {
+    width: 100%;
+}
+
+.question-actions-group ::deep .fluent-stack-horizontal {
+    width: 100%;
+}

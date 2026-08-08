@@ -56,7 +56,7 @@ public class AutomationEngineService(
         GameStatus previousStatus = _lastKnownStatus.GetOrAdd(clientId, GameStatus.NotStarted);
         if (previousStatus == newStatus)
         {
-            return; // ENG-01: edge-triggered — same status does not re-fire
+            return; // ENG-01: edge-triggered - same status does not re-fire
         }
         _lastKnownStatus[clientId] = newStatus;
         GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus);
@@ -72,7 +72,7 @@ public class AutomationEngineService(
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled", ct);
             _isEnabled = setting?.Value == "true";
-            _logger.LogInformation("AutomationEngine initialized — enabled: {IsEnabled}", _isEnabled);
+            _logger.LogInformation("AutomationEngine initialized - enabled: {IsEnabled}", _isEnabled);
         }
         catch (Exception ex)
         {
@@ -95,7 +95,7 @@ public class AutomationEngineService(
                 .ToListAsync(ct);
             _ruleCache = rules;
             _ruleCacheDirty = false;
-            _logger.LogInformation("AutomationEngine rule cache reloaded — {Count} rules", rules.Count);
+            _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
         }
         finally
         {
@@ -121,7 +121,7 @@ public class AutomationEngineService(
 
         if (!_isEnabled)
         {
-            _logger.LogDebug("AutomationEngine is disabled — skipping transition for client {ClientId}", ev.ClientId);
+            _logger.LogDebug("AutomationEngine is disabled - skipping transition for client {ClientId}", ev.ClientId);
             return;
         }
 
