@@ -48,7 +48,7 @@ else
         <FluentMultiSplitter Height="100%">
             <FluentMultiSplitterPane Size="30%" Class="px-2">
                 <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
-                    <FluentText Typo="Typography.PaneHeader">Sections</FluentText>
+                    <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
                         <div class="reorder-item" draggable="true"
@@ -70,7 +70,7 @@ else
 
                     <FluentDivider Class="my-3" />
 
-                    <FluentText Typo="Typography.PaneHeader">Quiz Questions</FluentText>
+                    <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
                         <div class="reorder-item" draggable="true"

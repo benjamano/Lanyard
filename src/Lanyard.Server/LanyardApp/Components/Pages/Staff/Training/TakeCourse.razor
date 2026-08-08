@@ -11,7 +11,7 @@
 
 <PageTitle>@(assignment?.Course?.Name ?? "Training")</PageTitle>
 
-@if (isLoading || assignment is null)
+@if (isLoading || assignment is null || assignment.Course is null)
 {
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
         <FluentSpinner />
@@ -19,8 +19,8 @@
 }
 else
 {
-    <FluentCard Height="auto">
-        <FluentText Typo="Typography.PaneHeader">@assignment.Course!.Name</FluentText>
+    <FluentCard Height="100%">
+        <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
 
         <div class="take-course-wizard-host">
             <FluentWizard @ref="wizardRef" StepperPosition="@stepperPosition" Height="@wizardHeight"
@@ -35,8 +35,7 @@ else
                         </FluentWizardStep>
                     }
                     <FluentWizardStep Label="Quiz" IconPrevious="@(new Icons.Filled.Size20.QuizNew())"
-                                      IconCurrent="@(new Icons.Filled.Size20.QuizNew())"
-                                      IconNext="@(new Icons.Regular.Size20.QuizNew())">
+                                      IconCurrent="@(new Icons.Filled.Size20.QuizNew())" IconNext="@(new Icons.Regular.Size20.QuizNew())">
                         @if (assignment.Course.Questions.Count == 0)
                         {
                             <FluentText>This course doesn't have a quiz yet.</FluentText>
@@ -66,7 +65,7 @@ else
                                         Question @(currentQuestionIndex + 1) of @assignment.Course.Questions.Count
                                     </FluentText>
                                     <FluentProgressBar Min="0" Max="@assignment.Course.Questions.Count"
-                                                        Value="@(currentQuestionIndex + 1)" />
+                                                       Value="@(currentQuestionIndex + 1)" />
                                 </div>
 
                                 @{
@@ -153,7 +152,7 @@ else
     // On mobile the stepper moves to the Top and the page itself scrolls, so there's no "side"
     // stepper affordance to keep a constant height for - a fixed calc(100vh - ...) height there
     // just clips content taller than the viewport instead of letting the card grow with it.
-    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 260px)";
+    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 200px)";
 
     private CourseAssignment? assignment;
     private bool isLoading;
@@ -191,7 +190,7 @@ else
             await JS.InvokeVoidAsync("viewportWatcher.dispose");
         }
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
-        catch (InvalidOperationException) {}
+        catch (InvalidOperationException) { }
 
         _viewportRef?.Dispose();
     }
