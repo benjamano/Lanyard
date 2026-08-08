@@ -84,15 +84,17 @@ else
                                             Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
                                         }
                                     </FluentStack>
-                                    <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
-                                                      Value="@GetSelectedOptionId(question.Id)"
-                                                      ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
-                                                      Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
-                                        @foreach (CourseQuestionOption option in GetDisplayOptions(question))
-                                        {
-                                            <FluentRadio Value="@option.Id" Label="@option.OptionText" />
-                                        }
-                                    </FluentRadioGroup>
+                                    <div class="quiz-option-radio-host">
+                                        <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
+                                                          Value="@GetSelectedOptionId(question.Id)"
+                                                          ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
+                                                          Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
+                                            @foreach (CourseQuestionOption option in GetDisplayOptions(question))
+                                            {
+                                                <FluentRadio Value="@option.Id" Label="@option.OptionText" />
+                                            }
+                                        </FluentRadioGroup>
+                                    </div>
                                 </FluentStack>
 
                                 @if (quizSubmitted && lastGradeResult is not null && !lastGradeResult.Passed)

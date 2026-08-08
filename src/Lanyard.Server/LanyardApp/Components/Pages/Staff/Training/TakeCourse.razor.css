@@ -39,3 +39,15 @@
     gap: 6px;
     width: 100%;
 }
+
+/* fluent-radio carries an internal "touched" state that, once a radio has ever
+   been checked, keeps its label at full brightness even after the user picks a
+   different option in the group - the option's actual checked state (verified
+   via :state(checked)) is correct, only the label color sticks. That makes a
+   previously-selected-then-deselected option look different from one that was
+   never touched, for no reason tied to anything currently true. Forcing every
+   label in the group to the same color regardless of that internal state is
+   the direct fix. */
+.quiz-option-radio-host ::deep fluent-field label {
+    color: var(--colorNeutralForeground1) !important;
+}
