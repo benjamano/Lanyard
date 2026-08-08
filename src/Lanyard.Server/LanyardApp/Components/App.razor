@@ -56,6 +56,23 @@
         }
     </style>
 
+    <style>
+        /* FluentLayoutItem's Content area can't be reached by scoped CSS - every
+           element between MainLayout.razor's own template and this one is a Fluent
+           library component, none of which carry MainLayout's scope attribute (nor
+           is there a plain wrapping element anywhere in the chain for a ::deep
+           anchor). MobileNavMenu is `position: fixed`, so it takes no space in the
+           document flow and never pushes scrolled content up to clear it - without
+           this, a long page's last ~60px (including a FluentCard's own bottom
+           border) ends up flush against, or effectively hidden behind, the fixed
+           mobile nav bar. */
+        @@media (max-width: 767.98px) {
+            [area="content"] {
+                padding-bottom: 80px;
+            }
+        }
+    </style>
+
     <script>
         (() => {
             const root = document.documentElement;

@@ -34,7 +34,9 @@ else
                             </div>
                         </FluentWizardStep>
                     }
-                    <FluentWizardStep Label="Quiz">
+                    <FluentWizardStep Label="Quiz" IconPrevious="@(new Icons.Filled.Size20.QuizNew())"
+                                      IconCurrent="@(new Icons.Filled.Size20.QuizNew())"
+                                      IconNext="@(new Icons.Regular.Size20.QuizNew())">
                         @if (assignment.Course.Questions.Count == 0)
                         {
                             <FluentText>This course doesn't have a quiz yet.</FluentText>
