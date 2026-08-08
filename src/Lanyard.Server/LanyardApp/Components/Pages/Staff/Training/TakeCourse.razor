@@ -19,7 +19,7 @@
 }
 else
 {
-    <FluentCard Height="100%">
+    <FluentCard Height="@cardHeight">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
 
         <div class="take-course-wizard-host">
@@ -34,8 +34,9 @@ else
                             </div>
                         </FluentWizardStep>
                     }
-                    <FluentWizardStep Label="Quiz" IconPrevious="@(new Icons.Filled.Size20.QuizNew())"
-                                      IconCurrent="@(new Icons.Filled.Size20.QuizNew())" IconNext="@(new Icons.Regular.Size20.QuizNew())">
+                    <FluentWizardStep Label="Quiz" IconPrevious="@(new Icons.Filled.Size20.QuestionCircle())"
+                                      IconCurrent="@(new Icons.Filled.Size20.QuestionCircle())"
+                                      IconNext="@(new Icons.Regular.Size20.QuestionCircle())">
                         @if (assignment.Course.Questions.Count == 0)
                         {
                             <FluentText>This course doesn't have a quiz yet.</FluentText>
@@ -152,7 +153,12 @@ else
     // On mobile the stepper moves to the Top and the page itself scrolls, so there's no "side"
     // stepper affordance to keep a constant height for - a fixed calc(100vh - ...) height there
     // just clips content taller than the viewport instead of letting the card grow with it.
-    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 200px)";
+    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 180px)";
+
+    // Height="100%" only resolves against a parent with a defined height - on mobile there's no
+    // such ancestor, so the card collapsed to an arbitrary size instead of fitting the (auto-height)
+    // wizard's actual content, leaving content rendered outside the card's own border.
+    private string cardHeight => stepperPosition == StepperPosition.Top ? "auto" : "100%";
 
     private CourseAssignment? assignment;
     private bool isLoading;

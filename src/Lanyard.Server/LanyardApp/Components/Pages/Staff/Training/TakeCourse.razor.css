@@ -16,6 +16,27 @@
     overflow-y: auto;
 }
 
+/* On mobile the page itself scrolls (see cardHeight/wizardHeight in the
+   code-behind), so the Previous/Next/Done row would otherwise sit wherever
+   that step's content happens to end - requiring a scroll to even find it.
+   Pin it as its own bar just above the fixed mobile nav (58px tall) instead,
+   so it's always reachable without hunting for it. MobileNavMenu.razor is a
+   sibling layout piece, not a descendant of this component, so its height
+   is duplicated here rather than shared - only one screen width away from
+   drift, but there's nowhere to source it from at this end. */
+@media (max-width: 767.98px) {
+    .take-course-wizard-host ::deep .fluent-wizard-buttons {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 58px;
+        z-index: 60;
+        background-color: var(--colorNeutralBackground1);
+        padding: 12px 0;
+        border-top: 1px solid var(--colorNeutralStroke1);
+    }
+}
+
 .take-course-section-body {
     max-width: 100%;
 }
