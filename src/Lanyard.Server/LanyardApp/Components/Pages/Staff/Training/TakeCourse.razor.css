@@ -2,6 +2,20 @@
     width: 100%;
 }
 
+/* FluentWizard lays out stepper/content/buttons as a 2-row CSS grid (content
+   row, then the Previous/Next/Done row), with the content row meant to take
+   whatever's left of the wizard's own fixed height - but a grid item's default
+   min-height is "auto" (its own content size), which lets a tall section
+   silently outgrow that row instead of respecting it, pushing the button row
+   down by however much taller that step's content is. Forcing min-height: 0
+   makes the row genuinely fixed regardless of content, with overflow-y: auto
+   so a tall section scrolls internally instead of pushing the buttons - same
+   root cause/fix shape as the toolbar-height issue in CourseEditor.razor.css. */
+.take-course-wizard-host ::deep .fluent-wizard-content {
+    min-height: 0;
+    overflow-y: auto;
+}
+
 .take-course-section-body {
     max-width: 100%;
 }
