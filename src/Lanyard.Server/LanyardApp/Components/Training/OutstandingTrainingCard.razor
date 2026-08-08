@@ -1,0 +1,83 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.Enum
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<FluentCard Appearance="CardAppearance.Filled" Height="100%">
+    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Color="Color.Default">
+        My Training
+    </FluentText>
+
+    @if (isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (outstandingAssignments.Count == 0)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentText>You're all caught up - no outstanding training.</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px" Class="mt-2">
+            @foreach (CourseAssignment assignment in outstandingAssignments)
+            {
+                <div class="outstanding-training-row" @onclick="@(() => OpenAssignment(assignment.Id))">
+                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
+                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="true" Class="w-100 outstanding-training-row-inner">
+                        <FluentText Weight="TextWeight.Semibold" Class="outstanding-training-name">@assignment.Course?.Name</FluentText>
+                        <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
+                    </FluentStack>
+                </div>
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private List<CourseAssignment> outstandingAssignments = [];
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (currentUserResult.IsSuccess && currentUserResult.Data is not null)
+        {
+            Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
+
+            if (result.IsSuccess && result.Data is not null)
+            {
+                outstandingAssignments = [.. result.Data.Where(x => x.GetStatus() != CourseAssignmentStatus.Completed)];
+            }
+        }
+
+        isLoading = false;
+    }
+
+    private void OpenAssignment(Guid assignmentId)
+    {
+        _navigationManager.NavigateTo($"/training/{assignmentId}");
+    }
+
+    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => "Not Started",
+        CourseAssignmentStatus.InProgress => "In Progress",
+        CourseAssignmentStatus.Overdue => "Overdue",
+        _ => "Unknown"
+    };
+
+    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
+        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
+        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+}

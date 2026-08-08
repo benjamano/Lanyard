@@ -4,6 +4,7 @@
 
 @using Lanyard.App.Components.ClockIn
 @using Lanyard.App.Components.Home
+@using Lanyard.App.Components.Training
 @using Lanyard.Application.Services.Authentication
 @using Microsoft.AspNetCore.Authorization
 
@@ -34,13 +35,17 @@
                 }
                 else
                 {
-                    <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
+                    @* Preview-content toggle - may want this back later, so commenting out
+                       rather than deleting. Replaced with the always-visible training card
+                       below in the meantime. *@
+                    @* <FluentStack HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center"
                                  Class="h-100 gap-3">
                         <FluentButton IconStart="new Icons.Regular.Size24.SearchSparkle()" Appearance="ButtonAppearance.Primary"
                                       @onclick="() => _showPreviewContent = true">
                             Show Preview Content
                         </FluentButton>
-                    </FluentStack>
+                    </FluentStack> *@
+                    <OutstandingTrainingCard />
                 }
             </FluentGridItem>
             <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
