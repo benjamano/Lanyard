@@ -10,14 +10,22 @@
 
 <FluentCard Height="auto">
     <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
-        <FluentText Typo="Typography.PaneHeader">Users</FluentText>
+        <FluentText As="@TextTag.H3">Users</FluentText>
 
-        <FluentButton Appearance="ButtonAppearance.Outline" class="me-2" IconEnd="new Icons.Regular.Size20.PersonAdd()" OnClick="OpenRegisterUserDialog">Register a New User</FluentButton>
+        <FluentStack Margin="@Margin.StartAuto" Width="auto" HorizontalGap="6"
+                     VerticalAlignment="@VerticalAlignment.Center">
+            <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" Immediate="true"
+                             @bind-Value:after=HandleSearchInput />
 
-        <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" @bind-Value:after=HandleSearchInput />
+            <FluentButton Appearance="ButtonAppearance.Outline" IconEnd="new Icons.Regular.Size20.PersonAdd()"
+                          OnClick="OpenRegisterUserDialog">Register a New User
+            </FluentButton>
+        </FluentStack>
     </FluentStack>
 
-    <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;">
+    <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page
+                    Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr 1fr"
+                    Style="width: 100%;">
         <EmptyContent>
             No Users Found
         </EmptyContent>
@@ -26,12 +34,15 @@
             <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" />
             <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" />
             <PropertyColumn Property="@(r => r.PhoneNumber ?? "Not Set")" Title="Phone Number" />
-            <PropertyColumn Property="@(r => r.DateOfBirth != null ? r.DateOfBirth.Value.ToString("d") : "Not Set")" Title="DOB" />
+            <PropertyColumn Property="@(r => r.DateOfBirth != null ? r.DateOfBirth.Value.ToString("d") : "Not Set")"
+                            Title="DOB" />
             <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
-                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error" OnClick="@(() => ConfirmDeleteUser(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary" OnClick="@(() => OpenChangePasswordDialog(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
+                                OnClick="@(() => ConfirmDeleteUser(context))" />
+                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary"
+                                OnClick="@(() => OpenChangePasswordDialog(context))" />
                     <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
                                 OnClick="@(() => SendSetPasswordLink(context))"
                                 title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
@@ -41,7 +52,7 @@
     </FluentDataGrid>
 </FluentCard>
 
-@code{
+@code {
     private IEnumerable<UserProfile> users = Enumerable.Empty<UserProfile>();
     private IEnumerable<UserProfile> filteredUsers = Enumerable.Empty<UserProfile>();
     private string? searchValue = string.Empty;

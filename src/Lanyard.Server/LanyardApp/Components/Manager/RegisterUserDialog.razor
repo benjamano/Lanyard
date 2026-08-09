@@ -7,8 +7,8 @@
 <FluentDialogBody>
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
-            <FluentText Typo="Typography.PaneHeader">Register a New User</FluentText>
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.PersonAdd())" />
+            <FluentText As="@TextTag.H3">Register a New User</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
@@ -16,7 +16,7 @@
         {
             <EditForm EditContext="@_editContext" OnValidSubmit="HandleRegisterUser">
                 <DataAnnotationsValidator />
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
                     <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true" Placeholder="Ben"
                                      Style="width: 100%;" Message="@GetValidationMessage(() => model.FirstName)"
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
@@ -27,8 +27,9 @@
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
-                    <FluentTextInput @bind-Value="model.Email" Label="Email" Required="true" Placeholder="ben.mercer@lanyard.com"
-                                     Style="width: 100%;" Message="@GetValidationMessage(() => model.Email)"
+                    <FluentTextInput @bind-Value="model.Email" Label="Email" Required="true"
+                                     Placeholder="ben.mercer@lanyard.com" Style="width: 100%;"
+                                     Message="@GetValidationMessage(() => model.Email)"
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
                     </FluentTextInput>
@@ -37,7 +38,7 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
                     </FluentTextInput>
 
-                    <FluentStack Orientation="Orientation.Horizontal">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
                         <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
                                       Disabled="@isSubmitting" IconStart="@(new Icons.Regular.Size20.PersonAdd())">
                             @if (isSubmitting)

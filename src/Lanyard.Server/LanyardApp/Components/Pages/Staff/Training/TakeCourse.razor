@@ -22,9 +22,9 @@ else
     <FluentCard>
         <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
 
-        <div class="take-course-wizard-host">
-            <FluentWizard @ref="wizardRef" StepperPosition="@stepperPosition" Height="@wizardHeight"
-                          OnFinish="HandleFinishAsync">
+        <div class="take-course-wizard-host" @ref="wizardHostRef">
+            <FluentWizard @ref="wizardRef" @bind-Value="currentWizardStepIndex" StepperPosition="@stepperPosition"
+                          Height="@wizardHeight" OnFinish="HandleFinishAsync">
                 <Steps>
                     @foreach (CourseSection courseSection in assignment.Course.Sections)
                     {
@@ -134,8 +134,16 @@ else
                         }
                         else
                         {
-                            <FluentButton Appearance="ButtonAppearance.Primary"
-                                          OnClick="@(() => wizardRef!.GoToStepAsync(stepIndex + 1, false))">Next</FluentButton>
+                            <FluentButton Id="take-course-next-button"
+                                          Appearance="ButtonAppearance.Primary"
+                                          DisabledFocusable="@(!readSections.Contains(stepIndex))"
+                                          OnClick="@(() => HandleContentNextAsync(stepIndex))">Next</FluentButton>
+                            @if (!readSections.Contains(stepIndex))
+                            {
+                                <FluentTooltip Anchor="take-course-next-button" UseTooltipService="false">
+                                    Scroll to the bottom of this section to continue.
+                                </FluentTooltip>
+                            }
                         }
                     </div>
                 </ButtonTemplate>
@@ -173,12 +181,34 @@ else
 
     private DotNetObjectReference<TakeCourse>? _viewportRef;
 
+    private ElementReference wizardHostRef;
+    private int currentWizardStepIndex;
+    private int lastCheckedStepIndex = -1;
+    private bool scrollGateAttached;
+    private readonly HashSet<int> readSections = [];
+    private DotNetObjectReference<TakeCourse>? _scrollGateRef;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             _viewportRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+
+        if (!scrollGateAttached && assignment?.Course is not null)
+        {
+            scrollGateAttached = true;
+            _scrollGateRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
+            lastCheckedStepIndex = currentWizardStepIndex;
+            return;
+        }
+
+        if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
+        {
+            lastCheckedStepIndex = currentWizardStepIndex;
+            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
         }
     }
 
@@ -187,6 +217,27 @@ else
     {
         stepperPosition = isNarrow ? StepperPosition.Top : StepperPosition.Left;
         InvokeAsync(StateHasChanged);
+    }
+
+    // stepIndex is the step the JS module measured for. When the wizard swaps in a
+    // shorter section the browser clamps scrollTop and fires a scroll event that
+    // genuinely reads "at bottom" - but for the section the user is leaving, not the
+    // one arriving. Discarding any report that doesn't match the step this component
+    // currently believes is active stops that clamp from unlocking an unread section.
+    [JSInvokable]
+    public void OnScrollGateChanged(int stepIndex, bool isAtBottom)
+    {
+        if (stepIndex != currentWizardStepIndex || !isAtBottom || assignment?.Course is null)
+        {
+            return;
+        }
+
+        bool isContentStep = currentWizardStepIndex < assignment.Course.Sections.Count;
+
+        if (isContentStep && readSections.Add(currentWizardStepIndex))
+        {
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -198,7 +249,15 @@ else
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
         catch (InvalidOperationException) { }
 
+        try
+        {
+            await JS.InvokeVoidAsync("trainingScrollGate.dispose");
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
         _viewportRef?.Dispose();
+        _scrollGateRef?.Dispose();
     }
 
     protected override async Task OnInitializedAsync()
@@ -295,6 +354,16 @@ selectedAnswers);
         {
             await wizardRef.GoToStepAsync(stepIndex - 1, false);
         }
+    }
+
+    private async Task HandleContentNextAsync(int stepIndex)
+    {
+        if (!readSections.Contains(stepIndex) || wizardRef is null)
+        {
+            return;
+        }
+
+        await wizardRef.GoToStepAsync(stepIndex + 1, false);
     }
 
     private void GoToNextQuestion()
