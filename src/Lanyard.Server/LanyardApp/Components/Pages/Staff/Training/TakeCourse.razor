@@ -22,9 +22,9 @@ else
     <FluentCard>
         <FluentText As="TextTag.H4" Size="TextSize.Size500">@assignment.Course!.Name</FluentText>
 
-        <div class="take-course-wizard-host">
-            <FluentWizard @ref="wizardRef" StepperPosition="@stepperPosition" Height="@wizardHeight"
-                          OnFinish="HandleFinishAsync">
+        <div class="take-course-wizard-host" @ref="wizardHostRef">
+            <FluentWizard @ref="wizardRef" @bind-Value="currentWizardStepIndex" StepperPosition="@stepperPosition"
+                          Height="@wizardHeight" OnFinish="HandleFinishAsync">
                 <Steps>
                     @foreach (CourseSection courseSection in assignment.Course.Sections)
                     {
@@ -173,12 +173,34 @@ else
 
     private DotNetObjectReference<TakeCourse>? _viewportRef;
 
+    private ElementReference wizardHostRef;
+    private int currentWizardStepIndex;
+    private int lastCheckedStepIndex = -1;
+    private bool scrollGateAttached;
+    private readonly HashSet<int> readSections = [];
+    private DotNetObjectReference<TakeCourse>? _scrollGateRef;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             _viewportRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+
+        if (!scrollGateAttached && assignment?.Course is not null)
+        {
+            scrollGateAttached = true;
+            _scrollGateRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef);
+            lastCheckedStepIndex = currentWizardStepIndex;
+            return;
+        }
+
+        if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
+        {
+            lastCheckedStepIndex = currentWizardStepIndex;
+            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep");
         }
     }
 
@@ -187,6 +209,22 @@ else
     {
         stepperPosition = isNarrow ? StepperPosition.Top : StepperPosition.Left;
         InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnScrollGateChanged(bool isAtBottom)
+    {
+        if (!isAtBottom || assignment?.Course is null)
+        {
+            return;
+        }
+
+        bool isContentStep = currentWizardStepIndex < assignment.Course.Sections.Count;
+
+        if (isContentStep && readSections.Add(currentWizardStepIndex))
+        {
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -198,7 +236,15 @@ else
         catch (Microsoft.JSInterop.JSDisconnectedException) { }
         catch (InvalidOperationException) { }
 
+        try
+        {
+            await JS.InvokeVoidAsync("trainingScrollGate.dispose");
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
         _viewportRef?.Dispose();
+        _scrollGateRef?.Dispose();
     }
 
     protected override async Task OnInitializedAsync()
@@ -296,6 +342,19 @@ selectedAnswers);
             await wizardRef.GoToStepAsync(stepIndex - 1, false);
         }
     }
+
+    private async Task HandleContentNextAsync(int stepIndex)
+    {
+        if (!readSections.Contains(stepIndex) || wizardRef is null)
+        {
+            return;
+        }
+
+        await wizardRef.GoToStepAsync(stepIndex + 1, false);
+    }
+
+    private string? GetSectionLockTooltip(int stepIndex) =>
+        readSections.Contains(stepIndex) ? null : "Scroll to the bottom of this section to continue.";
 
     private void GoToNextQuestion()
     {
