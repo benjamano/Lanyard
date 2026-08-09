@@ -194,7 +194,7 @@ else
         {
             scrollGateAttached = true;
             _scrollGateRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef);
+            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
             lastCheckedStepIndex = currentWizardStepIndex;
             return;
         }
@@ -202,7 +202,7 @@ else
         if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
         {
             lastCheckedStepIndex = currentWizardStepIndex;
-            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep");
+            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
         }
     }
 
@@ -213,10 +213,15 @@ else
         InvokeAsync(StateHasChanged);
     }
 
+    // stepIndex is the step the JS module measured for. When the wizard swaps in a
+    // shorter section the browser clamps scrollTop and fires a scroll event that
+    // genuinely reads "at bottom" - but for the section the user is leaving, not the
+    // one arriving. Discarding any report that doesn't match the step this component
+    // currently believes is active stops that clamp from unlocking an unread section.
     [JSInvokable]
-    public void OnScrollGateChanged(bool isAtBottom)
+    public void OnScrollGateChanged(int stepIndex, bool isAtBottom)
     {
-        if (!isAtBottom || assignment?.Course is null)
+        if (stepIndex != currentWizardStepIndex || !isAtBottom || assignment?.Course is null)
         {
             return;
         }
