@@ -135,7 +135,9 @@ else
                         else
                         {
                             <FluentButton Appearance="ButtonAppearance.Primary"
-                                          OnClick="@(() => wizardRef!.GoToStepAsync(stepIndex + 1, false))">Next</FluentButton>
+                                          DisabledFocusable="@(!readSections.Contains(stepIndex))"
+                                          Tooltip="@GetSectionLockTooltip(stepIndex)"
+                                          OnClick="@(() => HandleContentNextAsync(stepIndex))">Next</FluentButton>
                         }
                     </div>
                 </ButtonTemplate>
