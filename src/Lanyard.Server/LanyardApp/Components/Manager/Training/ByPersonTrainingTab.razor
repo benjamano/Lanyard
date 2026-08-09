@@ -22,7 +22,7 @@
         }
         else
         {
-            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100 mt-2"
+            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
                             RowSize="@DataGridRowSize.Medium">
                 <ChildContent>
                     <PropertyColumn Property="@(x => x.Course!.Name)" Title="Course" Sortable="true" />
@@ -35,6 +35,12 @@
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
                         @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                    </TemplateColumn>
+                    <TemplateColumn Title="">
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                      Tooltip="View timing" Title="View timing"
+                                      OnClick="@(() => OpenTimingDialogAsync(context))" />
                     </TemplateColumn>
                 </ChildContent>
                 <EmptyContent>
@@ -79,6 +85,23 @@
         }
 
         isLoading = false;
+    }
+
+    private async Task OpenTimingDialogAsync(CourseAssignment assignment)
+    {
+        string personName = users.FirstOrDefault(x => x.Id == selectedUserId)?.GetName() ?? selectedUserId;
+
+        await _dialogService.ShowDialogAsync<AssignmentTimingDialog>(options =>
+        {
+            options.Header.Title = "Training Timing";
+            options.Width = "min(500px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AssignmentTimingDialog.AssignmentId), assignment.Id);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.PersonName), personName);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.AssignedDate), assignment.AssignedDate);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.StartedDate), assignment.StartedDate);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.CompletedDate), assignment.CompletedDate);
+        });
     }
 
     private static string GetLatestScore(CourseAssignment assignment)

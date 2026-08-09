@@ -1,0 +1,113 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Training
+
+@inject ICourseService _courseService
+@inject ICourseAssignmentService _courseAssignmentService
+
+<div class="timing-reports-tab">
+    <div class="course-picker-host">
+        <FluentSelect TOption="Course" TValue="Guid" Items="@courses.OrderBy(x => x.Name)"
+                      OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i!.Id)" Placeholder="Select a course..."
+                      Label="Course" Value="@selectedCourseId" ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
+                      Width="100%">
+        </FluentSelect>
+    </div>
+
+    @if (selectedCourseId != Guid.Empty)
+    {
+        @if (isLoading)
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+                <FluentSpinner />
+            </FluentStack>
+        }
+        else if (summary is not null)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="24px" Class="mt-2 mb-2">
+                <FluentText>
+                    Average total time: <strong>@(summary.AverageTotalMinutes.HasValue ? FormatMinutes(summary.AverageTotalMinutes.Value) : "-")</strong>
+                </FluentText>
+                <FluentText>
+                    Completions: <strong>@summary.CompletedCount</strong>
+                </FluentText>
+            </FluentStack>
+
+            @if (summary.Sections.Count == 0)
+            {
+                <FluentText>No section timing data recorded yet.</FluentText>
+            }
+            else
+            {
+                <FluentDataGrid Items="@summary.Sections.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr" Class="w-100">
+                    <ChildContent>
+                        <TemplateColumn Title="Section">
+                            @context.SectionTitle
+                        </TemplateColumn>
+                        <TemplateColumn Title="Avg. Time">
+                            @FormatMinutes(context.AverageMinutes)
+                        </TemplateColumn>
+                        <TemplateColumn Title="Samples">
+                            @context.SampleCount
+                        </TemplateColumn>
+                    </ChildContent>
+                </FluentDataGrid>
+            }
+        }
+    }
+</div>
+
+@code {
+    private List<Course> courses = [];
+    private CourseTimingSummary? summary;
+    private Guid selectedCourseId = Guid.Empty;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+
+        if (!coursesResult.IsSuccess || coursesResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load courses: {coursesResult.Error}");
+            courses = [];
+        }
+        else
+        {
+            courses = coursesResult.Data;
+        }
+    }
+
+    private async Task OnCourseSelectedAsync(Guid value)
+    {
+        selectedCourseId = value;
+        await LoadSummaryAsync();
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        if (selectedCourseId == Guid.Empty)
+        {
+            summary = null;
+            return;
+        }
+
+        isLoading = true;
+
+        Result<CourseTimingSummary> result = await _courseAssignmentService.GetCourseTimingSummaryAsync(selectedCourseId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load timing summary: {result.Error}");
+            summary = null;
+        }
+        else
+        {
+            summary = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private static string FormatMinutes(double minutes) =>
+        minutes < 1 ? $"{Math.Round(minutes * 60)} sec" : $"{Math.Round(minutes)} min";
+}

@@ -8,6 +8,7 @@
 @inject ICourseService _courseService
 @inject IToastService _toastService
 @inject NavigationManager _navigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Edit Course</PageTitle>
 
@@ -36,12 +37,22 @@ else
                     <FluentTextArea Width="100%" @bind-Value="course.Description" Label="Description"
                                     Appearance="TextAreaAppearance.Outline" />
                 </div>
+                <div class="recurrence-field-host">
+                    <FluentNumberInput TValue="int?" Width="100%" @bind-Value="course.RecurrenceMonths"
+                                       Label="Recurs every (months)" Min="1" Placeholder="Does not recur" />
+                </div>
             </FluentGridItem>
         </FluentGrid>
-        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                      Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync" Class="mt-2">
-            Save Course Details
-        </FluentButton>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                          Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync">
+                Save Course Details
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Eye())"
+                          OnClick="OpenPreview">
+                Preview
+            </FluentButton>
+        </FluentStack>
     </FluentCard>
 
     <FluentCard Height="640px">
@@ -273,6 +284,11 @@ else
 
         course = result.Data;
         isLoading = false;
+    }
+
+    private async Task OpenPreview()
+    {
+        await JS.InvokeVoidAsync("open", $"/manage/training/courses/{CourseId}/preview", "_blank");
     }
 
     private async Task SaveCourseMetaAsync()

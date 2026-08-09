@@ -97,6 +97,10 @@
     fill: var(--colorCompoundBrandStroke);
 }
 
+.recurrence-field-host {
+    width: 40%;
+}
+
 .reorder-item {
     display: flex;
     align-items: center;

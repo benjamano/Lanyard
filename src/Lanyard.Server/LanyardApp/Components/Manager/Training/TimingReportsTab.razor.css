@@ -1,0 +1,5 @@
+/* Matches ByCourseTrainingTab.razor.css's course picker sizing for visual
+   consistency across the Training Dashboard's tabs. */
+.course-picker-host {
+    max-width: 400px;
+}
