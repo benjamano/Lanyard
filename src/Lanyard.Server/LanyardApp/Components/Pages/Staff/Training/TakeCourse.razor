@@ -134,10 +134,16 @@ else
                         }
                         else
                         {
-                            <FluentButton Appearance="ButtonAppearance.Primary"
+                            <FluentButton Id="take-course-next-button"
+                                          Appearance="ButtonAppearance.Primary"
                                           DisabledFocusable="@(!readSections.Contains(stepIndex))"
-                                          Tooltip="@GetSectionLockTooltip(stepIndex)"
                                           OnClick="@(() => HandleContentNextAsync(stepIndex))">Next</FluentButton>
+                            @if (!readSections.Contains(stepIndex))
+                            {
+                                <FluentTooltip Anchor="take-course-next-button" UseTooltipService="false">
+                                    Scroll to the bottom of this section to continue.
+                                </FluentTooltip>
+                            }
                         }
                     </div>
                 </ButtonTemplate>
@@ -359,9 +365,6 @@ selectedAnswers);
 
         await wizardRef.GoToStepAsync(stepIndex + 1, false);
     }
-
-    private string? GetSectionLockTooltip(int stepIndex) =>
-        readSections.Contains(stepIndex) ? null : "Scroll to the bottom of this section to continue.";
 
     private void GoToNextQuestion()
     {
