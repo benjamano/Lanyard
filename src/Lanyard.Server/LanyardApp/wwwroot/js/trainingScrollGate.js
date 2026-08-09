@@ -3,35 +3,51 @@
 // Tracks whether the currently-visible content of the training course wizard
 // has been scrolled to its bottom. On desktop the wizard has a fixed height
 // and its content pane (.fluent-wizard-content) scrolls internally; on mobile
-// the wizard height is "auto" instead, so the content pane never overflows
-// and the whole page scrolls. Resolving which one is actually scrollable at
-// check time (rather than assuming one or the other) covers both layouts.
+// the wizard height is "auto" instead, so that pane never overflows itself -
+// the app's own content region (a FluentLayoutItem ancestor with its own
+// overflow-y: auto) is what actually scrolls there, since document.body has
+// overflow: hidden and never scrolls on its own. Rather than hardcode both
+// cases, this walks up from the wizard's content pane to whichever ancestor
+// is actually the overflowing one.
 
 window.trainingScrollGate = (() => {
     const BOTTOM_THRESHOLD_PX = 24;
 
     let hostEl = null;
     let dotNetRef = null;
-    let innerScrollEl = null;
 
-    function isInnerScrollable(el) {
+    function isScrollable(el) {
         return !!el && (el.scrollHeight - el.clientHeight) > BOTTOM_THRESHOLD_PX;
     }
 
-    function computeIsAtBottom() {
-        if (isInnerScrollable(innerScrollEl)) {
-            return innerScrollEl.scrollTop + innerScrollEl.clientHeight
-                >= innerScrollEl.scrollHeight - BOTTOM_THRESHOLD_PX;
+    function resolveScrollContainer() {
+        const inner = hostEl ? hostEl.querySelector('.fluent-wizard-content') : null;
+
+        if (isScrollable(inner)) {
+            return inner;
         }
 
-        const doc = document.documentElement;
-        const pageScrollable = doc.scrollHeight - window.innerHeight > BOTTOM_THRESHOLD_PX;
+        let node = inner ? inner.parentElement : null;
 
-        if (!pageScrollable) {
+        while (node && node !== document.body) {
+            if (isScrollable(node)) {
+                return node;
+            }
+
+            node = node.parentElement;
+        }
+
+        return null;
+    }
+
+    function computeIsAtBottom() {
+        const el = resolveScrollContainer();
+
+        if (!el) {
             return true;
         }
 
-        return window.scrollY + window.innerHeight >= doc.scrollHeight - BOTTOM_THRESHOLD_PX;
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD_PX;
     }
 
     function report() {
@@ -48,39 +64,24 @@ window.trainingScrollGate = (() => {
         attach(host, ref) {
             hostEl = host;
             dotNetRef = ref;
-            innerScrollEl = hostEl.querySelector('.fluent-wizard-content');
-
-            if (innerScrollEl) {
-                innerScrollEl.addEventListener('scroll', onScrollOrResize, { passive: true });
-            }
-
-            window.addEventListener('scroll', onScrollOrResize, { passive: true });
+            document.addEventListener('scroll', onScrollOrResize, { capture: true, passive: true });
             window.addEventListener('resize', onScrollOrResize, { passive: true });
             report();
         },
         resetForStep() {
-            if (isInnerScrollable(innerScrollEl)) {
-                innerScrollEl.scrollTop = 0;
-            } else {
-                const doc = document.documentElement;
+            const el = resolveScrollContainer();
 
-                if (doc.scrollHeight - window.innerHeight > BOTTOM_THRESHOLD_PX) {
-                    window.scrollTo({ top: 0 });
-                }
+            if (el) {
+                el.scrollTop = 0;
             }
 
             report();
         },
         dispose() {
-            if (innerScrollEl) {
-                innerScrollEl.removeEventListener('scroll', onScrollOrResize);
-            }
-
-            window.removeEventListener('scroll', onScrollOrResize);
+            document.removeEventListener('scroll', onScrollOrResize, { capture: true });
             window.removeEventListener('resize', onScrollOrResize);
             hostEl = null;
             dotNetRef = null;
-            innerScrollEl = null;
         }
     };
 })();
