@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging;
@@ -77,7 +78,7 @@ public class EmailService : IEmailService
           <p>Use the button below to set your password. Your username is:</p>
           <p style="font-size: 18px; font-weight: bold;">{WebUtility.HtmlEncode(username)}</p>
           <p>
-            <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: #0F6CBD; color: #fff; text-decoration: none; border-radius: 4px;">
+            <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: {BrandConstants.PrimaryColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Set Your Password
             </a>
           </p>
