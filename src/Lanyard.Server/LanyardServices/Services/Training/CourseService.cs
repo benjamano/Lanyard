@@ -79,6 +79,11 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 return Result<Course>.Fail("Pass mark must be between 1 and 100.");
             }
 
+            if (course.RecurrenceMonths.HasValue && course.RecurrenceMonths < 1)
+            {
+                return Result<Course>.Fail("Recurrence interval must be at least 1 month.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Course? existingCourse = course.Id == Guid.Empty
@@ -96,6 +101,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                     Description = course.Description?.Trim(),
                     PassMarkPercent = course.PassMarkPercent,
                     AutoAssignOnUserCreation = course.AutoAssignOnUserCreation,
+                    RecurrenceMonths = course.RecurrenceMonths,
                     IsActive = true
                 };
 
@@ -108,6 +114,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 targetCourse.Description = course.Description?.Trim();
                 targetCourse.PassMarkPercent = course.PassMarkPercent;
                 targetCourse.AutoAssignOnUserCreation = course.AutoAssignOnUserCreation;
+                targetCourse.RecurrenceMonths = course.RecurrenceMonths;
                 targetCourse.IsActive = true;
             }
 

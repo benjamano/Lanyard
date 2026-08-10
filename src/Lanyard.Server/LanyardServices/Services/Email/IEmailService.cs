@@ -6,4 +6,5 @@ namespace Lanyard.Application.Services.Email;
 public interface IEmailService
 {
     Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl);
+    Task<Result<bool>> SendCourseRecurrenceReminderEmailAsync(UserProfile user, string courseName, string trainingUrl);
 }

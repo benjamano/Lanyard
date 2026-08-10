@@ -1,0 +1,107 @@
+@page "/manage/training/courses/{CourseId:guid}/preview"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Training
+@using Lanyard.App.Components.Pages.Staff.Training
+
+@inject ICourseService _courseService
+
+<PageTitle>@(course?.Name ?? "Preview") - Preview</PageTitle>
+
+@if (isLoading || course is null)
+{
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+        <FluentSpinner />
+    </FluentStack>
+}
+else
+{
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentMessageBar Intent="MessageBarIntent.Info">
+                Preview mode - this shows the last saved version of the course. Unsaved edits in the editor are not
+                reflected here.
+            </FluentMessageBar>
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center">
+                <FluentText As="TextTag.H4" Size="TextSize.Size500">@course.Name</FluentText>
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                              OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/courses/{CourseId}"))">
+                    Back to editor
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+
+        <CourseWizardRunner Course="course" EnableScrollGate="false"
+                             GradeQuizAsync="GradeLocallyAsync" OnPassed="HandlePreviewPassedAsync" />
+    </FluentCard>
+}
+
+@code {
+    [Parameter]
+    public Guid CourseId { get; set; }
+
+    private Course? course;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<Course> result = await _courseService.GetCourseAsync(CourseId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load course: {result.Error}");
+            isLoading = false;
+            _navigationManager.NavigateTo("/manage/training/courses");
+            return;
+        }
+
+        course = result.Data;
+        isLoading = false;
+    }
+
+    private Task<QuizGradeResult?> GradeLocallyAsync(Dictionary<Guid, Guid> answers)
+    {
+        if (course is null || course.Questions.Count == 0)
+        {
+            _toastService.ShowError("This course can't be previewed to completion until it has quiz questions.");
+            return Task.FromResult<QuizGradeResult?>(null);
+        }
+
+        List<QuizQuestionResult> questionResults = [];
+        int correctCount = 0;
+
+        foreach (CourseQuestion question in course.Questions)
+        {
+            bool wasCorrect = false;
+
+            if (answers.TryGetValue(question.Id, out Guid selectedOptionId))
+            {
+                CourseQuestionOption? selectedOption = question.Options.FirstOrDefault(x => x.Id == selectedOptionId && x.IsActive);
+                wasCorrect = selectedOption?.IsCorrect ?? false;
+            }
+
+            questionResults.Add(new QuizQuestionResult(question.Id, wasCorrect));
+
+            if (wasCorrect)
+            {
+                correctCount++;
+            }
+        }
+
+        int scorePercent = (int)Math.Round(correctCount * 100.0 / course.Questions.Count);
+        bool passed = scorePercent >= course.PassMarkPercent;
+
+        return Task.FromResult<QuizGradeResult?>(new QuizGradeResult(scorePercent, passed, 1, questionResults));
+    }
+
+    private Task HandlePreviewPassedAsync(QuizGradeResult result)
+    {
+        _toastService.ShowSuccess("Preview complete.");
+        return Task.CompletedTask;
+    }
+}

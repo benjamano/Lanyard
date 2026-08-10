@@ -78,6 +78,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 // only this one Radzen service (not AddRadzenComponents()) keeps the unused
 // Radzen Dialog/Notification/ContextMenu services out of the container.
 builder.Services.AddScoped<Radzen.TooltipService>();
+builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();

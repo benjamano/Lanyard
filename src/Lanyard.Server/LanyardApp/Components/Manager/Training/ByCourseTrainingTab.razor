@@ -59,6 +59,10 @@
                                           Tooltip="Edit due date" Title="Edit due date"
                                           OnClick="@(() => OpenEditDueDateDialogAsync(context))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(context))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
                                           Tooltip="Unassign" Title="Unassign"
                                           OnClick="@(() => UnassignAsync(context))" />
@@ -201,6 +205,21 @@
         {
             await LoadAssignmentsAsync();
         }
+    }
+
+    private async Task OpenTimingDialogAsync(CourseAssignment assignment)
+    {
+        await _dialogService.ShowDialogAsync<AssignmentTimingDialog>(options =>
+        {
+            options.Header.Title = "Training Timing";
+            options.Width = "min(500px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AssignmentTimingDialog.AssignmentId), assignment.Id);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.PersonName), GetUserName(assignment.UserId));
+            options.Parameters.Add(nameof(AssignmentTimingDialog.AssignedDate), assignment.AssignedDate);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.StartedDate), assignment.StartedDate);
+            options.Parameters.Add(nameof(AssignmentTimingDialog.CompletedDate), assignment.CompletedDate);
+        });
     }
 
     private async Task UnassignAsync(CourseAssignment assignment)

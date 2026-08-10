@@ -1,0 +1,363 @@
+@using Lanyard.Infrastructure.DTO.Training
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="take-course-wizard-host" @ref="wizardHostRef">
+    <FluentWizard @ref="wizardRef" @bind-Value="currentWizardStepIndex" StepperPosition="@stepperPosition"
+                  Height="@wizardHeight" OnFinish="HandleFinishAsync">
+        <Steps>
+            @foreach (CourseSection courseSection in Course.Sections)
+            {
+                <FluentWizardStep Label="@courseSection.Title">
+                    <div class="take-course-section-body">
+                        @((MarkupString)courseSection.BodyHtml)
+                    </div>
+                </FluentWizardStep>
+            }
+            <FluentWizardStep Label="Quiz" IconPrevious="@(new Icons.Filled.Size20.QuestionCircle())"
+                              IconCurrent="@(new Icons.Filled.Size20.QuestionCircle())"
+                              IconNext="@(new Icons.Regular.Size20.QuestionCircle())">
+                @if (Course.Questions.Count == 0)
+                {
+                    <FluentText>This course doesn't have a quiz yet.</FluentText>
+                }
+                else
+                {
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="24px">
+                        @if (quizSubmitted && lastGradeResult is not null)
+                        {
+                            @if (lastGradeResult.Passed)
+                            {
+                                <FluentMessageBar Intent="MessageBarIntent.Success">
+                                    You passed with a score of @lastGradeResult.ScorePercent%.
+                                </FluentMessageBar>
+                            }
+                            else
+                            {
+                                <FluentMessageBar Intent="MessageBarIntent.Warning">
+                                    You scored @lastGradeResult.ScorePercent% - you need @Course.PassMarkPercent% to
+                                    pass. Review the marked questions below and try again.
+                                </FluentMessageBar>
+                            }
+                        }
+
+                        <div class="quiz-progress-host">
+                            <FluentText Weight="TextWeight.Semibold">
+                                Question @(currentQuestionIndex + 1) of @Course.Questions.Count
+                            </FluentText>
+                            <FluentProgressBar Min="0" Max="@Course.Questions.Count"
+                                               Value="@(currentQuestionIndex + 1)" />
+                        </div>
+
+                        @{
+                            CourseQuestion question = Course.Questions[currentQuestionIndex];
+                        }
+
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                            <FluentStack Orientation="Orientation.Horizontal"
+                                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                <FluentText Weight="TextWeight.Semibold">@question.QuestionText</FluentText>
+                                @if (quizSubmitted)
+                                {
+                                    <FluentIcon
+                                    Value="@(WasQuestionCorrect(question.Id) ? (Icon)new Icons.Filled.Size20.CheckmarkCircle() : new Icons.Filled.Size20.DismissCircle())"
+                                    Color="@(WasQuestionCorrect(question.Id) ? Color.Success : Color.Error)" />
+                                }
+                            </FluentStack>
+                            <div class="quiz-option-radio-host">
+                                <FluentRadioGroup TValue="Guid" Orientation="Orientation.Vertical"
+                                                  Value="@GetSelectedOptionId(question.Id)"
+                                                  ValueChanged="@((Guid v) => SetSelectedOptionId(question.Id, v))"
+                                                  Disabled="@(quizSubmitted && lastGradeResult!.Passed)">
+                                    @foreach (CourseQuestionOption option in GetDisplayOptions(question))
+                                    {
+                                        <FluentRadio Value="@option.Id" Label="@option.OptionText" />
+                                    }
+                                </FluentRadioGroup>
+                            </div>
+                        </FluentStack>
+
+                        @if (quizSubmitted && lastGradeResult is not null && !lastGradeResult.Passed)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="RetryQuiz">
+                                Retry
+                            </FluentButton>
+                        }
+                    </FluentStack>
+                }
+            </FluentWizardStep>
+        </Steps>
+        <ButtonTemplate>
+            @{
+                int stepIndex = context;
+                bool isQuizStep = stepIndex == Course.Sections.Count;
+                bool hasQuestions = Course.Questions.Count > 0;
+                bool onLastQuestion = !hasQuestions || currentQuestionIndex == Course.Questions.Count - 1;
+                bool showPrevious = isQuizStep ? (currentQuestionIndex > 0 || stepIndex > 0) : stepIndex > 0;
+            }
+            <div>
+                @if (showPrevious)
+                {
+                    <FluentButton OnClick="@(() => HandleWizardPreviousAsync(stepIndex))">Previous</FluentButton>
+                }
+            </div>
+            <FluentSpacer />
+            <div>
+                @if (isQuizStep && !onLastQuestion)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="GoToNextQuestion">Next</FluentButton>
+                }
+                else if (isQuizStep)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                  OnClick="@(() => wizardRef!.FinishAsync(false))">Done</FluentButton>
+                }
+                else
+                {
+                    <FluentButton Id="take-course-next-button"
+                                  Appearance="ButtonAppearance.Primary"
+                                  DisabledFocusable="@(EnableScrollGate && !readSections.Contains(stepIndex))"
+                                  OnClick="@(() => HandleContentNextAsync(stepIndex))">Next</FluentButton>
+                    @if (EnableScrollGate && !readSections.Contains(stepIndex))
+                    {
+                        <FluentTooltip Anchor="take-course-next-button" UseTooltipService="false">
+                            Scroll to the bottom of this section to continue.
+                        </FluentTooltip>
+                    }
+                }
+            </div>
+        </ButtonTemplate>
+    </FluentWizard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Course Course { get; set; } = null!;
+
+    [Parameter]
+    public bool EnableScrollGate { get; set; } = true;
+
+    [Parameter, EditorRequired]
+    public Func<Dictionary<Guid, Guid>, Task<QuizGradeResult?>> GradeQuizAsync { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback<QuizGradeResult> OnPassed { get; set; }
+
+    // (departedSectionId, arrivedSectionId, transitionTimeUtc). Null when the caller doesn't
+    // care about timing (e.g. PreviewCourse.razor never sets this) - no separate "is preview"
+    // flag is needed anywhere, the hook simply never fires. The timestamp is captured here, at
+    // the moment the transition is detected, rather than later inside whatever DB write the
+    // caller queues it behind - otherwise queued/serialized writes would record when the write
+    // finally ran, not when the learner actually moved to the next section.
+    [Parameter]
+    public Action<Guid?, Guid?, DateTime>? OnSectionTransition { get; set; }
+
+    protected StepperPosition stepperPosition = StepperPosition.Left;
+
+    // On mobile the stepper moves to the Top and the page itself scrolls, so there's no "side"
+    // stepper affordance to keep a constant height for - a fixed calc(100vh - ...) height there
+    // just clips content taller than the viewport instead of letting the card grow with it.
+    private string wizardHeight => stepperPosition == StepperPosition.Top ? "auto" : "calc(100vh - 180px)";
+
+    private readonly Dictionary<Guid, Guid> selectedAnswers = [];
+    private bool quizSubmitted;
+    private QuizGradeResult? lastGradeResult;
+    private int currentQuestionIndex;
+    private FluentWizard? wizardRef;
+    private readonly Dictionary<Guid, List<CourseQuestionOption>> shuffledOptionsByQuestionId = [];
+    private readonly Random optionShuffleRandom = new();
+
+    private DotNetObjectReference<CourseWizardRunner>? _viewportRef;
+
+    private ElementReference wizardHostRef;
+    private int currentWizardStepIndex;
+    private int lastCheckedStepIndex = -1;
+    private bool scrollGateAttached;
+    private readonly HashSet<int> readSections = [];
+    private DotNetObjectReference<CourseWizardRunner>? _scrollGateRef;
+    private int lastTrackedStepIndexForTiming = -1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _viewportRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+
+        if (currentWizardStepIndex != lastTrackedStepIndexForTiming)
+        {
+            Guid? departedSectionId = SectionIdForStep(lastTrackedStepIndexForTiming);
+            Guid? arrivedSectionId = SectionIdForStep(currentWizardStepIndex);
+            lastTrackedStepIndexForTiming = currentWizardStepIndex;
+
+            if (departedSectionId.HasValue || arrivedSectionId.HasValue)
+            {
+                OnSectionTransition?.Invoke(departedSectionId, arrivedSectionId, DateTime.UtcNow);
+            }
+        }
+
+        if (!EnableScrollGate)
+        {
+            return;
+        }
+
+        if (!scrollGateAttached && Course is not null)
+        {
+            scrollGateAttached = true;
+            _scrollGateRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("trainingScrollGate.attach", wizardHostRef, _scrollGateRef, currentWizardStepIndex);
+            lastCheckedStepIndex = currentWizardStepIndex;
+            return;
+        }
+
+        if (scrollGateAttached && currentWizardStepIndex != lastCheckedStepIndex)
+        {
+            lastCheckedStepIndex = currentWizardStepIndex;
+            await JS.InvokeVoidAsync("trainingScrollGate.resetForStep", currentWizardStepIndex);
+        }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isNarrow)
+    {
+        stepperPosition = isNarrow ? StepperPosition.Top : StepperPosition.Left;
+        InvokeAsync(StateHasChanged);
+    }
+
+    // stepIndex is the step the JS module measured for. When the wizard swaps in a
+    // shorter section the browser clamps scrollTop and fires a scroll event that
+    // genuinely reads "at bottom" - but for the section the user is leaving, not the
+    // one arriving. Discarding any report that doesn't match the step this component
+    // currently believes is active stops that clamp from unlocking an unread section.
+    [JSInvokable]
+    public void OnScrollGateChanged(int stepIndex, bool isAtBottom)
+    {
+        if (stepIndex != currentWizardStepIndex || !isAtBottom)
+        {
+            return;
+        }
+
+        bool isContentStep = currentWizardStepIndex < Course.Sections.Count;
+
+        if (isContentStep && readSections.Add(currentWizardStepIndex))
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("viewportWatcher.dispose");
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
+        if (EnableScrollGate)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("trainingScrollGate.dispose");
+            }
+            catch (Microsoft.JSInterop.JSDisconnectedException) { }
+            catch (InvalidOperationException) { }
+        }
+
+        _viewportRef?.Dispose();
+        _scrollGateRef?.Dispose();
+    }
+
+    private async Task HandleFinishAsync()
+    {
+        QuizGradeResult? result = await GradeQuizAsync(selectedAnswers);
+
+        if (result is null)
+        {
+            return;
+        }
+
+        lastGradeResult = result;
+        quizSubmitted = true;
+
+        if (lastGradeResult.Passed)
+        {
+            await OnPassed.InvokeAsync(lastGradeResult);
+        }
+    }
+
+    private void RetryQuiz()
+    {
+        selectedAnswers.Clear();
+        quizSubmitted = false;
+        lastGradeResult = null;
+        currentQuestionIndex = 0;
+    }
+
+    private async Task HandleWizardPreviousAsync(int stepIndex)
+    {
+        bool isQuizStep = stepIndex == Course.Sections.Count;
+
+        if (isQuizStep && currentQuestionIndex > 0)
+        {
+            currentQuestionIndex--;
+            return;
+        }
+
+        if (wizardRef is not null)
+        {
+            await wizardRef.GoToStepAsync(stepIndex - 1, false);
+        }
+    }
+
+    private async Task HandleContentNextAsync(int stepIndex)
+    {
+        if ((EnableScrollGate && !readSections.Contains(stepIndex)) || wizardRef is null)
+        {
+            return;
+        }
+
+        await wizardRef.GoToStepAsync(stepIndex + 1, false);
+    }
+
+    private void GoToNextQuestion()
+    {
+        if (currentQuestionIndex < Course.Questions.Count - 1)
+        {
+            currentQuestionIndex++;
+        }
+    }
+
+    private List<CourseQuestionOption> GetDisplayOptions(CourseQuestion question)
+    {
+        if (!shuffledOptionsByQuestionId.TryGetValue(question.Id, out List<CourseQuestionOption>? options))
+        {
+            options = [.. question.Options];
+
+            for (int i = options.Count - 1; i > 0; i--)
+            {
+                int j = optionShuffleRandom.Next(i + 1);
+                (options[i], options[j]) = (options[j], options[i]);
+            }
+
+            shuffledOptionsByQuestionId[question.Id] = options;
+        }
+
+        return options;
+    }
+
+    private Guid GetSelectedOptionId(Guid questionId) =>
+        selectedAnswers.TryGetValue(questionId, out Guid optionId) ? optionId : Guid.Empty;
+
+    private void SetSelectedOptionId(Guid questionId, Guid optionId)
+    {
+        selectedAnswers[questionId] = optionId;
+    }
+
+    private bool WasQuestionCorrect(Guid questionId) =>
+        lastGradeResult?.QuestionResults.FirstOrDefault(x => x.QuestionId == questionId)?.WasCorrect ?? false;
+
+    private Guid? SectionIdForStep(int stepIndex) =>
+        stepIndex >= 0 && stepIndex < Course.Sections.Count ? Course.Sections[stepIndex].Id : null;
+}

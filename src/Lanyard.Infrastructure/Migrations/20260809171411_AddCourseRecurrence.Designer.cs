@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260809171411_AddCourseRecurrence")]
+    partial class AddCourseRecurrence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -691,34 +694,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.ToTable("CourseSections");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CourseSectionProgress", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssignmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("EnteredDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LeftDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("SectionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SectionId");
-
-                    b.HasIndex("AssignmentId", "SectionId")
-                        .IsUnique();
-
-                    b.ToTable("CourseSectionProgresses");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dashboard", b =>
@@ -1813,25 +1788,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Course");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CourseSectionProgress", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.CourseAssignment", "Assignment")
-                        .WithMany()
-                        .HasForeignKey("AssignmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.CourseSection", "Section")
-                        .WithMany()
-                        .HasForeignKey("SectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Assignment");
-
-                    b.Navigation("Section");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.DashboardWidget", b =>

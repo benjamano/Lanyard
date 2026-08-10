@@ -12,6 +12,10 @@ namespace Lanyard.Infrastructure.Models
         public int PassMarkPercent { get; set; } = 80;
         public bool AutoAssignOnUserCreation { get; set; }
 
+        // Null = does not recur. When set, everyone who has ever completed this
+        // course is due to retake it this many months after their CompletedDate.
+        public int? RecurrenceMonths { get; set; }
+
         public bool IsActive { get; set; }
 
         public virtual List<CourseSection> Sections { get; set; } = [];
@@ -125,5 +129,23 @@ namespace Lanyard.Infrastructure.Models
         public required Guid SelectedOptionId { get; set; }
 
         public bool WasCorrect { get; set; }
+    }
+
+    // One row per (AssignmentId, SectionId), first-entered/last-left - not a
+    // full visit log. EnteredDate is set once, on first arrival; LeftDate is
+    // overwritten on every departure. A section never departed (tab closed
+    // mid-read) keeps LeftDate null and is excluded from duration averages.
+    public class CourseSectionProgress
+    {
+        public Guid Id { get; set; }
+
+        public required Guid AssignmentId { get; set; }
+        public CourseAssignment? Assignment { get; set; }
+
+        public required Guid SectionId { get; set; }
+        public CourseSection? Section { get; set; }
+
+        public DateTime EnteredDate { get; set; }
+        public DateTime? LeftDate { get; set; }
     }
 }
