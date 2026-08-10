@@ -64,6 +64,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CourseAssignment> CourseAssignments { get; set; }
         public DbSet<CourseQuizAttempt> CourseQuizAttempts { get; set; }
         public DbSet<CourseQuizAttemptAnswer> CourseQuizAttemptAnswers { get; set; }
+        public DbSet<CourseSectionProgress> CourseSectionProgresses { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -137,6 +138,12 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(s => s.FileMetadataId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // RecordSectionTransitionAsync finds-or-creates by (AssignmentId, SectionId) -
+            // this backstops that against a double-fired write creating a duplicate row.
+            modelBuilder.Entity<CourseSectionProgress>()
+                .HasIndex(x => new { x.AssignmentId, x.SectionId })
+                .IsUnique();
         }
     }
 }

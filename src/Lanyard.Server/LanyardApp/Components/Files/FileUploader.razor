@@ -10,6 +10,7 @@
                      Multiple="true"
                      MaximumFileCount="4"
                      MaximumFileSize="@(100*1024*1024)"
+                     Accept="@Accept"
                      @bind-ProgressPercent="@ProgressPercent"
                      OnCompleted="@OnCompletedAsync"
                      Class="file-uploader-dropzone"
@@ -36,6 +37,7 @@
 {
     [Parameter] public Guid? SelectedFolderId { get; set; }
     [Parameter] public EventCallback<FileMetadata> OnFileUploaded { get; set; }
+    [Parameter] public string? Accept { get; set; }
 
     int ProgressPercent = 0;
     FluentInputFileEventArgs[] Files = Array.Empty<FluentInputFileEventArgs>();

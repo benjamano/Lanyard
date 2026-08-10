@@ -1,0 +1,60 @@
+@using Lanyard.Infrastructure.Models
+@inject IFileService _fileService
+
+<FluentDialogBody>
+    <ChildContent>
+        <div class="image-picker-host">
+            <div class="image-picker-sidebar">
+                <FluentText Weight="TextWeight.Semibold">Folder</FluentText>
+                <FolderTree SelectedFolderId="selectedFolderId" SelectedFolderIdChanged="OnFolderChangedAsync" />
+                <FluentDivider Class="my-2" />
+                <FluentText Weight="TextWeight.Semibold">Upload a new image</FluentText>
+                <FileUploader SelectedFolderId="selectedFolderId" Accept="image/*" OnFileUploaded="OnFileUploadedAsync" />
+            </div>
+            <div class="image-picker-grid-host">
+                <ImageThumbnailGrid @ref="thumbnailGrid" FolderId="selectedFolderId" OnImageSelected="OnImageSelectedAsync" />
+            </div>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private Guid? selectedFolderId;
+    private ImageThumbnailGrid? thumbnailGrid;
+
+    private void OnFolderChangedAsync(Guid? folderId)
+    {
+        // Changing the parameter re-triggers ImageThumbnailGrid.OnParametersSetAsync, which reloads.
+        selectedFolderId = folderId;
+    }
+
+    private async Task OnFileUploadedAsync(FileMetadata file)
+    {
+        if (file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            await OnImageSelectedAsync(file.Id);
+            return;
+        }
+
+        if (thumbnailGrid is not null)
+        {
+            await thumbnailGrid.RefreshAsync();
+        }
+    }
+
+    private async Task OnImageSelectedAsync(Guid fileId)
+    {
+        await Dialog.CloseAsync(fileId);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

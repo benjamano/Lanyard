@@ -1,0 +1,103 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Training
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="2px">
+                <FluentText Weight="TextWeight.Semibold">@PersonName</FluentText>
+                <FluentText Size="TextSize.Size200">
+                    Assigned @AssignedDate.ToString("d MMM yyyy")
+                    @(StartedDate.HasValue ? $" - Started {StartedDate.Value:d MMM yyyy}" : "")
+                    @(CompletedDate.HasValue ? $" - Completed {CompletedDate.Value:d MMM yyyy}" : "")
+                </FluentText>
+            </FluentStack>
+
+            @if (StartedDate.HasValue && CompletedDate.HasValue)
+            {
+                <FluentText>
+                    Total time: <strong>@FormatMinutes((CompletedDate.Value - StartedDate.Value).TotalMinutes)</strong>
+                </FluentText>
+            }
+
+            @if (isLoading)
+            {
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-2">
+                    <FluentSpinner />
+                </FluentStack>
+            }
+            else if (timings.Count == 0)
+            {
+                <FluentText>No section timing data recorded yet.</FluentText>
+            }
+            else
+            {
+                <FluentDataGrid Items="@timings.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="w-100">
+                    <ChildContent>
+                        <TemplateColumn Title="Section">
+                            @context.SectionTitle
+                        </TemplateColumn>
+                        <TemplateColumn Title="Time Spent">
+                            @(context.DurationMinutes.HasValue ? FormatMinutes(context.DurationMinutes.Value) : "In progress")
+                        </TemplateColumn>
+                    </ChildContent>
+                </FluentDataGrid>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CloseAsync">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public Guid AssignmentId { get; set; }
+
+    [Parameter]
+    public string PersonName { get; set; } = string.Empty;
+
+    [Parameter]
+    public DateTime AssignedDate { get; set; }
+
+    [Parameter]
+    public DateTime? StartedDate { get; set; }
+
+    [Parameter]
+    public DateTime? CompletedDate { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private List<AssignmentSectionTiming> timings = [];
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        Result<List<AssignmentSectionTiming>> result = await _courseAssignmentService.GetSectionTimingsForAssignmentAsync(AssignmentId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load section timings: {result.Error}");
+            timings = [];
+        }
+        else
+        {
+            timings = result.Data;
+        }
+
+        isLoading = false;
+    }
+
+    private static string FormatMinutes(double minutes) =>
+        minutes < 1 ? $"{Math.Round(minutes * 60)} sec" : $"{Math.Round(minutes)} min";
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+}

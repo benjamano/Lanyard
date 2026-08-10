@@ -16,4 +16,9 @@ public interface ICourseAssignmentService
     Task<Result<CourseAssignment>> UpdateAssignmentDueDateAsync(Guid assignmentId, DateTime? newDueDate);
     Task<Result<bool>> UnassignAsync(Guid assignmentId);
     Task<Result<int>> UnassignAllForUserAsync(string userId);
+    Task<Result<List<CourseAssignment>>> GetAssignmentsDueForRecurrenceAsync();
+    Task<Result<CourseAssignment>> ProcessRecurrenceCycleAsync(Guid previousAssignmentId);
+    Task<Result<bool>> RecordSectionTransitionAsync(Guid assignmentId, string requestingUserId, Guid? departedSectionId, Guid? arrivedSectionId, DateTime transitionTimeUtc);
+    Task<Result<CourseTimingSummary>> GetCourseTimingSummaryAsync(Guid courseId);
+    Task<Result<List<AssignmentSectionTiming>>> GetSectionTimingsForAssignmentAsync(Guid assignmentId);
 }
