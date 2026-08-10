@@ -12,7 +12,7 @@
 .quill-editor-host {
     display: flex;
     flex-direction: column;
-    height: 320px;
+    height: 480px;
     flex-shrink: 0;
     width: 100%;
 }
@@ -23,6 +23,27 @@
     background-color: var(--colorNeutralBackground3);
     border-top-left-radius: var(--borderRadiusMedium);
     border-top-right-radius: var(--borderRadiusMedium);
+}
+
+/* A plain, Quill-unrecognized class (not "ql-image") so Quill's toolbar module
+   never attaches its own default image handler (native file picker -> base64
+   embed) to this button - only our own @onclick fires. Sized/colored to sit
+   visually alongside Quill's own ~28px-wide icon buttons. */
+.quill-editor-host ::deep .ql-image-insert {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host ::deep .ql-image-insert:hover {
+    color: var(--colorCompoundBrandStroke);
 }
 
 .quill-editor-host ::deep .ql-container.ql-snow {

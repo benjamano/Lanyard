@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Training
 @using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Files
 
 @inject ICourseService _courseService
 @inject IToastService _toastService
@@ -109,7 +110,7 @@ else
                     <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
                         <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title"
                                          Appearance="TextInputAppearance.Outline" Required="true" />
-                        <div class="quill-editor-host">
+                        <div class="quill-editor-host" @ref="quillEditorHostRef">
                             <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
                                 <ToolbarContent>
                                     <span class="ql-formats">
@@ -127,6 +128,12 @@ else
                                     <span class="ql-formats">
                                         <button class="ql-list" value="ordered"></button>
                                         <button class="ql-list" value="bullet"></button>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <button type="button" class="ql-image-insert" @onclick="OpenImagePickerAsync"
+                                                title="Insert image">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                                        </button>
                                     </span>
                                 </ToolbarContent>
                                 <EditorContent></EditorContent>
@@ -215,6 +222,7 @@ else
     private CourseSection? selectedSection;
     private CourseQuestion? selectedQuestion;
     private BlazoredTextEditor? sectionEditor;
+    private ElementReference quillEditorHostRef;
     private Guid? loadedSectionEditorId;
     private CourseSection? draggedSection;
     private CourseQuestion? draggedQuestion;
@@ -289,6 +297,25 @@ else
     private async Task OpenPreview()
     {
         await JS.InvokeVoidAsync("open", $"/manage/training/courses/{CourseId}/preview", "_blank");
+    }
+
+    private async Task OpenImagePickerAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ImagePickerDialog>(options =>
+        {
+            options.Header.Title = "Insert Image";
+            options.Width = "min(900px, 95vw)";
+            options.Modal = true;
+        });
+
+        if (!result.Cancelled && result.Value is Guid fileId)
+        {
+            // BlazoredTextEditor.InsertImage falls back to inserting at document position
+            // 0 whenever the Quill editor doesn't currently have DOM focus - which it
+            // never does right after this dialog closes. courseImageEditor.js restores
+            // focus to the last cursor position before inserting instead.
+            await JS.InvokeVoidAsync("courseImageEditor.insertImageAtCursor", quillEditorHostRef, $"/api/files/download/{fileId}");
+        }
     }
 
     private async Task SaveCourseMetaAsync()

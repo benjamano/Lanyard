@@ -1,0 +1,68 @@
+@using Lanyard.Infrastructure.Models
+@inject IFileService _fileService
+@inject IToastService _toastService
+
+<div class="image-thumbnail-grid">
+    @if (isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (images.Count == 0)
+    {
+        <FluentText>No images in this folder yet. Upload one above.</FluentText>
+    }
+    else
+    {
+        @foreach (FileMetadata image in images)
+        {
+            <button type="button" class="image-thumbnail-tile" title="@image.FileName"
+                    @onclick="@(() => OnImageSelected.InvokeAsync(image.Id))">
+                <img src="@($"/api/files/download/{image.Id}")" alt="@image.FileName" loading="lazy" />
+                <span class="image-thumbnail-caption">@image.FileName</span>
+            </button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid? FolderId { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnImageSelected { get; set; }
+
+    private List<FileMetadata> images = [];
+    private bool isLoading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadImagesAsync();
+    }
+
+    public async Task RefreshAsync()
+    {
+        await LoadImagesAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadImagesAsync()
+    {
+        isLoading = true;
+
+        Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(FolderId, CancellationToken.None);
+
+        if (result.Success == true && result.Data is not null)
+        {
+            images = [.. result.Data.Where(x => x.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true)];
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load images: {result.Error}");
+            images = [];
+        }
+
+        isLoading = false;
+    }
+}

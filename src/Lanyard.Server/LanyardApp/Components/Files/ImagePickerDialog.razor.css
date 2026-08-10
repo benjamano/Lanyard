@@ -1,0 +1,32 @@
+.image-picker-host {
+    display: flex;
+    gap: 16px;
+    height: 520px;
+}
+
+.image-picker-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 260px;
+    flex-shrink: 0;
+    overflow-y: auto;
+}
+
+.image-picker-grid-host {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 767.98px) {
+    .image-picker-host {
+        flex-direction: column;
+        height: auto;
+        max-height: 70vh;
+    }
+
+    .image-picker-sidebar {
+        width: 100%;
+    }
+}

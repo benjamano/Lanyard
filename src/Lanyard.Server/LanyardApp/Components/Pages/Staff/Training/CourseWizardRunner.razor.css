@@ -68,6 +68,15 @@
     padding-left: 24px;
 }
 
+/* Images inserted via the section editor's image picker have no intrinsic
+   size limit - without this, a large uploaded image would overflow the
+   content column, most visibly on a phone viewport. */
+.take-course-section-body ::deep img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
 .quiz-progress-host {
     display: flex;
     flex-direction: column;
