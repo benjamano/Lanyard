@@ -1,0 +1,43 @@
+@using Lanyard.Infrastructure.DTO.Charts
+@using Radzen
+@using Radzen.Blazor
+
+<div class="category-donut-chart">
+    @if (PlottableData.Count == 0)
+    {
+        <FluentText Color="Color.Default">No data available.</FluentText>
+    }
+    else
+    {
+        <RadzenChart>
+            <RadzenDonutSeries Data="@PlottableData" CategoryProperty="@nameof(ChartCategoryValue.Label)"
+                               ValueProperty="@nameof(ChartCategoryValue.Value)" Fills="@PlottableFills">
+                <RadzenSeriesDataLabels Visible="true" />
+            </RadzenDonutSeries>
+            <RadzenLegend Position="LegendPosition.Left" />
+        </RadzenChart>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<ChartCategoryValue> Data { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> SeriesColors { get; set; } = ChartPalette.Categorical;
+
+    // Radzen renders a 0-value slice as a degenerate, zero-length SVG arc path
+    // and uses that path string as the Blazor diffing key - two zero-value
+    // slices produce an identical path/key and crash the render with a
+    // "duplicate key" exception on the next re-render. Filtering zero-value
+    // categories out before binding avoids the collision entirely (a 0-value
+    // slice wouldn't be visible anyway).
+    private List<ChartCategoryValue> PlottableData =>
+        [.. Data.Where(x => x.Value > 0)];
+
+    private List<string> PlottableFills =>
+        [.. Data
+            .Select((x, i) => (Item: x, Color: SeriesColors[i % SeriesColors.Count]))
+            .Where(x => x.Item.Value > 0)
+            .Select(x => x.Color)];
+}
