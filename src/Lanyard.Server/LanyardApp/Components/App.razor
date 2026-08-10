@@ -81,13 +81,21 @@
 
             // Fluent stores the user's explicit choice here; prefers-color-scheme alone
             // would contradict a user who picked Light on a dark OS.
-            const stored = (() => {
+            const readStoredThemeSettings = () => {
                 try { return JSON.parse(localStorage.getItem('fluentui-blazor:theme-settings') || '{}'); }
                 catch { return {}; }
-            })();
+            };
+            const stored = readStoredThemeSettings();
             const isDark = stored.mode === 'dark'
                 || (stored.mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
             root.setAttribute('data-app-theme', isDark ? 'dark' : 'light');
+
+            // MainLayout reads this before calling IThemeService.SetThemeAsync(color, isExact):
+            // that overload re-derives ThemeSettings from FluentUI's own "current effective
+            // mode", which on a fresh load hasn't been hydrated from storage yet and silently
+            // drops the user's saved mode back to system-preference. Passing the raw stored
+            // mode through explicitly keeps the color-only update from clobbering it.
+            window.lanyardGetStoredThemeMode = () => readStoredThemeSettings().mode ?? null;
 
             // Set from JS, never in markup: if scripting is unavailable the page is
             // never cloaked, so it can never stay blank.

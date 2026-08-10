@@ -2,6 +2,7 @@
 
 @inject NavigationManager NavigationManager
 @inject IThemeService ThemeService
+@inject IJSRuntime JSRuntime
 
 <FluentProviders />
 
@@ -102,7 +103,21 @@
 
         try
         {
-            await ThemeService.SetThemeAsync(BrandConstants.PrimaryColorHex, true);
+            // SetThemeAsync(color, isExact) re-derives the full ThemeSettings (incl. Mode)
+            // from FluentUI's "current effective mode", which isn't hydrated from storage
+            // yet at this point in the lifecycle and would silently reset a saved dark-mode
+            // choice back to system-preference. Read the persisted mode ourselves and apply
+            // it explicitly alongside the brand color so this call can't clobber it.
+            string? storedMode = await JSRuntime.InvokeAsync<string?>("lanyardGetStoredThemeMode");
+
+            ThemeMode mode = storedMode switch
+            {
+                "dark" => ThemeMode.Dark,
+                "light" => ThemeMode.Light,
+                _ => ThemeMode.System
+            };
+
+            await ThemeService.SetThemeAsync(new ThemeSettings(BrandConstants.PrimaryColorHex, 0, 0, mode, true));
         }
         catch { }
     }
