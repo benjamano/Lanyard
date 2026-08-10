@@ -1,0 +1,162 @@
+@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.DTO.Training
+@using Lanyard.Infrastructure.DTO.Charts
+@using Lanyard.App.Components.Charts
+
+@inject ICourseService _courseService
+@inject ITrainingAnalyticsService _analyticsService
+
+<div class="analytics-reports-tab">
+    <div class="course-picker-host">
+        <FluentSelect TOption="Course" TValue="Guid" Items="@courses.OrderBy(x => x.Name)"
+                      OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i!.Id)" Placeholder="Select a course..."
+                      Label="Course" Value="@selectedCourseId" ValueChanged="@((Guid v) => OnCourseSelectedAsync(v))"
+                      Width="100%">
+        </FluentSelect>
+    </div>
+
+    @if (selectedCourseId != Guid.Empty)
+    {
+        @if (isLoading)
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+                <FluentSpinner />
+            </FluentStack>
+        }
+        else
+        {
+            <div class="analytics-grid">
+                <FluentCard>
+                    <FluentText As="TextTag.H5">Top Scores</FluentText>
+                    <RankedBarChart Data="@scoreChartData" ValueSuffix="%" />
+                </FluentCard>
+                <FluentCard>
+                    <FluentText As="TextTag.H5">Fastest Completions</FluentText>
+                    <RankedBarChart Data="@fastestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Success" />
+                </FluentCard>
+                <FluentCard>
+                    <FluentText As="TextTag.H5">Slowest Completions</FluentText>
+                    <RankedBarChart Data="@slowestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Warning" />
+                </FluentCard>
+                <FluentCard>
+                    <FluentText As="TextTag.H5">Completion Status</FluentText>
+                    <CategoryDonutChart Data="@statusChartData" />
+                </FluentCard>
+                <FluentCard>
+                    <FluentText As="TextTag.H5">Pass / Fail (latest attempt)</FluentText>
+                    <CategoryDonutChart Data="@passFailChartData" SeriesColors="@passFailColors" />
+                </FluentCard>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<Course> courses = [];
+    private Guid selectedCourseId = Guid.Empty;
+    private bool isLoading;
+
+    private IEnumerable<UserProfile> users = [];
+    private List<ChartCategoryValue> scoreChartData = [];
+    private List<ChartCategoryValue> fastestChartData = [];
+    private List<ChartCategoryValue> slowestChartData = [];
+    private List<ChartCategoryValue> statusChartData = [];
+    private List<ChartCategoryValue> passFailChartData = [];
+    private readonly string[] passFailColors = [ChartPalette.Success, ChartPalette.Danger];
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await _securityService.GetAllUsersAsync();
+
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+
+        if (!coursesResult.IsSuccess || coursesResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load courses: {coursesResult.Error}");
+            courses = [];
+        }
+        else
+        {
+            courses = coursesResult.Data;
+        }
+    }
+
+    private async Task OnCourseSelectedAsync(Guid value)
+    {
+        selectedCourseId = value;
+        await LoadAnalyticsAsync();
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        if (selectedCourseId == Guid.Empty)
+        {
+            return;
+        }
+
+        isLoading = true;
+
+        Result<List<TraineeScoreRankingRow>> scores = await _analyticsService.GetTopScoringTraineesAsync(selectedCourseId);
+        Result<List<TraineeTimingRankingRow>> fastest = await _analyticsService.GetFastestCompletionsAsync(selectedCourseId);
+        Result<List<TraineeTimingRankingRow>> slowest = await _analyticsService.GetSlowestCompletionsAsync(selectedCourseId);
+        Result<CourseCompletionSummary> summary = await _analyticsService.GetCourseCompletionSummaryAsync(selectedCourseId);
+
+        scoreChartData = MapScores(scores);
+        fastestChartData = MapTimings(fastest);
+        slowestChartData = MapTimings(slowest);
+        (statusChartData, passFailChartData) = MapSummary(summary);
+
+        isLoading = false;
+    }
+
+    private string ResolveName(string userId) => users.FirstOrDefault(x => x.Id == userId)?.GetName() ?? userId;
+
+    private List<ChartCategoryValue> MapScores(Result<List<TraineeScoreRankingRow>> result)
+    {
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load top scores: {result.Error}");
+            return [];
+        }
+
+        return [.. result.Data.Select(r => new ChartCategoryValue(ResolveName(r.UserId), r.ScorePercent))];
+    }
+
+    private List<ChartCategoryValue> MapTimings(Result<List<TraineeTimingRankingRow>> result)
+    {
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load completion timings: {result.Error}");
+            return [];
+        }
+
+        return [.. result.Data.Select(r => new ChartCategoryValue(ResolveName(r.UserId), Math.Round(r.DurationMinutes, 1)))];
+    }
+
+    private (List<ChartCategoryValue> Status, List<ChartCategoryValue> PassFail) MapSummary(Result<CourseCompletionSummary> result)
+    {
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load completion summary: {result.Error}");
+            return ([], []);
+        }
+
+        CourseCompletionSummary s = result.Data;
+
+        List<ChartCategoryValue> status =
+        [
+            new("Not Started", s.NotStartedCount),
+            new("In Progress", s.InProgressCount),
+            new("Overdue", s.OverdueCount),
+            new("Completed", s.CompletedCount)
+        ];
+
+        List<ChartCategoryValue> passFail =
+        [
+            new("Passed", s.LatestAttemptPassedCount),
+            new("Failed", s.LatestAttemptFailedCount)
+        ];
+
+        return (status, passFail);
+    }
+}

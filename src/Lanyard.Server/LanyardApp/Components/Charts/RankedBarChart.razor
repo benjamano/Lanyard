@@ -1,0 +1,38 @@
+@using Lanyard.Infrastructure.DTO.Charts
+@using Radzen
+@using Radzen.Blazor
+
+<div class="ranked-bar-chart">
+    @if (Data.Count == 0)
+    {
+        <FluentText Color="Color.Default">@EmptyMessage</FluentText>
+    }
+    else
+    {
+        <RadzenChart>
+            <RadzenBarSeries Data="@Data" CategoryProperty="@nameof(ChartCategoryValue.Label)" ValueProperty="@nameof(ChartCategoryValue.Value)"
+                              Fill="@SeriesColor" Title="" />
+            <RadzenCategoryAxis Padding="10" />
+            <RadzenValueAxis Formatter="@FormatValue">
+                <RadzenGridLines Visible="true" />
+            </RadzenValueAxis>
+            <RadzenLegend Visible="false" />
+        </RadzenChart>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<ChartCategoryValue> Data { get; set; } = [];
+
+    [Parameter]
+    public string? ValueSuffix { get; set; }
+
+    [Parameter]
+    public string SeriesColor { get; set; } = ChartPalette.Accent;
+
+    [Parameter]
+    public string EmptyMessage { get; set; } = "No data available.";
+
+    private string FormatValue(object value) => $"{value}{ValueSuffix}";
+}

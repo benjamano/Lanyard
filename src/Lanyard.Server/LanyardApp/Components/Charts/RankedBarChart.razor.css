@@ -1,0 +1,8 @@
+.ranked-bar-chart {
+    height: 320px;
+}
+
+::deep .rz-chart {
+    width: 100%;
+    height: 100%;
+}
