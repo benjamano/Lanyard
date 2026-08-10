@@ -26,23 +26,23 @@
         else
         {
             <div class="analytics-grid">
-                <FluentCard>
+                <FluentCard Height="100%">
                     <FluentText As="TextTag.H5">Top Scores</FluentText>
                     <RankedBarChart Data="@scoreChartData" ValueSuffix="%" />
                 </FluentCard>
-                <FluentCard>
+                <FluentCard Height="100%">
                     <FluentText As="TextTag.H5">Fastest Completions</FluentText>
                     <RankedBarChart Data="@fastestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Success" />
-                </FluentCard>
+                </FluentCard Height="100%">
                 <FluentCard>
                     <FluentText As="TextTag.H5">Slowest Completions</FluentText>
                     <RankedBarChart Data="@slowestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Warning" />
-                </FluentCard>
-                <FluentCard>
+                </FluentCard Height="100%">
+                <FluentCard Height="100%">
                     <FluentText As="TextTag.H5">Completion Status</FluentText>
                     <CategoryDonutChart Data="@statusChartData" />
                 </FluentCard>
-                <FluentCard>
+                <FluentCard Height="100%" Padding="@Padding.Bottom7">
                     <FluentText As="TextTag.H5">Pass / Fail (latest attempt)</FluentText>
                     <CategoryDonutChart Data="@passFailChartData" SeriesColors="@passFailColors" />
                 </FluentCard>
@@ -133,7 +133,8 @@
         return [.. result.Data.Select(r => new ChartCategoryValue(ResolveName(r.UserId), Math.Round(r.DurationMinutes, 1)))];
     }
 
-    private (List<ChartCategoryValue> Status, List<ChartCategoryValue> PassFail) MapSummary(Result<CourseCompletionSummary> result)
+    private (List<ChartCategoryValue> Status, List<ChartCategoryValue> PassFail) MapSummary(Result<CourseCompletionSummary>
+result)
     {
         if (!result.IsSuccess || result.Data is null)
         {

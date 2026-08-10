@@ -268,6 +268,10 @@ if (app.Environment.IsDevelopment() == false)
 }
 
 // Baseline security response headers (applied in every environment).
+// In Development, connect-src also allows dotnet watch's browser-refresh websocket, which
+// dials ws://localhost:<random-port> and would otherwise be silently blocked by the CSP.
+string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -287,7 +291,7 @@ app.Use(async (context, next) =>
         "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         "img-src 'self' data:; " +
-        "connect-src 'self' wss:; " +
+        $"connect-src {connectSrc}; " +
         "frame-ancestors 'self';";
 
     await next();

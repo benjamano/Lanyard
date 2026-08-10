@@ -10,11 +10,11 @@
     else
     {
         <RadzenChart>
-            <RadzenDonutSeries Data="@PlottableData" CategoryProperty="@nameof(ChartCategoryValue.Label)" ValueProperty="@nameof(ChartCategoryValue.Value)"
-                                Fills="@PlottableFills">
+            <RadzenDonutSeries Data="@PlottableData" CategoryProperty="@nameof(ChartCategoryValue.Label)"
+                               ValueProperty="@nameof(ChartCategoryValue.Value)" Fills="@PlottableFills">
                 <RadzenSeriesDataLabels Visible="true" />
             </RadzenDonutSeries>
-            <RadzenLegend Position="LegendPosition.Bottom" />
+            <RadzenLegend Position="LegendPosition.Left" />
         </RadzenChart>
     }
 </div>
