@@ -1,4 +1,4 @@
-@page "/automation"
+﻿@page "/automation"
 @attribute [Authorize(Roles = "Admin")]
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
@@ -14,7 +14,7 @@
 @inject IAutomationLogService _logService
 @inject AutomationEngineService _engineService
 @inject IClientService _clientService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject IDialogService _dialogService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
 

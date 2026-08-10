@@ -1,10 +1,10 @@
-@page "/manage/users"
+﻿@page "/manage/users"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
 
-@inject IToastService ToastService
+@inject INotificationService ToastService
 
 <PageTitle>User Management</PageTitle>
 

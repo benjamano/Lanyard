@@ -1,8 +1,8 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IFileService _fileService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <div class="file-uploader-wrapper">
     <FluentInputFile Id="my-file-uploader"

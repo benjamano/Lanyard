@@ -218,7 +218,7 @@ builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
 builder.Services.AddFluentUIComponents(configuration =>
 {
     configuration.Toast.Position = ToastPosition.TopEnd;
-    configuration.Toast.Timeout = 5000;
+    configuration.Toast.Lifetime = TimeSpan.FromSeconds(5);
 });
 
 builder.Services.AddSignalR();

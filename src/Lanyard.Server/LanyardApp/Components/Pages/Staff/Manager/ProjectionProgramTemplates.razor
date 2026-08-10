@@ -1,11 +1,11 @@
-@page "/manage/projectiontemplates"
+﻿@page "/manage/projectiontemplates"
 @attribute [Authorize(Roles = "Admin")]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services
 
 @inject IProjectionProgramService _projectionProgramService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <PageTitle>Projection Templates</PageTitle>
 

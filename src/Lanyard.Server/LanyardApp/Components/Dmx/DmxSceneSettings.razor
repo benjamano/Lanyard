@@ -1,8 +1,8 @@
-@using Lanyard.Infrastructure.Models.Dmx
+﻿@using Lanyard.Infrastructure.Models.Dmx
 @using Microsoft.AspNetCore.Components.Web
 
 @inject IDmxSceneService _dmxSceneService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <FluentCard>
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
@@ -52,7 +52,7 @@
                      @onkeydown:stopPropagation="true"
                      @onblur="CancelCapture"
                      style="border: 1px dashed var(--accent-fill-rest); border-radius: 4px; padding: 5px 10px; cursor: text; outline: none; min-width: 90px; text-align: center;">
-                    Press a key…
+                    Press a keyâ€¦
                 </div>
             }
             else
