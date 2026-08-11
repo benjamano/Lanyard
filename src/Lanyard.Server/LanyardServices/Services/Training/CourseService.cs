@@ -55,7 +55,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
             if (course is null || (!scope.IsAdmin && course.LocationId != scope.LocationId
-                && !(course.IsShared && course.Location!.CompanyId == scope.CompanyId)))
+                && !(course.IsShared && course.Location is not null && course.Location.CompanyId == scope.CompanyId)))
             {
                 return Result<Course>.Fail("Course not found.");
             }

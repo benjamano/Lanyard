@@ -167,6 +167,30 @@ public class CourseServiceTests
     }
 
     [TestMethod]
+    public async Task CourseService_GetCourse_SharedCourseWithNoLocation_ReturnsNotFoundForNonAdminInsteadOfThrowing()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        // An Admin can currently save a course with IsShared set and no LocationId
+        // (SaveCourseAsync only forces a location for non-Admins on create). This
+        // seeds that exact combination directly, bypassing the service.
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Shared No Location", PassMarkPercent = 80, IsActive = true, LocationId = null, IsShared = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.GetCourseAsync(courseId, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Course not found.", result.Error);
+    }
+
+    [TestMethod]
     public async Task CourseService_GetCourses_ReturnsOnlyActiveCoursesOrderedByName()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
