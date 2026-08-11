@@ -47,8 +47,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
-        public DbSet<CompanyTenant> CompanyTenants { get; set; }
-        public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
+        public DbSet<Company> Companies { get; set; }
+        public DbSet<Location> Locations { get; set; }
+        public DbSet<UserLocationMembership> UserLocationMemberships { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -143,6 +144,14 @@ namespace Lanyard.Infrastructure.DataAccess
             // this backstops that against a double-fired write creating a duplicate row.
             modelBuilder.Entity<CourseSectionProgress>()
                 .HasIndex(x => new { x.AssignmentId, x.SectionId })
+                .IsUnique();
+
+            modelBuilder.Entity<Location>()
+                .HasIndex(x => new { x.CompanyId, x.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<UserLocationMembership>()
+                .HasIndex(x => new { x.UserId, x.LocationId })
                 .IsUnique();
         }
     }
