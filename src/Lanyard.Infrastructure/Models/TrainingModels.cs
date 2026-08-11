@@ -92,6 +92,12 @@ namespace Lanyard.Infrastructure.Models
 
         public bool IsActive { get; set; }
 
+        // Nullable for now, same reasoning as Course.LocationId (see Task 3).
+        // For non-Admin assigners this is the acting manager's own location, NOT
+        // necessarily the course's location - a course can be shared.
+        public int? LocationId { get; set; }
+        public Location? Location { get; set; }
+
         public virtual List<CourseQuizAttempt> Attempts { get; set; } = [];
 
         public CourseAssignmentStatus GetStatus()

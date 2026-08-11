@@ -200,7 +200,9 @@ public class SecurityService : ISecurityService
                 {
                     foreach (Course course in coursesResult.Data.Where(x => x.AutoAssignOnUserCreation))
                     {
-                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null);
+                        // Unscoped: mirrors the GetCoursesAsync() call above - auto-assignment on
+                        // user creation applies across all locations, matching pre-Task-4 behaviour.
+                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null, new LocationScope(true, null, null, null));
 
                         if (!assignResult.IsSuccess)
                         {

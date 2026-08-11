@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -12,6 +13,8 @@ namespace Lanyard.Tests.Services.Training;
 [TestClass]
 public class CourseAssignmentServiceTests
 {
+    private static readonly LocationScope AdminScope = new(true, null, null, null);
+
     private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
     {
         return new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -28,16 +31,44 @@ public class CourseAssignmentServiceTests
         return new CourseAssignmentService(factoryMock.Object);
     }
 
-    private static async Task<Course> SeedCourseAsync(DbContextOptions<ApplicationDbContext> options, int passMarkPercent = 80)
+    private static async Task<(Location ipswich, Location wisbech)> SeedTwoLocationsAsync(DbContextOptions<ApplicationDbContext> options)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Company company = new() { Name = "Play2Day", IsActive = true };
+        ctx.Companies.Add(company);
+        await ctx.SaveChangesAsync();
+
+        Location ipswich = new() { CompanyId = company.Id, Name = "Ipswich", IsActive = true };
+        Location wisbech = new() { CompanyId = company.Id, Name = "Wisbech", IsActive = true };
+        ctx.Locations.AddRange(ipswich, wisbech);
+        await ctx.SaveChangesAsync();
+
+        return (ipswich, wisbech);
+    }
+
+    private static async Task SeedUserInLocationAsync(DbContextOptions<ApplicationDbContext> options, string userId, int locationId)
+    {
+        await using ApplicationDbContext ctx = new(options);
+        ctx.Users.Add(new UserProfile { Id = userId, UserName = userId, FirstName = "Test", LastName = "User" });
+        ctx.UserLocationMemberships.Add(new UserLocationMembership { UserId = userId, LocationId = locationId, CreateDate = DateTime.UtcNow });
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task<Course> SeedCourseAsync(
+        DbContextOptions<ApplicationDbContext> options, int passMarkPercent = 80,
+        int? locationId = null, bool isShared = false, string name = "Play2Day Induction")
     {
         await using ApplicationDbContext ctx = new(options);
 
         Course course = new()
         {
             Id = Guid.NewGuid(),
-            Name = "Play2Day Induction",
+            Name = name,
             PassMarkPercent = passMarkPercent,
-            IsActive = true
+            IsActive = true,
+            LocationId = locationId,
+            IsShared = isShared
         };
 
         ctx.Courses.Add(course);
@@ -130,7 +161,7 @@ public class CourseAssignmentServiceTests
         Course course = await SeedCourseAsync(options);
         UserProfile user = await SeedUserAsync(options);
 
-        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", null);
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", null, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(course.Id, result.Data!.CourseId);
@@ -146,7 +177,7 @@ public class CourseAssignmentServiceTests
         CourseAssignmentService service = GetService(options);
         UserProfile user = await SeedUserAsync(options);
 
-        Result<CourseAssignment> result = await service.AssignCourseAsync(Guid.NewGuid(), user.Id, "manager-1", null);
+        Result<CourseAssignment> result = await service.AssignCourseAsync(Guid.NewGuid(), user.Id, "manager-1", null, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -158,7 +189,7 @@ public class CourseAssignmentServiceTests
         CourseAssignmentService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, "no-such-user", "manager-1", null);
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, "no-such-user", "manager-1", null, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -174,7 +205,7 @@ public class CourseAssignmentServiceTests
         DateTime unspecifiedDueDate = new(2026, 12, 25, 0, 0, 0, DateTimeKind.Unspecified);
         Assert.AreEqual(DateTimeKind.Unspecified, unspecifiedDueDate.Kind);
 
-        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", unspecifiedDueDate);
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", unspecifiedDueDate, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.IsNotNull(result.Data!.DueDate);
@@ -443,7 +474,7 @@ public class CourseAssignmentServiceTests
         await SeedAssignmentAsync(options, courseA.Id, userA.Id);
         await SeedAssignmentAsync(options, courseB.Id, userB.Id);
 
-        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(courseA.Id);
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(courseA.Id, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(1, result.Data!);
@@ -460,7 +491,7 @@ public class CourseAssignmentServiceTests
         UserProfile userB = await SeedUserAsync(options, "user-b");
 
         Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
-            course.Id, [userA.Id, userB.Id], "manager-1", null);
+            course.Id, [userA.Id, userB.Id], "manager-1", null, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(2, result.Data!.AssignedCount);
@@ -482,7 +513,7 @@ public class CourseAssignmentServiceTests
         await SeedAssignmentAsync(options, course.Id, userA.Id);
 
         Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
-            course.Id, [userA.Id, userB.Id], "manager-1", null);
+            course.Id, [userA.Id, userB.Id], "manager-1", null, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(1, result.Data!.AssignedCount);
@@ -497,7 +528,7 @@ public class CourseAssignmentServiceTests
         UserProfile user = await SeedUserAsync(options);
 
         Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
-            Guid.NewGuid(), [user.Id], "manager-1", null);
+            Guid.NewGuid(), [user.Id], "manager-1", null, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -512,7 +543,7 @@ public class CourseAssignmentServiceTests
         DateTime unspecifiedDueDate = new(2026, 12, 25, 0, 0, 0, DateTimeKind.Unspecified);
 
         Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
-            course.Id, [user.Id], "manager-1", unspecifiedDueDate);
+            course.Id, [user.Id], "manager-1", unspecifiedDueDate, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
 
@@ -613,7 +644,7 @@ public class CourseAssignmentServiceTests
         Result<bool> unassignResult = await service.UnassignAsync(assignment.Id);
         Assert.IsTrue(unassignResult.Success, unassignResult.Error);
 
-        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(course.Id);
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(course.Id, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(0, result.Data!);
@@ -699,5 +730,81 @@ public class CourseAssignmentServiceTests
 
         Assert.AreEqual(enteredSection, progress.EnteredDate);
         Assert.AreEqual(leftForQuiz, progress.LeftDate);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_NonAdmin_SetsAssignmentLocationToActingManagersLocationNotCoursesLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: wisbech.Id, isShared: true, name: "COSHH");
+        await SeedUserInLocationAsync(options, "staff-1", ipswich.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<CourseAssignment> result = await service.AssignCourseAsync(sharedCourse.Id, "staff-1", "manager-1", null, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_NonAdmin_AssigningToUserOutsideTheirLocation_Fails()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options, locationId: ipswich.Id);
+        await SeedUserInLocationAsync(options, "staff-1", wisbech.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, "staff-1", "manager-1", null, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("This user is not a member of your location.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForCourseAsync_SharedCourse_NonAdminSeesOnlyOwnLocationsAssignees()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: ipswich.Id, isShared: true, name: "COSHH");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "ipswich-staff", AssignedDate = DateTime.UtcNow, IsActive = true, LocationId = ipswich.Id });
+            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "wisbech-staff", AssignedDate = DateTime.UtcNow, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(sharedCourse.Id, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual("ipswich-staff", result.Data![0].UserId);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForCourseAsync_Admin_SeesAllLocations()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: ipswich.Id, isShared: true, name: "COSHH");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "ipswich-staff", AssignedDate = DateTime.UtcNow, IsActive = true, LocationId = ipswich.Id });
+            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "wisbech-staff", AssignedDate = DateTime.UtcNow, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForCourseAsync(sharedCourse.Id, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
     }
 }
