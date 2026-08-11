@@ -1,0 +1,56 @@
+@using Lanyard.Shared.DTO
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.News())" />
+            <FluentText Typo="Typography.PaneHeader">What's New</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            @foreach (ReleaseNote release in Releases)
+            {
+                <FluentCard Appearance="CardAppearance.Subtle">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+                            <FluentText Typo="Typography.H6">v@(release.Version)</FluentText>
+                            <FluentText Color="Color.Disabled">@release.ReleaseDate.ToString("d MMM yyyy")</FluentText>
+                        </FluentStack>
+                        <FluentText>@release.Summary</FluentText>
+                        @if (release.Details.Count > 0)
+                        {
+                            <ul>
+                                @foreach (string detail in release.Details)
+                                {
+                                    <li>@detail</li>
+                                }
+                            </ul>
+                        }
+                    </FluentStack>
+                </FluentCard>
+            }
+
+            @if (!Releases.Any())
+            {
+                <FluentText>No release notes available.</FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@CloseAsync" Appearance="ButtonAppearance.Outline">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public IEnumerable<ReleaseNote> Releases { get; set; } = [];
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

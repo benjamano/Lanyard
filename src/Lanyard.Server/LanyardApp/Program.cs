@@ -119,6 +119,8 @@ builder.Services.AddSingleton(new AppInfo
     Version = informationalVersion
 });
 
+builder.Services.AddSingleton<IReleaseNotesService, ReleaseNotesService>();
+
 // Configure Database
 string? connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 

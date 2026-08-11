@@ -6,10 +6,14 @@
     <FluentGridItem HiddenWhen="GridItemHidden.SmAndDown" Xs="12">
         <footer>
             <FluentCard Appearance="CardAppearance.Subtle" Class="rounded-0">
-                <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+                <FluentStack VerticalAlignment="VerticalAlignment.Center"
+                             HorizontalAlignment="HorizontalAlignment.SpaceBetween">
                     <span class="mb-0">© @DateTime.UtcNow.Year The Lanyard Development Team</span>
 
-                    <a href="/privacy">Privacy Policy</a>
+                    <FluentStack Width="auto" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
+                        <span>v@(AppInfo.Version)</span>
+                        <a href="/privacy">Privacy Policy</a>
+                    </FluentStack>
                 </FluentStack>
             </FluentCard>
         </footer>
