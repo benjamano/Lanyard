@@ -1,29 +1,30 @@
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Shared.DTO
+
 @inject NavigationManager NavigationManager
 @inject ISecurityService SecurityService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IReleaseNotesService ReleaseNotesService
 
-<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween" HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
+             HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
     <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium" Padding="@Padding.All3">
         @if (_isAuthenticated)
         {
-            <FluentNavItem Href="/"
-                            IconRest="@(new Icons.Regular.Size20.Home())"
-                            IconActive="@(new Icons.Filled.Size20.Home())"
-                            Match="NavLinkMatch.All">
+            <FluentNavItem Href="/" IconRest="@(new Icons.Regular.Size20.Home())"
+                           IconActive="@(new Icons.Filled.Size20.Home())" Match="NavLinkMatch.All">
                 Home
             </FluentNavItem>
 
-            <FluentNavItem Href="/training"
-                            IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                            IconActive="@(new Icons.Filled.Size20.BookOpen())">
+            <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                           IconActive="@(new Icons.Filled.Size20.BookOpen())">
                 My Training
             </FluentNavItem>
 
             @if (_canClockIn)
             {
-                <FluentNavCategory Title="Rota"
-                                    IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
-                                    IconActive="@(new Icons.Filled.Size20.CalendarLtr())">
+                <FluentNavCategory Title="Rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
+                                   IconActive="@(new Icons.Filled.Size20.CalendarLtr())">
                     <FluentNavItem Href="/rota/clockin">Clock In</FluentNavItem>
                     <FluentNavItem Href="/rota">Rota</FluentNavItem>
                 </FluentNavCategory>
@@ -33,22 +34,19 @@
             {
                 <FluentNavSectionHeader Title="Management" />
 
-                <FluentNavItem Href="/files"
-                                IconRest="@(new Icons.Regular.Size20.Folder())"
-                                IconActive="@(new Icons.Filled.Size20.Folder())">
+                <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                               IconActive="@(new Icons.Filled.Size20.Folder())">
                     File Manager
                 </FluentNavItem>
 
-                <FluentNavCategory Title="Manage"
-                                    IconRest="@(new Icons.Regular.Size20.Settings())"
-                                    IconActive="@(new Icons.Filled.Size20.Settings())">
+                <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
+                                   IconActive="@(new Icons.Filled.Size20.Settings())">
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
                 </FluentNavCategory>
 
-                <FluentNavCategory Title="Training"
-                                    IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                                    IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                                   IconActive="@(new Icons.Filled.Size20.BookOpen())">
                     <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
                     <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
@@ -57,20 +55,21 @@
             @if (_isAdmin)
             {
                 <FluentNavSectionHeader Title="Clients" />
-                
-                <FluentNavCategory Title="Clients"
-                                    IconRest="@(new Icons.Regular.Size20.Laptop())"
-                                    IconActive="@(new Icons.Filled.Size20.Laptop())">
-                    <FluentNavItem Href="/manage/clients" 
-                                    IconRest="@(new Icons.Regular.Size20.LaptopSettings())" 
-                                    IconActive="@(new Icons.Filled.Size20.LaptopSettings())">
+
+                <FluentNavCategory Title="Clients" IconRest="@(new Icons.Regular.Size20.Laptop())"
+                                   IconActive="@(new Icons.Filled.Size20.Laptop())">
+                    <FluentNavItem Href="/manage/clients" IconRest="@(new Icons.Regular.Size20.LaptopSettings())"
+                                   IconActive="@(new Icons.Filled.Size20.LaptopSettings())">
                         Clients
                     </FluentNavItem>
                     <FluentNavItem Href="/music">
                         Music
                     </FluentNavItem>
-                    <FluentNavItem Href="/manage/projectionprograms" IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())" IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
-                    <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())" IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
+                    <FluentNavItem Href="/manage/projectionprograms"
+                                   IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())"
+                                   IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
+                    <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())"
+                                   IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
 
                     @if (_canManageDmx)
                     {
@@ -80,31 +79,50 @@
             }
 
             <FluentNavSectionHeader Title="Dashboards" />
-            <FluentNavItem Href="/manage/dashboards" IconRest="@(new Icons.Regular.Size20.DataArea())" IconActive="@(new Icons.Filled.Size20.DataArea())">Dashboards</FluentNavItem>
+            <FluentNavItem Href="/manage/dashboards" IconRest="@(new Icons.Regular.Size20.DataArea())"
+                           IconActive="@(new Icons.Filled.Size20.DataArea())">Dashboards</FluentNavItem>
         }
     </FluentNav>
 
     <div class="w-100">
+        @if (_latestRelease is not null)
+        {
+            <FluentDivider />
+
+            <FluentNav Padding="@Padding.Bottom0">
+                <FluentCard Appearance="CardAppearance.Subtle">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
+                            <FluentText Weight="TextWeight.Bold">What's new in v@(_latestRelease.Version)</FluentText>
+                        </FluentStack>
+                        <FluentText>@_latestRelease.Summary</FluentText>
+                        <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@OpenReleaseNotesAsync">
+                            More info
+                        </FluentButton>
+                    </FluentStack>
+                </FluentCard>
+            </FluentNav>
+        }
+
         <FluentDivider />
+
         <FluentNav Margin="Margin.Top2" Density="NavDensity.Medium" Padding="@Padding.All3">
             @if (_isAuthenticated)
             {
-                <FluentNavItem Href="/account/manage"
-                                IconRest="@(new Icons.Regular.Size20.Person())"
-                                IconActive="@(new Icons.Filled.Size20.Person())">
+                <FluentNavItem Href="/account/manage" IconRest="@(new Icons.Regular.Size20.Person())"
+                               IconActive="@(new Icons.Filled.Size20.Person())">
                     @_displayName
                 </FluentNavItem>
-                <FluentNavItem Href="/api/auth/logout"
-                                IconRest="@(new Icons.Regular.Size20.SignOut())"
-                                IconActive="@(new Icons.Filled.Size20.SignOut())">
+                <FluentNavItem Href="/api/auth/logout" IconRest="@(new Icons.Regular.Size20.SignOut())"
+                               IconActive="@(new Icons.Filled.Size20.SignOut())">
                     Logout
                 </FluentNavItem>
             }
             else
             {
-                <FluentNavItem Href="/login"
-                                IconRest="@(new Icons.Regular.Size20.ArrowEnter())"
-                                IconActive="@(new Icons.Filled.Size20.ArrowEnter())">
+                <FluentNavItem Href="/login" IconRest="@(new Icons.Regular.Size20.ArrowEnter())"
+                               IconActive="@(new Icons.Filled.Size20.ArrowEnter())">
                     Login
                 </FluentNavItem>
             }
@@ -120,6 +138,8 @@
     private bool _canClockIn;
     private bool _canManageDmx;
     private string? _displayName;
+    private ReleaseNote? _latestRelease;
+    private IEnumerable<ReleaseNote> _releaseNotes = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -137,6 +157,24 @@
         {
             string? name = await SecurityService.GetCurrentUserName();
             _displayName = name?.Length > 20 ? name[..20] + "…" : name;
+
+            Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
+            if (releaseNotesResult.IsSuccess)
+            {
+                _releaseNotes = releaseNotesResult.Data ?? [];
+                _latestRelease = _releaseNotes.FirstOrDefault();
+            }
         }
+    }
+
+    private async Task OpenReleaseNotesAsync()
+    {
+        await _dialogService.ShowDialogAsync<ReleaseNotesDialog>(options =>
+        {
+            options.Header.Title = "What's New";
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ReleaseNotesDialog.Releases), _releaseNotes);
+        });
     }
 }

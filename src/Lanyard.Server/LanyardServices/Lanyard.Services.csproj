@@ -25,4 +25,8 @@
     <Folder Include="Repositories\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Services\ReleaseNotes\release-notes.json" />
+  </ItemGroup>
+
 </Project>
