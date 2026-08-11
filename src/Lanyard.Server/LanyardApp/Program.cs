@@ -73,6 +73,11 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
+builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>();
+// RadzenChart injects this directly for its built-in hover tooltips - registering
+// only this one Radzen service (not AddRadzenComponents()) keeps the unused
+// Radzen Dialog/Notification/ContextMenu services out of the container.
+builder.Services.AddScoped<Radzen.TooltipService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
@@ -263,6 +268,10 @@ if (app.Environment.IsDevelopment() == false)
 }
 
 // Baseline security response headers (applied in every environment).
+// In Development, connect-src also allows dotnet watch's browser-refresh websocket, which
+// dials ws://localhost:<random-port> and would otherwise be silently blocked by the CSP.
+string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -282,7 +291,7 @@ app.Use(async (context, next) =>
         "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "font-src 'self' data:; " +
         "img-src 'self' data:; " +
-        "connect-src 'self' wss:; " +
+        $"connect-src {connectSrc}; " +
         "frame-ancestors 'self';";
 
     await next();

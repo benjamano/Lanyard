@@ -1,0 +1,33 @@
+/* We intentionally do NOT load any Radzen theme stylesheet (e.g. standard-base.css) -
+   every Radzen theme ships a bare `body { background: ... }` rule (their own demo-page
+   decoration) that leaks into the whole app. Instead this file hand-styles only the
+   specific Radzen chart classes we actually render (confirmed against the Radzen.Blazor
+   8.5.2 source: Rendering/CategoryAxis.razor, Rendering/Text.razor,
+   Rendering/ChartTooltip.razor), for both themes explicitly - Radzen chart internals
+   render outside any component's Blazor scope attribute (same limitation as FluentUI
+   v5), so this can't be a scoped .razor.css. Data colors (series fills, donut segments)
+   are set explicitly per-component in C# via ChartPalette and never touch this file. */
+
+.rz-axis {
+    stroke: var(--colorNeutralForeground3);
+}
+
+.rz-chart text {
+    fill: var(--colorNeutralForeground3);
+}
+
+.rz-chart-tooltip-content {
+    background: #ffffff;
+    color: #242424;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, .14);
+    padding: .5rem;
+    font-size: .875rem;
+}
+
+html[data-app-theme="dark"] .rz-chart-tooltip-content {
+    background: #2b2b2b;
+    color: #e8e8e8;
+    border-color: #3f3f3f;
+}

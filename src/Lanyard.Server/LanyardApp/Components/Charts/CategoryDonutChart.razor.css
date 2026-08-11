@@ -1,0 +1,14 @@
+.category-donut-chart {
+    height: 280px;
+}
+
+::deep .rz-chart {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+::deep .rz-legend-item{
+    margin-right: 0.5rem;
+}

@@ -1,0 +1,10 @@
+.course-picker-host {
+    max-width: 400px;
+}
+
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
