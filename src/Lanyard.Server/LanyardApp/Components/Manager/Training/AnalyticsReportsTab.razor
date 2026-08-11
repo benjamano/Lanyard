@@ -27,17 +27,17 @@
         {
             <div class="analytics-grid">
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Top Scores</FluentText>
+                    <FluentText As="TextTag.H5">Top Scores (%)</FluentText>
                     <RankedBarChart Data="@scoreChartData" ValueSuffix="%" />
                 </FluentCard>
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Fastest Completions</FluentText>
+                    <FluentText As="TextTag.H5">Fastest Completions (min)</FluentText>
                     <RankedBarChart Data="@fastestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Success" />
-                </FluentCard Height="100%">
-                <FluentCard>
-                    <FluentText As="TextTag.H5">Slowest Completions</FluentText>
+                </FluentCard>
+                <FluentCard Height="100%">
+                    <FluentText As="TextTag.H5">Slowest Completions (min)</FluentText>
                     <RankedBarChart Data="@slowestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Warning" />
-                </FluentCard Height="100%">
+                </FluentCard>
                 <FluentCard Height="100%">
                     <FluentText As="TextTag.H5">Completion Status</FluentText>
                     <CategoryDonutChart Data="@statusChartData" />

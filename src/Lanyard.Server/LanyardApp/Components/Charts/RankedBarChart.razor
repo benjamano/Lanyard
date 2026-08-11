@@ -1,6 +1,5 @@
 @using Lanyard.Infrastructure.DTO.Charts
-@using Radzen
-@using Radzen.Blazor
+@using Microsoft.FluentUI.AspNetCore.Components.Charts
 
 <div class="ranked-bar-chart">
     @if (PlottableData.Count == 0)
@@ -9,15 +8,8 @@
     }
     else
     {
-        <RadzenChart>
-            <RadzenColumnSeries Data="@PlottableData" CategoryProperty="@nameof(ChartCategoryValue.Label)"
-                                ValueProperty="@nameof(ChartCategoryValue.Value)" Fill="@SeriesColor" />
-            <RadzenCategoryAxis Padding="60" LabelAutoRotation="0" />
-            <RadzenValueAxis Formatter="@FormatValue">
-                <RadzenGridLines Visible="true" />
-            </RadzenValueAxis>
-            <RadzenLegend Visible="false" />
-        </RadzenChart>
+        <FluentHorizontalBarChart Style="width:100%;height:100%;" ChartData="@SeriesData"
+                                   Variant="HorizontalBarChartVariant.SingleBar" />
     }
 </div>
 
@@ -34,14 +26,28 @@
     [Parameter]
     public string EmptyMessage { get; set; } = "No data available.";
 
-    // Radzen renders a 0-value bar as a degenerate, zero-height path and uses
-    // that path string as the Blazor diffing key - two 0-value bars (or two
-    // equal-value bars landing on the same rounded-rect geometry) produce an
-    // identical path/key and crash the render with a "duplicate key"
-    // exception (same class of bug as CategoryDonutChart's zero-slice case).
-    // A 0-value bar isn't visible anyway, so filtering it out is safe.
+    // A 0-value bar isn't visible anyway, so filtering it out before binding is safe.
     private List<ChartCategoryValue> PlottableData =>
         [.. Data.Where(x => x.Value > 0)];
 
-    private string FormatValue(object value) => $"{value}{ValueSuffix}";
+    // The SingleBar variant scales each bar's width against Total, so every bar
+    // needs a shared Total (the largest value) to render proportionally to the rest.
+    private double Total => PlottableData.Count == 0 ? 0 : PlottableData.Max(x => x.Value);
+
+    private IReadOnlyList<HorizontalBarChartSeries> SeriesData =>
+        [.. PlottableData.Select(x => new HorizontalBarChartSeries
+        {
+            ChartSeriesTitle = x.Label,
+            ChartData =
+            [
+                new HorizontalBarChartDataPoint
+                {
+                    Legend = x.Label,
+                    Data = x.Value,
+                    Total = Total,
+                    Color = DataVizPalette.Custom,
+                    CustomColor = SeriesColor
+                }
+            ]
+        })];
 }
