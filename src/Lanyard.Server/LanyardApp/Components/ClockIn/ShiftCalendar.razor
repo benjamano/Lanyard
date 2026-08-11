@@ -1,4 +1,4 @@
-@inject IToastService _toastService
+﻿@inject INotificationService _toastService
 
 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Height="100%">
     <FluentCalendar TValue="DateTime" DisabledDateFunc="(date => AmIOnShift(date) == false)" DisabledSelectable="false">

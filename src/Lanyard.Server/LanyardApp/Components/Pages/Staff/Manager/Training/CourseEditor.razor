@@ -1,4 +1,4 @@
-@page "/manage/training/courses/{CourseId:guid}"
+﻿@page "/manage/training/courses/{CourseId:guid}"
 @attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
@@ -7,7 +7,7 @@
 @using Lanyard.App.Components.Files
 
 @inject ICourseService _courseService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject NavigationManager _navigationManager
 @inject IJSRuntime JS
 

@@ -1,10 +1,10 @@
-@implements IDisposable
+﻿@implements IDisposable
 
 @using Lanyard.Infrastructure.Models.Dmx
 
 @inject IDmxService _dmxService
 @inject IDmxSceneService _dmxSceneService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <FluentCard Height="auto" Class="p-0 mt-2" Appearance="CardAppearance.Default">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
@@ -56,7 +56,7 @@
     [Parameter]
     public DmxSceneStep? EditingStep { get; set; }
 
-    // Key: Channel number (1–512), Value: Channel value (0–255)
+    // Key: Channel number (1â€“512), Value: Channel value (0â€“255)
     private Dictionary<int, int> channelValues = new();
 
     // When a step is selected the desk is a per-step editor: values load from and

@@ -1,4 +1,4 @@
-@using Lanyard.App.Components.ProjectionPrograms
+﻿@using Lanyard.App.Components.ProjectionPrograms
 @using Lanyard.Application.Services
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.DTO
@@ -8,7 +8,7 @@
 @using System.Text.Json
 @using Microsoft.EntityFrameworkCore
 
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject IAutomationRuleService _ruleService
 @inject IClientService _clientService
 @inject IDbContextFactory<ApplicationDbContext> _dbContextFactory

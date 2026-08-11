@@ -1,4 +1,4 @@
-@using Lanyard.Infrastructure.DTO.Dmx
+﻿@using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
@@ -6,7 +6,7 @@
 @inject IDmxSceneService _dmxSceneService
 @inject IDmxSceneRunnerService _sceneRunner
 @inject IDialogService _dialogService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject IJSRuntime JS
 
 <div>
