@@ -658,4 +658,46 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(0, result.Data);
     }
+
+    [TestMethod]
+    public async Task RecordSectionTransitionAsync_RevisitingSectionAfterQuiz_DoesNotExtendItsRecordedDuration()
+    {
+        // Reproduces the reported bug: a learner reads the last section, moves into the
+        // quiz, fails, clicks Previous back into that section, then clicks Next into the
+        // quiz again. The section's LeftDate must stay pinned to the FIRST departure -
+        // otherwise the entire time spent on the failed quiz attempt gets counted as time
+        // spent reading the section.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Guid sectionId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CourseSections.Add(new CourseSection { Id = sectionId, CourseId = course.Id, Title = "Only Section", SortOrder = 0, IsActive = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        DateTime enteredSection = new(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        DateTime leftForQuiz = enteredSection.AddMinutes(2);
+        DateTime backFromQuizAfterFailing = leftForQuiz.AddMinutes(10);
+        DateTime leftForQuizAgain = backFromQuizAfterFailing.AddMinutes(1);
+
+        // Arrive at the section.
+        await service.RecordSectionTransitionAsync(assignment.Id, user.Id, null, sectionId, enteredSection);
+        // Leave the section for the quiz (genuine reading time: 2 minutes).
+        await service.RecordSectionTransitionAsync(assignment.Id, user.Id, sectionId, null, leftForQuiz);
+        // Fail the quiz, click Previous back into the section.
+        await service.RecordSectionTransitionAsync(assignment.Id, user.Id, null, sectionId, backFromQuizAfterFailing);
+        // Click Next back into the quiz to retry.
+        await service.RecordSectionTransitionAsync(assignment.Id, user.Id, sectionId, null, leftForQuizAgain);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        CourseSectionProgress progress = await verifyCtx.CourseSectionProgresses.SingleAsync(x => x.AssignmentId == assignment.Id && x.SectionId == sectionId);
+
+        Assert.AreEqual(enteredSection, progress.EnteredDate);
+        Assert.AreEqual(leftForQuiz, progress.LeftDate);
+    }
 }

@@ -530,8 +530,12 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                         LeftDate = transitionTimeUtc
                     });
                 }
-                else
+                else if (departedProgress.LeftDate is null)
                 {
+                    // Only the first departure counts. A section can be departed more than
+                    // once (learner goes back into it and leaves again) - re-stamping LeftDate
+                    // on a later departure would fold whatever happened in between (e.g. a
+                    // failed quiz attempt) into this section's recorded duration.
                     departedProgress.LeftDate = transitionTimeUtc;
                 }
             }
