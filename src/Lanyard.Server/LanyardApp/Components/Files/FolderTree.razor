@@ -1,6 +1,6 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 @inject HttpClient Http
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject IFileService _fileService
 
 <FluentListbox TOption="string" TValue="string" Value="@(SelectedFolderId?.ToString() ?? string.Empty)" ValueChanged="OnFolderValueChanged">

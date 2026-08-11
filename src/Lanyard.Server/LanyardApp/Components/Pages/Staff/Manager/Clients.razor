@@ -1,11 +1,11 @@
-@page "/manage/clients"
+﻿@page "/manage/clients"
 @attribute [Authorize(Roles = "Admin")]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
 
 @inject IClientService _clientService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <PageTitle>Clients</PageTitle>
 

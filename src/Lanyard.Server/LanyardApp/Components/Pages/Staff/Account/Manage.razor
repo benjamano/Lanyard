@@ -1,11 +1,11 @@
-@page "/account/manage"
+﻿@page "/account/manage"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Layout.Staff
 @using Lanyard.Application.Services.Authentication
 
-@inject IToastService ToastService
+@inject INotificationService ToastService
 
 <PageTitle>Account Management</PageTitle>
 

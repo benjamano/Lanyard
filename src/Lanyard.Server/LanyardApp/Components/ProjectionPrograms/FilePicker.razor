@@ -1,7 +1,7 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 
 @inject IFileService FileService
-@inject IToastService ToastService
+@inject INotificationService ToastService
 
 <div class="file-picker">
     <FluentTextInput Value="@selectedFileDisplayName"

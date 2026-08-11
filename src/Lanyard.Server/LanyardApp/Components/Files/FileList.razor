@@ -1,7 +1,7 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 @inject HttpClient Http
 @inject IFileService _fileService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <div class="file-list-wrapper w-100">
     <FluentDataGrid Items="@(files?.AsQueryable())" AutoItemsPerPage="true" ItemSize="46" Virtualize="true" GridTemplateColumns="2fr 1fr 1fr 1fr 0.6fr" class="file-list-grid w-100">

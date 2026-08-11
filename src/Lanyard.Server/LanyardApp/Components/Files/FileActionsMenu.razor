@@ -1,8 +1,8 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 
 @inject HttpClient Http
 @inject IFileService _fileService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <FluentButton IconEnd="@(new Icons.Regular.Size20.Rename())" OnClick="ShowRenameDialogAsync"></FluentButton>
 <FluentButton IconEnd="@(new Icons.Regular.Size20.BinRecycle())" OnClick="DeleteFile"></FluentButton>

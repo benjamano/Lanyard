@@ -1,6 +1,5 @@
 @using Lanyard.Infrastructure.DTO.Charts
-@using Radzen
-@using Radzen.Blazor
+@using Microsoft.FluentUI.AspNetCore.Components.Charts
 
 <div class="category-donut-chart">
     @if (PlottableData.Count == 0)
@@ -9,13 +8,7 @@
     }
     else
     {
-        <RadzenChart>
-            <RadzenDonutSeries Data="@PlottableData" CategoryProperty="@nameof(ChartCategoryValue.Label)"
-                               ValueProperty="@nameof(ChartCategoryValue.Value)" Fills="@PlottableFills">
-                <RadzenSeriesDataLabels Visible="true" />
-            </RadzenDonutSeries>
-            <RadzenLegend Position="LegendPosition.Left" />
-        </RadzenChart>
+        <FluentDonutChart Style="width:100%;height:100%;" ChartData="@PlottableData" InnerRadius="55" />
     }
 </div>
 
@@ -26,18 +19,19 @@
     [Parameter]
     public IReadOnlyList<string> SeriesColors { get; set; } = ChartPalette.Categorical;
 
-    // Radzen renders a 0-value slice as a degenerate, zero-length SVG arc path
-    // and uses that path string as the Blazor diffing key - two zero-value
-    // slices produce an identical path/key and crash the render with a
-    // "duplicate key" exception on the next re-render. Filtering zero-value
-    // categories out before binding avoids the collision entirely (a 0-value
-    // slice wouldn't be visible anyway).
-    private List<ChartCategoryValue> PlottableData =>
-        [.. Data.Where(x => x.Value > 0)];
-
-    private List<string> PlottableFills =>
+    // A 0-value slice isn't visible anyway, so filtering it out before binding is safe.
+    // Colors are assigned by each item's position in the original (unfiltered) Data list,
+    // so a given category keeps the same color regardless of which other categories are
+    // filtered out around it.
+    private List<DonutDataPoint> PlottableData =>
         [.. Data
             .Select((x, i) => (Item: x, Color: SeriesColors[i % SeriesColors.Count]))
             .Where(x => x.Item.Value > 0)
-            .Select(x => x.Color)];
+            .Select(x => new DonutDataPoint
+            {
+                Legend = x.Item.Label,
+                Data = x.Item.Value,
+                Color = DataVizPalette.Custom,
+                CustomColor = x.Color
+            })];
 }

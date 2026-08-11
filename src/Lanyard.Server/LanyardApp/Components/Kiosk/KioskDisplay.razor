@@ -1,8 +1,8 @@
-@implements IDisposable
+﻿@implements IDisposable
 @using Lanyard.App.Components.Kiosk.Templates
 @using Lanyard.App.Components.Pages.Staff.Dashboards
 
-@inject IToastService _toastService
+@inject INotificationService _toastService
 @inject ILogger<KioskDisplay> _logger
 
 @if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.ShowText)

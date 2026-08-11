@@ -74,10 +74,6 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
 builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>();
-// RadzenChart injects this directly for its built-in hover tooltips - registering
-// only this one Radzen service (not AddRadzenComponents()) keeps the unused
-// Radzen Dialog/Notification/ContextMenu services out of the container.
-builder.Services.AddScoped<Radzen.TooltipService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
@@ -223,7 +219,7 @@ builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
 builder.Services.AddFluentUIComponents(configuration =>
 {
     configuration.Toast.Position = ToastPosition.TopEnd;
-    configuration.Toast.Timeout = 5000;
+    configuration.Toast.Lifetime = TimeSpan.FromSeconds(5);
 });
 
 builder.Services.AddSignalR();

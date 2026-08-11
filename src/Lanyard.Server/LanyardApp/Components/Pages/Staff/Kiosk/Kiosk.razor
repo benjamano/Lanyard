@@ -1,4 +1,4 @@
-@page "/kiosk/{clientId}/{projectionProgramId}"
+﻿@page "/kiosk/{clientId}/{projectionProgramId}"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
 @using Lanyard.Application.Services
@@ -6,7 +6,7 @@
 
 @inject IProjectionProgramService _projectionProgramService
 @inject IClientService _clientService
-@inject IToastService _toastService
+@inject INotificationService _toastService
 
 <PageTitle>Kiosk</PageTitle>
 
