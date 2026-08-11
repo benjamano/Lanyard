@@ -9,6 +9,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Lanyard.Application.Services.Email;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
 
@@ -191,7 +192,9 @@ public class SecurityService : ISecurityService
 
             try
             {
-                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+                // Unscoped: auto-assignment on user creation applies across all locations,
+                // matching pre-Task-3 behaviour where GetCoursesAsync() saw every course.
+                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(new LocationScope(true, null, null, null));
 
                 if (coursesResult.IsSuccess && coursesResult.Data is not null)
                 {

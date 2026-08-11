@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 
@@ -5,10 +6,10 @@ namespace Lanyard.Application.Services.Training;
 
 public interface ICourseService
 {
-    Task<Result<List<Course>>> GetCoursesAsync();
-    Task<Result<Course>> GetCourseAsync(Guid courseId);
-    Task<Result<Course>> SaveCourseAsync(Course course);
-    Task<Result<bool>> DeleteCourseAsync(Guid courseId);
+    Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope);
+    Task<Result<Course>> GetCourseAsync(Guid courseId, LocationScope scope);
+    Task<Result<Course>> SaveCourseAsync(Course course, LocationScope scope);
+    Task<Result<bool>> DeleteCourseAsync(Guid courseId, LocationScope scope);
 
     Task<Result<CourseSection>> SaveSectionAsync(CourseSection section);
     Task<Result<bool>> DeleteSectionAsync(Guid sectionId);

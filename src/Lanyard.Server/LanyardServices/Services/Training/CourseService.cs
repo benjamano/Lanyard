@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -9,18 +10,26 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    public async Task<Result<List<Course>>> GetCoursesAsync()
+    public async Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<Course> courses = await ctx.Courses
+            IQueryable<Course> query = ctx.Courses
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.Name)
-                .ToListAsync();
+                .Include(x => x.Location)
+                .Where(x => x.IsActive);
+
+            if (!scope.IsAdmin)
+            {
+                query = query.Where(x =>
+                    x.LocationId == scope.LocationId ||
+                    (x.IsShared && x.Location!.CompanyId == scope.CompanyId));
+            }
+
+            List<Course> courses = await query.OrderBy(x => x.Name).ToListAsync();
 
             return Result<List<Course>>.Ok(courses);
         }
@@ -30,7 +39,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<Course>> GetCourseAsync(Guid courseId)
+    public async Task<Result<Course>> GetCourseAsync(Guid courseId, LocationScope scope)
     {
         try
         {
@@ -39,12 +48,14 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             Course? course = await ctx.Courses
                 .AsNoTracking()
                 .TagWithCallSite()
+                .Include(x => x.Location)
                 .Include(x => x.Sections.Where(s => s.IsActive))
                 .Include(x => x.Questions.Where(q => q.IsActive))
                     .ThenInclude(x => x.Options.Where(o => o.IsActive))
                 .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
-            if (course is null)
+            if (course is null || (!scope.IsAdmin && course.LocationId != scope.LocationId
+                && !(course.IsShared && course.Location!.CompanyId == scope.CompanyId)))
             {
                 return Result<Course>.Fail("Course not found.");
             }
@@ -65,7 +76,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<Course>> SaveCourseAsync(Course course)
+    public async Task<Result<Course>> SaveCourseAsync(Course course, LocationScope scope)
     {
         try
         {
@@ -90,6 +101,16 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 ? null
                 : await ctx.Courses.FirstOrDefaultAsync(x => x.Id == course.Id);
 
+            if (existingCourse is not null && !scope.IsAdmin && existingCourse.LocationId != scope.LocationId)
+            {
+                return Result<Course>.Fail("You do not have access to this course.");
+            }
+
+            if (existingCourse is null && !scope.IsAdmin && scope.LocationId is null)
+            {
+                return Result<Course>.Fail("You do not have access to create courses.");
+            }
+
             Course targetCourse;
 
             if (existingCourse is null)
@@ -102,7 +123,9 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                     PassMarkPercent = course.PassMarkPercent,
                     AutoAssignOnUserCreation = course.AutoAssignOnUserCreation,
                     RecurrenceMonths = course.RecurrenceMonths,
-                    IsActive = true
+                    IsActive = true,
+                    LocationId = scope.IsAdmin ? course.LocationId : scope.LocationId,
+                    IsShared = course.IsShared
                 };
 
                 ctx.Courses.Add(targetCourse);
@@ -116,6 +139,8 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 targetCourse.AutoAssignOnUserCreation = course.AutoAssignOnUserCreation;
                 targetCourse.RecurrenceMonths = course.RecurrenceMonths;
                 targetCourse.IsActive = true;
+                targetCourse.IsShared = course.IsShared;
+                // LocationId is immutable after creation in this phase - intentionally not reassigned here.
             }
 
             await ctx.SaveChangesAsync();
@@ -128,7 +153,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<bool>> DeleteCourseAsync(Guid courseId)
+    public async Task<Result<bool>> DeleteCourseAsync(Guid courseId, LocationScope scope)
     {
         try
         {
@@ -139,6 +164,11 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             if (course is null)
             {
                 return Result<bool>.Fail("Course not found.");
+            }
+
+            if (!scope.IsAdmin && course.LocationId != scope.LocationId)
+            {
+                return Result<bool>.Fail("You do not have access to this course.");
             }
 
             course.IsActive = false;

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -83,7 +84,7 @@ namespace Lanyard.Tests.Services.Authentication
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
 
             Mock<ICourseService> courseServiceMock = new();
-            courseServiceMock.Setup(c => c.GetCoursesAsync()).ReturnsAsync(Result<List<Course>>.Ok([]));
+            courseServiceMock.Setup(c => c.GetCoursesAsync(It.IsAny<LocationScope>())).ReturnsAsync(Result<List<Course>>.Ok([]));
 
             Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
 
