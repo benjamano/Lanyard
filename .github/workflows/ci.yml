@@ -16,6 +16,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require Lanyard.App version bump
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }} --depth=1
+          $csprojPath = 'src/Lanyard.Server/LanyardApp/Lanyard.App.csproj'
+          $baseContent = git show "origin/${{ github.event.pull_request.base.ref }}:$csprojPath"
+          $baseVersion = [regex]::Match($baseContent, '<Version>([^<]+)</Version>').Groups[1].Value
+          $prContent = Get-Content $csprojPath -Raw
+          $prVersion = [regex]::Match($prContent, '<Version>([^<]+)</Version>').Groups[1].Value
+
+          Write-Host "Base version: $baseVersion"
+          Write-Host "PR version:   $prVersion"
+
+          if (-not $baseVersion -or -not $prVersion) {
+            Write-Host "::error::Could not find <Version> in Lanyard.App.csproj on base or PR branch."
+            exit 1
+          }
+          if ([version]$prVersion -le [version]$baseVersion) {
+            Write-Host "::error::Lanyard.App.csproj <Version> must be incremented (base: $baseVersion, PR: $prVersion)."
+            exit 1
+          }
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
