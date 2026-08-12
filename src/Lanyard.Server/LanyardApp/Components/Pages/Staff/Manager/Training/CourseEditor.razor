@@ -100,7 +100,7 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="@canEditCourse"
+                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
                              @ondragstart="@(() => draggedSection = courseSection)"
                              @ondragover="@(() => { })" @ondragover:preventDefault="true"
                              @ondrop="@(() => OnSectionDropAsync(courseSection))">
@@ -122,7 +122,7 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="@canEditCourse"
+                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
                              @ondragstart="@(() => draggedQuestion = question)"
                              @ondragover="@(() => { })" @ondragover:preventDefault="true"
                              @ondrop="@(() => OnQuestionDropAsync(question))">
