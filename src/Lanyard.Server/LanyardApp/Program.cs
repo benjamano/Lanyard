@@ -7,6 +7,7 @@ using Lanyard.Application.Services.Training;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -74,6 +75,8 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
 builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>();
+builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
