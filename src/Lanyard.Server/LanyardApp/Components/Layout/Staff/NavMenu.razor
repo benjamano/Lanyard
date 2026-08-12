@@ -42,7 +42,12 @@
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
-                    <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
+                    @* /manage/companies-locations is [Authorize(Roles = "Admin")] - a non-Admin
+                       Manager following this link only ever lands on an access-denied page. *@
+                    @if (_isAdmin)
+                    {
+                        <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
+                    }
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
                 </FluentNavCategory>
 

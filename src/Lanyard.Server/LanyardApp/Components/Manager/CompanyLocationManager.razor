@@ -2,7 +2,11 @@
 
 @inject INotificationService ToastService
 
-<FluentCard Height="auto" Style="min-height:30vh;">
+@* The plain wrapper div is what carries this component's scoped-CSS attribute - FluentUI
+   component roots do not receive it, so every rule in the sibling .razor.css reaches them
+   via "::deep" from here. *@
+<div class="company-location-manager">
+<FluentCard Height="auto" Class="clm-root-card">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentText Typo="Typography.H4">Companies &amp; Locations</FluentText>
 
@@ -12,10 +16,10 @@
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                         <FluentText Typo="Typography.H6">Companies</FluentText>
 
-                        <FluentTextInput @bind-Value="newCompanyName" Label="New company name" Placeholder="Partyman" Style="width: 100%;" />
+                        <FluentTextInput @bind-Value="newCompanyName" Label="New company name" Placeholder="Partyman" Class="clm-full-width" />
                         <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddCompany">Add Company</FluentButton>
 
-                        <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                        <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="clm-full-width">
                             <TemplateColumn Title="Name">
                                 @context.Name
                             </TemplateColumn>
@@ -37,18 +41,18 @@
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                             <FluentText Typo="Typography.H6">Locations for @selectedCompany.Name</FluentText>
 
-                            <FluentTextInput @bind-Value="newLocationName" Label="New location name" Placeholder="Ipswich" Style="width: 100%;" />
+                            <FluentTextInput @bind-Value="newLocationName" Label="New location name" Placeholder="Ipswich" Class="clm-full-width" />
                             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddLocation">Add Location</FluentButton>
 
                             @if (!locationsForSelectedCompany.Any())
                             {
-                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                <FluentText Class="clm-empty-note">
                                     No locations yet for this company.
                                 </FluentText>
                             }
                             else
                             {
-                                <FluentDataGrid Items="@locationsForSelectedCompany.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid Items="@locationsForSelectedCompany.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="clm-full-width">
                                     <TemplateColumn Title="Name">
                                         @context.GetDisplayName()
                                     </TemplateColumn>
@@ -64,6 +68,7 @@
         </FluentGrid>
     </FluentStack>
 </FluentCard>
+</div>
 
 @code {
     [Parameter]

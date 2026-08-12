@@ -3,7 +3,11 @@
 
 @inject INotificationService ToastService
 
-<FluentCard Height="auto" Style="min-height:30vh;">
+@* The plain wrapper div is what carries this component's scoped-CSS attribute - FluentUI
+   component roots do not receive it, so every rule in the sibling .razor.css reaches them
+   via "::deep" from here. *@
+<div class="user-locations-manager">
+<FluentCard Height="auto" Class="ulm-root-card">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentText Typo="Typography.H4">Staff Locations</FluentText>
 
@@ -31,13 +35,13 @@
 
                             @if (!assignedLocations.Any())
                             {
-                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                <FluentText Class="ulm-empty-note">
                                     This user has no location memberships.
                                 </FluentText>
                             }
                             else
                             {
-                                <FluentDataGrid Items="@assignedLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid Items="@assignedLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="ulm-full-width">
                                     <TemplateColumn Title="Location">
                                         @context.GetDisplayName()
                                     </TemplateColumn>
@@ -60,13 +64,13 @@
 
                             @if (!availableLocations.Any())
                             {
-                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                <FluentText Class="ulm-empty-note">
                                     No more locations left to assign.
                                 </FluentText>
                             }
                             else
                             {
-                                <FluentDataGrid Items="@availableLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid Items="@availableLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="ulm-full-width">
                                     <TemplateColumn Title="Location">
                                         @context.GetDisplayName()
                                     </TemplateColumn>
@@ -82,6 +86,7 @@
         </FluentGrid>
     </FluentStack>
 </FluentCard>
+</div>
 
 @code {
     private List<UserProfile> userProfiles = [];
