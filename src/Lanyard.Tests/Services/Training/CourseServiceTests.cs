@@ -537,13 +537,43 @@ public class CourseServiceTests
         Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
         Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
 
-        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], AdminScope);
         Assert.IsTrue(reorderResult.Success, reorderResult.Error);
 
         Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.AreEqual("Jewellery", reloaded.Data!.Sections[0].Title);
         Assert.AreEqual("Shoes", reloaded.Data!.Sections[1].Title);
+    }
+
+    [TestMethod]
+    public async Task CourseService_ReorderSections_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], wisbechScope);
+
+        Assert.IsFalse(reorderResult.Success);
+        Assert.AreEqual("You do not have access to this course.", reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual("Shoes", reloaded.Data!.Sections[0].Title);
+        Assert.AreEqual("Jewellery", reloaded.Data!.Sections[1].Title);
     }
 
     [TestMethod]
@@ -556,13 +586,43 @@ public class CourseServiceTests
         Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
         Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)));
 
-        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], AdminScope);
         Assert.IsTrue(reorderResult.Success, reorderResult.Error);
 
         Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[0].Id);
         Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[1].Id);
+    }
+
+    [TestMethod]
+    public async Task CourseService_ReorderQuestions_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+        Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)));
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], wisbechScope);
+
+        Assert.IsFalse(reorderResult.Success);
+        Assert.AreEqual("You do not have access to this course.", reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[0].Id);
+        Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[1].Id);
     }
 
     [TestMethod]

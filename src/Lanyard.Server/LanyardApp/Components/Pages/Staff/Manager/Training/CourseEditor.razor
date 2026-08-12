@@ -100,7 +100,7 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="true"
+                        <div class="reorder-item" draggable="@canEditCourse"
                              @ondragstart="@(() => draggedSection = courseSection)"
                              @ondragover="@(() => { })" @ondragover:preventDefault="true"
                              @ondrop="@(() => OnSectionDropAsync(courseSection))">
@@ -122,7 +122,7 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="true"
+                        <div class="reorder-item" draggable="@canEditCourse"
                              @ondragstart="@(() => draggedQuestion = question)"
                              @ondragover="@(() => { })" @ondragover:preventDefault="true"
                              @ondrop="@(() => OnQuestionDropAsync(question))">
@@ -436,6 +436,12 @@ else
 
     private async Task OnSectionDropAsync(CourseSection targetSection)
     {
+        if (!canEditCourse)
+        {
+            draggedSection = null;
+            return;
+        }
+
         if (course is null || draggedSection is null || draggedSection.Id == targetSection.Id)
         {
             draggedSection = null;
@@ -461,7 +467,7 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)], currentScope!);
 
         if (!result.IsSuccess)
         {
@@ -472,6 +478,12 @@ else
 
     private async Task OnQuestionDropAsync(CourseQuestion targetQuestion)
     {
+        if (!canEditCourse)
+        {
+            draggedQuestion = null;
+            return;
+        }
+
         if (course is null || draggedQuestion is null || draggedQuestion.Id == targetQuestion.Id)
         {
             draggedQuestion = null;
@@ -497,7 +509,7 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)], currentScope!);
 
         if (!result.IsSuccess)
         {

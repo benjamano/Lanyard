@@ -273,11 +273,23 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
             return Result<bool>.Fail($"Failed to delete section: {ex.Message}");
         }
     }
-    public async Task<Result<bool>> ReorderSectionsAsync(Guid courseId, List<Guid> orderedSectionIds)
+    public async Task<Result<bool>> ReorderSectionsAsync(Guid courseId, List<Guid> orderedSectionIds, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Course? course = await ctx.Courses.FirstOrDefaultAsync(x => x.Id == courseId);
+
+            if (course is null)
+            {
+                return Result<bool>.Fail("Course not found.");
+            }
+
+            if (!scope.IsAdmin && course.LocationId != scope.LocationId)
+            {
+                return Result<bool>.Fail("You do not have access to this course.");
+            }
 
             List<CourseSection> sections = await ctx.CourseSections
                 .Where(x => x.CourseId == courseId && x.IsActive)
@@ -450,11 +462,23 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<bool>> ReorderQuestionsAsync(Guid courseId, List<Guid> orderedQuestionIds)
+    public async Task<Result<bool>> ReorderQuestionsAsync(Guid courseId, List<Guid> orderedQuestionIds, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Course? course = await ctx.Courses.FirstOrDefaultAsync(x => x.Id == courseId);
+
+            if (course is null)
+            {
+                return Result<bool>.Fail("Course not found.");
+            }
+
+            if (!scope.IsAdmin && course.LocationId != scope.LocationId)
+            {
+                return Result<bool>.Fail("You do not have access to this course.");
+            }
 
             List<CourseQuestion> questions = await ctx.CourseQuestions
                 .Where(x => x.CourseId == courseId && x.IsActive)
