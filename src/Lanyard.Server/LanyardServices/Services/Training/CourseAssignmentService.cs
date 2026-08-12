@@ -17,11 +17,20 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == courseId && x.IsActive);
+            Course? course = await ctx.Courses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<CourseAssignment>.Fail("Course not found.");
+            }
+
+            if (!IsCourseInScope(course, scope))
+            {
+                return Result<CourseAssignment>.Fail("You do not have access to this course.");
             }
 
             bool userExists = await ctx.Users.AnyAsync(x => x.Id == userId);
@@ -43,7 +52,6 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             if (scope.IsAdmin)
             {
-                Course course = await ctx.Courses.AsNoTracking().TagWithCallSite().FirstAsync(x => x.Id == courseId);
                 assignmentLocationId = course.LocationId;
             }
             else
@@ -277,6 +285,15 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         }
     }
 
+    // Mirrors CourseService.GetCourseAsync's read rule: a non-Admin may act on a course in
+    // their own location, or on one another location in the same company has shared with them.
+    // Kept here rather than shared so the assignment service does not take a dependency on
+    // CourseService just for a three-line predicate.
+    private static bool IsCourseInScope(Course course, LocationScope scope) =>
+        scope.IsAdmin
+        || course.LocationId == scope.LocationId
+        || (course.IsShared && course.Location is not null && course.Location.CompanyId == scope.CompanyId);
+
     private static DateTime? NormalizeDueDate(DateTime? dueDate) =>
         dueDate.HasValue ? DateTime.SpecifyKind(dueDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc) : null;
 
@@ -308,11 +325,20 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == courseId && x.IsActive);
+            Course? course = await ctx.Courses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<BulkAssignResult>.Fail("Course not found.");
+            }
+
+            if (!IsCourseInScope(course, scope))
+            {
+                return Result<BulkAssignResult>.Fail("You do not have access to this course.");
             }
 
             DateTime? normalizedDueDate = NormalizeDueDate(dueDate);
@@ -323,7 +349,6 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             if (scope.IsAdmin)
             {
-                Course course = await ctx.Courses.AsNoTracking().TagWithCallSite().FirstAsync(x => x.Id == courseId);
                 assignmentLocationId = course.LocationId;
             }
             else
@@ -373,7 +398,15 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             await ctx.SaveChangesAsync();
 
-            return Result<BulkAssignResult>.Ok(new BulkAssignResult(assignedCount, eligibleUserIds.Count - assignedCount));
+            // Two distinct reasons a requested user ends up unassigned, reported separately so
+            // the caller can explain the shortfall: already had the course (a duplicate, counted
+            // against the eligible set) versus filtered out for not being in the acting
+            // manager's location at all. Folding the second into the first - or dropping it, as
+            // this previously did - makes the totals silently fail to add up for the user.
+            int skippedOutsideLocationCount = distinctUserIds.Count - eligibleUserIds.Count;
+
+            return Result<BulkAssignResult>.Ok(new BulkAssignResult(
+                assignedCount, eligibleUserIds.Count - assignedCount, skippedOutsideLocationCount));
         }
         catch (Exception ex)
         {

@@ -140,7 +140,15 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 targetCourse.RecurrenceMonths = course.RecurrenceMonths;
                 targetCourse.IsActive = true;
                 targetCourse.IsShared = course.IsShared;
-                // LocationId is immutable after creation in this phase - intentionally not reassigned here.
+
+                // Only an Admin may move a course between locations. For a non-Admin the
+                // LocationId stays pinned to whatever it was created with - deliberately not
+                // reassigned, so a tampered client payload can never re-home someone else's
+                // course (the access check above already forced the course into their location).
+                if (scope.IsAdmin)
+                {
+                    targetCourse.LocationId = course.LocationId;
+                }
             }
 
             await ctx.SaveChangesAsync();

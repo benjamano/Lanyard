@@ -825,6 +825,9 @@ public class CourseAssignmentServiceTests
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(2, result.Data!.AssignedCount);
+        Assert.AreEqual(0, result.Data!.SkippedDuplicateCount);
+        // The filtered-out Wisbech user is reported rather than silently vanishing.
+        Assert.AreEqual(1, result.Data!.SkippedOutsideLocationCount);
 
         await using ApplicationDbContext ctx = new(options);
         List<CourseAssignment> assignments = await ctx.CourseAssignments.Where(x => x.CourseId == sharedCourse.Id).ToListAsync();
@@ -864,5 +867,95 @@ public class CourseAssignmentServiceTests
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual(1, result.Data!.CompletedCount);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_NonAdmin_CourseOutsideTheirScope_IsRejected()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course wisbechCourse = await SeedCourseAsync(options, locationId: wisbech.Id, name: "Wisbech Only");
+        await SeedUserInLocationAsync(options, "ipswich-staff-1", ipswich.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<CourseAssignment> result = await service.AssignCourseAsync(
+            wisbechCourse.Id, "ipswich-staff-1", "manager-1", null, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("You do not have access to this course.", result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsEmpty(await ctx.CourseAssignments.Where(x => x.CourseId == wisbechCourse.Id).ToListAsync());
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_NonAdmin_SharedCourseFromSiblingLocation_IsAllowed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: wisbech.Id, isShared: true, name: "COSHH");
+        await SeedUserInLocationAsync(options, "ipswich-staff-1", ipswich.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<CourseAssignment> result = await service.AssignCourseAsync(
+            sharedCourse.Id, "ipswich-staff-1", "manager-1", null, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_NonAdmin_CourseOutsideTheirScope_IsRejected()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course wisbechCourse = await SeedCourseAsync(options, locationId: wisbech.Id, name: "Wisbech Only");
+        await SeedUserInLocationAsync(options, "ipswich-staff-1", ipswich.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            wisbechCourse.Id, ["ipswich-staff-1"], "manager-1", null, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("You do not have access to this course.", result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsEmpty(await ctx.CourseAssignments.Where(x => x.CourseId == wisbechCourse.Id).ToListAsync());
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_NonAdmin_ReportsOutsideLocationSkipsSeparatelyFromDuplicates()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: ipswich.Id, isShared: true, name: "COSHH");
+        await SeedUserInLocationAsync(options, "ipswich-staff-1", ipswich.Id);
+        await SeedUserInLocationAsync(options, "ipswich-staff-2", ipswich.Id);
+        await SeedUserInLocationAsync(options, "wisbech-staff-1", wisbech.Id);
+        await SeedUserInLocationAsync(options, "wisbech-staff-2", wisbech.Id);
+
+        // ipswich-staff-2 already holds this course, so it is an in-scope duplicate. Both
+        // Wisbech users were requested but are outside the acting manager's location.
+        await SeedAssignmentAsync(options, sharedCourse.Id, "ipswich-staff-2");
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            sharedCourse.Id,
+            ["ipswich-staff-1", "ipswich-staff-2", "wisbech-staff-1", "wisbech-staff-2"],
+            "manager-1", null, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(1, result.Data!.AssignedCount);
+        Assert.AreEqual(1, result.Data!.SkippedDuplicateCount);
+        Assert.AreEqual(2, result.Data!.SkippedOutsideLocationCount);
+
+        // Every requested user is now accounted for by exactly one of the three counts.
+        Assert.AreEqual(
+            4,
+            result.Data!.AssignedCount + result.Data!.SkippedDuplicateCount + result.Data!.SkippedOutsideLocationCount);
     }
 }

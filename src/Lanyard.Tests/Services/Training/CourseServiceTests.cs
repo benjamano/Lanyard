@@ -564,4 +564,82 @@ public class CourseServiceTests
         Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[0].Id);
         Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[1].Id);
     }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_AdminUpdate_CanReassignLocationId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Induction", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Induction", PassMarkPercent = 80, LocationId = wisbech.Id }, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(wisbech.Id, result.Data!.LocationId);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        Course persisted = await verifyCtx.Courses.SingleAsync(x => x.Id == courseId);
+        Assert.AreEqual(wisbech.Id, persisted.LocationId);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_AdminUpdate_CanAssignLocationToACourseThatHasNone()
+    {
+        // The gap this closes: courses created through the "New Course" flow land with a null
+        // LocationId, which makes them invisible to every non-Admin. An Admin must be able to
+        // backfill one through the editor.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Orphan", PassMarkPercent = 80, IsActive = true, LocationId = null });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Orphan", PassMarkPercent = 80, LocationId = ipswich.Id }, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_NonAdminUpdate_IgnoresSuppliedLocationId()
+    {
+        // The tamper guard on update: a non-Admin editing their own course cannot re-home it,
+        // even by posting a different LocationId.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Ipswich Course", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Renamed", PassMarkPercent = 80, LocationId = wisbech.Id }, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        Course persisted = await verifyCtx.Courses.SingleAsync(x => x.Id == courseId);
+        Assert.AreEqual(ipswich.Id, persisted.LocationId);
+        Assert.AreEqual("Renamed", persisted.Name);
+    }
 }
