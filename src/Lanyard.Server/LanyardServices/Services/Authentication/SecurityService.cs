@@ -12,6 +12,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Lanyard.Infrastructure.Branding;
 
 namespace Lanyard.Application.Services.Authentication;
@@ -27,6 +28,7 @@ public class SecurityService : ISecurityService
     private readonly NavigationManager _navigationManager;
     private readonly IEmailService _emailService;
     private readonly ICompanyLocationService _companyLocationService;
+    private readonly IOptions<EmailOptions> _emailOptions;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -37,7 +39,8 @@ public class SecurityService : ISecurityService
         ILogger<SecurityService> logger,
         NavigationManager navigationManager,
         IEmailService emailService,
-        ICompanyLocationService companyLocationService)
+        ICompanyLocationService companyLocationService,
+        IOptions<EmailOptions> emailOptions)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
@@ -48,6 +51,7 @@ public class SecurityService : ISecurityService
         _navigationManager = navigationManager;
         _emailService = emailService;
         _companyLocationService = companyLocationService;
+        _emailOptions = emailOptions;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -334,13 +338,28 @@ public class SecurityService : ISecurityService
     private async Task<Result<bool>> SendSetPasswordLinkEmailAsync(UserProfile user)
     {
         string token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        string setPasswordUrl = $"{_navigationManager.BaseUri}set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
+
+        // Both URLs below are consumed by a mail client on someone else's machine, so they must
+        // be absolute and externally reachable. NavigationManager.BaseUri is the host of whatever
+        // request happens to be running (localhost in dev, an internal hostname behind the proxy
+        // in production) and is therefore wrong here - use the configured public base URL, the
+        // same value CourseRecurrenceHostedService builds its email links from. BaseUri remains
+        // the fallback only when PublicBaseUrl has not been configured at all.
+        string baseUrl = string.IsNullOrWhiteSpace(_emailOptions.Value.PublicBaseUrl)
+            ? _navigationManager.BaseUri.TrimEnd('/')
+            : _emailOptions.Value.PublicBaseUrl.TrimEnd('/');
+
+        string setPasswordUrl = $"{baseUrl}/set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
 
         string? logoUrl = null;
         string accentColorHex = BrandConstants.PrimaryColorHex;
 
         Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(user.Id);
 
+        // Known, accepted limitation: a user who belongs to locations across more than one company
+        // gets an arbitrary company's branding here - GetLocationsForUserAsync orders by location
+        // name, so locations[0] carries no precedence meaning. Invite emails are not worth a
+        // "primary company" concept; the branding is cosmetic and the link itself is unaffected.
         if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
         {
             if (!string.IsNullOrWhiteSpace(company.ThemeColorHex))
@@ -350,7 +369,7 @@ public class SecurityService : ISecurityService
 
             if (company.LogoFileId is not null)
             {
-                logoUrl = $"{_navigationManager.BaseUri}api/companies/{company.Id}/logo";
+                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo";
             }
         }
 

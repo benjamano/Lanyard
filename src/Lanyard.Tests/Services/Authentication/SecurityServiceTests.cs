@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
@@ -79,7 +80,8 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager,
             bool isAdmin,
             IEmailService emailService,
-            Mock<ICompanyLocationService>? companyLocationServiceMock = null)
+            Mock<ICompanyLocationService>? companyLocationServiceMock = null,
+            string publicBaseUrl = "")
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
@@ -106,7 +108,8 @@ namespace Lanyard.Tests.Services.Authentication
                 NullLogger<SecurityService>.Instance,
                 new TestNavigationManager(),
                 emailService,
-                resolvedCompanyLocationServiceMock.Object);
+                resolvedCompanyLocationServiceMock.Object,
+                Options.Create(new EmailOptions { PublicBaseUrl = publicBaseUrl }));
         }
 
         [TestMethod]
@@ -406,6 +409,103 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(resendResult.IsSuccess);
             Assert.Contains("administrator", resendResult.Error);
+        }
+
+        [TestMethod]
+        public async Task CreateUserAsync_BuildsEmailUrlsFromPublicBaseUrl_NotNavigationManagerBaseUri()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            string? capturedSetPasswordUrl = null;
+            string? capturedLogoUrl = null;
+            string? capturedAccentColor = null;
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
+                .Callback<UserProfile, string, string?, string>((_, setPasswordUrl, logoUrl, accentColor) =>
+                {
+                    capturedSetPasswordUrl = setPasswordUrl;
+                    capturedLogoUrl = logoUrl;
+                    capturedAccentColor = accentColor;
+                })
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Mock<ICompanyLocationService> companyLocationServiceMock = new();
+
+            SecurityService service = BuildService(
+                options,
+                userManager,
+                isAdmin: false,
+                emailServiceMock.Object,
+                companyLocationServiceMock,
+                publicBaseUrl: "https://public.lanyard.example/");
+
+            // Re-stated after BuildService, which installs a returns-nothing default for this
+            // member - the last Moq setup wins, and this one gives the branding branch a company.
+            companyLocationServiceMock
+                .Setup(c => c.GetLocationsForUserAsync(It.IsAny<string>()))
+                .ReturnsAsync(Result<List<Location>>.Ok(
+                [
+                    new Location
+                    {
+                        Id = 1,
+                        CompanyId = 7,
+                        Name = "Ipswich",
+                        Company = new Company
+                        {
+                            Id = 7,
+                            Name = "Play2Day",
+                            ThemeColorHex = "#C8102E",
+                            LogoFileId = Guid.NewGuid()
+                        }
+                    }
+                ]));
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+
+            // Emails are read on someone else's machine, so both URLs must come from the
+            // configured public base URL, never from the current request's host.
+            Assert.IsNotNull(capturedLogoUrl);
+            Assert.AreEqual("https://public.lanyard.example/api/companies/7/logo", capturedLogoUrl);
+            Assert.IsNotNull(capturedSetPasswordUrl);
+            Assert.StartsWith("https://public.lanyard.example/set-password?userId=", capturedSetPasswordUrl);
+            Assert.DoesNotContain("test.lanyard.local", capturedSetPasswordUrl);
+            Assert.AreEqual("#C8102E", capturedAccentColor);
+        }
+
+        [TestMethod]
+        public async Task CreateUserAsync_NoPublicBaseUrl_FallsBackToNavigationManagerBaseUri()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            string? capturedSetPasswordUrl = null;
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
+                .Callback<UserProfile, string, string?, string>((_, setPasswordUrl, _, _) => capturedSetPasswordUrl = setPasswordUrl)
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsNotNull(capturedSetPasswordUrl);
+            Assert.StartsWith("https://test.lanyard.local/set-password?userId=", capturedSetPasswordUrl);
         }
 
         [TestMethod]
