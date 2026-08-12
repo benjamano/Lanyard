@@ -1,0 +1,174 @@
+@using Lanyard.Application.Services.Locations
+
+@inject INotificationService ToastService
+
+<FluentCard Height="auto" Style="min-height:30vh;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentText Typo="Typography.H4">Companies &amp; Locations</FluentText>
+
+        <FluentGrid Class="w-100">
+            <FluentGridItem Xs="12" Sm="4">
+                <FluentCard Height="auto">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        <FluentText Typo="Typography.H6">Companies</FluentText>
+
+                        <FluentTextInput @bind-Value="newCompanyName" Label="New company name" Placeholder="Partyman" Style="width: 100%;" />
+                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddCompany">Add Company</FluentButton>
+
+                        <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                            <TemplateColumn Title="Name">
+                                @context.Name
+                            </TemplateColumn>
+                            <TemplateColumn Title="Actions">
+                                <FluentButton Appearance="@(selectedCompany?.Id == context.Id ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                                              OnClick="@(() => SelectCompany(context))">
+                                    Select
+                                </FluentButton>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </FluentStack>
+                </FluentCard>
+            </FluentGridItem>
+
+            <FluentGridItem Xs="12" Sm="8">
+                @if (selectedCompany is not null)
+                {
+                    <FluentCard Height="auto">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText Typo="Typography.H6">Locations for @selectedCompany.Name</FluentText>
+
+                            <FluentTextInput @bind-Value="newLocationName" Label="New location name" Placeholder="Ipswich" Style="width: 100%;" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddLocation">Add Location</FluentButton>
+
+                            @if (!locationsForSelectedCompany.Any())
+                            {
+                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                    No locations yet for this company.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@locationsForSelectedCompany.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                    <TemplateColumn Title="Name">
+                                        @context.GetDisplayName()
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => DeactivateLocation(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public EventCallback OnLocationsChanged { get; set; }
+
+    private List<Company> companies = [];
+    private List<Location> locationsForSelectedCompany = [];
+    private Company? selectedCompany;
+    private string newCompanyName = string.Empty;
+    private string newLocationName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompaniesAsync();
+    }
+
+    private async Task LoadCompaniesAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+
+        if (result.IsSuccess)
+        {
+            companies = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load companies: {result.Error}");
+        }
+    }
+
+    private async Task AddCompany()
+    {
+        if (string.IsNullOrWhiteSpace(newCompanyName))
+        {
+            return;
+        }
+
+        Result<Company> result = await _companyLocationService.SaveCompanyAsync(new Company { Name = newCompanyName });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add company: {result.Error}");
+            return;
+        }
+
+        newCompanyName = string.Empty;
+        await LoadCompaniesAsync();
+    }
+
+    private async Task SelectCompany(Company company)
+    {
+        selectedCompany = company;
+        await LoadLocationsAsync();
+    }
+
+    private async Task LoadLocationsAsync()
+    {
+        if (selectedCompany is null)
+        {
+            return;
+        }
+
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync(selectedCompany.Id);
+
+        if (result.IsSuccess)
+        {
+            locationsForSelectedCompany = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load locations: {result.Error}");
+        }
+    }
+
+    private async Task AddLocation()
+    {
+        if (selectedCompany is null || string.IsNullOrWhiteSpace(newLocationName))
+        {
+            return;
+        }
+
+        Result<Location> result = await _companyLocationService.SaveLocationAsync(new Location { CompanyId = selectedCompany.Id, Name = newLocationName });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add location: {result.Error}");
+            return;
+        }
+
+        newLocationName = string.Empty;
+        await LoadLocationsAsync();
+        await OnLocationsChanged.InvokeAsync();
+    }
+
+    private async Task DeactivateLocation(int locationId)
+    {
+        Result<bool> result = await _companyLocationService.DeactivateLocationAsync(locationId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to deactivate location: {result.Error}");
+            return;
+        }
+
+        await LoadLocationsAsync();
+        await OnLocationsChanged.InvokeAsync();
+    }
+}

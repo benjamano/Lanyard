@@ -1,0 +1,184 @@
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Locations
+
+@inject INotificationService ToastService
+
+<FluentCard Height="auto" Style="min-height:30vh;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentText Typo="Typography.H4">Staff Locations</FluentText>
+
+        <FluentGrid Class="w-100">
+            <FluentGridItem Xs="12" Sm="2">
+                <FluentSelect TOption="UserProfile"
+                              TValue="string"
+                              Items="@userProfiles.OrderBy(x => x.GetName())"
+                              OptionText="@(i => i?.GetName() ?? string.Empty)"
+                              OptionValue="@(i => i?.Id)"
+                              Placeholder="Select a User..."
+                              Label="Select User"
+                              Value="@selectedUserId"
+                              ValueChanged="SetUserAndLoadLocations"
+                              Width="100%">
+                </FluentSelect>
+            </FluentGridItem>
+
+            <FluentGridItem Xs="12" Sm="5">
+                @if (selectedUserId is not null)
+                {
+                    <FluentCard Height="auto">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText Typo="Typography.H6">Assigned Locations</FluentText>
+
+                            @if (!assignedLocations.Any())
+                            {
+                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                    This user has no location memberships.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@assignedLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                    <TemplateColumn Title="Location">
+                                        @context.GetDisplayName()
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => RemoveLocation(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+
+            <FluentGridItem Xs="12" Sm="5">
+                @if (selectedUserId is not null)
+                {
+                    <FluentCard Height="auto">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText Typo="Typography.H6">Add Location</FluentText>
+
+                            @if (!availableLocations.Any())
+                            {
+                                <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                                    No more locations left to assign.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@availableLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;">
+                                    <TemplateColumn Title="Location">
+                                        @context.GetDisplayName()
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())" OnClick="@(() => AddLocation(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentStack>
+</FluentCard>
+
+@code {
+    private List<UserProfile> userProfiles = [];
+    private List<Location> allLocations = [];
+    private List<Location> assignedLocations = [];
+    private List<Location> availableLocations = [];
+    private string? selectedUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userProfiles = (await _securityService.GetAllUsersAsync()).ToList();
+        await ReloadLocationsAsync();
+    }
+
+    public async Task ReloadLocationsAsync()
+    {
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync();
+
+        if (result.IsSuccess)
+        {
+            allLocations = result.Data!;
+            RecomputeAvailable();
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load locations: {result.Error}");
+        }
+    }
+
+    private async Task SetUserAndLoadLocations(string? userId)
+    {
+        selectedUserId = userId;
+        await LoadAssignedLocationsAsync();
+    }
+
+    private async Task LoadAssignedLocationsAsync()
+    {
+        if (selectedUserId is null)
+        {
+            assignedLocations = [];
+            RecomputeAvailable();
+            return;
+        }
+
+        Result<List<Location>> result = await _companyLocationService.GetLocationsForUserAsync(selectedUserId);
+
+        if (result.IsSuccess)
+        {
+            assignedLocations = result.Data!;
+            RecomputeAvailable();
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load user's locations: {result.Error}");
+        }
+    }
+
+    private void RecomputeAvailable()
+    {
+        availableLocations = [.. allLocations.Where(l => assignedLocations.All(a => a.Id != l.Id))];
+    }
+
+    private async Task AddLocation(int locationId)
+    {
+        if (selectedUserId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _companyLocationService.AddUserToLocationAsync(selectedUserId, locationId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add location: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Location assigned.");
+        await LoadAssignedLocationsAsync();
+    }
+
+    private async Task RemoveLocation(int locationId)
+    {
+        if (selectedUserId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _companyLocationService.RemoveUserFromLocationAsync(selectedUserId, locationId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to remove location: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Location removed.");
+        await LoadAssignedLocationsAsync();
+    }
+}
