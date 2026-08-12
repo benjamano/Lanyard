@@ -32,3 +32,9 @@ html, body {
     transform: rotate(180deg) translateY(-22%);
     padding-bottom: 0.1rem;
 }
+
+.nav-brand-logo {
+    height: 28px;
+    margin-right: 8px;
+    object-fit: contain;
+}

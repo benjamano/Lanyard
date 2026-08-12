@@ -17,6 +17,10 @@
             </AuthorizeView>
 
             <FluentLink Href="/" Class="nav-brand">
+                @if (_companyLogoUrl is not null)
+                {
+                    <img src="@_companyLogoUrl" alt="Company logo" class="nav-brand-logo" />
+                }
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
                         Lan<span class="nav-brand-flip">y</span>ard
@@ -88,6 +92,7 @@
 
 @code {
     private ErrorBoundary? _errorBoundary;
+    private string? _companyLogoUrl;
 
     protected override void OnInitialized()
     {
@@ -100,6 +105,31 @@
         {
             return;
         }
+
+        string accentColor = BrandConstants.PrimaryColorHex;
+
+        try
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (scopeResult.Success && scopeResult.Data is { IsAdmin: false, CompanyId: int companyId })
+            {
+                Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+                if (branding.Success && branding.Data is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(branding.Data.ThemeColorHex))
+                    {
+                        accentColor = branding.Data.ThemeColorHex;
+                    }
+
+                    _companyLogoUrl = branding.Data.LogoFileId is not null
+                        ? $"/api/companies/{companyId}/logo"
+                        : null;
+                }
+            }
+        }
+        catch { }
 
         try
         {
@@ -117,9 +147,11 @@
                 _ => ThemeMode.System
             };
 
-            await ThemeService.SetThemeAsync(new ThemeSettings(BrandConstants.PrimaryColorHex, 0, 0, mode, true));
+            await ThemeService.SetThemeAsync(new ThemeSettings(accentColor, 0, 0, mode, true));
         }
         catch { }
+
+        StateHasChanged();
     }
 
     private void Recover() => _errorBoundary?.Recover();
