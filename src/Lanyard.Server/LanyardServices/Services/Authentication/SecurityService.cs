@@ -25,6 +25,7 @@ public class SecurityService : ISecurityService
     private readonly ILogger<SecurityService> _logger;
     private readonly NavigationManager _navigationManager;
     private readonly IEmailService _emailService;
+    private readonly ICompanyLocationService _companyLocationService;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -34,7 +35,8 @@ public class SecurityService : ISecurityService
         ICourseService courseService,
         ILogger<SecurityService> logger,
         NavigationManager navigationManager,
-        IEmailService emailService)
+        IEmailService emailService,
+        ICompanyLocationService companyLocationService)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
@@ -44,6 +46,7 @@ public class SecurityService : ISecurityService
         _logger = logger;
         _navigationManager = navigationManager;
         _emailService = emailService;
+        _companyLocationService = companyLocationService;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -150,7 +153,7 @@ public class SecurityService : ISecurityService
         return await ctx.Users.ToListAsync();
     }
 
-    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user)
+    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds)
     {
         try
         {
@@ -175,6 +178,11 @@ public class SecurityService : ISecurityService
                 return Result<UserCreationResult>.Fail("A valid email address is required to invite a new user.");
             }
 
+            if (locationIds is null || locationIds.Count == 0)
+            {
+                return Result<UserCreationResult>.Fail("At least one location is required.");
+            }
+
             string initial = user.FirstName.ToLowerInvariant()[..1];
             string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
@@ -188,6 +196,16 @@ public class SecurityService : ISecurityService
             {
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<UserCreationResult>.Fail($"Failed to create user: {errors}");
+            }
+
+            foreach (int locationId in locationIds)
+            {
+                Result<bool> membershipResult = await _companyLocationService.AddUserToLocationAsync(user.Id, locationId);
+
+                if (!membershipResult.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to add newly created user {UserId} to location {LocationId}: {Error}", user.Id, locationId, membershipResult.Error);
+                }
             }
 
             try

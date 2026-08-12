@@ -78,7 +78,8 @@ namespace Lanyard.Tests.Services.Authentication
             DbContextOptions<ApplicationDbContext> options,
             UserManager<UserProfile> userManager,
             bool isAdmin,
-            IEmailService emailService)
+            IEmailService emailService,
+            Mock<ICompanyLocationService>? companyLocationServiceMock = null)
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
@@ -88,6 +89,11 @@ namespace Lanyard.Tests.Services.Authentication
 
             Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
 
+            Mock<ICompanyLocationService> resolvedCompanyLocationServiceMock = companyLocationServiceMock ?? new Mock<ICompanyLocationService>();
+            resolvedCompanyLocationServiceMock
+                .Setup(c => c.AddUserToLocationAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
             return new SecurityService(
                 BuildAuthProvider(isAdmin).Object,
                 factoryMock.Object,
@@ -96,7 +102,8 @@ namespace Lanyard.Tests.Services.Authentication
                 courseServiceMock.Object,
                 NullLogger<SecurityService>.Instance,
                 new TestNavigationManager(),
-                emailService);
+                emailService,
+                resolvedCompanyLocationServiceMock.Object);
         }
 
         [TestMethod]
@@ -116,7 +123,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.IsNotNull(result.Data);
@@ -144,7 +151,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = null
-            });
+            }, locationIds: [1]);
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("email", result.Error);
@@ -168,7 +175,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.IsNotNull(result.Data);
@@ -196,7 +203,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             Assert.IsTrue(createResult.IsSuccess, createResult.Error);
             UserProfile user = createResult.Data!.User;
@@ -230,7 +237,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
             string token = await userManager.GeneratePasswordResetTokenAsync(user);
@@ -263,7 +270,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
             string firstToken = await userManager.GeneratePasswordResetTokenAsync(user);
@@ -301,7 +308,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
 
@@ -328,7 +335,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
 
@@ -355,7 +362,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
             string token = await userManager.GeneratePasswordResetTokenAsync(user);
@@ -387,7 +394,7 @@ namespace Lanyard.Tests.Services.Authentication
                 FirstName = "Jane",
                 LastName = "Doe",
                 Email = "jane@example.com"
-            });
+            }, locationIds: [1]);
 
             UserProfile user = createResult.Data!.User;
 
@@ -396,6 +403,50 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(resendResult.IsSuccess);
             Assert.Contains("administrator", resendResult.Error);
+        }
+
+        [TestMethod]
+        public async Task CreateUserAsync_NoLocationIds_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(
+                new UserProfile { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+                locationIds: []);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.AreEqual("At least one location is required.", result.Error);
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [TestMethod]
+        public async Task CreateUserAsync_WithLocationIds_AddsUserToEachLocation()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Mock<ICompanyLocationService> companyLocationServiceMock = new();
+            companyLocationServiceMock
+                .Setup(c => c.AddUserToLocationAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object, companyLocationServiceMock);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(
+                new UserProfile { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+                locationIds: [1, 2]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            companyLocationServiceMock.Verify(x => x.AddUserToLocationAsync(It.IsAny<string>(), 1), Times.Once);
+            companyLocationServiceMock.Verify(x => x.AddUserToLocationAsync(It.IsAny<string>(), 2), Times.Once);
         }
     }
 }
