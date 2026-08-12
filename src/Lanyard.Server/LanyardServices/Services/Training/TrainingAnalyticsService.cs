@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
@@ -11,7 +12,7 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    public async Task<Result<List<TraineeScoreRankingRow>>> GetTopScoringTraineesAsync(Guid courseId, int topN = 10)
+    public async Task<Result<List<TraineeScoreRankingRow>>> GetTopScoringTraineesAsync(Guid courseId, LocationScope scope, int topN = 10)
     {
         try
         {
@@ -21,7 +22,7 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Attempts)
-                .Where(x => x.CourseId == courseId && x.IsActive && x.Attempts.Count > 0)
+                .Where(x => x.CourseId == courseId && x.IsActive && x.Attempts.Count > 0 && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .ToListAsync();
 
             List<TraineeScoreRankingRow> rows = [.. assignments
@@ -42,13 +43,13 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
         }
     }
 
-    public Task<Result<List<TraineeTimingRankingRow>>> GetFastestCompletionsAsync(Guid courseId, int topN = 10) =>
-        GetTimingRankingAsync(courseId, topN, descending: false);
+    public Task<Result<List<TraineeTimingRankingRow>>> GetFastestCompletionsAsync(Guid courseId, LocationScope scope, int topN = 10) =>
+        GetTimingRankingAsync(courseId, scope, topN, descending: false);
 
-    public Task<Result<List<TraineeTimingRankingRow>>> GetSlowestCompletionsAsync(Guid courseId, int topN = 10) =>
-        GetTimingRankingAsync(courseId, topN, descending: true);
+    public Task<Result<List<TraineeTimingRankingRow>>> GetSlowestCompletionsAsync(Guid courseId, LocationScope scope, int topN = 10) =>
+        GetTimingRankingAsync(courseId, scope, topN, descending: true);
 
-    private async Task<Result<List<TraineeTimingRankingRow>>> GetTimingRankingAsync(Guid courseId, int topN, bool descending)
+    private async Task<Result<List<TraineeTimingRankingRow>>> GetTimingRankingAsync(Guid courseId, LocationScope scope, int topN, bool descending)
     {
         try
         {
@@ -57,7 +58,7 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
             List<CourseAssignment> completed = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.CourseId == courseId && x.IsActive && x.StartedDate != null && x.CompletedDate != null)
+                .Where(x => x.CourseId == courseId && x.IsActive && x.StartedDate != null && x.CompletedDate != null && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .ToListAsync();
 
             IEnumerable<TraineeTimingRankingRow> rows = completed
@@ -75,7 +76,7 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
         }
     }
 
-    public async Task<Result<CourseCompletionSummary>> GetCourseCompletionSummaryAsync(Guid courseId)
+    public async Task<Result<CourseCompletionSummary>> GetCourseCompletionSummaryAsync(Guid courseId, LocationScope scope)
     {
         try
         {
@@ -95,7 +96,7 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Attempts)
-                .Where(x => x.CourseId == courseId && x.IsActive)
+                .Where(x => x.CourseId == courseId && x.IsActive && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .ToListAsync();
 
             int notStarted = assignments.Count(x => x.GetStatus() == CourseAssignmentStatus.NotStarted);
