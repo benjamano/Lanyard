@@ -191,11 +191,101 @@ public class CompanyLocationServiceTests
             await ctx.SaveChangesAsync();
         }
 
+        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E" });
+
         Result<List<LoginLocationOption>> result = await service.GetLoginLocationOptionsAsync();
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(1, result.Data!);
         Assert.AreEqual(ipswich.Id, result.Data![0].LocationId);
         Assert.AreEqual("Play2Day Ipswich", result.Data![0].DisplayName);
+        Assert.AreEqual(company.Id, result.Data![0].CompanyId);
+        Assert.AreEqual("#C8102E", result.Data[0].ThemeColorHex);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_SaveCompany_RejectsMalformedHexColor()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        Result<Company> result = await service.SaveCompanyAsync(new Company { Name = "Play2Day", ThemeColorHex = "red" });
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Theme color must be a hex value like #C8102E.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_SaveCompany_AcceptsValidHexColorAndLogoFileId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        Guid logoFileId = Guid.NewGuid();
+
+        Result<Company> result = await service.SaveCompanyAsync(new Company { Name = "Play2Day", ThemeColorHex = "#C8102E", LogoFileId = logoFileId });
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Company dbCompany = await ctx.Companies.SingleAsync(x => x.Id == result.Data!.Id);
+        Assert.AreEqual("#C8102E", dbCompany.ThemeColorHex);
+        Assert.AreEqual(logoFileId, dbCompany.LogoFileId);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_SaveCompany_EmptyHexColorIsStoredAsNull()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        Result<Company> result = await service.SaveCompanyAsync(new Company { Name = "Play2Day", ThemeColorHex = "   " });
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Company dbCompany = await ctx.Companies.SingleAsync(x => x.Id == result.Data!.Id);
+        Assert.IsNull(dbCompany.ThemeColorHex);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetCompanyBranding_ReturnsBrandingForActiveCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        Guid logoFileId = Guid.NewGuid();
+        (Company company, _) = await SeedCompanyAndLocationAsync(options);
+        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E", LogoFileId = logoFileId });
+
+        Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingAsync(company.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual("#C8102E", result.Data!.ThemeColorHex);
+        Assert.AreEqual(logoFileId, result.Data.LogoFileId);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetCompanyBranding_FailsForMissingCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingAsync(999);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetCompanyBrandingForLocation_ResolvesThroughLocationToCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        (Company company, Location location) = await SeedCompanyAndLocationAsync(options);
+        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E" });
+
+        Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingForLocationAsync(location.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(company.Id, result.Data!.CompanyId);
+        Assert.AreEqual("#C8102E", result.Data.ThemeColorHex);
     }
 }

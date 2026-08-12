@@ -8,6 +8,10 @@ namespace Lanyard.Infrastructure.Models
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
 
+        public string? ThemeColorHex { get; set; }   // e.g. "#c8102e"; null => falls back to BrandConstants.PrimaryColorHex
+        public Guid? LogoFileId { get; set; }         // FK -> FileMetadata.Id; null => navbar falls back to text-only wordmark
+        public FileMetadata? LogoFile { get; set; }
+
         public virtual List<Location> Locations { get; set; } = [];
     }
 

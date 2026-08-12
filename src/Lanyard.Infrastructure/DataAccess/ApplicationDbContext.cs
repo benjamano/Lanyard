@@ -156,6 +156,12 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserLocationMembership>()
                 .HasIndex(x => new { x.UserId, x.LocationId })
                 .IsUnique();
+
+            modelBuilder.Entity<Company>()
+                .HasOne(x => x.LogoFile)
+                .WithMany()
+                .HasForeignKey(x => x.LogoFileId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

@@ -3,7 +3,8 @@ using Lanyard.Infrastructure.Models;
 
 namespace Lanyard.Application.Services.Locations;
 
-public record LoginLocationOption(int LocationId, string DisplayName);
+public record LoginLocationOption(int LocationId, string DisplayName, int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
+public record CompanyBrandingInfo(int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
 
 public interface ICompanyLocationService
 {
@@ -22,4 +23,6 @@ public interface ICompanyLocationService
 
     Task<Result<bool>> IsUserMemberOfLocationAsync(string userId, int locationId);
     Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync();
+    Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId);
+    Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForLocationAsync(int locationId);
 }

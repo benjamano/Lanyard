@@ -2,6 +2,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
 
@@ -39,6 +40,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Company>.Fail("Company name is required.");
             }
 
+            string? normalizedColor = string.IsNullOrWhiteSpace(company.ThemeColorHex) ? null : company.ThemeColorHex.Trim();
+
+            if (normalizedColor is not null && !Regex.IsMatch(normalizedColor, "^#[0-9A-Fa-f]{6}$"))
+            {
+                return Result<Company>.Fail("Theme color must be a hex value like #C8102E.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Company? existing = company.Id == 0 ? null : await ctx.Companies.FirstOrDefaultAsync(x => x.Id == company.Id);
@@ -47,7 +55,15 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 
             if (existing is null)
             {
-                target = new Company { Name = company.Name.Trim(), IsActive = true, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
+                target = new Company
+                {
+                    Name = company.Name.Trim(),
+                    IsActive = true,
+                    CreateDate = DateTime.UtcNow,
+                    UpdateDate = DateTime.UtcNow,
+                    ThemeColorHex = normalizedColor,
+                    LogoFileId = company.LogoFileId
+                };
                 ctx.Companies.Add(target);
             }
             else
@@ -55,6 +71,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 target = existing;
                 target.Name = company.Name.Trim();
                 target.UpdateDate = DateTime.UtcNow;
+                target.ThemeColorHex = normalizedColor;
+                target.LogoFileId = company.LogoFileId;
             }
 
             await ctx.SaveChangesAsync();
@@ -339,6 +357,55 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         }
     }
 
+    public async Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Company? company = await ctx.Companies
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == companyId && x.IsActive);
+
+            if (company is null)
+            {
+                return Result<CompanyBrandingInfo>.Fail("Company not found.");
+            }
+
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId));
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyBrandingInfo>.Fail($"Failed to retrieve company branding: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForLocationAsync(int locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Location? location = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Company)
+                .FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (location?.Company is null)
+            {
+                return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
+            }
+
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId));
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyBrandingInfo>.Fail($"Failed to retrieve company branding for location: {ex.Message}");
+        }
+    }
+
     public async Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync()
     {
         try
@@ -353,7 +420,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 .OrderBy(x => x.Company!.Name).ThenBy(x => x.Name)
                 .ToListAsync();
 
-            List<LoginLocationOption> options = [.. locations.Select(x => new LoginLocationOption(x.Id, x.GetDisplayName()))];
+            List<LoginLocationOption> options = [.. locations.Select(x => new LoginLocationOption(
+                x.Id, x.GetDisplayName(), x.CompanyId, x.Company!.ThemeColorHex, x.Company!.LogoFileId))];
 
             return Result<List<LoginLocationOption>>.Ok(options);
         }
