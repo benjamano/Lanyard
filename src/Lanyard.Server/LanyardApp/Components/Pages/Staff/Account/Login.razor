@@ -9,11 +9,16 @@
              HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
 
     <FluentCard Style="width: 300px; max-width: 90vw; padding: 32px;">
-        <div class="login-accent-bar" style="@AccentBarStyle"></div>
+        @if (SelectedAccentColor is not null)
+        {
+            <div class="login-accent-bar" style="@AccentBarStyle"></div>
+        }
 
         @if (SelectedLogoUrl is not null)
         {
-            <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" />
+            @* onerror is a deliberate one-line fallback: if the logo blob has gone missing the
+               <img> would otherwise render a broken-image icon, and there is no CSS-only equivalent. *@
+            <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" onerror="this.style.display='none'" />
         }
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
                      HorizontalAlignment="HorizontalAlignment.Center">
@@ -92,9 +97,9 @@
     private string? SelectedAccentColor;
     private string? SelectedLogoUrl;
 
-    private string AccentBarStyle => SelectedAccentColor is null
-        ? "display:none;"
-        : $"background-color:{SelectedAccentColor};height:6px;margin:-32px -32px 8px;";
+    // Only the colour is dynamic - the bar's height and negative margins are static and live
+    // in .login-accent-bar in Login.razor.css.
+    private string AccentBarStyle => $"background-color:{SelectedAccentColor};";
 
     protected override async Task OnInitializedAsync()
     {

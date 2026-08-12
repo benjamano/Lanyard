@@ -1,8 +1,10 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 
 @inject NavigationManager NavigationManager
 @inject IThemeService ThemeService
 @inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <FluentProviders />
 
@@ -19,7 +21,9 @@
             <FluentLink Href="/" Class="nav-brand">
                 @if (_companyLogoUrl is not null)
                 {
-                    <img src="@_companyLogoUrl" alt="Company logo" class="nav-brand-logo" />
+                    @* onerror is a deliberate one-line fallback: if the logo blob has gone missing the
+                       <img> would otherwise render a broken-image icon, and there is no CSS-only equivalent. *@
+                    <img src="@_companyLogoUrl" alt="Company logo" class="nav-brand-logo" onerror="this.style.display='none'" />
                 }
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
@@ -97,6 +101,18 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
+
+        // Branding must not outlive the identity it was resolved for. A one-shot firstRender
+        // resolve would leave the previous user's logo and accent colour on screen if the
+        // authenticated identity changes without the circuit being torn down (an enhanced
+        // navigation to /api/auth/logout can preserve component instances), which on a shared
+        // kiosk means the next person to log in sees the last person's company branding.
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(ApplyBrandingAsync);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -106,7 +122,16 @@
             return;
         }
 
+        await ApplyBrandingAsync();
+    }
+
+    private async Task ApplyBrandingAsync()
+    {
+        // Reset to the Lanyard defaults first, so a state with no company branding (signed out,
+        // an admin, or a company that has set none) actively clears whatever was applied before
+        // rather than leaving the previous values in place.
         string accentColor = BrandConstants.PrimaryColorHex;
+        _companyLogoUrl = null;
 
         try
         {
@@ -155,4 +180,9 @@
     }
 
     private void Recover() => _errorBoundary?.Recover();
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
 }
