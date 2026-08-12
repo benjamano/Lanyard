@@ -1,8 +1,6 @@
 @page "/login"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
-@using Lanyard.Infrastructure.DTO
-
 @inject NavigationManager Navigation
 
 <PageTitle>Login</PageTitle>
@@ -44,6 +42,17 @@
                         </FluentTextInput>
                     </div>
 
+                    <div style="width: 100%;">
+                        <label for="locationId">Location</label>
+                        <select name="locationId" id="locationId" style="width: 100%; padding: 8px;">
+                            <option value="">Select your location</option>
+                            @foreach (LoginLocationOption option in locationOptions)
+                            {
+                                <option value="@option.LocationId">@option.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+
                     @* <FluentCheckbox Name="rememberMe"
                                     Label="Remember Me" /> *@
 
@@ -70,4 +79,16 @@
 
     [SupplyParameterFromQuery(Name = "error")]
     public string? ErrorMessage { get; set; }
+
+    private IEnumerable<LoginLocationOption> locationOptions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<LoginLocationOption>> result = await _companyLocationService.GetLoginLocationOptionsAsync();
+
+        if (result.IsSuccess)
+        {
+            locationOptions = result.Data!;
+        }
+    }
 }
