@@ -96,6 +96,71 @@ public class CurrentLocationContextServiceTests
     }
 
     [TestMethod]
+    public async Task CurrentLocationContext_AdminWithValidClaim_ResolvesLocationScopeButStaysAdmin()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+        int locationId;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Company company = new() { Name = "Play2Day", IsActive = true };
+            ctx.Companies.Add(company);
+            await ctx.SaveChangesAsync();
+
+            Location location = new() { CompanyId = company.Id, Name = "Ipswich", IsActive = true };
+            ctx.Locations.Add(location);
+            await ctx.SaveChangesAsync();
+            locationId = location.Id;
+        }
+
+        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options));
+
+        Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: true, locationId: locationId));
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+
+        Result<LocationScope> result = await service.GetScopeAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsTrue(result.Data!.IsAdmin);
+        Assert.AreEqual(locationId, result.Data.LocationId);
+        Assert.AreEqual("Play2Day Ipswich", result.Data.LocationDisplayName);
+    }
+
+    [TestMethod]
+    public async Task CurrentLocationContext_AdminWithInactiveLocation_FallsBackToDefaultInsteadOfFailing()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+        int locationId;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Company company = new() { Name = "Play2Day", IsActive = true };
+            ctx.Companies.Add(company);
+            await ctx.SaveChangesAsync();
+
+            Location location = new() { CompanyId = company.Id, Name = "Closed", IsActive = false };
+            ctx.Locations.Add(location);
+            await ctx.SaveChangesAsync();
+            locationId = location.Id;
+        }
+
+        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options));
+
+        Mock<AuthenticationStateProvider> authProvider = BuildAuthStateProvider(BuildPrincipal(isAdmin: true, locationId: locationId));
+        CurrentLocationContextService service = new(authProvider.Object, factoryMock.Object);
+
+        Result<LocationScope> result = await service.GetScopeAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsTrue(result.Data!.IsAdmin);
+        Assert.IsNull(result.Data.LocationId);
+    }
+
+    [TestMethod]
     public async Task CurrentLocationContext_NonAdminWithMissingClaim_Fails()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

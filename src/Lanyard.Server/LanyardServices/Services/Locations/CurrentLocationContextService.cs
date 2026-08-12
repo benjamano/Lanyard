@@ -24,15 +24,18 @@ public class CurrentLocationContextService(
                 return Result<LocationScope>.Fail("User is not authenticated.");
             }
 
-            if (authState.User.IsInRole("Admin"))
-            {
-                return Result<LocationScope>.Ok(new LocationScope(true, null, null, null));
-            }
-
+            bool isAdmin = authState.User.IsInRole("Admin");
             string? locationIdClaim = authState.User.FindFirst(LocationClaimTypes.LocationId)?.Value;
 
             if (string.IsNullOrEmpty(locationIdClaim) || !int.TryParse(locationIdClaim, out int locationId))
             {
+                // Admins don't have to pick a location at login (unlike everyone else) - no
+                // claim just means they get the default Lanyard branding, not a hard failure.
+                if (isAdmin)
+                {
+                    return Result<LocationScope>.Ok(new LocationScope(true, null, null, null));
+                }
+
                 return Result<LocationScope>.Fail("No location is set for this session. Please log in again.");
             }
 
@@ -46,10 +49,18 @@ public class CurrentLocationContextService(
 
             if (location is null || !location.IsActive)
             {
+                if (isAdmin)
+                {
+                    return Result<LocationScope>.Ok(new LocationScope(true, null, null, null));
+                }
+
                 return Result<LocationScope>.Fail("Your selected location is no longer available. Please log in again.");
             }
 
-            return Result<LocationScope>.Ok(new LocationScope(false, location.Id, location.CompanyId, location.GetDisplayName()));
+            // IsAdmin stays true here even though a location is attached: every scope.IsAdmin
+            // check elsewhere (course/training access) short-circuits before looking at
+            // LocationId, so this only ever adds branding info, never narrows an admin's access.
+            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName()));
         }
         catch (Exception ex)
         {

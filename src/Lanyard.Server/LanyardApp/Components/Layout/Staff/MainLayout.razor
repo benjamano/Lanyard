@@ -137,7 +137,10 @@
         {
             Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
-            if (scopeResult.Success && scopeResult.Data is { IsAdmin: false, CompanyId: int companyId })
+            // Admins who picked a location at login get that location's branding too, same
+            // as everyone else - IsAdmin is no longer a factor here, only whether a company
+            // was actually resolved (an admin with no location keeps the Lanyard default).
+            if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
             {
                 Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
 

@@ -143,14 +143,28 @@ namespace Lanyard.App.Controllers
         {
             bool isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
 
-            if (isAdmin)
-            {
-                return (true, null);
-            }
-
             if (locationId is null)
             {
-                return (false, "Please select your location.");
+                // Non-admins must belong to a location; admins can skip this and keep
+                // the default Lanyard branding (no company to derive it from).
+                return isAdmin ? (true, null) : (false, "Please select your location.");
+            }
+
+            if (isAdmin)
+            {
+                // Admins aren't location members, so membership can't gate them - instead,
+                // only allow picking a location that was actually offered on the login form
+                // (i.e. an active location under an active company).
+                Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
+
+                if (!optionsResult.IsSuccess || optionsResult.Data!.All(x => x.LocationId != locationId.Value))
+                {
+                    return (false, "The selected location is no longer available.");
+                }
+
+                claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
+
+                return (true, null);
             }
 
             Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
