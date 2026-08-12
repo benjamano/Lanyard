@@ -43,7 +43,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             if (scope.IsAdmin)
             {
-                Course course = await ctx.Courses.AsNoTracking().FirstAsync(x => x.Id == courseId);
+                Course course = await ctx.Courses.AsNoTracking().TagWithCallSite().FirstAsync(x => x.Id == courseId);
                 assignmentLocationId = course.LocationId;
             }
             else
@@ -323,7 +323,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             if (scope.IsAdmin)
             {
-                Course course = await ctx.Courses.AsNoTracking().FirstAsync(x => x.Id == courseId);
+                Course course = await ctx.Courses.AsNoTracking().TagWithCallSite().FirstAsync(x => x.Id == courseId);
                 assignmentLocationId = course.LocationId;
             }
             else

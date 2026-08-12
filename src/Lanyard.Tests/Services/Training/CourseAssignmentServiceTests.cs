@@ -807,4 +807,62 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);
     }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_NonAdmin_FiltersOutUsersOutsideActingManagersLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: ipswich.Id, isShared: true, name: "COSHH");
+        await SeedUserInLocationAsync(options, "ipswich-staff-1", ipswich.Id);
+        await SeedUserInLocationAsync(options, "ipswich-staff-2", ipswich.Id);
+        await SeedUserInLocationAsync(options, "wisbech-staff-1", wisbech.Id);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            sharedCourse.Id, ["ipswich-staff-1", "ipswich-staff-2", "wisbech-staff-1"], "manager-1", null, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(2, result.Data!.AssignedCount);
+
+        await using ApplicationDbContext ctx = new(options);
+        List<CourseAssignment> assignments = await ctx.CourseAssignments.Where(x => x.CourseId == sharedCourse.Id).ToListAsync();
+        Assert.HasCount(2, assignments);
+        Assert.IsTrue(assignments.All(x => x.UserId != "wisbech-staff-1"));
+        Assert.IsTrue(assignments.All(x => x.LocationId == ipswich.Id));
+    }
+
+    [TestMethod]
+    public async Task GetCourseTimingSummaryAsync_NonAdmin_OnlyIncludesOwnLocationsAssignments()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course sharedCourse = await SeedCourseAsync(options, locationId: ipswich.Id, isShared: true, name: "COSHH");
+
+        DateTime started = new(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        DateTime completed = started.AddMinutes(30);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CourseAssignments.Add(new CourseAssignment
+            {
+                Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "ipswich-staff", AssignedDate = started,
+                StartedDate = started, CompletedDate = completed, IsActive = true, LocationId = ipswich.Id
+            });
+            ctx.CourseAssignments.Add(new CourseAssignment
+            {
+                Id = Guid.NewGuid(), CourseId = sharedCourse.Id, UserId = "wisbech-staff", AssignedDate = started,
+                StartedDate = started, CompletedDate = completed, IsActive = true, LocationId = wisbech.Id
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<CourseTimingSummary> result = await service.GetCourseTimingSummaryAsync(sharedCourse.Id, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(1, result.Data!.CompletedCount);
+    }
 }
