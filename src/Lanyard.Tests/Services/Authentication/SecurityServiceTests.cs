@@ -93,6 +93,9 @@ namespace Lanyard.Tests.Services.Authentication
             resolvedCompanyLocationServiceMock
                 .Setup(c => c.AddUserToLocationAsync(It.IsAny<string>(), It.IsAny<int>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
+            resolvedCompanyLocationServiceMock
+                .Setup(c => c.GetLocationsForUserAsync(It.IsAny<string>()))
+                .ReturnsAsync(Result<List<Location>>.Ok([]));
 
             return new SecurityService(
                 BuildAuthProvider(isAdmin).Object,
@@ -113,7 +116,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -155,7 +158,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("email", result.Error);
-            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Never);
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
         }
 
         [TestMethod]
@@ -165,7 +168,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Fail("Email provider unreachable"));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -193,7 +196,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -227,7 +230,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -260,7 +263,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -298,7 +301,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
@@ -325,7 +328,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
@@ -342,7 +345,7 @@ namespace Lanyard.Tests.Services.Authentication
             Result<bool> resendResult = await service.SendSetPasswordLinkAsync(user.Id);
 
             Assert.IsTrue(resendResult.IsSuccess, resendResult.Error);
-            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Exactly(2));
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Exactly(2));
         }
 
         [TestMethod]
@@ -352,7 +355,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService service = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
@@ -374,7 +377,7 @@ namespace Lanyard.Tests.Services.Authentication
             Result<bool> resendResult = await service.SendSetPasswordLinkAsync(user.Id);
 
             Assert.IsTrue(resendResult.IsSuccess, resendResult.Error);
-            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Exactly(2));
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Exactly(2));
         }
 
         [TestMethod]
@@ -384,7 +387,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
@@ -420,7 +423,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(result.IsSuccess);
             Assert.AreEqual("At least one location is required.", result.Error);
-            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()), Times.Never);
+            emailServiceMock.Verify(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never);
         }
 
         [TestMethod]
@@ -430,7 +433,7 @@ namespace Lanyard.Tests.Services.Authentication
             UserManager<UserProfile> userManager = BuildUserManager(options);
 
             Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>()))
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             Mock<ICompanyLocationService> companyLocationServiceMock = new();

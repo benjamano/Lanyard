@@ -12,6 +12,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
+using Lanyard.Infrastructure.Branding;
 
 namespace Lanyard.Application.Services.Authentication;
 
@@ -334,7 +335,26 @@ public class SecurityService : ISecurityService
     {
         string token = await _userManager.GeneratePasswordResetTokenAsync(user);
         string setPasswordUrl = $"{_navigationManager.BaseUri}set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
-        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl);
+
+        string? logoUrl = null;
+        string accentColorHex = BrandConstants.PrimaryColorHex;
+
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(user.Id);
+
+        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
+        {
+            if (!string.IsNullOrWhiteSpace(company.ThemeColorHex))
+            {
+                accentColorHex = company.ThemeColorHex;
+            }
+
+            if (company.LogoFileId is not null)
+            {
+                logoUrl = $"{_navigationManager.BaseUri}api/companies/{company.Id}/logo";
+            }
+        }
+
+        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)

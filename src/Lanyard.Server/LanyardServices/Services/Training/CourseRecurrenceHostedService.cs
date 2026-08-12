@@ -1,4 +1,6 @@
 using Lanyard.Application.Services.Email;
+using Lanyard.Application.Services.Locations;
+using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -60,6 +62,7 @@ public class CourseRecurrenceHostedService(
         IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
         IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
         EmailOptions emailOptions = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
+        ICompanyLocationService companyLocationService = scope.ServiceProvider.GetRequiredService<ICompanyLocationService>();
 
         Result<List<CourseAssignment>> dueResult = await assignmentService.GetAssignmentsDueForRecurrenceAsync();
 
@@ -100,8 +103,29 @@ public class CourseRecurrenceHostedService(
 
                 string trainingUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/training/{newCycleResult.Data.Id}";
 
+                string? logoUrl = null;
+                string accentColorHex = BrandConstants.PrimaryColorHex;
+
+                if (previous.LocationId is int locationId)
+                {
+                    Result<CompanyBrandingInfo> brandingResult = await companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
+
+                    if (brandingResult.Success && brandingResult.Data is not null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(brandingResult.Data.ThemeColorHex))
+                        {
+                            accentColorHex = brandingResult.Data.ThemeColorHex;
+                        }
+
+                        if (brandingResult.Data.LogoFileId is not null)
+                        {
+                            logoUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo";
+                        }
+                    }
+                }
+
                 Result<bool> emailResult = await emailService.SendCourseRecurrenceReminderEmailAsync(
-                    user, previous.Course?.Name ?? "your training course", trainingUrl);
+                    user, previous.Course?.Name ?? "your training course", trainingUrl, logoUrl, accentColorHex);
 
                 if (!emailResult.IsSuccess)
                 {

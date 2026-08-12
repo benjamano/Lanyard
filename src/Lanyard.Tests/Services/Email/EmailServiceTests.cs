@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Lanyard.Application.Services.Email;
+using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,29 +21,34 @@ namespace Lanyard.Tests.Services.Email
             private readonly HttpStatusCode _statusCode;
             private readonly string _body;
 
+            public string? LastRequestBody { get; private set; }
+
             public FakeHttpMessageHandler(HttpStatusCode statusCode, string body = "")
             {
                 _statusCode = statusCode;
                 _body = body;
             }
 
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
-                return Task.FromResult(new HttpResponseMessage(_statusCode)
+                LastRequestBody = request.Content is not null ? await request.Content.ReadAsStringAsync(cancellationToken) : null;
+
+                return new HttpResponseMessage(_statusCode)
                 {
                     Content = new StringContent(_body)
-                });
+                };
             }
         }
 
-        private static EmailService BuildService(HttpStatusCode statusCode, EmailOptions options)
+        private static (EmailService service, FakeHttpMessageHandler handler) BuildService(HttpStatusCode statusCode, EmailOptions options)
         {
-            HttpClient httpClient = new(new FakeHttpMessageHandler(statusCode))
+            FakeHttpMessageHandler handler = new(statusCode);
+            HttpClient httpClient = new(handler)
             {
                 BaseAddress = new Uri("https://api.resend.com/")
             };
 
-            return new EmailService(httpClient, Options.Create(options), NullLogger<EmailService>.Instance);
+            return (new EmailService(httpClient, Options.Create(options), NullLogger<EmailService>.Instance), handler);
         }
 
         private static EmailOptions ValidOptions()
@@ -58,11 +64,13 @@ namespace Lanyard.Tests.Services.Email
         [TestMethod]
         public async Task SendSetPasswordEmailAsync_SuccessResponse_ReturnsOk()
         {
-            EmailService service = BuildService(HttpStatusCode.OK, ValidOptions());
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
 
             Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
-                "https://lanyard.example.com/set-password?userId=1&token=abc");
+                "https://lanyard.example.com/set-password?userId=1&token=abc",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.IsTrue(result.Data);
@@ -71,11 +79,13 @@ namespace Lanyard.Tests.Services.Email
         [TestMethod]
         public async Task SendSetPasswordEmailAsync_NonSuccessStatusCode_ReturnsFail()
         {
-            EmailService service = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
 
             Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
-                "https://lanyard.example.com/set-password?userId=1&token=abc");
+                "https://lanyard.example.com/set-password?userId=1&token=abc",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("401", result.Error);
@@ -84,7 +94,7 @@ namespace Lanyard.Tests.Services.Email
         [TestMethod]
         public async Task SendSetPasswordEmailAsync_MissingApiKey_ReturnsFail()
         {
-            EmailService service = BuildService(HttpStatusCode.OK, new EmailOptions
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, new EmailOptions
             {
                 ResendApiKey = "",
                 FromAddress = "noreply@example.com"
@@ -92,7 +102,9 @@ namespace Lanyard.Tests.Services.Email
 
             Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
-                "https://lanyard.example.com/set-password");
+                "https://lanyard.example.com/set-password",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("not configured", result.Error);
@@ -101,7 +113,7 @@ namespace Lanyard.Tests.Services.Email
         [TestMethod]
         public async Task SendSetPasswordEmailAsync_MissingFromAddress_ReturnsFail()
         {
-            EmailService service = BuildService(HttpStatusCode.OK, new EmailOptions
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, new EmailOptions
             {
                 ResendApiKey = "test-key",
                 FromAddress = ""
@@ -109,7 +121,9 @@ namespace Lanyard.Tests.Services.Email
 
             Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
-                "https://lanyard.example.com/set-password");
+                "https://lanyard.example.com/set-password",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("not configured", result.Error);
@@ -118,14 +132,66 @@ namespace Lanyard.Tests.Services.Email
         [TestMethod]
         public async Task SendSetPasswordEmailAsync_UserHasNoEmail_ReturnsFail()
         {
-            EmailService service = BuildService(HttpStatusCode.OK, ValidOptions());
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
 
             Result<bool> result = await service.SendSetPasswordEmailAsync(
                 new UserProfile { UserName = "jdoe", Email = null },
-                "https://lanyard.example.com/set-password");
+                "https://lanyard.example.com/set-password",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendSetPasswordEmailAsync_WithLogoAndColor_IncludesBothInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "https://lanyard.example.com/set-password?userId=1&token=abc",
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+            Assert.Contains("Lanyard", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendSetPasswordEmailAsync_NoLogo_OmitsImageTag()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendSetPasswordEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "https://lanyard.example.com/set-password",
+                logoUrl: null,
+                accentColorHex: "#167a47");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.DoesNotContain("<img", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendCourseRecurrenceReminderEmailAsync_WithLogoAndColor_IncludesBothInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendCourseRecurrenceReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                "https://lanyard.example.com/training/123",
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+            Assert.Contains("Lanyard", handler.LastRequestBody);
         }
     }
 }
