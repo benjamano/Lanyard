@@ -14,6 +14,10 @@
     color: var(--neutral-foreground-hint);
 }
 
+.company-location-manager ::deep .clm-form-heading {
+    font-weight: 600;
+}
+
 .company-location-manager ::deep .clm-color-swatch {
     width: 24px;
     height: 24px;

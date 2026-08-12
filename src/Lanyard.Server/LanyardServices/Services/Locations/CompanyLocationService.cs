@@ -71,6 +71,9 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 target = existing;
                 target.Name = company.Name.Trim();
                 target.UpdateDate = DateTime.UtcNow;
+                // Full replacement, not a patch: the edit form round-trips the company's complete
+                // current branding into its fields before a save, so a null/blank arriving here
+                // means "the admin cleared it", not "the caller omitted it".
                 target.ThemeColorHex = normalizedColor;
                 target.LogoFileId = company.LogoFileId;
             }

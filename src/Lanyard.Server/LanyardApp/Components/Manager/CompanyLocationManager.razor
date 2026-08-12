@@ -17,14 +17,40 @@
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                         <FluentText Typo="Typography.H6">Companies</FluentText>
 
-                        <FluentTextInput @bind-Value="newCompanyName" Label="New company name" Placeholder="Partyman" Class="clm-full-width" />
-                        <FluentTextInput @bind-Value="newCompanyThemeColor" Label="Theme color (hex)" Placeholder="#C8102E" Class="clm-full-width" />
-                        @if (!string.IsNullOrWhiteSpace(newCompanyThemeColor))
+                        <FluentText Typo="Typography.Body" Class="clm-form-heading">
+                            @(selectedCompany is null ? "Add a company" : $"Editing {selectedCompany.Name}")
+                        </FluentText>
+
+                        <FluentTextInput @bind-Value="companyName" Label="Company name" Placeholder="Partyman" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="companyThemeColor" Label="Theme color (hex)" Placeholder="#C8102E" Class="clm-full-width" />
+                        @if (!string.IsNullOrWhiteSpace(companyThemeColor))
                         {
-                            <div class="clm-color-swatch" style="background-color:@newCompanyThemeColor;"></div>
+                            <div class="clm-color-swatch" style="background-color:@companyThemeColor;"></div>
                         }
                         <FileUploader Accept="image/*" MaximumFileSize="@(5*1024*1024)" OnFileUploaded="OnLogoUploaded" />
-                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddCompany">Add Company</FluentButton>
+                        @if (companyLogoFileId is not null)
+                        {
+                            <FluentText Class="clm-empty-note">
+                                A logo is set. Upload a file to replace it, or clear it.
+                            </FluentText>
+                        }
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                            @if (selectedCompany is null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany">Add Company</FluentButton>
+                            }
+                            else
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany">Save Changes</FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New Company</FluentButton>
+                            }
+
+                            @if (companyLogoFileId is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearLogo">Clear Logo</FluentButton>
+                            }
+                        </FluentStack>
 
                         <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="clm-full-width">
                             <TemplateColumn Title="Name">
@@ -84,14 +110,23 @@
     private List<Company> companies = [];
     private List<Location> locationsForSelectedCompany = [];
     private Company? selectedCompany;
-    private string newCompanyName = string.Empty;
-    private string newCompanyThemeColor = string.Empty;
-    private Guid? newCompanyLogoFileId;
+
+    // One form, two modes: with no company selected it creates, with one selected it edits that
+    // company in place. Selecting a company round-trips its complete current branding into these
+    // fields, so a save always sends the full state back (see SaveCompanyAsync's update branch).
+    private string companyName = string.Empty;
+    private string companyThemeColor = string.Empty;
+    private Guid? companyLogoFileId;
     private string newLocationName = string.Empty;
 
     private void OnLogoUploaded(FileMetadata file)
     {
-        newCompanyLogoFileId = file.Id;
+        companyLogoFileId = file.Id;
+    }
+
+    private void ClearLogo()
+    {
+        companyLogoFileId = null;
     }
 
     protected override async Task OnInitializedAsync()
@@ -113,35 +148,78 @@
         }
     }
 
-    private async Task AddCompany()
+    private async Task SaveCompany()
     {
-        if (string.IsNullOrWhiteSpace(newCompanyName))
+        if (string.IsNullOrWhiteSpace(companyName))
         {
             return;
         }
 
+        bool isEdit = selectedCompany is not null;
+
+        // Id 0 routes SaveCompanyAsync down its create branch; a real id routes it down the
+        // update branch, which is what makes an already-seeded company (e.g. Play2Day) brandable.
         Result<Company> result = await _companyLocationService.SaveCompanyAsync(new Company
         {
-            Name = newCompanyName,
-            ThemeColorHex = newCompanyThemeColor,
-            LogoFileId = newCompanyLogoFileId
+            Id = selectedCompany?.Id ?? 0,
+            Name = companyName,
+            ThemeColorHex = companyThemeColor,
+            LogoFileId = companyLogoFileId
         });
 
         if (!result.IsSuccess)
         {
-            ToastService.ShowError($"Failed to add company: {result.Error}");
+            ToastService.ShowError($"Failed to {(isEdit ? "save" : "add")} company: {result.Error}");
             return;
         }
 
-        newCompanyName = string.Empty;
-        newCompanyThemeColor = string.Empty;
-        newCompanyLogoFileId = null;
         await LoadCompaniesAsync();
+
+        if (isEdit)
+        {
+            // Re-point at the freshly loaded row so the form and the Locations panel keep
+            // showing the saved state rather than the now-stale pre-save instance.
+            Company? reloaded = companies.FirstOrDefault(x => x.Id == result.Data!.Id);
+
+            if (reloaded is not null)
+            {
+                selectedCompany = reloaded;
+                PopulateFormFrom(reloaded);
+            }
+
+            ToastService.ShowSuccess("Company updated.");
+            return;
+        }
+
+        ClearForm();
+        ToastService.ShowSuccess("Company added.");
+    }
+
+    private void StartNewCompany()
+    {
+        selectedCompany = null;
+        locationsForSelectedCompany = [];
+        ClearForm();
+    }
+
+    private void ClearForm()
+    {
+        companyName = string.Empty;
+        companyThemeColor = string.Empty;
+        companyLogoFileId = null;
+    }
+
+    private void PopulateFormFrom(Company company)
+    {
+        companyName = company.Name;
+        companyThemeColor = company.ThemeColorHex ?? string.Empty;
+        companyLogoFileId = company.LogoFileId;
     }
 
     private async Task SelectCompany(Company company)
     {
         selectedCompany = company;
+        PopulateFormFrom(company);
         await LoadLocationsAsync();
     }
 
