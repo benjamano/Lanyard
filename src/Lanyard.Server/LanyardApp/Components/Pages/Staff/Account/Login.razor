@@ -9,6 +9,12 @@
              HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
 
     <FluentCard Style="width: 300px; max-width: 90vw; padding: 32px;">
+        <div class="login-accent-bar" style="@AccentBarStyle"></div>
+
+        @if (SelectedLogoUrl is not null)
+        {
+            <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" />
+        }
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
                      HorizontalAlignment="HorizontalAlignment.Center">
             <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
@@ -44,7 +50,7 @@
 
                     <div>
                         <label for="locationId">Location</label>
-                        <select name="locationId" id="locationId" style="width: 100%; padding: 8px;">
+                        <select name="locationId" id="locationId" style="width: 100%; padding: 8px;" @onchange="OnLocationChanged">
                             <option value="">Select your location</option>
                             @foreach (LoginLocationOption option in locationOptions)
                             {
@@ -58,7 +64,8 @@
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
                                  Style="margin-top: 8px;">
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      BackgroundColor="@SelectedAccentColor" Color="@(SelectedAccentColor is null ? null : "white")">
                             <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
                             Login
                         </FluentButton>
@@ -82,6 +89,13 @@
 
     private IEnumerable<LoginLocationOption> locationOptions = [];
 
+    private string? SelectedAccentColor;
+    private string? SelectedLogoUrl;
+
+    private string AccentBarStyle => SelectedAccentColor is null
+        ? "display:none;"
+        : $"background-color:{SelectedAccentColor};height:6px;margin:-32px -32px 8px;";
+
     protected override async Task OnInitializedAsync()
     {
         Result<List<LoginLocationOption>> result = await _companyLocationService.GetLoginLocationOptionsAsync();
@@ -90,5 +104,15 @@
         {
             locationOptions = result.Data!;
         }
+    }
+
+    private void OnLocationChanged(ChangeEventArgs e)
+    {
+        LoginLocationOption? option = int.TryParse(e.Value?.ToString(), out int locationId)
+            ? locationOptions.FirstOrDefault(x => x.LocationId == locationId)
+            : null;
+
+        SelectedAccentColor = option?.ThemeColorHex;
+        SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
     }
 }
