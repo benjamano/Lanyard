@@ -1,4 +1,5 @@
 @using Lanyard.Application.Services.Locations
+@using Lanyard.App.Components.Files
 
 @inject INotificationService ToastService
 
@@ -17,6 +18,12 @@
                         <FluentText Typo="Typography.H6">Companies</FluentText>
 
                         <FluentTextInput @bind-Value="newCompanyName" Label="New company name" Placeholder="Partyman" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="newCompanyThemeColor" Label="Theme color (hex)" Placeholder="#C8102E" Class="clm-full-width" />
+                        @if (!string.IsNullOrWhiteSpace(newCompanyThemeColor))
+                        {
+                            <div class="clm-color-swatch" style="background-color:@newCompanyThemeColor;"></div>
+                        }
+                        <FileUploader Accept="image/*" MaximumFileSize="@(5*1024*1024)" OnFileUploaded="OnLogoUploaded" />
                         <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddCompany">Add Company</FluentButton>
 
                         <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="clm-full-width">
@@ -78,7 +85,14 @@
     private List<Location> locationsForSelectedCompany = [];
     private Company? selectedCompany;
     private string newCompanyName = string.Empty;
+    private string newCompanyThemeColor = string.Empty;
+    private Guid? newCompanyLogoFileId;
     private string newLocationName = string.Empty;
+
+    private void OnLogoUploaded(FileMetadata file)
+    {
+        newCompanyLogoFileId = file.Id;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -106,7 +120,12 @@
             return;
         }
 
-        Result<Company> result = await _companyLocationService.SaveCompanyAsync(new Company { Name = newCompanyName });
+        Result<Company> result = await _companyLocationService.SaveCompanyAsync(new Company
+        {
+            Name = newCompanyName,
+            ThemeColorHex = newCompanyThemeColor,
+            LogoFileId = newCompanyLogoFileId
+        });
 
         if (!result.IsSuccess)
         {
@@ -115,6 +134,8 @@
         }
 
         newCompanyName = string.Empty;
+        newCompanyThemeColor = string.Empty;
+        newCompanyLogoFileId = null;
         await LoadCompaniesAsync();
     }
 
