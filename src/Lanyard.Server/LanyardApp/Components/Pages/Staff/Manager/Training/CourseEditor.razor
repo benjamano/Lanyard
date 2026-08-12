@@ -13,7 +13,22 @@
 
 <PageTitle>Edit Course</PageTitle>
 
-@if (isLoading || course is null)
+@if (scopeFailed)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so this course can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCourseAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+}
+else if (isLoading || course is null)
 {
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
         <FluentSpinner />
@@ -21,6 +36,14 @@
 }
 else
 {
+    @if (!canEditCourse)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" Class="mb-3">
+            This course belongs to another location and is shared with yours. You can read it, but
+            only its owning location can make changes.
+        </FluentMessageBar>
+    }
+
     <FluentCard Height="auto" Class="mb-3">
         <FluentGrid Class="w-100" Spacing="3">
             <FluentGridItem Xs="3">
@@ -48,18 +71,19 @@ else
                         <FluentSelect TOption="Location" TValue="int?" Items="@allLocations"
                                       OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
                                       OptionValue="@(l => l?.Id)" @bind-Value="course.LocationId"
-                                      Label="Location" Disabled="@(course.Id != Guid.Empty)" Required="true"
+                                      Label="Location" Disabled="@(currentScope?.IsAdmin != true)" Required="true"
                                       Style="width: 100%;" />
                     </div>
                 }
                 <div class="w-100">
-                    <FluentSwitch @bind-Value="course.IsShared" Label="Share this course across all locations (e.g. COSHH)" />
+                    <FluentSwitch @bind-Value="course.IsShared" Disabled="@(!canEditCourse)"
+                                  Label="Share this course across all locations (e.g. COSHH)" />
                 </div>
             </FluentGridItem>
         </FluentGrid>
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                          Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync">
+                          Loading="@isSavingCourse" Disabled="@(!canEditCourse)" OnClick="SaveCourseMetaAsync">
                 Save Course Details
             </FluentButton>
             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Eye())"
@@ -89,7 +113,7 @@ else
                         </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  OnClick="StartNewSection">
+                                  Disabled="@(!canEditCourse)" OnClick="StartNewSection">
                         Add Section
                     </FluentButton>
 
@@ -111,7 +135,7 @@ else
                         </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  OnClick="StartNewQuestion">
+                                  Disabled="@(!canEditCourse)" OnClick="StartNewQuestion">
                         Add Question
                     </FluentButton>
                 </FluentStack>
@@ -154,12 +178,13 @@ else
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                                          Loading="@isSavingSection" OnClick="SaveSelectedSectionAsync">
+                                          Loading="@isSavingSection" Disabled="@(!canEditCourse)"
+                                          OnClick="SaveSelectedSectionAsync">
                                 Save
                             </FluentButton>
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                          Disabled="@(selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
+                                          Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
                                 Delete
                             </FluentButton>
                         </FluentStack>
@@ -195,7 +220,8 @@ else
                         <div class="question-actions-group">
                             <div class="question-actions-add">
                                 <FluentButton Appearance="ButtonAppearance.Outline"
-                                              IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="AddOption">
+                                              IconStart="@(new Icons.Regular.Size20.FormNew())"
+                                              Disabled="@(!canEditCourse)" OnClick="AddOption">
                                     Add Option
                                 </FluentButton>
                             </div>
@@ -203,12 +229,12 @@ else
                             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                                 <FluentButton Appearance="ButtonAppearance.Primary"
                                               IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion"
-                                              OnClick="SaveSelectedQuestionAsync">
+                                              Disabled="@(!canEditCourse)" OnClick="SaveSelectedQuestionAsync">
                                     Save
                                 </FluentButton>
                                 <FluentButton Appearance="ButtonAppearance.Outline"
                                               IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                              Disabled="@(selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
+                                              Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
                                     Delete
                                 </FluentButton>
                             </FluentStack>
@@ -243,8 +269,17 @@ else
     private bool isSavingCourse;
     private bool isSavingSection;
     private bool isSavingQuestion;
+    private bool scopeFailed;
     private LocationScope? currentScope;
     private List<Location> allLocations = [];
+
+    // A shared course owned by another location is readable here but not writable - the service
+    // rejects every write. Gate the write controls on the same rule so the UI doesn't offer
+    // buttons that are guaranteed to fail.
+    private bool canEditCourse =>
+        currentScope is not null
+        && course is not null
+        && (currentScope.IsAdmin || course.LocationId == currentScope.LocationId);
 
     private Guid correctOptionId
     {
@@ -285,9 +320,13 @@ else
         if (!scopeResult.IsSuccess)
         {
             _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the render guard below would sit on a
+            // spinner forever with nothing left on screen explaining why.
+            scopeFailed = true;
             return null;
         }
 
+        scopeFailed = false;
         currentScope = scopeResult.Data;
         return currentScope;
     }

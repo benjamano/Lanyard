@@ -10,7 +10,22 @@
 
 <PageTitle>@(course?.Name ?? "Preview") - Preview</PageTitle>
 
-@if (isLoading || course is null)
+@if (scopeFailed)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so this preview can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCourseAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+}
+else if (isLoading || course is null)
 {
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
         <FluentSpinner />
@@ -45,9 +60,12 @@ else
 
     private Course? course;
     private bool isLoading;
+    private bool scopeFailed;
     private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadCourseAsync();
+
+    private async Task LoadCourseAsync()
     {
         isLoading = true;
 
@@ -80,9 +98,13 @@ else
         if (!scopeResult.IsSuccess)
         {
             _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the render guard above would sit on a
+            // spinner forever with nothing left on screen explaining why.
+            scopeFailed = true;
             return null;
         }
 
+        scopeFailed = false;
         currentScope = scopeResult.Data;
         return currentScope;
     }

@@ -7,6 +7,21 @@
 @inject ITrainingAnalyticsService _analyticsService
 
 <div class="analytics-reports-tab">
+    @if (scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so these reports can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCoursesAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else
+    {
     <div class="course-picker-host">
         <FluentSelect TOption="Course" TValue="Guid" Items="@courses.OrderBy(x => x.Name)"
                       OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i!.Id)" Placeholder="Select a course..."
@@ -49,6 +64,7 @@
             </div>
         }
     }
+    }
 </div>
 
 @code {
@@ -63,9 +79,12 @@
     private List<ChartCategoryValue> statusChartData = [];
     private List<ChartCategoryValue> passFailChartData = [];
     private readonly string[] passFailColors = [ChartPalette.Success, ChartPalette.Danger];
+    private bool scopeFailed;
     private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadCoursesAsync();
+
+    private async Task LoadCoursesAsync()
     {
         users = await _securityService.GetAllUsersAsync();
 
@@ -97,9 +116,13 @@
         if (!scopeResult.IsSuccess)
         {
             _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the tab renders an empty course picker
+            // with nothing left on screen explaining why.
+            scopeFailed = true;
             return null;
         }
 
+        scopeFailed = false;
         currentScope = scopeResult.Data;
         return currentScope;
     }

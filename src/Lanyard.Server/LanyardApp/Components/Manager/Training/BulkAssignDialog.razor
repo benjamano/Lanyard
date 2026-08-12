@@ -13,6 +13,25 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
+        @if (scopeFailed)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+                <FluentMessageBar Intent="MessageBarIntent.Error">
+                    We couldn't work out which location you're working in, so nobody can be
+                    assigned right now. This is usually temporary - try again, or sign out and
+                    back in.
+                </FluentMessageBar>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())" OnClick="LoadAsync">
+                        Reload
+                    </FluentButton>
+                    <FluentButton OnClick="CancelAsync">Close</FluentButton>
+                </FluentStack>
+            </FluentStack>
+        }
+        else
+        {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
             @if (isAdmin)
             {
@@ -66,6 +85,7 @@
                 <FluentButton OnClick="CancelAsync" Disabled="@isSubmitting">Cancel</FluentButton>
             </FluentStack>
         </FluentStack>
+        }
     </ChildContent>
 </FluentDialogBody>
 
@@ -86,9 +106,12 @@
     private string? selectedRoleId;
     private DateTime? dueDate;
     private bool isSubmitting;
+    private bool scopeFailed;
     private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
         LocationScope? scope = await ResolveScopeAsync();
 
@@ -134,9 +157,13 @@
         if (!scopeResult.IsSuccess)
         {
             _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the dialog offers an empty picker and
+            // an Assign button that cannot succeed, with no explanation left on screen.
+            scopeFailed = true;
             return null;
         }
 
+        scopeFailed = false;
         currentScope = scopeResult.Data;
         return currentScope;
     }
@@ -216,8 +243,23 @@
             return;
         }
 
-        string message = result.Data.SkippedDuplicateCount > 0
-            ? $"Assigned to {result.Data.AssignedCount} people ({result.Data.SkippedDuplicateCount} already had this course)."
+        // Report the two skip reasons separately - a user filtered out for being outside this
+        // manager's location is a different problem from one who already had the course, and
+        // lumping them together (or omitting them) makes the totals look like they don't add up.
+        List<string> skipNotes = [];
+
+        if (result.Data.SkippedDuplicateCount > 0)
+        {
+            skipNotes.Add($"{result.Data.SkippedDuplicateCount} already had this course");
+        }
+
+        if (result.Data.SkippedOutsideLocationCount > 0)
+        {
+            skipNotes.Add($"{result.Data.SkippedOutsideLocationCount} skipped - not in your location");
+        }
+
+        string message = skipNotes.Count > 0
+            ? $"Assigned to {result.Data.AssignedCount} people ({string.Join("; ", skipNotes)})."
             : $"Assigned to {result.Data.AssignedCount} people.";
 
         _toastService.ShowSuccess(message);

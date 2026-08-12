@@ -3,7 +3,20 @@
 @inject ICourseService _courseService
 
 <div class="auto-assign-rules-tab">
-    @if (isLoading)
+    @if (scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so the auto-assign rules
+                can't be listed. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCoursesAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else if (isLoading)
     {
         <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
             <FluentSpinner />
@@ -18,9 +31,12 @@
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="mt-2">
             @foreach (Course course in courses)
             {
+                @* A course shared from a sibling location is listed (read access) but the save
+                   behind this toggle is rejected server-side, so don't offer the switch. *@
                 <FluentSwitch Value="@course.AutoAssignOnUserCreation"
                               ValueChanged="@((bool v) => ToggleAutoAssignAsync(course, v))"
-                              Label="@course.Name" />
+                              Disabled="@(!CanWrite(course))"
+                              Label="@(CanWrite(course) ? course.Name : $"{course.Name} (shared - owned by another location)")" />
             }
         </FluentStack>
     }
@@ -29,9 +45,18 @@
 @code {
     private List<Course> courses = [];
     private bool isLoading;
+    private bool scopeFailed;
     private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    // Mirrors the service's write rule: Admins write anything; everyone else only writes
+    // courses owned by their own location.
+    private bool CanWrite(Course course) =>
+        currentScope is not null
+        && (currentScope.IsAdmin || course.LocationId == currentScope.LocationId);
+
+    protected override Task OnInitializedAsync() => LoadCoursesAsync();
+
+    private async Task LoadCoursesAsync()
     {
         isLoading = true;
 
@@ -66,9 +91,13 @@
         if (!scopeResult.IsSuccess)
         {
             _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the tab would render "No courses exist
+            // yet.", which is indistinguishable from the genuine empty state.
+            scopeFailed = true;
             return null;
         }
 
+        scopeFailed = false;
         currentScope = scopeResult.Data;
         return currentScope;
     }
