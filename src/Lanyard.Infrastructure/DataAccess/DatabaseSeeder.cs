@@ -17,6 +17,7 @@ public static class DatabaseSeeder
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
 
         await SeedUsersAndRolesAsync(context, configuration, logger);
+        await SeedCompanyAndLocationsAsync(context);
     }
 
     private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context, IConfiguration configuration, ILogger logger)
@@ -135,6 +136,51 @@ public static class DatabaseSeeder
             new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId },
             new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanClockInRoleId }
         );
+
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedCompanyAndLocationsAsync(ApplicationDbContext context)
+    {
+        if (await context.Companies.AnyAsync(c => c.Id == ApplicationDbContext.SeedPlay2DayCompanyId))
+        {
+            return;
+        }
+
+        Company play2Day = new()
+        {
+            Id = ApplicationDbContext.SeedPlay2DayCompanyId,
+            Name = "Play2Day",
+            IsActive = true,
+            CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+            UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
+        };
+
+        await context.Companies.AddAsync(play2Day);
+
+        await context.Locations.AddRangeAsync(
+            new Location
+            {
+                Id = ApplicationDbContext.SeedIpswichLocationId,
+                CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId,
+                Name = "Ipswich",
+                IsActive = true,
+                CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+                UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
+            },
+            new Location
+            {
+                Id = ApplicationDbContext.SeedWisbechLocationId,
+                CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId,
+                Name = "Wisbech",
+                IsActive = true,
+                CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+                UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
+            });
+
+        await context.UserLocationMemberships.AddRangeAsync(
+            new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedIpswichLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc },
+            new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedWisbechLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc });
 
         await context.SaveChangesAsync();
     }
