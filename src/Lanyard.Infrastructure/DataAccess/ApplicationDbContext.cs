@@ -157,6 +157,9 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => new { x.UserId, x.LocationId })
                 .IsUnique();
 
+            // A company may point at an uploaded file as its logo. When that file row is
+            // hard-deleted, null the link rather than cascade-deleting the company (companies
+            // are soft-deleted via IsActive instead).
             modelBuilder.Entity<Company>()
                 .HasOne(x => x.LogoFile)
                 .WithMany()
