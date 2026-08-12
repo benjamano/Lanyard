@@ -288,4 +288,44 @@ public class CompanyLocationServiceTests
         Assert.AreEqual(company.Id, result.Data!.CompanyId);
         Assert.AreEqual("#C8102E", result.Data.ThemeColorHex);
     }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetCompanyBrandingForLocation_FailsForDeactivatedLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        (Company company, Location location) = await SeedCompanyAndLocationAsync(options);
+        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E" });
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Location dbLocation = await ctx.Locations.SingleAsync(x => x.Id == location.Id);
+            dbLocation.IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingForLocationAsync(location.Id);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetCompanyBrandingForLocation_FailsForDeactivatedCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        (Company company, Location location) = await SeedCompanyAndLocationAsync(options);
+        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E" });
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Company dbCompany = await ctx.Companies.SingleAsync(x => x.Id == company.Id);
+            dbCompany.IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingForLocationAsync(location.Id);
+
+        Assert.IsFalse(result.Success);
+    }
 }

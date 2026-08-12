@@ -391,7 +391,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Company)
-                .FirstOrDefaultAsync(x => x.Id == locationId);
+                .FirstOrDefaultAsync(x => x.Id == locationId && x.IsActive && x.Company!.IsActive);
 
             if (location?.Company is null)
             {
