@@ -52,17 +52,41 @@
 @code {
     private List<Course> courses = [];
     private bool isLoading;
+    private LocationScope? currentScope;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCoursesAsync();
     }
 
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
+    }
+
     private async Task LoadCoursesAsync()
     {
         isLoading = true;
 
-        Result<List<Course>> result = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            courses = [];
+            isLoading = false;
+            return;
+        }
+
+        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -79,12 +103,19 @@
 
     private async Task CreateCourseAsync()
     {
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         Result<Course> result = await _courseService.SaveCourseAsync(new Course
         {
             Id = Guid.Empty,
             Name = "New Course",
             PassMarkPercent = 80
-        });
+        }, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -115,7 +146,14 @@
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteCourseAsync(courseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteCourseAsync(courseId, scope);
 
         if (!result.IsSuccess)
         {

@@ -42,6 +42,19 @@ else
                     <FluentNumberInput TValue="int?" Width="100%" @bind-Value="course.RecurrenceMonths"
                                        Label="Recurs every (months)" Min="1" Placeholder="Does not recur" />
                 </div>
+                @if (currentScope?.IsAdmin == true)
+                {
+                    <div class="w-100">
+                        <FluentSelect TOption="Location" TValue="int?" Items="@allLocations"
+                                      OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                                      OptionValue="@(l => l?.Id)" @bind-Value="course.LocationId"
+                                      Label="Location" Disabled="@(course.Id != Guid.Empty)" Required="true"
+                                      Style="width: 100%;" />
+                    </div>
+                }
+                <div class="w-100">
+                    <FluentSwitch @bind-Value="course.IsShared" Label="Share this course across all locations (e.g. COSHH)" />
+                </div>
             </FluentGridItem>
         </FluentGrid>
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
@@ -230,6 +243,8 @@ else
     private bool isSavingCourse;
     private bool isSavingSection;
     private bool isSavingQuestion;
+    private LocationScope? currentScope;
+    private List<Location> allLocations = [];
 
     private Guid correctOptionId
     {
@@ -251,6 +266,30 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadCourseAsync();
+
+        if (currentScope?.IsAdmin == true)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            if (locationsResult.IsSuccess && locationsResult.Data is not null)
+            {
+                allLocations = locationsResult.Data;
+            }
+        }
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     // BlazoredTextEditor (v1.1.3, confirmed via assembly reflection) does not accept its
@@ -280,7 +319,15 @@ else
     {
         isLoading = true;
 
-        Result<Course> result = await _courseService.GetCourseAsync(CourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        Result<Course> result = await _courseService.GetCourseAsync(CourseId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -325,9 +372,16 @@ else
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingCourse = true;
 
-        Result<Course> result = await _courseService.SaveCourseAsync(course);
+        Result<Course> result = await _courseService.SaveCourseAsync(course, scope);
 
         if (!result.IsSuccess)
         {
