@@ -63,12 +63,21 @@
     private List<ChartCategoryValue> statusChartData = [];
     private List<ChartCategoryValue> passFailChartData = [];
     private readonly string[] passFailColors = [ChartPalette.Success, ChartPalette.Danger];
+    private LocationScope? currentScope;
 
     protected override async Task OnInitializedAsync()
     {
         users = await _securityService.GetAllUsersAsync();
 
-        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            courses = [];
+            return;
+        }
+
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope);
 
         if (!coursesResult.IsSuccess || coursesResult.Data is null)
         {
@@ -79,6 +88,20 @@
         {
             courses = coursesResult.Data;
         }
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     private async Task OnCourseSelectedAsync(Guid value)
@@ -96,10 +119,23 @@
 
         isLoading = true;
 
-        Result<List<TraineeScoreRankingRow>> scores = await _analyticsService.GetTopScoringTraineesAsync(selectedCourseId);
-        Result<List<TraineeTimingRankingRow>> fastest = await _analyticsService.GetFastestCompletionsAsync(selectedCourseId);
-        Result<List<TraineeTimingRankingRow>> slowest = await _analyticsService.GetSlowestCompletionsAsync(selectedCourseId);
-        Result<CourseCompletionSummary> summary = await _analyticsService.GetCourseCompletionSummaryAsync(selectedCourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            scoreChartData = [];
+            fastestChartData = [];
+            slowestChartData = [];
+            statusChartData = [];
+            passFailChartData = [];
+            isLoading = false;
+            return;
+        }
+
+        Result<List<TraineeScoreRankingRow>> scores = await _analyticsService.GetTopScoringTraineesAsync(selectedCourseId, scope);
+        Result<List<TraineeTimingRankingRow>> fastest = await _analyticsService.GetFastestCompletionsAsync(selectedCourseId, scope);
+        Result<List<TraineeTimingRankingRow>> slowest = await _analyticsService.GetSlowestCompletionsAsync(selectedCourseId, scope);
+        Result<CourseCompletionSummary> summary = await _analyticsService.GetCourseCompletionSummaryAsync(selectedCourseId, scope);
 
         scoreChartData = MapScores(scores);
         fastestChartData = MapTimings(fastest);

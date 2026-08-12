@@ -45,12 +45,21 @@ else
 
     private Course? course;
     private bool isLoading;
+    private LocationScope? currentScope;
 
     protected override async Task OnInitializedAsync()
     {
         isLoading = true;
 
-        Result<Course> result = await _courseService.GetCourseAsync(CourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        Result<Course> result = await _courseService.GetCourseAsync(CourseId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -62,6 +71,20 @@ else
 
         course = result.Data;
         isLoading = false;
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     private Task<QuizGradeResult?> GradeLocallyAsync(Dictionary<Guid, Guid> answers)

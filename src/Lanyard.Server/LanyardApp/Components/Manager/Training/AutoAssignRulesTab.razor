@@ -29,12 +29,22 @@
 @code {
     private List<Course> courses = [];
     private bool isLoading;
+    private LocationScope? currentScope;
 
     protected override async Task OnInitializedAsync()
     {
         isLoading = true;
 
-        Result<List<Course>> result = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            courses = [];
+            isLoading = false;
+            return;
+        }
+
+        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -49,6 +59,20 @@
         isLoading = false;
     }
 
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
+    }
+
     private async Task ToggleAutoAssignAsync(Course course, bool newValue)
     {
         // Must be set before the await below so Blazor renders the new value first -
@@ -57,7 +81,15 @@
         // becomes a silent no-op (there is no "old" rendered value left to diff back to).
         course.AutoAssignOnUserCreation = newValue;
 
-        Result<Course> result = await _courseService.SaveCourseAsync(course);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            course.AutoAssignOnUserCreation = !newValue;
+            return;
+        }
+
+        Result<Course> result = await _courseService.SaveCourseAsync(course, scope);
 
         if (!result.IsSuccess)
         {

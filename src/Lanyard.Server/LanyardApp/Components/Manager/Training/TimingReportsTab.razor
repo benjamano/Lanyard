@@ -61,10 +61,19 @@
     private CourseTimingSummary? summary;
     private Guid selectedCourseId = Guid.Empty;
     private bool isLoading;
+    private LocationScope? currentScope;
 
     protected override async Task OnInitializedAsync()
     {
-        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            courses = [];
+            return;
+        }
+
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope);
 
         if (!coursesResult.IsSuccess || coursesResult.Data is null)
         {
@@ -75,6 +84,20 @@
         {
             courses = coursesResult.Data;
         }
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            return null;
+        }
+
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     private async Task OnCourseSelectedAsync(Guid value)
@@ -93,7 +116,16 @@
 
         isLoading = true;
 
-        Result<CourseTimingSummary> result = await _courseAssignmentService.GetCourseTimingSummaryAsync(selectedCourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            summary = null;
+            isLoading = false;
+            return;
+        }
+
+        Result<CourseTimingSummary> result = await _courseAssignmentService.GetCourseTimingSummaryAsync(selectedCourseId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
