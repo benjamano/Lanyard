@@ -249,8 +249,6 @@ builder.Services.AddFluentUIComponents(configuration =>
     configuration.Toast.Lifetime = TimeSpan.FromSeconds(5);
 });
 
-builder.Services.AddSignalR();
-
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("ip-fixed", httpContext =>

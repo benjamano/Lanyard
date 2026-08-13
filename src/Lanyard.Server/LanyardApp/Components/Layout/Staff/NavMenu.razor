@@ -8,14 +8,13 @@
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
+    <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium">
+        <FluentStack Width="auto">
+            <CompanyLogo Url="@CompanyLogoUrl" />
+        </FluentStack>
 
-    <FluentStack Width="auto">
-        <CompanyLogo Url="@CompanyLogoUrl" />
-    </FluentStack>
+        <FluentDivider />
 
-    <FluentDivider />
-
-    <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium" Padding="@Padding.All3">
         @if (_isAuthenticated)
         {
             <FluentNavItem Href="/" IconRest="@(new Icons.Regular.Size20.Home())"
