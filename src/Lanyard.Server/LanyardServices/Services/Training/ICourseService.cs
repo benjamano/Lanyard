@@ -11,11 +11,11 @@ public interface ICourseService
     Task<Result<Course>> SaveCourseAsync(Course course, LocationScope scope);
     Task<Result<bool>> DeleteCourseAsync(Guid courseId, LocationScope scope);
 
-    Task<Result<CourseSection>> SaveSectionAsync(CourseSection section);
-    Task<Result<bool>> DeleteSectionAsync(Guid sectionId);
+    Task<Result<CourseSection>> SaveSectionAsync(CourseSection section, LocationScope scope);
+    Task<Result<bool>> DeleteSectionAsync(Guid sectionId, LocationScope scope);
     Task<Result<bool>> ReorderSectionsAsync(Guid courseId, List<Guid> orderedSectionIds, LocationScope scope);
 
-    Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question);
-    Task<Result<bool>> DeleteQuestionAsync(Guid questionId);
+    Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question, LocationScope scope);
+    Task<Result<bool>> DeleteQuestionAsync(Guid questionId, LocationScope scope);
     Task<Result<bool>> ReorderQuestionsAsync(Guid courseId, List<Guid> orderedQuestionIds, LocationScope scope);
 }

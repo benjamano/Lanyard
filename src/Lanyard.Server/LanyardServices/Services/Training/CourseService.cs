@@ -191,7 +191,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<CourseSection>> SaveSectionAsync(CourseSection section)
+    public async Task<Result<CourseSection>> SaveSectionAsync(CourseSection section, LocationScope scope)
     {
         try
         {
@@ -202,11 +202,16 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == section.CourseId);
+            Course? course = await ctx.Courses.FirstOrDefaultAsync(x => x.Id == section.CourseId);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<CourseSection>.Fail("Course not found.");
+            }
+
+            if (!scope.IsAdmin && course.LocationId != scope.LocationId)
+            {
+                return Result<CourseSection>.Fail("You do not have access to this course.");
             }
 
             CourseSection? existingSection = section.Id == Guid.Empty
@@ -249,17 +254,24 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<bool>> DeleteSectionAsync(Guid sectionId)
+    public async Task<Result<bool>> DeleteSectionAsync(Guid sectionId, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            CourseSection? section = await ctx.CourseSections.FirstOrDefaultAsync(x => x.Id == sectionId);
+            CourseSection? section = await ctx.CourseSections
+                .Include(x => x.Course)
+                .FirstOrDefaultAsync(x => x.Id == sectionId);
 
             if (section is null)
             {
                 return Result<bool>.Fail("Section not found.");
+            }
+
+            if (!scope.IsAdmin && section.Course?.LocationId != scope.LocationId)
+            {
+                return Result<bool>.Fail("You do not have access to this course.");
             }
 
             section.IsActive = false;
@@ -315,7 +327,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question)
+    public async Task<Result<CourseQuestion>> SaveQuestionAsync(CourseQuestion question, LocationScope scope)
     {
         try
         {
@@ -340,11 +352,16 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == question.CourseId);
+            Course? course = await ctx.Courses.FirstOrDefaultAsync(x => x.Id == question.CourseId);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<CourseQuestion>.Fail("Course not found.");
+            }
+
+            if (!scope.IsAdmin && course.LocationId != scope.LocationId)
+            {
+                return Result<CourseQuestion>.Fail("You do not have access to this course.");
             }
 
             CourseQuestion? existingQuestion = question.Id == Guid.Empty
@@ -437,17 +454,24 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
         }
     }
 
-    public async Task<Result<bool>> DeleteQuestionAsync(Guid questionId)
+    public async Task<Result<bool>> DeleteQuestionAsync(Guid questionId, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            CourseQuestion? question = await ctx.CourseQuestions.FirstOrDefaultAsync(x => x.Id == questionId);
+            CourseQuestion? question = await ctx.CourseQuestions
+                .Include(x => x.Course)
+                .FirstOrDefaultAsync(x => x.Id == questionId);
 
             if (question is null)
             {
                 return Result<bool>.Fail("Question not found.");
+            }
+
+            if (!scope.IsAdmin && question.Course?.LocationId != scope.LocationId)
+            {
+                return Result<bool>.Fail("You do not have access to this course.");
             }
 
             question.IsActive = false;

@@ -547,6 +547,13 @@ string.Empty
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingSection = true;
 
         if (sectionEditor is not null)
@@ -554,7 +561,7 @@ string.Empty
             selectedSection.BodyHtml = await sectionEditor.GetHTML();
         }
 
-        Result<CourseSection> result = await _courseService.SaveSectionAsync(selectedSection);
+        Result<CourseSection> result = await _courseService.SaveSectionAsync(selectedSection, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -591,7 +598,14 @@ null;
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteSectionAsync(selectedSection.Id);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteSectionAsync(selectedSection.Id, scope);
 
         if (!result.IsSuccess)
         {
@@ -655,6 +669,13 @@ null;
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingQuestion = true;
 
         for (int i = 0; i < selectedQuestion.Options.Count; i++)
@@ -662,7 +683,7 @@ null;
             selectedQuestion.Options[i].SortOrder = i;
         }
 
-        Result<CourseQuestion> result = await _courseService.SaveQuestionAsync(selectedQuestion);
+        Result<CourseQuestion> result = await _courseService.SaveQuestionAsync(selectedQuestion, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -698,7 +719,14 @@ null;
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteQuestionAsync(selectedQuestion.Id);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteQuestionAsync(selectedQuestion.Id, scope);
 
         if (!result.IsSuccess)
         {
