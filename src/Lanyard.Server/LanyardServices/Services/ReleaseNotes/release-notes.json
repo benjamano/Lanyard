@@ -46,5 +46,13 @@
       "Users with the \"Manager\" role can now open the User and Role Management pages.",
       "Users with the \"Manager\" role can now bulk-assign training courses."
     ]
+  },
+  {
+    "version": "1.3.5",
+    "releaseDate": "2026-08-14",
+    "summary": "Updated site branding.",
+    "details": [
+      "Updated the site to use the specific Lanyard logos for the browser icon."
+    ]
   }
 ]
