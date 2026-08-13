@@ -51,6 +51,7 @@
                     {
                         <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
                     }
+                    
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
                 </FluentNavCategory>
@@ -174,7 +175,7 @@
             if (releaseNotesResult.IsSuccess)
             {
                 _releaseNotes = releaseNotesResult.Data ?? [];
-                _latestRelease = _releaseNotes.FirstOrDefault();
+                _latestRelease = _releaseNotes.OrderByDescending(x => x.Version).FirstOrDefault();
             }
         }
     }

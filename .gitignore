@@ -422,3 +422,4 @@ src/Lanyard.Server/LanyardApp/appsettings.json
 .playwright-mcp/
 .superpowers/
 docs/superpowers/plans/
+**/binVerifyOnly --no-restore/

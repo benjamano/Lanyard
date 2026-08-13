@@ -33,19 +33,16 @@
         else
         {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
-            @if (isAdmin)
-            {
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                    <FluentButton Appearance="@(mode == AssignMode.Individually ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                  OnClick="@(() => mode = AssignMode.Individually)">
-                        Individually
-                    </FluentButton>
-                    <FluentButton Appearance="@(mode == AssignMode.ByRole ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                  OnClick="@(() => mode = AssignMode.ByRole)">
-                        By Role
-                    </FluentButton>
-                </FluentStack>
-            }
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                <FluentButton Appearance="@(mode == AssignMode.Individually ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                              OnClick="@(() => mode = AssignMode.Individually)">
+                    Individually
+                </FluentButton>
+                <FluentButton Appearance="@(mode == AssignMode.ByRole ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                              OnClick="@(() => mode = AssignMode.ByRole)">
+                    By Role
+                </FluentButton>
+            </FluentStack>
 
             @if (mode == AssignMode.Individually)
             {
@@ -99,7 +96,6 @@
     public required IDialogInstance Dialog { get; set; }
 
     private AssignMode mode = AssignMode.Individually;
-    private bool isAdmin;
     private IEnumerable<UserProfile> users = [];
     private IEnumerable<UserProfile> selectedUsers = [];
     private List<ApplicationRole> roles = [];
@@ -120,7 +116,6 @@
             return;
         }
 
-        isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
         users = await _securityService.GetAllUsersAsync();
 
         if (!scope.IsAdmin)
@@ -139,14 +134,11 @@
             }
         }
 
-        if (isAdmin)
-        {
-            Result<List<ApplicationRole>> rolesResult = await _rolesService.GetAllApplicationRolesAsync();
+        Result<List<ApplicationRole>> rolesResult = await _rolesService.GetAllApplicationRolesAsync();
 
-            if (rolesResult.IsSuccess && rolesResult.Data is not null)
-            {
-                roles = rolesResult.Data;
-            }
+        if (rolesResult.IsSuccess && rolesResult.Data is not null)
+        {
+            roles = rolesResult.Data;
         }
     }
 

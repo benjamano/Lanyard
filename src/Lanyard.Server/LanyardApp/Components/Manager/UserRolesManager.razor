@@ -56,8 +56,11 @@
                                         @createdBy
                                     </TemplateColumn>
                                     <TemplateColumn Title="Actions">
-                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
-                                                      OnClick="@(() => RemoveRoleFromUser(context.Id))"></FluentButton>
+                                        @if (isAdmin || !string.Equals(context.Name, "Admin", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                          OnClick="@(() => RemoveRoleFromUser(context.Id))"></FluentButton>
+                                        }
                                     </TemplateColumn>
                                 </FluentDataGrid>
                             }
@@ -131,9 +134,11 @@
 
     private string? searchForRolesAlreadyAssignedValue = string.Empty;
     private string? searchForRoleToAddValue = string.Empty;
+    private bool isAdmin;
 
     protected override async Task OnInitializedAsync()
     {
+        isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
         userProfiles = await _securityService.GetAllUsersAsync();
         await LoadRoles();
     }
@@ -254,7 +259,10 @@
 
     private void GetAvailableRolesToAdd()
     {
-        filteredRoles = roles.Where(r => !userRoles.Any(ur => ur.Id == r.Id)).OrderBy(r => r.Name);
+        filteredRoles = roles
+            .Where(r => !userRoles.Any(ur => ur.Id == r.Id))
+            .Where(r => isAdmin || !string.Equals(r.Name, "Admin", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(r => r.Name);
     }
 
     private async Task HandleSearchForRoleAlreadyAssignedInput()

@@ -36,6 +36,13 @@ else if (isLoading || course is null)
 }
 else
 {
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" Class="mb-2">
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/manage/training/help?topic=courses"))">
+            Help
+        </FluentButton>
+    </FluentStack>
+
     @if (!canEditCourse)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" Class="mb-3">

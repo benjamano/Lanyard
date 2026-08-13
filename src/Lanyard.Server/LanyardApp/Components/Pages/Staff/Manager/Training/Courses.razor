@@ -12,11 +12,16 @@
 <PageTitle>Training Courses</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center">
+    <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Courses</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                      Disabled="@scopeFailed" OnClick="CreateCourseAsync" Class="ms-auto">
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" Class="ms-auto"
+                      Disabled="@scopeFailed" OnClick="CreateCourseAsync">
             New Course
+        </FluentButton>
+
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/manage/training/help?topic=courses"))">
+            Help
         </FluentButton>
     </FluentStack>
 
