@@ -26,149 +26,48 @@ If the MCP server returns no relevant results, fall back to general reasoning an
 
 ## Core Patterns
 
-### `Result<T>` Pattern
+### `Result<T>` Pattern (`src/Lanyard.Infrastructure/DTO/Result.cs`)
 
-**Definition**: `src/Lanyard.Infrastructure/DTO/Result.cs`
+Services return `Result<T>` (`.Ok(data)` / `.Fail(error)`) instead of throwing for expected failures — callers inspect `.IsSuccess`, no guessing which exceptions to catch. Exceptions are reserved for truly unexpected conditions and caught at the service boundary, not propagated.
 
-```csharp
-public record Result<T>
-{
-    public bool IsSuccess { get; init; }
-    public bool Success => IsSuccess;
-    public T? Data { get; init; }
-    public string? Error { get; init; }
-
-    public static Result<T> Ok(T data) => new() { IsSuccess = true, Data = data };
-    public static Result<T> Fail(string error) => new() { IsSuccess = false, Error = error };
-}
-```
-
-**Why**: Services return `Result<T>` instead of throwing for expected failures. Callers always inspect `.IsSuccess` — no guessing which exceptions to catch. Exceptions are only used for truly unexpected conditions and are caught at the service boundary, not propagated.
-
-**Rules**:
-- Every service method that can fail in a predictable way returns `Task<Result<T>>`.
+- Every service method that can fail predictably returns `Task<Result<T>>`.
 - The `catch` block returns `Result<T>.Fail(ex.Message)` — never rethrows or swallows.
-- Business-rule failures (e.g. "not found", "validation failed") use `Result<T>.Fail(...)` directly, without an exception.
-- Use `.Fail()` not `.Error()` — `.Error()` does not exist on this type.
-
-**Canonical example** (`src/Lanyard.Server/LanyardServices/Services/Playlists/PlaylistService.cs`):
+- Business-rule failures ("not found", "validation failed") use `.Fail(...)` directly, no exception needed.
+- Use `.Fail()` — `.Error()` does not exist on this type.
 
 ```csharp
-public async Task<Result<IEnumerable<Playlist>>> GetActivePlaylistsAsync()
-{
-    try
-    {
-        ApplicationDbContext context = _factory.CreateDbContext();
-
-        IEnumerable<Playlist> playlists = await context.Playlists
-            .AsNoTracking()
-            .Where(playlist => playlist.DeleteDate == null)
-            .Include(x => x.Members!)
-            .ThenInclude(x => x.Song)
-            .ToListAsync();
-
-        return Result<IEnumerable<Playlist>>.Ok(playlists);
-    }
-    catch (Exception ex)
-    {
-        return Result<IEnumerable<Playlist>>.Fail($"An error occurred while retrieving active playlists: {ex.Message}");
-    }
-}
+try { return Result<T>.Ok(data); }
+catch (Exception ex) { return Result<T>.Fail($"...: {ex.Message}"); }
 ```
-
----
+See `src/Lanyard.Server/LanyardServices/Services/Playlists/PlaylistService.cs` for a full example.
 
 ### `.AsNoTracking()`
 
-**Why**: EF Core's change tracker takes a snapshot of every entity it loads so it can detect modifications. For read-only queries that will never be saved back, this overhead is pure waste. `.AsNoTracking()` skips the snapshot entirely.
-
-**Rule**: Chain `.AsNoTracking()` on every query whose results will not be updated within the same `DbContext` scope. This is the default for all read operations.
-
-**Canonical example** (`src/Lanyard.Server/LanyardServices/Services/Dashboards/DashboardService.cs`):
-
-```csharp
-List<Dashboard> dashboards = await ctx.Dashboards
-    .AsNoTracking()
-    .Where(x => x.IsActive)
-    .Include(x => x.Widgets.Where(w => w.IsActive))
-    .OrderBy(x => x.Name)
-    .ToListAsync();
-```
-
----
+Chain on every query whose results won't be updated within the same `DbContext` scope (the default for all reads) — skips EF Core's change-tracking snapshot, which is pure overhead for read-only queries.
 
 ### `.TagWithCallSite()`
 
-**Why**: This EF Core extension embeds the calling C# file path and line number as a comment in the generated SQL. When a slow query appears in PostgreSQL's `pg_stat_statements` or server logs, the comment tells you exactly which line of application code produced it — without needing to trace back through query shapes.
+Chain alongside `.AsNoTracking()` on any meaningful read query. Embeds the calling file/line as a SQL comment, so a slow query in `pg_stat_statements` or server logs traces straight back to the code that issued it.
 
-**Rule**: Chain `.TagWithCallSite()` alongside `.AsNoTracking()` on any meaningful read query (i.e. any query you would want to identify in a database trace).
+### `IDbContextFactory<ApplicationDbContext>`
 
-**Canonical example** (`src/Lanyard.Server/LanyardServices/Services/MusicPlayer/MusicPlayerService.cs`):
-
-```csharp
-Playlist? playlist = await context.Playlists
-    .AsNoTracking()
-    .TagWithCallSite()
-    .Where(x => x.Id == playlistId)
-    .FirstOrDefaultAsync();
-```
-
----
-
-### `IDbContextFactory<ApplicationDbContext>` Usage
-
-**Why**: A scoped `DbContext` lives for the duration of an HTTP request. Singleton services (`MusicPlayerService`, `AutomationEngineService`, `DmxService`) outlive any request, so injecting a scoped `DbContext` directly causes a lifetime mismatch and thread-safety issues. The factory creates a fresh, short-lived `DbContext` per operation and disposes it cleanly.
-
-**Rules**:
-- Always inject `IDbContextFactory<ApplicationDbContext>` — never `ApplicationDbContext` directly.
-- Use `await using` with `CreateDbContextAsync()` to ensure disposal even on exceptions.
-- Create one context per logical unit of work; do not share a context across concurrent operations.
-
-**Canonical example** (`src/Lanyard.Server/LanyardServices/Services/Dashboards/DashboardService.cs`):
-
-```csharp
-public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) : IDashboardService
-{
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-
-    public async Task<Result<IEnumerable<Dashboard>>> GetDashboardsAsync()
-    {
-        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-        // ...
-    }
-}
-```
-
----
+Always inject the factory, never `ApplicationDbContext` directly — singleton services (`MusicPlayerService`, `AutomationEngineService`, `DmxService`) outlive a request-scoped `DbContext`, causing lifetime mismatches and thread-safety issues. Use `await using` with `CreateDbContextAsync()`; one context per logical unit of work, never shared across concurrent operations.
 
 ### Interface-Driven Services
 
-**Rule**: Every service must have a matching `I*Service` interface. `Program.cs` registers the interface against the concrete class. Blazor components and controllers always inject the interface — never the concrete type.
+Every service has a matching `I*Service` interface; `Program.cs` registers the interface against the concrete class; components/controllers inject the interface, never the concrete type. This is what makes the Moq-based test suite possible — Moq can't substitute a concrete type.
 
-**Why**: The interface is the only thing the test project mocks. If components take the concrete type, Moq cannot substitute a fake, and the entire MSTest suite breaks.
-
-**Pattern**:
-```csharp
-// Registration in Program.cs
-builder.Services.AddScoped<IPlaylistService, PlaylistService>();
-```
-
-```razor
-@* Injection in a Blazor component — prefer @inject over [Inject] attribute *@
-@inject IPlaylistService PlaylistService
-```
-
-#### Pre-injected services via `_Imports.razor`
-
-`src/Lanyard.Server/LanyardApp/Components/_Imports.razor` globally injects several services into every component in the app. Do **not** re-inject these in individual components — they are already available under these field names:
+**Pre-injected via `_Imports.razor`** (`src/Lanyard.Server/LanyardApp/Components/_Imports.razor`) — don't re-inject these:
 
 | Field name | Interface |
 |---|---|
 | `_securityService` | `ISecurityService` |
 | `_dialogService` | `IDialogService` |
 | `_timeService` | `ITimeService` |
-
-The same file also `@using`-imports the most common namespaces (`Lanyard.Infrastructure.Models`, `Lanyard.Infrastructure.DTO`, `Microsoft.FluentUI.AspNetCore.Components`, etc.), so those do not need repeating in individual `.razor` files either.
+| `_companyLocationService` | `ICompanyLocationService` |
+| `_currentLocationContext` | `ICurrentLocationContext` |
+| `_toastService` | `INotificationService` |
+| `_navigationManager` | `NavigationManager` |
 
 ---
 
@@ -194,6 +93,15 @@ Always apply the appropriate filter on reads unless the call is explicitly about
 
 ---
 
+## Logging Conventions
+
+Plain `ILogger<T>` — no Serilog, no correlation-ID/trace-ID propagation anywhere in the app. Don't introduce either without a separate decision to do so; there's nothing existing to plug into.
+
+- Always use structured templates, never string interpolation: `_logger.LogWarning("Failed to add {UserId} to {LocationId}: {Error}", userId, locationId, error)`, not `$"Failed to add {userId}..."`.
+- `LogInformation` for normal lifecycle events, `LogWarning` for recoverable/expected failures (including passing a `Result.Error` string as a templated property), `LogError(ex, ...)` for caught exceptions.
+
+---
+
 ## Claude-Specific Behaviour Rules
 
 ### Before acting
@@ -209,4 +117,29 @@ Always apply the appropriate filter on reads unless the call is explicitly about
 Never run `dotnet ef database update` automatically for destructive schema changes. Describe the migration and wait for explicit approval. Safe additive migrations (new table, new nullable column) can proceed without asking.
 
 ### Before marking a task complete
-Run `dotnet build LanyardApp.slnx` and `dotnet test LanyardTests/Lanyard.Tests.csproj` and confirm both pass.
+Run `dotnet build LanyardApp.sln` and `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj` and confirm both pass.
+
+### Route authorization — the one rule that must never get missed
+Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]` — there is no third option; a missing attribute redirects to login by design (`RouteAuthorizationGate.razor`). For the history, edge cases (`StaffNotFound.razor`), and why this matters, see the `route-authorization` skill.
+
+---
+
+## Deep-Dive Skills
+
+The topics below used to live in this file as long-form sections. They moved to skills so they load only when relevant instead of bloating every session's context. They trigger automatically when applicable, or can be invoked by name:
+
+| Skill | Covers |
+|---|---|
+| `fluentui-v5-blazor` | Fluent UI v5 component-naming changes, the FOUC boot cloak, `::deep` scoped-CSS traps, `FluentDataGrid` row sizing, theme-mode desync history |
+| `charting` | Fluent UI Charts is the only charting library (Radzen was fully migrated away from) — real components in use, data-color sourcing, and why the MCP server has nothing indexed for the Charts package |
+| `route-authorization` | Full history/edge cases behind the default-deny route gate |
+| `email-invite-system` | Resend-based invite emails, username-or-email login |
+| `client-build-troubleshooting` | Client "No frameworks were found" — stray host DLLs in `build\`, not a missing runtime |
+| `kiosk-client-dev-stack` | Launching the full server+client exe stack for SignalR/DMX end-to-end testing |
+| `verify` | Lighter Playwright-driven UI verification loop (server only, no kiosk client) |
+| `dashboard-widgets` | 6-touchpoint checklist for adding a new dashboard widget type; failure modes when a step is missed |
+| `location-scoping` | What `ICurrentLocationContext`/`LocationScope` actually cover (Training/Course only, not app-wide) and a known cross-location gap in `CourseService` |
+| `dmx-scene-engine` | Why DMX services are singletons with locks, server-side vs. client-side stepping vs. projection programs, BPM timing, momentary-scene semantics |
+| `automation-engine` | 3-touchpoint checklist for new automation action types (fails silently if missed), the lazy-init cache pattern |
+| `service-testing-patterns` | The EF InMemory + Moq test-setup convention used across all service tests, and the different approach needed for Identity-backed tests |
+| `api-controller-conventions` | Known inconsistencies across API controllers (a namespace bug, three coexisting auth mechanisms, no `Result<T>`→HTTP helper) |
