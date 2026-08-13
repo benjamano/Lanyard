@@ -12,15 +12,7 @@ BEFORE STARTING EVERY REQUEST, WRITE THE MESSAGE: "Instructions Loaded" TO CONFI
 
 ## MCP Preference
 
-For any Blazor or Fluent UI Blazor question or task, call the `blazor_knowledge` MCP server **before** relying on built-in knowledge. The server name in `.claude/settings.json` is `fluent-ui-blazor`.
-
-Key tools:
-- `search_blazor_docs` / `semantic_search_blazor_docs`
-- `get_fluentui_component`
-- `compare_patterns`
-- `blazor://overview`, `blazor://component/{name}`, `blazor://api/{symbol}`, `blazor://example/{component}/{scenario}`
-
-If the MCP server returns no relevant results, fall back to general reasoning and state the fallback explicitly.
+See AGENTS.md's "MCP Preference For This Repository" — same rule for both files, kept in one place to avoid drift.
 
 ---
 
@@ -142,4 +134,5 @@ The topics below used to live in this file as long-form sections. They moved to 
 | `dmx-scene-engine` | Why DMX services are singletons with locks, server-side vs. client-side stepping vs. projection programs, BPM timing, momentary-scene semantics |
 | `automation-engine` | 3-touchpoint checklist for new automation action types (fails silently if missed), the lazy-init cache pattern |
 | `service-testing-patterns` | The EF InMemory + Moq test-setup convention used across all service tests, and the different approach needed for Identity-backed tests |
+| `integration-testing` | The `CustomWebApplicationFactory` fixture for real-pipeline tests (auth, routing, controllers) — an EF dual-provider conflict already solved, logging in as the seeded admin, keeping the test host hermetic |
 | `api-controller-conventions` | Known inconsistencies across API controllers (a namespace bug, three coexisting auth mechanisms, no `Result<T>`→HTTP helper) |

@@ -373,3 +373,8 @@ if (builder.Environment.IsDevelopment() == false)
 await DatabaseSeeder.SeedAsync(app.Services);
 
 app.Run();
+
+// Exposes the top-level-statement Program class to WebApplicationFactory<Program> in
+// src/Lanyard.Tests's integration tests - top-level statements otherwise generate an
+// internal Program type invisible outside this assembly.
+public partial class Program;

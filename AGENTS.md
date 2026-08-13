@@ -10,21 +10,15 @@ BEFORE STARTING EVERY REQUEST, WRITE THE MESSAGE: "Instructions Loaded" TO CONFI
 
 ## MCP Preference For This Repository
 
-When working in this repository, for any Blazor or Fluent UI Blazor question/task:
+For any Blazor or Fluent UI Blazor question or task, call the `blazor_knowledge` MCP server **before** relying on built-in knowledge — its server name in `.claude/settings.json` is `fluent-ui-blazor`.
 
-1. Call the `blazor_knowledge` MCP server first.
-2. Use these tools/resources before relying on built-in memory:
-   - `search_blazor_docs`
-   - `semantic_search_blazor_docs`
+1. Use these tools/resources first:
+   - `search_blazor_docs` / `semantic_search_blazor_docs`
    - `get_fluentui_component`
    - `compare_patterns`
-   - `blazor://overview`
-   - `blazor://component/{name}`
-   - `blazor://api/{symbol}`
-   - `blazor://search/{query}`
-   - `blazor://example/{component}/{scenario}`
-3. Prefer answers that include citations returned by the MCP server.
-4. If MCP returns no relevant results, fall back to general reasoning/web sources and clearly state the fallback.
+   - `blazor://overview`, `blazor://component/{name}`, `blazor://api/{symbol}`, `blazor://search/{query}`, `blazor://example/{component}/{scenario}`
+2. Prefer answers that include citations returned by the MCP server.
+3. If MCP returns no relevant results, fall back to general reasoning/web sources and clearly state the fallback.
 
 ## Solution Overview
 
@@ -207,7 +201,19 @@ If troubleshooting local auth, inspect `src/Lanyard.Server/LanyardApp/Data/Devel
 1. Place tests in `src/Lanyard.Tests` with folder parity to source area.
 2. Use Arrange-Act-Assert structure.
 3. Cover success and failure paths for new service methods.
-4. For data logic tests, prefer EF InMemory patterns already used by existing tests.
+4. For data logic tests, prefer EF InMemory patterns already used by existing tests — see the `service-testing-patterns` skill for the exact convention.
+
+### When a service-level unit test isn't enough
+
+A unit test mocks away the DI pipeline, auth middleware, and SignalR wiring — it can't catch a bug that only exists in how those pieces are wired together. Consider an integration/system test (not just a unit test) instead of — or in addition to — a service-level test whenever the change touches:
+
+1. **Authorization/routing wiring** — a new route, a new `[Authorize]`/`[AllowAnonymous]` placement, or middleware ordering. Exactly this class of bug shipped once already: `Routes.razor` used a plain `RouteView` instead of `AuthorizeRouteView`, so every `[Authorize]` attribute in the app was silently dead code — and every service-level unit test still passed, because none of them exercise routing at all.
+2. **A SignalR hub event or method name** — `SendAsync("EventName", ...)` / `.On("EventName", ...)` pairs are untyped strings with no compile-time check; a typo silently drops the event with no error anywhere (see CLAUDE.md's SignalR Event Patterns).
+3. **A cross-file "dispatch" pattern where a missing wiring step fails silently rather than throwing** — e.g. a new dashboard widget type or automation action type. See the `dashboard-widgets`/`automation-engine` skills for the concrete shape this takes in this repo (something that saves fine and looks correct but silently does nothing at runtime).
+
+If none of the above apply, a service-level unit test is sufficient — don't reach for integration-test infrastructure by default.
+
+When you do need one, reuse `src/Lanyard.Tests/Integration/CustomWebApplicationFactory.cs` (a `WebApplicationFactory<Program>` boot against an isolated EF InMemory database) rather than building a new fixture — see the `integration-testing` skill for the non-obvious setup it already solved (an EF dual-provider conflict, the `Program` visibility marker, logging in as the seeded admin, keeping the test host hermetic). `RouteAuthorizationIntegrationTests.cs` is the reference example.
 
 ## Practical Checklist For Any New Feature
 
