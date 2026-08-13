@@ -1,5 +1,5 @@
 ﻿@page "/manage/users"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication

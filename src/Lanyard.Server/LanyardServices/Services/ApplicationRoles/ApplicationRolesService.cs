@@ -28,9 +28,11 @@ public class ApplicationRolesService
 
     public async Task<Result<List<ApplicationRole>>> GetAllApplicationRolesAsync()
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Read-only, so Managers get it too - they need the role list to bulk-assign training
+        // by role (BulkAssignDialog). Role creation/deletion/assignment below stays Admin-only.
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin") && !await _sApi.IsCurrentUserInRoleAsync("Manager"))
         {
-            return Result<List<ApplicationRole>>.Fail("You must be an administrator to perform this action!");
+            return Result<List<ApplicationRole>>.Fail("You must be a manager or administrator to perform this action!");
         }
 
         try
@@ -119,9 +121,11 @@ public class ApplicationRolesService
 
     public async Task<Result<List<UserProfile>>> GetUsersInRoleAsync(string roleId)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Read-only, so Managers get it too - see GetAllApplicationRolesAsync above. Callers that
+        // need location-scoped results (e.g. BulkAssignDialog) filter this list down themselves.
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin") && !await _sApi.IsCurrentUserInRoleAsync("Manager"))
         {
-            return Result<List<UserProfile>>.Fail("You must be an administrator to perform this action!");
+            return Result<List<UserProfile>>.Fail("You must be a manager or administrator to perform this action!");
         }
 
         try
@@ -261,9 +265,9 @@ public class ApplicationRolesService
 
     public async Task<Result<string>> AssignRoleToUserAsync(string userId, string roleId)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin") && !await _sApi.IsCurrentUserInRoleAsync("Manager"))
         {
-            return Result<string>.Fail("You must be an administrator to perform this action!");
+            return Result<string>.Fail("You must be a manager or administrator to perform this action!");
         }
 
         try
@@ -284,6 +288,13 @@ public class ApplicationRolesService
             if (!role.IsActive)
             {
                 return Result<string>.Fail("Cannot assign an inactive role.");
+            }
+
+            // Managers can assign any role except Admin - only an existing Admin can grant Admin.
+            if (string.Equals(role.Name, "Admin", StringComparison.OrdinalIgnoreCase)
+                && !await _sApi.IsCurrentUserInRoleAsync("Admin"))
+            {
+                return Result<string>.Fail("Only administrators can assign the Admin role.");
             }
 
             if (await _umApi.IsInRoleAsync(user, role.Name!))
@@ -309,9 +320,9 @@ public class ApplicationRolesService
 
     public async Task<Result<string>> RemoveRoleFromUserAsync(string userId, string roleId)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin") && !await _sApi.IsCurrentUserInRoleAsync("Manager"))
         {
-            return Result<string>.Fail("You must be an administrator to perform this action!");
+            return Result<string>.Fail("You must be a manager or administrator to perform this action!");
         }
 
         try
@@ -327,6 +338,14 @@ public class ApplicationRolesService
             if (role is null)
             {
                 return Result<string>.Fail("Role not found.");
+            }
+
+            // Mirrors the assign-side guard - a Manager must never be able to strip Admin status
+            // from anyone either, only an existing Admin can touch another Admin's Admin role.
+            if (string.Equals(role.Name, "Admin", StringComparison.OrdinalIgnoreCase)
+                && !await _sApi.IsCurrentUserInRoleAsync("Admin"))
+            {
+                return Result<string>.Fail("Only administrators can remove the Admin role.");
             }
 
             if (!await _umApi.IsInRoleAsync(user, role.Name!))

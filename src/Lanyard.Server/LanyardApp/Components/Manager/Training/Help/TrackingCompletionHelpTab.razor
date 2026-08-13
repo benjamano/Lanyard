@@ -1,0 +1,27 @@
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16px" Class="my-2">
+    <FluentText>
+        The <a href="/manage/training">Training Dashboard</a>'s By Course and By Person tabs show
+        live status for every assignment. The Timing and Analytics tabs turn that into reports.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Timing reports</FluentText>
+    <FluentText>
+        For a selected course, shows the average time taken to complete it, plus a breakdown of
+        average time spent per section, useful for spotting a section that's taking people far
+        longer than expected.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Analytics reports</FluentText>
+    <FluentText>
+        For a selected course, shows top-scoring trainees, fastest and slowest completions, and a
+        donut chart of how the assigned group splits across Not Started / In Progress / Completed
+        / Overdue.
+    </FluentText>
+
+    <FluentMessageBar Intent="MessageBarIntent.Warning">
+        There is no automatic email reminder for overdue or newly-assigned training. The only
+        training email the system sends is a retake reminder for courses with recurrence enabled,
+        when someone's retake window comes up. For everything else, check the dashboard rather
+        than waiting for a notification.
+    </FluentMessageBar>
+</FluentStack>

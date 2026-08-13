@@ -1,5 +1,5 @@
 ﻿@page "/manage/roles"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
@@ -7,12 +7,23 @@
 <div class="p-2">
     <UserRolesManager @ref="_userRoleManager" />
 
-    <RoleManager OnRolesChanged="HandleRolesChanged" />
+    @if (isAdmin)
+    {
+        <RoleManager OnRolesChanged="HandleRolesChanged" />
+    }
 </div>
 
 @code {
     private IEnumerable<ApplicationRole> roles = Array.Empty<ApplicationRole>();
     private UserRolesManager? _userRoleManager;
+    private bool isAdmin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Defining which roles exist (create/delete) stays Admin-only - Managers here only get
+        // to assign existing roles to users, via UserRolesManager above.
+        isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
+    }
 
     public async Task HandleRolesChanged(IEnumerable<ApplicationRole> roles)
     {

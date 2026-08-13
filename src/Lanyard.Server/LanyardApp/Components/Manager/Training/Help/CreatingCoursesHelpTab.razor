@@ -1,0 +1,41 @@
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16px" Class="my-2">
+    <FluentText>
+        Courses are created and edited from the <a href="/manage/training/courses">Courses</a>
+        page. Click a course to open its editor, or use "New Course" to start one from scratch.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Course details</FluentText>
+    <ul>
+        <li><strong>Course Name</strong> and <strong>Description</strong>, shown to the trainee
+            before they start.</li>
+        <li><strong>Pass Mark %</strong>, the minimum quiz score needed for the assignment to
+            count as Completed.</li>
+        <li><strong>Recurs every (months)</strong>, optional. Leave blank for a one-off course.
+            If set, completing the course automatically starts a fresh assignment cycle for that
+            person once the given number of months has passed (a "retake").</li>
+        <li><strong>Location</strong>, which location owns the course. Only Admins can change
+            this; a Manager's new courses are automatically owned by their own location.</li>
+        <li><strong>Share this course across all locations</strong>, see the <strong>Multi-
+            Location Training Rules</strong> tab for what sharing does and doesn't allow.</li>
+    </ul>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Sections and quiz questions</FluentText>
+    <FluentText>
+        Below the course details are two lists: <strong>Sections</strong> (the reading content a
+        trainee works through, in order, drag the handle to reorder) and <strong>Quiz
+        Questions</strong> (multiple-choice questions, each with one correct option, that make up
+        the course's single quiz). Add as many of each as the course needs, then use
+        <strong>Save Course Details</strong> to save the top-level fields.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Preview</FluentText>
+    <FluentText>
+        Use the <strong>Preview</strong> button to step through the course exactly as a trainee
+        would see it, before assigning it to anyone.
+    </FluentText>
+
+    <FluentMessageBar Intent="MessageBarIntent.Info">
+        If a course was shared with your location by another location, you can view it but its
+        fields will be read-only, only the owning location can make changes.
+    </FluentMessageBar>
+</FluentStack>

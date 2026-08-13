@@ -1,0 +1,39 @@
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16px" Class="my-2">
+    <FluentMessageBar Intent="MessageBarIntent.Info">
+        Training is one of the few areas of the app that's location-scoped. Don't assume the same
+        rules apply elsewhere, most other modules (Clients, Zones, Automation, Dashboards) aren't
+        split by location the way Training is.
+    </FluentMessageBar>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Ownership and sharing</FluentText>
+    <FluentText>
+        Every course belongs to exactly one location. By default, only that location can see or
+        manage it. Turning on <strong>Share this course across all locations</strong> makes it
+        visible to every other location too, but strictly read-only there, other locations can
+        view and preview it, but can't edit its content, change its auto-assign rule, or delete
+        it. Only the owning location (or an Admin) can make changes.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Managers vs Admins</FluentText>
+    <FluentText>
+        A Manager only manages courses and assignments belonging to their own location, including
+        bulk-assigning by role, which for a Manager only ever reaches people at their own
+        location. Admins can act across every location, and are the only role that can move a
+        course to a different owning location.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Assignment location vs course location</FluentText>
+    <FluentText>
+        An assignment records the location of whoever assigned it, which isn't always the same as
+        the course's own owning location, this matters mainly for a shared course, where a
+        Manager at a different location may have assigned it to one of their own staff.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">"Couldn't work out which location" error</FluentText>
+    <FluentText>
+        Any Training page can occasionally fail to resolve which location you're working in and
+        show this error instead of its usual content. It's normally temporary, use the
+        <strong>Reload</strong> button that appears with it, or sign out and back in if it
+        persists.
+    </FluentText>
+</FluentStack>

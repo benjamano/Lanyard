@@ -1,0 +1,68 @@
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="16px" Class="my-2">
+    <FluentText>
+        The Training system lets Managers and Admins build courses, assign them to staff, and
+        track who has completed what. This page covers the pieces that make it up and how they
+        fit together.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Key terms</FluentText>
+    <ul>
+        <li><strong>Course</strong>, the top-level unit of training. Has a name, description,
+            pass mark, and belongs to a location.</li>
+        <li><strong>Section</strong>, a block of reading content inside a course. A course can
+            have several, shown to the trainee in order.</li>
+        <li><strong>Quiz question</strong>, a multiple-choice question attached to a course, with
+            one correct option. All of a course's questions make up its single quiz.</li>
+        <li><strong>Assignment</strong>, links one course to one staff member. This is what
+            actually shows up in someone's "My Training" list, and what carries the due date and
+            completion status.</li>
+        <li><strong>Recurrence</strong>, an optional setting on a course that automatically
+            re-assigns it to someone a set number of months after they last completed it (a
+            "retake").</li>
+    </ul>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Assignment status</FluentText>
+    <FluentText>
+        Every assignment is always in exactly one of these states, worked out automatically,
+        there's nothing to set manually:
+    </FluentText>
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+            <FluentBadge Content="Not Started" Color="BadgeColor.Subtle" Appearance="BadgeAppearance.Filled" />
+            <FluentText>The person hasn't opened the course yet.</FluentText>
+        </FluentStack>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+            <FluentBadge Content="In Progress" Color="BadgeColor.Informative" Appearance="BadgeAppearance.Filled" />
+            <FluentText>They've started at least one section but haven't finished.</FluentText>
+        </FluentStack>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+            <FluentBadge Content="Completed" Color="BadgeColor.Success" Appearance="BadgeAppearance.Filled" />
+            <FluentText>They've finished and, if there's a quiz, passed it.</FluentText>
+        </FluentStack>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px">
+            <FluentBadge Content="Overdue" Color="BadgeColor.Danger" Appearance="BadgeAppearance.Filled" />
+            <FluentText>The due date has passed and it still isn't completed.</FluentText>
+        </FluentStack>
+    </FluentStack>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Manager vs Admin</FluentText>
+    <ul>
+        <li><strong>Managers</strong> can create/edit courses for their own location, assign
+            training to individuals or by role, and view reports for their location.</li>
+        <li><strong>Admins</strong> can do everything a Manager can, plus: change which location a
+            course belongs to, and manage courses/assignments across every location.</li>
+    </ul>
+    <FluentText>
+        See the <strong>Multi-Location Training Rules</strong> tab for more on how location
+        ownership and sharing works.
+    </FluentText>
+
+    <FluentText As="TextTag.H5" Size="TextSize.Size400">Where to find things</FluentText>
+    <FluentText>
+        The <a href="/manage/training">Training Dashboard</a> has five tabs: <strong>By
+        Course</strong> and <strong>By Person</strong> for viewing and managing assignments,
+        <strong>Auto-assign rules</strong> for new-user defaults, and <strong>Timing</strong> /
+        <strong>Analytics</strong> for reports. Courses themselves are created and edited from the
+        separate <a href="/manage/training/courses">Courses</a> page.
+    </FluentText>
+</FluentStack>
