@@ -39,14 +39,18 @@
     const failsafe = setTimeout(reveal, 5000);
     window.lanyardRevealApp = reveal;
 
-    // defineComponents() runs at beforeStart but applyStyles() at
+    // defineComponents() runs at beforeStart but token application at
     // afterStarted, so waiting on the custom element alone would reveal
-    // mid-flash. default-fuib-css is the last thing applyStyles() injects.
+    // mid-flash. As of Fluent UI v5 rc.5, tokens are written as inline CSS
+    // custom properties on <html> (initializeThemeSettings(), part of
+    // beforeStart) rather than via a <link id="default-fuib-css"> element
+    // (that was rc.3-only and no longer exists - re-verify on Fluent upgrades).
+    // --colorNeutralBackground1 is the token default-fuib.css uses for
+    // body { background-color }, so its presence means tokens are live.
     const isReady = () => {
         if (customElements.get('fluent-button') === undefined) { return false; }
-        const link = document.getElementById('default-fuib-css');
-        if (link === null) { return false; }
-        try { return link.sheet !== null; } catch { return false; }
+        const bg = getComputedStyle(document.documentElement).getPropertyValue('--colorNeutralBackground1');
+        return bg.trim() !== '';
     };
 
     const poll = () => {
