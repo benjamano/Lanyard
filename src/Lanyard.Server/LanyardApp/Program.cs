@@ -56,6 +56,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddRuntimeInstrumentation())
+    .WithLogging()
     .UseOtlpExporter();
 
 // Add Razor Components with Interactive Server
