@@ -4,30 +4,31 @@
 @inject IFileService _fileService
 @inject INotificationService _toastService
 
-<div class="file-uploader-wrapper">
-    <FluentInputFile Id="my-file-uploader"
-                     Mode="InputFileMode.SaveToTemporaryFolder"
-                     Multiple="true"
-                     MaximumFileCount="4"
-                     MaximumFileSize="@MaximumFileSize"
-                     Accept="@Accept"
-                     @bind-ProgressPercent="@ProgressPercent"
-                     OnCompleted="@OnCompletedAsync"
-                     Class="file-uploader-dropzone"
+<div class="file-uploader-wrapper w-100">
+    <FluentInputFile Id="my-file-uploader" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="true"
+                     MaximumFileCount="@MaximumFileCount" MaximumFileSize="@MaximumFileSize" Accept="@Accept"
+                     @bind-ProgressPercent="@ProgressPercent" OnCompleted="@OnCompletedAsync" Class="file-uploader-dropzone"
                      Padding="@Padding.Top5">
         <ChildContent>
             <label for="my-file-uploader">
-                <FluentIcon Value="@(new @Icons.Regular.Size24.ArrowUpload())" />
+                @if (PreviewUrl is not null)
+                {
+                    <img src="@PreviewUrl" alt="Current file preview" class="file-uploader-preview" />
+                }
+                else
+                {
+                    <FluentIcon Value="@(new @Icons.Regular.Size24.ArrowUpload())" />
+                }
             </label>
 
             <div>
-                Drag files here you wish to upload,
+                @Label,
                 or <label for="my-file-uploader">browse</label>
                 for them.
                 <br />
-                <em>Maximum of 4 files allowed.</em>
+                <em>Maximum of @MaximumFileCount file@(MaximumFileCount > 1 ? "s" : "") allowed.</em>
                 <br />
-                <em>Maximum file size: 100 MB.</em>
+                <em>Maximum file size: @(MaximumFileSize / (1024 * 1024)) MB.</em>
             </div>
         </ChildContent>
     </FluentInputFile>
@@ -39,6 +40,13 @@
     [Parameter] public EventCallback<FileMetadata> OnFileUploaded { get; set; }
     [Parameter] public string? Accept { get; set; }
     [Parameter] public long MaximumFileSize { get; set; } = 100 * 1024 * 1024;
+    [Parameter] public string Label { get; set; } = "Upload files";
+    [Parameter] public int MaximumFileCount { get; set; } = 4;
+
+    // Purely parent-owned: this component has no opinion on what "current" means (an
+    // already-saved value vs. one just uploaded this session), so callers that want a
+    // preview pass a URL and update it themselves from OnFileUploaded's FileMetadata.
+    [Parameter] public string? PreviewUrl { get; set; }
 
     int ProgressPercent = 0;
     FluentInputFileEventArgs[] Files = Array.Empty<FluentInputFileEventArgs>();

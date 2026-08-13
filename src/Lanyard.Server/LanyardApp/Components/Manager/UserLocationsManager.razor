@@ -3,89 +3,84 @@
 
 @inject INotificationService ToastService
 
-@* The plain wrapper div is what carries this component's scoped-CSS attribute - FluentUI
-   component roots do not receive it, so every rule in the sibling .razor.css reaches them
-   via "::deep" from here. *@
 <div class="user-locations-manager">
-<FluentCard Height="auto" Class="ulm-root-card">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Typo="Typography.H4">Staff Locations</FluentText>
+    <FluentCard Height="auto" Class="ulm-root-card">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentText As="@TextTag.H4">Staff Locations</FluentText>
 
-        <FluentGrid Class="w-100">
-            <FluentGridItem Xs="12" Sm="2">
-                <FluentSelect TOption="UserProfile"
-                              TValue="string"
-                              Items="@userProfiles.OrderBy(x => x.GetName())"
-                              OptionText="@(i => i?.GetName() ?? string.Empty)"
-                              OptionValue="@(i => i?.Id)"
-                              Placeholder="Select a User..."
-                              Label="Select User"
-                              Value="@selectedUserId"
-                              ValueChanged="SetUserAndLoadLocations"
-                              Width="100%">
-                </FluentSelect>
-            </FluentGridItem>
+            <FluentGrid Class="w-100" Margin="@Margin.Start2" Spacing="1">
+                <FluentGridItem Xs="12" Sm="2">
+                    <FluentSelect TOption="UserProfile" TValue="string" Items="@userProfiles.OrderBy(x => x.GetName())"
+                                  OptionText="@(i => i?.GetName() ?? string.Empty)" OptionValue="@(i => i?.Id)"
+                                  Placeholder="Select a User..." Label="Select User" Value="@selectedUserId"
+                                  ValueChanged="SetUserAndLoadLocations" Width="100%" Margin="@Margin.Top0">
+                    </FluentSelect>
+                </FluentGridItem>
 
-            <FluentGridItem Xs="12" Sm="5">
-                @if (selectedUserId is not null)
-                {
-                    <FluentCard Height="auto">
-                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentText Typo="Typography.H6">Assigned Locations</FluentText>
+                <FluentGridItem Xs="12" Sm="5">
+                    @if (selectedUserId is not null)
+                    {
+                        <FluentCard Height="100%">
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                <FluentText Typo="Typography.H6">Assigned Locations</FluentText>
 
-                            @if (!assignedLocations.Any())
-                            {
-                                <FluentText Class="ulm-empty-note">
-                                    This user has no location memberships.
-                                </FluentText>
-                            }
-                            else
-                            {
-                                <FluentDataGrid Items="@assignedLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="ulm-full-width">
-                                    <TemplateColumn Title="Location">
-                                        @context.GetDisplayName()
-                                    </TemplateColumn>
-                                    <TemplateColumn Title="Actions">
-                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => RemoveLocation(context.Id))" />
-                                    </TemplateColumn>
-                                </FluentDataGrid>
-                            }
-                        </FluentStack>
-                    </FluentCard>
-                }
-            </FluentGridItem>
+                                @if (!assignedLocations.Any())
+                                {
+                                    <FluentText Class="ulm-empty-note">
+                                        This user has no location memberships.
+                                    </FluentText>
+                                }
+                                else
+                                {
+                                    <FluentDataGrid Items="@assignedLocations.AsQueryable()" GridTemplateColumns="2fr 1fr"
+                                                    Class="ulm-full-width" RowSize="@DataGridRowSize.Medium">
+                                        <TemplateColumn Title="Location">
+                                            @context.GetDisplayName()
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="Actions">
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                          OnClick="@(() => RemoveLocation(context.Id))" />
+                                        </TemplateColumn>
+                                    </FluentDataGrid>
+                                }
+                            </FluentStack>
+                        </FluentCard>
+                    }
+                </FluentGridItem>
 
-            <FluentGridItem Xs="12" Sm="5">
-                @if (selectedUserId is not null)
-                {
-                    <FluentCard Height="auto">
-                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            <FluentText Typo="Typography.H6">Add Location</FluentText>
+                <FluentGridItem Xs="12" Sm="5">
+                    @if (selectedUserId is not null)
+                    {
+                        <FluentCard Height="100%">
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                <FluentText Typo="Typography.H6">Add Location</FluentText>
 
-                            @if (!availableLocations.Any())
-                            {
-                                <FluentText Class="ulm-empty-note">
-                                    No more locations left to assign.
-                                </FluentText>
-                            }
-                            else
-                            {
-                                <FluentDataGrid Items="@availableLocations.AsQueryable()" GridTemplateColumns="2fr 1fr" Class="ulm-full-width">
-                                    <TemplateColumn Title="Location">
-                                        @context.GetDisplayName()
-                                    </TemplateColumn>
-                                    <TemplateColumn Title="Actions">
-                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())" OnClick="@(() => AddLocation(context.Id))" />
-                                    </TemplateColumn>
-                                </FluentDataGrid>
-                            }
-                        </FluentStack>
-                    </FluentCard>
-                }
-            </FluentGridItem>
-        </FluentGrid>
-    </FluentStack>
-</FluentCard>
+                                @if (!availableLocations.Any())
+                                {
+                                    <FluentText Class="ulm-empty-note">
+                                        No more locations left to assign.
+                                    </FluentText>
+                                }
+                                else
+                                {
+                                    <FluentDataGrid Items="@availableLocations.AsQueryable()" GridTemplateColumns="2fr 1fr"
+                                                    Class="ulm-full-width" RowSize="@DataGridRowSize.Medium">
+                                        <TemplateColumn Title="Location">
+                                            @context.GetDisplayName()
+                                        </TemplateColumn>
+                                        <TemplateColumn Title="Actions">
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())"
+                                                          OnClick="@(() => AddLocation(context.Id))" />
+                                        </TemplateColumn>
+                                    </FluentDataGrid>
+                                }
+                            </FluentStack>
+                        </FluentCard>
+                    }
+                </FluentGridItem>
+            </FluentGrid>
+        </FluentStack>
+    </FluentCard>
 </div>
 
 @code {

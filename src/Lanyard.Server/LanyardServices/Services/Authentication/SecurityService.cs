@@ -362,14 +362,13 @@ public class SecurityService : ISecurityService
         // "primary company" concept; the branding is cosmetic and the link itself is unaffected.
         if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
         {
-            if (!string.IsNullOrWhiteSpace(company.ThemeColorHex))
-            {
-                accentColorHex = company.ThemeColorHex;
-            }
+            accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
 
-            if (company.LogoFileId is not null)
+            if (company.LogoFileId is Guid logoFileId)
             {
-                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo";
+                // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                // logo replacement needs a new URL to guarantee a fresh fetch.
+                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
             }
         }
 

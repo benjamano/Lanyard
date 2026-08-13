@@ -39,8 +39,7 @@ else
     @if (!canEditCourse)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" Class="mb-3">
-            This course belongs to another location and is shared with yours. You can read it, but
-            only its owning location can make changes.
+            This course belongs to @owningLocationName and is shared with yours. You can read it, but only its owning location can make changes.
         </FluentMessageBar>
     }
 
@@ -69,15 +68,14 @@ else
                 {
                     <div class="w-100">
                         <FluentSelect TOption="Location" TValue="int?" Items="@allLocations"
-                                      OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
-                                      OptionValue="@(l => l?.Id)" @bind-Value="course.LocationId"
-                                      Label="Location" Disabled="@(currentScope?.IsAdmin != true)" Required="true"
-                                      Style="width: 100%;" />
+                                      OptionText="@(l => l?.GetDisplayName() ?? string.Empty)" OptionValue="@(l => l?.Id)"
+                                      @bind-Value="course.LocationId" Label="Location" Disabled="@(currentScope?.IsAdmin != true)"
+                                      Required="true" Style="width: 100%;" />
                     </div>
                 }
                 <div class="w-100">
                     <FluentSwitch @bind-Value="course.IsShared" Disabled="@(!canEditCourse)"
-                                  Label="Share this course across all locations (e.g. COSHH)" />
+                                  Label="Share this course across all locations" />
                 </div>
             </FluentGridItem>
         </FluentGrid>
@@ -101,9 +99,8 @@ else
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
                         <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
-                             @ondragstart="@(() => draggedSection = courseSection)"
-                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
-                             @ondrop="@(() => OnSectionDropAsync(courseSection))">
+                             @ondragstart="@(() => draggedSection = courseSection)" @ondragover="@(() => { })"
+                             @ondragover:preventDefault="true" @ondrop="@(() => OnSectionDropAsync(courseSection))">
                             <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
                             <FluentButton
                                 Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
@@ -123,9 +120,8 @@ else
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
                         <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
-                             @ondragstart="@(() => draggedQuestion = question)"
-                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
-                             @ondrop="@(() => OnQuestionDropAsync(question))">
+                             @ondragstart="@(() => draggedQuestion = question)" @ondragover="@(() => { })"
+                             @ondragover:preventDefault="true" @ondrop="@(() => OnQuestionDropAsync(question))">
                             <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
                             <FluentButton
                                 Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
@@ -178,13 +174,13 @@ else
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                                          Loading="@isSavingSection" Disabled="@(!canEditCourse)"
-                                          OnClick="SaveSelectedSectionAsync">
+                                          Loading="@isSavingSection" Disabled="@(!canEditCourse)" OnClick="SaveSelectedSectionAsync">
                                 Save
                             </FluentButton>
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                          Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
+                                          Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)"
+                                          OnClick="DeleteSelectedSectionAsync">
                                 Delete
                             </FluentButton>
                         </FluentStack>
@@ -220,8 +216,8 @@ else
                         <div class="question-actions-group">
                             <div class="question-actions-add">
                                 <FluentButton Appearance="ButtonAppearance.Outline"
-                                              IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                              Disabled="@(!canEditCourse)" OnClick="AddOption">
+                                              IconStart="@(new Icons.Regular.Size20.FormNew())" Disabled="@(!canEditCourse)"
+                                              OnClick="AddOption">
                                     Add Option
                                 </FluentButton>
                             </div>
@@ -234,7 +230,8 @@ else
                                 </FluentButton>
                                 <FluentButton Appearance="ButtonAppearance.Outline"
                                               IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                              Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
+                                              Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)"
+                                              OnClick="DeleteSelectedQuestionAsync">
                                     Delete
                                 </FluentButton>
                             </FluentStack>
@@ -281,6 +278,9 @@ else
         && course is not null
         && (currentScope.IsAdmin || course.LocationId == currentScope.LocationId);
 
+    private string owningLocationName =>
+        allLocations.FirstOrDefault(l => l.Id == course?.LocationId)?.GetDisplayName() ?? "another location";
+
     private Guid correctOptionId
     {
         get => selectedQuestion?.Options.FirstOrDefault(x => x.IsCorrect)?.Id ?? Guid.Empty;
@@ -302,14 +302,14 @@ else
     {
         await LoadCourseAsync();
 
-        if (currentScope?.IsAdmin == true)
-        {
-            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+        // Fetched for everyone, not just admins: non-admins never see the Location dropdown
+        // below, but they're exactly who sees the "belongs to another location" message bar,
+        // which needs this list to name the owning location instead of a generic phrase.
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
 
-            if (locationsResult.IsSuccess && locationsResult.Data is not null)
-            {
-                allLocations = locationsResult.Data;
-            }
+        if (locationsResult.IsSuccess && locationsResult.Data is not null)
+        {
+            allLocations = locationsResult.Data;
         }
     }
 
@@ -467,7 +467,8 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)], currentScope!);
+        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)],
+currentScope!);
 
         if (!result.IsSuccess)
         {
@@ -509,7 +510,8 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)], currentScope!);
+        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)],
+currentScope!);
 
         if (!result.IsSuccess)
         {

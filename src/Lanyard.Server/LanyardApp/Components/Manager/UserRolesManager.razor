@@ -10,34 +10,32 @@
 
 <FluentCard Height="auto" Style="min-height:30vh;">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Typo="Typography.H4">User Roles</FluentText>
+        <FluentStack VerticalAlignment="@VerticalAlignment.Top" Orientation="Orientation.Vertical" HorizontalGap="8">
+            <FluentText As="@TextTag.H4">User Roles</FluentText>
 
-        <FluentGrid Class="w-100">
-            <FluentGridItem Xs="12" Sm="2">
-                <FluentSelect TOption="UserProfile"
-                              TValue="string"
-                              Items="@userProfiles.OrderBy(x=> x.GetName())"
-                              OptionText="@(i => i?.GetName() ?? string.Empty)"
-                              OptionValue="@(i => i?.Id)"
-                              Placeholder="Select a User..."
-                              Label="Select User"
-                              Value="@selectedUser"
-                              ValueChanged="SetUserAndLoadRolesById"
-                              Width="100%">
+            <FluentStack Width="auto">
+                <FluentSelect Margin="@Margin.Vertical0" TOption="UserProfile" TValue="string"
+                              Items="@userProfiles.OrderBy(x => x.GetName())" OptionText="@(i => i?.GetName() ?? string.Empty)"
+                              OptionValue="@(i => i?.Id)" Placeholder="Select a User..." Label="Select User" Value="@selectedUser"
+                              ValueChanged="SetUserAndLoadRolesById" Width="100%">
                 </FluentSelect>
-            </FluentGridItem>
+            </FluentStack>
+        </FluentStack>
 
-            <FluentGridItem Xs="12" Sm="6">
+        <FluentGrid Class="w-100" Spacing="1">
+            <FluentGridItem Xs="12" Sm="8">
                 @if (selectedUser != null)
                 {
-                    <FluentCard Height="auto">
+                    <FluentCard Height="100%">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                             <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
-                                <FluentText Typo="Typography.H6">Assigned Roles</FluentText>
+                                <FluentText As="@TextTag.H6">Assigned Roles</FluentText>
 
-                                <FluentTextInput Placeholder="Filter..." AutoComplete="off" @bind-Value="@searchForRolesAlreadyAssignedValue" @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
+                                <FluentTextInput Margin="@Margin.StartAuto" Placeholder="Filter..." AutoComplete="off"
+                                                 @bind-Value="@searchForRolesAlreadyAssignedValue"
+                                                 @bind-Value:after=HandleSearchForRoleAlreadyAssignedInput />
                             </FluentStack>
-                            
+
                             @if (!filteredUserRoles.Any())
                             {
                                 <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
@@ -46,7 +44,9 @@
                             }
                             else
                             {
-                                <FluentDataGrid AutoItemsPerPage="true" ItemSize="46" Virtualize="true" Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
+                                <FluentDataGrid AutoItemsPerPage="true" ItemSize="46" Virtualize="true"
+                                                Items="@filteredUserRoles.OrderBy(x => x.Name).AsQueryable()"
+                                                GridTemplateColumns="1fr 1fr 1fr 1fr" Style="width: 100%;">
                                     <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Role" />
                                     <PropertyColumn Property="@(r => r.CreateDate)" Title="Date Added" Format="g" />
                                     <TemplateColumn Title="Created By">
@@ -56,7 +56,8 @@
                                         @createdBy
                                     </TemplateColumn>
                                     <TemplateColumn Title="Actions">
-                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())" OnClick="@(() => RemoveRoleFromUser(context.Id))"></FluentButton>
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                      OnClick="@(() => RemoveRoleFromUser(context.Id))"></FluentButton>
                                     </TemplateColumn>
                                 </FluentDataGrid>
                             }
@@ -71,16 +72,20 @@
                     <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                             <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
-                                <FluentText Typo="Typography.H6">Assign New Roles</FluentText>
+                                <FluentText As="@TextTag.H6">Assign New Roles</FluentText>
 
-                                <FluentTextInput Placeholder="Filter..." AutoComplete="off" @bind-Value="@searchForRoleToAddValue" @bind-Value:after=HandleSearchForRoleToAddInput />
+                                <FluentTextInput Margin="@Margin.StartAuto" Placeholder="Filter..." AutoComplete="off"
+                                                 @bind-Value="@searchForRoleToAddValue"
+                                                 @bind-Value:after=HandleSearchForRoleToAddInput />
                             </FluentStack>
-                            
+
                             @if (roles is not null)
                             {
                                 @if (filteredRoles.Any())
                                 {
-                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr" Style="width: 100%;" AutoItemsPerPage="true" ItemSize="46" Virtualize="true">
+                                    <FluentDataGrid Items="@filteredRoles.OrderBy(x => x.Name).AsQueryable()"
+                                                    GridTemplateColumns="2fr 1fr" Style="width: 100%;" AutoItemsPerPage="true" ItemSize="46"
+                                                    Virtualize="true">
                                         <TemplateColumn Title="Name">
                                             @{
                                                 var roleName = context.Name ?? string.Empty;
@@ -88,7 +93,8 @@
                                             @roleName
                                         </TemplateColumn>
                                         <TemplateColumn Title="Actions">
-                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())" OnClick="@(() => AddRoleToUser(context.Id))"></FluentButton>
+                                            <FluentButton IconEnd="@(new Icons.Regular.Size20.AddCircle())"
+                                                          OnClick="@(() => AddRoleToUser(context.Id))"></FluentButton>
                                         </TemplateColumn>
                                     </FluentDataGrid>
                                 }

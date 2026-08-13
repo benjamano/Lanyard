@@ -112,14 +112,13 @@ public class CourseRecurrenceHostedService(
 
                     if (brandingResult.Success && brandingResult.Data is not null)
                     {
-                        if (!string.IsNullOrWhiteSpace(brandingResult.Data.ThemeColorHex))
-                        {
-                            accentColorHex = brandingResult.Data.ThemeColorHex;
-                        }
+                        accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
 
-                        if (brandingResult.Data.LogoFileId is not null)
+                        if (brandingResult.Data.LogoFileId is Guid logoFileId)
                         {
-                            logoUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo";
+                            // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                            // logo replacement needs a new URL to guarantee a fresh fetch.
+                            logoUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
                         }
                     }
                 }

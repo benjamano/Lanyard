@@ -441,6 +441,8 @@ namespace Lanyard.Tests.Services.Authentication
                 companyLocationServiceMock,
                 publicBaseUrl: "https://public.lanyard.example/");
 
+            Guid logoFileId = Guid.NewGuid();
+
             // Re-stated after BuildService, which installs a returns-nothing default for this
             // member - the last Moq setup wins, and this one gives the branding branch a company.
             companyLocationServiceMock
@@ -457,7 +459,7 @@ namespace Lanyard.Tests.Services.Authentication
                             Id = 7,
                             Name = "Play2Day",
                             ThemeColorHex = "#C8102E",
-                            LogoFileId = Guid.NewGuid()
+                            LogoFileId = logoFileId
                         }
                     }
                 ]));
@@ -474,7 +476,7 @@ namespace Lanyard.Tests.Services.Authentication
             // Emails are read on someone else's machine, so both URLs must come from the
             // configured public base URL, never from the current request's host.
             Assert.IsNotNull(capturedLogoUrl);
-            Assert.AreEqual("https://public.lanyard.example/api/companies/7/logo", capturedLogoUrl);
+            Assert.AreEqual($"https://public.lanyard.example/api/companies/7/logo?v={logoFileId:N}", capturedLogoUrl);
             Assert.IsNotNull(capturedSetPasswordUrl);
             Assert.StartsWith("https://public.lanyard.example/set-password?userId=", capturedSetPasswordUrl);
             Assert.DoesNotContain("test.lanyard.local", capturedSetPasswordUrl);

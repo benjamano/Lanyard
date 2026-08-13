@@ -50,6 +50,73 @@ public class ApplicationRolesService
         }
     }
 
+    public async Task<Result<List<ApplicationRole>>> GetInactiveApplicationRolesAsync()
+    {
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        {
+            return Result<List<ApplicationRole>>.Fail("You must be an administrator to perform this action!");
+        }
+
+        try
+        {
+            using ApplicationDbContext ctx = _factory.CreateDbContext();
+
+            List<ApplicationRole> roles = await ctx.Roles
+                .Include(x => x.CreatedByUser)
+                .Where(x => !x.IsActive)
+                .ToListAsync();
+
+            return Result<List<ApplicationRole>>.Ok(roles);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<ApplicationRole>>.Fail($"Failed to retrieve disabled roles: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RestoreRoleAsync(string roleId)
+    {
+        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        {
+            return Result<bool>.Fail("You must be an administrator to perform this action!");
+        }
+
+        try
+        {
+            ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
+
+            if (role is null)
+            {
+                return Result<bool>.Fail("Role not found.");
+            }
+
+            if (role.IsActive)
+            {
+                return Result<bool>.Fail("Role is already active.");
+            }
+
+            role.IsActive = true;
+
+            IdentityResult updateResult = await _rmApi.UpdateAsync(role);
+
+            if (!updateResult.Succeeded)
+            {
+                string errors = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+                return Result<bool>.Fail($"Failed to restore role: {errors}");
+            }
+
+            // Deliberately does not restore this role to the users who had it at delete time -
+            // DeleteRoleAsync already removed those AspNetUserRoles links, so a restore only
+            // brings the role definition back as assignable, same as re-creating it by name
+            // does in CreateNewRoleAsync's reactivation branch.
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to restore role: {ex.Message}");
+        }
+    }
+
     public async Task<Result<List<UserProfile>>> GetUsersInRoleAsync(string roleId)
     {
         if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))

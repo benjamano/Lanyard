@@ -19,12 +19,6 @@
             </AuthorizeView>
 
             <FluentLink Href="/" Class="nav-brand">
-                @if (_companyLogoUrl is not null)
-                {
-                    @* onerror is a deliberate one-line fallback: if the logo blob has gone missing the
-                       <img> would otherwise render a broken-image icon, and there is no CSS-only equivalent. *@
-                    <img src="@_companyLogoUrl" alt="Company logo" class="nav-brand-logo" onerror="this.style.display='none'" />
-                }
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
                         Lan<span class="nav-brand-flip">y</span>ard
@@ -34,14 +28,16 @@
 
             <FluentSpacer />
 
-            <ThemeSelector />
+            <FluentStack Width="auto">
+                <ThemeSelector />
+            </FluentStack>
         </FluentStack>
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Navigation" Height="auto">
         <AuthorizeView>
             <Authorized>
-                <NavMenu />
+                <NavMenu CompanyLogoUrl="@_companyLogoUrl" />
             </Authorized>
         </AuthorizeView>
     </FluentLayoutItem>
@@ -102,11 +98,6 @@
     {
         base.OnInitialized();
 
-        // Branding must not outlive the identity it was resolved for. A one-shot firstRender
-        // resolve would leave the previous user's logo and accent colour on screen if the
-        // authenticated identity changes without the circuit being torn down (an enhanced
-        // navigation to /api/auth/logout can preserve component instances), which on a shared
-        // kiosk means the next person to log in sees the last person's company branding.
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
 
@@ -127,9 +118,6 @@
 
     private async Task ApplyBrandingAsync()
     {
-        // Reset to the Lanyard defaults first, so a state with no company branding (signed out,
-        // an admin, or a company that has set none) actively clears whatever was applied before
-        // rather than leaving the previous values in place.
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
 
@@ -137,22 +125,16 @@
         {
             Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
-            // Admins who picked a location at login get that location's branding too, same
-            // as everyone else - IsAdmin is no longer a factor here, only whether a company
-            // was actually resolved (an admin with no location keeps the Lanyard default).
             if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
             {
                 Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
 
                 if (branding.Success && branding.Data is not null)
                 {
-                    if (!string.IsNullOrWhiteSpace(branding.Data.ThemeColorHex))
-                    {
-                        accentColor = branding.Data.ThemeColorHex;
-                    }
+                    accentColor = BrandConstants.ResolveAccentColor(branding.Data.ThemeColorHex);
 
-                    _companyLogoUrl = branding.Data.LogoFileId is not null
-                        ? $"/api/companies/{companyId}/logo"
+                    _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
+                        ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
                         : null;
                 }
             }
@@ -161,11 +143,6 @@
 
         try
         {
-            // SetThemeAsync(color, isExact) re-derives the full ThemeSettings (incl. Mode)
-            // from FluentUI's "current effective mode", which isn't hydrated from storage
-            // yet at this point in the lifecycle and would silently reset a saved dark-mode
-            // choice back to system-preference. Read the persisted mode ourselves and apply
-            // it explicitly alongside the brand color so this call can't clobber it.
             string? storedMode = await JSRuntime.InvokeAsync<string?>("lanyardGetStoredThemeMode");
 
             ThemeMode mode = storedMode switch
