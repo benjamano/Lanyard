@@ -31,10 +31,17 @@
   {
     "version": "1.3.3",
     "releaseDate": "2026-08-13",
-    "summary": "Added a new Help system.",
+    "summary": "Major Performance improvements.",
     "details": [
       "Added a fix for a bug that would cause a loading spinner to show for 5 seconds when loading any page.",
-      "Added a fix for a bug that would cause the Companies logo to be hidden on the sidebar in the mobile view",
+      "Added a fix for a bug that would cause the Companies logo to be hidden on the sidebar in the mobile view"
+    ]
+  },
+  {
+    "version": "1.3.4",
+    "releaseDate": "2026-08-13",
+    "summary": "Added a new Help system.",
+    "details": [
       "Added a new Help panel accessible from areas that have help documents available.",
       "Users with the \"Manager\" role can now open the User and Role Management pages.",
       "Users with the \"Manager\" role can now bulk-assign training courses."
