@@ -12,5 +12,7 @@ namespace Lanyard.Infrastructure.DTO
         public string Password { get; set; } = string.Empty;
 
         public bool RememberMe { get; set; } = false;
+
+        public int? LocationId { get; set; }
     }
 }

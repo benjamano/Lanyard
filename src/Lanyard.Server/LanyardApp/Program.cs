@@ -7,6 +7,7 @@ using Lanyard.Application.Services.Training;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -15,6 +16,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using System.Reflection;
+using System.Security.Claims;
 using Lanyard.App.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -54,6 +56,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddRuntimeInstrumentation())
+    .WithLogging()
     .UseOtlpExporter();
 
 // Add Razor Components with Interactive Server
@@ -74,6 +77,8 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
 builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>();
+builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
@@ -161,6 +166,26 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
     // email may sit unread longer than a same-session password reset. ChangePasswordAsync
     // (admin-driven) generates and consumes its token in the same call, so this is safe there too.
     options.TokenLifespan = TimeSpan.FromDays(7);
+});
+
+// ASP.NET Identity's SecurityStampValidator periodically (every 30 minutes by default)
+// rebuilds the cookie principal from the user/role store via CreateUserPrincipalAsync.
+// The location claim is issued at sign-in only and is not backed by the user store, so
+// without this hook it would be silently dropped from the refreshed principal - breaking
+// every location-scoped page for any session that outlives the validation interval.
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+{
+    options.OnRefreshingPrincipal = context =>
+    {
+        Claim? locationClaim = context.CurrentPrincipal?.FindFirst(LocationClaimTypes.LocationId);
+
+        if (locationClaim is not null && context.NewPrincipal?.Identity is ClaimsIdentity identity)
+        {
+            identity.AddClaim(locationClaim);
+        }
+
+        return Task.CompletedTask;
+    };
 });
 
 builder.Services.AddAuthorization();
@@ -349,3 +374,8 @@ if (builder.Environment.IsDevelopment() == false)
 await DatabaseSeeder.SeedAsync(app.Services);
 
 app.Run();
+
+// Exposes the top-level-statement Program class to WebApplicationFactory<Program> in
+// src/Lanyard.Tests's integration tests - top-level statements otherwise generate an
+// internal Program type invisible outside this assembly.
+public partial class Program;

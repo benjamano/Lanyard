@@ -27,4 +27,9 @@ public static class BrandConstants
         "#3987e5", "#d95926", "#199e70", "#c98500",
         "#d55181", PrimaryColorHex, "#9085e9", "#e66767",
     ];
+
+    // Shared by every call site that resolves a company's accent color (live UI theme,
+    // invite emails, recurrence reminder emails) so the fallback rule lives in one place.
+    public static string ResolveAccentColor(string? companyThemeColorHex) =>
+        string.IsNullOrWhiteSpace(companyThemeColorHex) ? PrimaryColorHex : companyThemeColorHex;
 }

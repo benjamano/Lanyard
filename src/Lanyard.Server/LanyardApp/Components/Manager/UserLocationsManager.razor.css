@@ -1,0 +1,15 @@
+/* FluentUI component roots never receive the Blazor scope attribute, so every rule below is
+   reached with ::deep from the plain .user-locations-manager wrapper div, which does. */
+
+.user-locations-manager ::deep .ulm-root-card {
+    min-height: 30vh;
+}
+
+.user-locations-manager ::deep .ulm-full-width {
+    width: 100%;
+}
+
+.user-locations-manager ::deep .ulm-empty-note {
+    text-align: center;
+    color: var(--neutral-foreground-hint);
+}

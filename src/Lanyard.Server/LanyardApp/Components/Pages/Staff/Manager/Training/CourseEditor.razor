@@ -13,7 +13,22 @@
 
 <PageTitle>Edit Course</PageTitle>
 
-@if (isLoading || course is null)
+@if (scopeFailed)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so this course can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCourseAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+}
+else if (isLoading || course is null)
 {
     <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
         <FluentSpinner />
@@ -21,6 +36,13 @@
 }
 else
 {
+    @if (!canEditCourse)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Info" Class="mb-3">
+            This course belongs to @owningLocationName and is shared with yours. You can read it, but only its owning location can make changes.
+        </FluentMessageBar>
+    }
+
     <FluentCard Height="auto" Class="mb-3">
         <FluentGrid Class="w-100" Spacing="3">
             <FluentGridItem Xs="3">
@@ -42,11 +64,24 @@ else
                     <FluentNumberInput TValue="int?" Width="100%" @bind-Value="course.RecurrenceMonths"
                                        Label="Recurs every (months)" Min="1" Placeholder="Does not recur" />
                 </div>
+                @if (currentScope?.IsAdmin == true)
+                {
+                    <div class="w-100">
+                        <FluentSelect TOption="Location" TValue="int?" Items="@allLocations"
+                                      OptionText="@(l => l?.GetDisplayName() ?? string.Empty)" OptionValue="@(l => l?.Id)"
+                                      @bind-Value="course.LocationId" Label="Location" Disabled="@(currentScope?.IsAdmin != true)"
+                                      Required="true" Style="width: 100%;" />
+                    </div>
+                }
+                <div class="w-100">
+                    <FluentSwitch @bind-Value="course.IsShared" Disabled="@(!canEditCourse)"
+                                  Label="Share this course across all locations" />
+                </div>
             </FluentGridItem>
         </FluentGrid>
         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Class="mt-2">
             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                          Loading="@isSavingCourse" OnClick="SaveCourseMetaAsync">
+                          Loading="@isSavingCourse" Disabled="@(!canEditCourse)" OnClick="SaveCourseMetaAsync">
                 Save Course Details
             </FluentButton>
             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Eye())"
@@ -63,10 +98,9 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
                     @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="true"
-                             @ondragstart="@(() => draggedSection = courseSection)"
-                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
-                             @ondrop="@(() => OnSectionDropAsync(courseSection))">
+                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
+                             @ondragstart="@(() => draggedSection = courseSection)" @ondragover="@(() => { })"
+                             @ondragover:preventDefault="true" @ondrop="@(() => OnSectionDropAsync(courseSection))">
                             <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
                             <FluentButton
                                 Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
@@ -76,7 +110,7 @@ else
                         </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  OnClick="StartNewSection">
+                                  Disabled="@(!canEditCourse)" OnClick="StartNewSection">
                         Add Section
                     </FluentButton>
 
@@ -85,10 +119,9 @@ else
                     <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
                     @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
                     {
-                        <div class="reorder-item" draggable="true"
-                             @ondragstart="@(() => draggedQuestion = question)"
-                             @ondragover="@(() => { })" @ondragover:preventDefault="true"
-                             @ondrop="@(() => OnQuestionDropAsync(question))">
+                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
+                             @ondragstart="@(() => draggedQuestion = question)" @ondragover="@(() => { })"
+                             @ondragover:preventDefault="true" @ondrop="@(() => OnQuestionDropAsync(question))">
                             <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
                             <FluentButton
                                 Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
@@ -98,7 +131,7 @@ else
                         </div>
                     }
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  OnClick="StartNewQuestion">
+                                  Disabled="@(!canEditCourse)" OnClick="StartNewQuestion">
                         Add Question
                     </FluentButton>
                 </FluentStack>
@@ -141,12 +174,13 @@ else
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                                          Loading="@isSavingSection" OnClick="SaveSelectedSectionAsync">
+                                          Loading="@isSavingSection" Disabled="@(!canEditCourse)" OnClick="SaveSelectedSectionAsync">
                                 Save
                             </FluentButton>
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                          Disabled="@(selectedSection.Id == Guid.Empty)" OnClick="DeleteSelectedSectionAsync">
+                                          Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)"
+                                          OnClick="DeleteSelectedSectionAsync">
                                 Delete
                             </FluentButton>
                         </FluentStack>
@@ -182,7 +216,8 @@ else
                         <div class="question-actions-group">
                             <div class="question-actions-add">
                                 <FluentButton Appearance="ButtonAppearance.Outline"
-                                              IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="AddOption">
+                                              IconStart="@(new Icons.Regular.Size20.FormNew())" Disabled="@(!canEditCourse)"
+                                              OnClick="AddOption">
                                     Add Option
                                 </FluentButton>
                             </div>
@@ -190,12 +225,13 @@ else
                             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                                 <FluentButton Appearance="ButtonAppearance.Primary"
                                               IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion"
-                                              OnClick="SaveSelectedQuestionAsync">
+                                              Disabled="@(!canEditCourse)" OnClick="SaveSelectedQuestionAsync">
                                     Save
                                 </FluentButton>
                                 <FluentButton Appearance="ButtonAppearance.Outline"
                                               IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                              Disabled="@(selectedQuestion.Id == Guid.Empty)" OnClick="DeleteSelectedQuestionAsync">
+                                              Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)"
+                                              OnClick="DeleteSelectedQuestionAsync">
                                     Delete
                                 </FluentButton>
                             </FluentStack>
@@ -230,6 +266,20 @@ else
     private bool isSavingCourse;
     private bool isSavingSection;
     private bool isSavingQuestion;
+    private bool scopeFailed;
+    private LocationScope? currentScope;
+    private List<Location> allLocations = [];
+
+    // A shared course owned by another location is readable here but not writable - the service
+    // rejects every write. Gate the write controls on the same rule so the UI doesn't offer
+    // buttons that are guaranteed to fail.
+    private bool canEditCourse =>
+        currentScope is not null
+        && course is not null
+        && (currentScope.IsAdmin || course.LocationId == currentScope.LocationId);
+
+    private string owningLocationName =>
+        allLocations.FirstOrDefault(l => l.Id == course?.LocationId)?.GetDisplayName() ?? "another location";
 
     private Guid correctOptionId
     {
@@ -251,6 +301,34 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadCourseAsync();
+
+        // Fetched for everyone, not just admins: non-admins never see the Location dropdown
+        // below, but they're exactly who sees the "belongs to another location" message bar,
+        // which needs this list to name the owning location instead of a generic phrase.
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+        if (locationsResult.IsSuccess && locationsResult.Data is not null)
+        {
+            allLocations = locationsResult.Data;
+        }
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the render guard below would sit on a
+            // spinner forever with nothing left on screen explaining why.
+            scopeFailed = true;
+            return null;
+        }
+
+        scopeFailed = false;
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     // BlazoredTextEditor (v1.1.3, confirmed via assembly reflection) does not accept its
@@ -280,7 +358,15 @@ else
     {
         isLoading = true;
 
-        Result<Course> result = await _courseService.GetCourseAsync(CourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        Result<Course> result = await _courseService.GetCourseAsync(CourseId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -325,9 +411,16 @@ else
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingCourse = true;
 
-        Result<Course> result = await _courseService.SaveCourseAsync(course);
+        Result<Course> result = await _courseService.SaveCourseAsync(course, scope);
 
         if (!result.IsSuccess)
         {
@@ -343,6 +436,12 @@ else
 
     private async Task OnSectionDropAsync(CourseSection targetSection)
     {
+        if (!canEditCourse)
+        {
+            draggedSection = null;
+            return;
+        }
+
         if (course is null || draggedSection is null || draggedSection.Id == targetSection.Id)
         {
             draggedSection = null;
@@ -368,7 +467,8 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+        Result<bool> result = await _courseService.ReorderSectionsAsync(CourseId, [.. ordered.Select(x => x.Id)],
+currentScope!);
 
         if (!result.IsSuccess)
         {
@@ -379,6 +479,12 @@ else
 
     private async Task OnQuestionDropAsync(CourseQuestion targetQuestion)
     {
+        if (!canEditCourse)
+        {
+            draggedQuestion = null;
+            return;
+        }
+
         if (course is null || draggedQuestion is null || draggedQuestion.Id == targetQuestion.Id)
         {
             draggedQuestion = null;
@@ -404,7 +510,8 @@ else
             ordered[i].SortOrder = i;
         }
 
-        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)]);
+        Result<bool> result = await _courseService.ReorderQuestionsAsync(CourseId, [.. ordered.Select(x => x.Id)],
+currentScope!);
 
         if (!result.IsSuccess)
         {
@@ -440,6 +547,13 @@ string.Empty
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingSection = true;
 
         if (sectionEditor is not null)
@@ -447,7 +561,7 @@ string.Empty
             selectedSection.BodyHtml = await sectionEditor.GetHTML();
         }
 
-        Result<CourseSection> result = await _courseService.SaveSectionAsync(selectedSection);
+        Result<CourseSection> result = await _courseService.SaveSectionAsync(selectedSection, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -484,7 +598,14 @@ null;
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteSectionAsync(selectedSection.Id);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteSectionAsync(selectedSection.Id, scope);
 
         if (!result.IsSuccess)
         {
@@ -548,6 +669,13 @@ null;
             return;
         }
 
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isSavingQuestion = true;
 
         for (int i = 0; i < selectedQuestion.Options.Count; i++)
@@ -555,7 +683,7 @@ null;
             selectedQuestion.Options[i].SortOrder = i;
         }
 
-        Result<CourseQuestion> result = await _courseService.SaveQuestionAsync(selectedQuestion);
+        Result<CourseQuestion> result = await _courseService.SaveQuestionAsync(selectedQuestion, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -591,7 +719,14 @@ null;
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteQuestionAsync(selectedQuestion.Id);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteQuestionAsync(selectedQuestion.Id, scope);
 
         if (!result.IsSuccess)
         {

@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
@@ -10,17 +11,26 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    public async Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate)
+    public async Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == courseId && x.IsActive);
+            Course? course = await ctx.Courses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<CourseAssignment>.Fail("Course not found.");
+            }
+
+            if (!IsCourseInScope(course, scope))
+            {
+                return Result<CourseAssignment>.Fail("You do not have access to this course.");
             }
 
             bool userExists = await ctx.Users.AnyAsync(x => x.Id == userId);
@@ -38,6 +48,24 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 return Result<CourseAssignment>.Fail("This course is already assigned to that user.");
             }
 
+            int? assignmentLocationId;
+
+            if (scope.IsAdmin)
+            {
+                assignmentLocationId = course.LocationId;
+            }
+            else
+            {
+                bool userInScope = await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == userId && x.LocationId == scope.LocationId);
+
+                if (!userInScope)
+                {
+                    return Result<CourseAssignment>.Fail("This user is not a member of your location.");
+                }
+
+                assignmentLocationId = scope.LocationId;
+            }
+
             DateTime? normalizedDueDate = NormalizeDueDate(dueDate);
 
             CourseAssignment assignment = new()
@@ -48,7 +76,8 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 AssignedByUserId = assignedByUserId,
                 AssignedDate = DateTime.UtcNow,
                 DueDate = normalizedDueDate,
-                IsActive = true
+                IsActive = true,
+                LocationId = assignmentLocationId
             };
 
             ctx.CourseAssignments.Add(assignment);
@@ -256,10 +285,19 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         }
     }
 
+    // Mirrors CourseService.GetCourseAsync's read rule: a non-Admin may act on a course in
+    // their own location, or on one another location in the same company has shared with them.
+    // Kept here rather than shared so the assignment service does not take a dependency on
+    // CourseService just for a three-line predicate.
+    private static bool IsCourseInScope(Course course, LocationScope scope) =>
+        scope.IsAdmin
+        || course.LocationId == scope.LocationId
+        || (course.IsShared && course.Location is not null && course.Location.CompanyId == scope.CompanyId);
+
     private static DateTime? NormalizeDueDate(DateTime? dueDate) =>
         dueDate.HasValue ? DateTime.SpecifyKind(dueDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc) : null;
 
-    public async Task<Result<List<CourseAssignment>>> GetAssignmentsForCourseAsync(Guid courseId)
+    public async Task<Result<List<CourseAssignment>>> GetAssignmentsForCourseAsync(Guid courseId, LocationScope scope)
     {
         try
         {
@@ -268,7 +306,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             List<CourseAssignment> assignments = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.CourseId == courseId && x.IsActive)
+                .Where(x => x.CourseId == courseId && x.IsActive && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .Include(x => x.Attempts)
                 .OrderBy(x => x.AssignedDate)
                 .ToListAsync();
@@ -281,24 +319,52 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         }
     }
 
-    public async Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate)
+    public async Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate, LocationScope scope)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            bool courseExists = await ctx.Courses.AnyAsync(x => x.Id == courseId && x.IsActive);
+            Course? course = await ctx.Courses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .FirstOrDefaultAsync(x => x.Id == courseId && x.IsActive);
 
-            if (!courseExists)
+            if (course is null)
             {
                 return Result<BulkAssignResult>.Fail("Course not found.");
+            }
+
+            if (!IsCourseInScope(course, scope))
+            {
+                return Result<BulkAssignResult>.Fail("You do not have access to this course.");
             }
 
             DateTime? normalizedDueDate = NormalizeDueDate(dueDate);
             List<string> distinctUserIds = [.. userIds.Distinct()];
 
+            int? assignmentLocationId;
+            List<string> eligibleUserIds = distinctUserIds;
+
+            if (scope.IsAdmin)
+            {
+                assignmentLocationId = course.LocationId;
+            }
+            else
+            {
+                HashSet<string> membersOfScope = (await ctx.UserLocationMemberships
+                    .Where(x => x.LocationId == scope.LocationId && distinctUserIds.Contains(x.UserId))
+                    .Select(x => x.UserId)
+                    .ToListAsync())
+                    .ToHashSet();
+
+                eligibleUserIds = [.. distinctUserIds.Where(membersOfScope.Contains)];
+                assignmentLocationId = scope.LocationId;
+            }
+
             HashSet<string> alreadyAssignedUserIds = (await ctx.CourseAssignments
-                .Where(x => x.CourseId == courseId && x.IsActive && x.CompletedDate == null && distinctUserIds.Contains(x.UserId))
+                .Where(x => x.CourseId == courseId && x.IsActive && x.CompletedDate == null && eligibleUserIds.Contains(x.UserId))
                 .Select(x => x.UserId)
                 .ToListAsync())
                 .ToHashSet();
@@ -308,7 +374,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             // userIds are sourced from GetAllUsersAsync (individual picks) or
             // GetUsersInRoleAsync (role members) by the caller - both already
             // resolve to real Identity users, so no per-user existence check here.
-            foreach (string userId in distinctUserIds)
+            foreach (string userId in eligibleUserIds)
             {
                 if (alreadyAssignedUserIds.Contains(userId))
                 {
@@ -323,7 +389,8 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                     AssignedByUserId = assignedByUserId,
                     AssignedDate = DateTime.UtcNow,
                     DueDate = normalizedDueDate,
-                    IsActive = true
+                    IsActive = true,
+                    LocationId = assignmentLocationId
                 });
 
                 assignedCount++;
@@ -331,7 +398,15 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             await ctx.SaveChangesAsync();
 
-            return Result<BulkAssignResult>.Ok(new BulkAssignResult(assignedCount, distinctUserIds.Count - assignedCount));
+            // Two distinct reasons a requested user ends up unassigned, reported separately so
+            // the caller can explain the shortfall: already had the course (a duplicate, counted
+            // against the eligible set) versus filtered out for not being in the acting
+            // manager's location at all. Folding the second into the first - or dropping it, as
+            // this previously did - makes the totals silently fail to add up for the user.
+            int skippedOutsideLocationCount = distinctUserIds.Count - eligibleUserIds.Count;
+
+            return Result<BulkAssignResult>.Ok(new BulkAssignResult(
+                assignedCount, eligibleUserIds.Count - assignedCount, skippedOutsideLocationCount));
         }
         catch (Exception ex)
         {
@@ -482,7 +557,8 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 AssignedByUserId = null,
                 AssignedDate = DateTime.UtcNow,
                 DueDate = null,
-                IsActive = true
+                IsActive = true,
+                LocationId = previous.LocationId
             };
 
             ctx.CourseAssignments.Add(newCycle);
@@ -567,7 +643,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         }
     }
 
-    public async Task<Result<CourseTimingSummary>> GetCourseTimingSummaryAsync(Guid courseId)
+    public async Task<Result<CourseTimingSummary>> GetCourseTimingSummaryAsync(Guid courseId, LocationScope scope)
     {
         try
         {
@@ -576,7 +652,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
             List<CourseAssignment> assignments = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.CourseId == courseId && x.StartedDate != null && x.CompletedDate != null)
+                .Where(x => x.CourseId == courseId && x.StartedDate != null && x.CompletedDate != null && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .ToListAsync();
 
             double? averageTotalMinutes = assignments.Count == 0
@@ -593,7 +669,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Assignment)
-                .Where(x => x.Assignment!.CourseId == courseId && x.LeftDate != null)
+                .Where(x => x.Assignment!.CourseId == courseId && x.LeftDate != null && (scope.IsAdmin || x.Assignment!.LocationId == scope.LocationId))
                 .ToListAsync();
 
             List<SectionTimingSummary> sectionSummaries = [.. sections

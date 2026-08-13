@@ -9,11 +9,12 @@
     </TitleTemplate>
     <ChildContent>
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            @foreach (ReleaseNote release in Releases)
+            @foreach (ReleaseNote release in Releases.OrderByDescending(x => x.Version))
             {
                 <FluentCard Appearance="CardAppearance.Subtle">
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                                     VerticalAlignment="VerticalAlignment.Center">
                             <FluentText Typo="Typography.H6">v@(release.Version)</FluentText>
                             <FluentText Color="Color.Disabled">@release.ReleaseDate.ToString("d MMM yyyy")</FluentText>
                         </FluentStack>

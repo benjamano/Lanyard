@@ -13,6 +13,25 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
+        @if (scopeFailed)
+        {
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+                <FluentMessageBar Intent="MessageBarIntent.Error">
+                    We couldn't work out which location you're working in, so nobody can be
+                    assigned right now. This is usually temporary - try again, or sign out and
+                    back in.
+                </FluentMessageBar>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())" OnClick="LoadAsync">
+                        Reload
+                    </FluentButton>
+                    <FluentButton OnClick="CancelAsync">Close</FluentButton>
+                </FluentStack>
+            </FluentStack>
+        }
+        else
+        {
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
             @if (isAdmin)
             {
@@ -66,6 +85,7 @@
                 <FluentButton OnClick="CancelAsync" Disabled="@isSubmitting">Cancel</FluentButton>
             </FluentStack>
         </FluentStack>
+        }
     </ChildContent>
 </FluentDialogBody>
 
@@ -86,11 +106,38 @@
     private string? selectedRoleId;
     private DateTime? dueDate;
     private bool isSubmitting;
+    private bool scopeFailed;
+    private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
         users = await _securityService.GetAllUsersAsync();
+
+        if (!scope.IsAdmin)
+        {
+            Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+
+            if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
+            {
+                _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
+                users = [];
+            }
+            else
+            {
+                HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
+                users = users.Where(u => locationUserIds.Contains(u.Id));
+            }
+        }
 
         if (isAdmin)
         {
@@ -103,8 +150,33 @@
         }
     }
 
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the dialog offers an empty picker and
+            // an Assign button that cannot succeed, with no explanation left on screen.
+            scopeFailed = true;
+            return null;
+        }
+
+        scopeFailed = false;
+        currentScope = scopeResult.Data;
+        return currentScope;
+    }
+
     private async Task SubmitAsync()
     {
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         List<string> userIds;
 
         if (mode == AssignMode.ByRole)
@@ -124,6 +196,20 @@
             }
 
             userIds = [.. usersInRoleResult.Data.Select(x => x.Id)];
+
+            if (!scope.IsAdmin)
+            {
+                Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+
+                if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
+                {
+                    _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
+                    return;
+                }
+
+                HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
+                userIds = [.. userIds.Where(locationUserIds.Contains)];
+            }
         }
         else
         {
@@ -148,7 +234,7 @@
         }
 
         Result<BulkAssignResult> result = await _courseAssignmentService.AssignCourseToUsersAsync(
-            CourseId, userIds, currentUserResult.Data, dueDate);
+            CourseId, userIds, currentUserResult.Data, dueDate, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -157,8 +243,23 @@
             return;
         }
 
-        string message = result.Data.SkippedDuplicateCount > 0
-            ? $"Assigned to {result.Data.AssignedCount} people ({result.Data.SkippedDuplicateCount} already had this course)."
+        // Report the two skip reasons separately - a user filtered out for being outside this
+        // manager's location is a different problem from one who already had the course, and
+        // lumping them together (or omitting them) makes the totals look like they don't add up.
+        List<string> skipNotes = [];
+
+        if (result.Data.SkippedDuplicateCount > 0)
+        {
+            skipNotes.Add($"{result.Data.SkippedDuplicateCount} already had this course");
+        }
+
+        if (result.Data.SkippedOutsideLocationCount > 0)
+        {
+            skipNotes.Add($"{result.Data.SkippedOutsideLocationCount} skipped - not in your location");
+        }
+
+        string message = skipNotes.Count > 0
+            ? $"Assigned to {result.Data.AssignedCount} people ({string.Join("; ", skipNotes)})."
             : $"Assigned to {result.Data.AssignedCount} people.";
 
         _toastService.ShowSuccess(message);

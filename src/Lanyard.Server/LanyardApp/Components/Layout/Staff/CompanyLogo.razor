@@ -1,0 +1,13 @@
+@* Single render site for the company logo image, so MainLayout's header and NavMenu (and
+   anywhere else that ends up wanting it) share one markup + style definition instead of
+   each carrying their own copy of the <img> and its onerror fallback. *@
+@if (Url is not null)
+{
+    <FluentStack Padding="@Padding.All2" HorizontalAlignment="@HorizontalAlignment.Center">
+        <img src="@Url" alt="Company logo" class="company-logo" onerror="this.style.display='none'" />
+    </FluentStack>
+}
+
+@code {
+    [Parameter] public string? Url { get; set; }
+}

@@ -18,6 +18,13 @@ namespace Lanyard.Infrastructure.Models
 
         public bool IsActive { get; set; }
 
+        // Nullable for now: existing courses need a location assigned through the
+        // CourseEditor UI before this can become required. See plan Task 3 note.
+        public int? LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public bool IsShared { get; set; }
+
         public virtual List<CourseSection> Sections { get; set; } = [];
         public virtual List<CourseQuestion> Questions { get; set; } = [];
     }
@@ -84,6 +91,12 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? CompletedDate { get; set; }
 
         public bool IsActive { get; set; }
+
+        // Nullable for now, same reasoning as Course.LocationId (see Task 3).
+        // For non-Admin assigners this is the acting manager's own location, NOT
+        // necessarily the course's location - a course can be shared.
+        public int? LocationId { get; set; }
+        public Location? Location { get; set; }
 
         public virtual List<CourseQuizAttempt> Attempts { get; set; } = [];
 

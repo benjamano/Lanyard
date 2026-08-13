@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -45,6 +46,150 @@ public class CourseServiceTests
         return course;
     }
 
+    private static readonly LocationScope AdminScope = new(true, null, null, null);
+
+    private static async Task<(Location locationA, Location locationB)> SeedTwoLocationsAsync(DbContextOptions<ApplicationDbContext> options)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Company company = new() { Name = "Play2Day", IsActive = true };
+        ctx.Companies.Add(company);
+        await ctx.SaveChangesAsync();
+
+        Location ipswich = new() { CompanyId = company.Id, Name = "Ipswich", IsActive = true };
+        Location wisbech = new() { CompanyId = company.Id, Name = "Wisbech", IsActive = true };
+        ctx.Locations.AddRange(ipswich, wisbech);
+        await ctx.SaveChangesAsync();
+
+        return (ipswich, wisbech);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_NonAdminSeesOwnLocationAndSharedCoursesOnly()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "COSHH Shared", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id, IsShared = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<List<Course>> result = await service.GetCoursesAsync(ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+        CollectionAssert.AreEquivalent(new[] { "COSHH Shared", "Ipswich Only" }, result.Data!.Select(x => x.Name).ToList());
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_AdminSeesEveryLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_NonAdminCreate_ForcesScopeLocationIgnoringClientValue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+
+        Course tampered = new() { Id = Guid.Empty, Name = "New Course", PassMarkPercent = 80, LocationId = wisbech.Id };
+
+        Result<Course> result = await service.SaveCourseAsync(tampered, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_NonAdminEditingAnotherLocationsCourse_Fails()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Wisbech Course", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Renamed", PassMarkPercent = 80 }, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("You do not have access to this course.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourse_OutOfScopeCourse_ReturnsNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Wisbech Course", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.GetCourseAsync(courseId, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Course not found.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourse_SharedCourseWithNoLocation_ReturnsNotFoundForNonAdminInsteadOfThrowing()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        // An Admin can currently save a course with IsShared set and no LocationId
+        // (SaveCourseAsync only forces a location for non-Admins on create). This
+        // seeds that exact combination directly, bypassing the service.
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Shared No Location", PassMarkPercent = 80, IsActive = true, LocationId = null, IsShared = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.GetCourseAsync(courseId, ipswichScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Course not found.", result.Error);
+    }
+
     [TestMethod]
     public async Task CourseService_GetCourses_ReturnsOnlyActiveCoursesOrderedByName()
     {
@@ -60,7 +205,7 @@ public class CourseServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        Result<List<Course>> result = await service.GetCoursesAsync();
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);
@@ -76,7 +221,7 @@ public class CourseServiceTests
 
         Course newCourse = new() { Id = Guid.Empty, Name = "New Course", PassMarkPercent = 80 };
 
-        Result<Course> result = await service.SaveCourseAsync(newCourse);
+        Result<Course> result = await service.SaveCourseAsync(newCourse, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreNotEqual(Guid.Empty, result.Data!.Id);
@@ -98,7 +243,7 @@ public class CourseServiceTests
         course.PassMarkPercent = 90;
         course.AutoAssignOnUserCreation = true;
 
-        Result<Course> result = await service.SaveCourseAsync(course);
+        Result<Course> result = await service.SaveCourseAsync(course, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
 
@@ -115,7 +260,7 @@ public class CourseServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         CourseService service = GetService(options);
 
-        Result<Course> result = await service.SaveCourseAsync(new Course { Id = Guid.Empty, Name = "   ", PassMarkPercent = 80 });
+        Result<Course> result = await service.SaveCourseAsync(new Course { Id = Guid.Empty, Name = "   ", PassMarkPercent = 80 }, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -127,7 +272,7 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<bool> result = await service.DeleteCourseAsync(course.Id);
+        Result<bool> result = await service.DeleteCourseAsync(course.Id, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
 
@@ -142,7 +287,7 @@ public class CourseServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         CourseService service = GetService(options);
 
-        Result<Course> result = await service.GetCourseAsync(Guid.NewGuid());
+        Result<Course> result = await service.GetCourseAsync(Guid.NewGuid(), AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -154,8 +299,8 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
-        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" }, AdminScope);
 
         Assert.IsTrue(first.Success, first.Error);
         Assert.IsTrue(second.Success, second.Error);
@@ -170,13 +315,13 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
         Assert.IsTrue(created.Success, created.Error);
 
         created.Data!.Title = "Footwear";
         created.Data!.BodyHtml = "<p>Closed toe only.</p>";
 
-        Result<CourseSection> updated = await service.SaveSectionAsync(created.Data!);
+        Result<CourseSection> updated = await service.SaveSectionAsync(created.Data!, AdminScope);
 
         Assert.IsTrue(updated.Success, updated.Error);
         Assert.AreEqual("Footwear", updated.Data!.Title);
@@ -190,7 +335,7 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseSection> result = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = " " });
+        Result<CourseSection> result = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = " " }, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -201,14 +346,65 @@ public class CourseServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
-        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
+        Result<CourseSection> created = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
 
-        Result<bool> deleteResult = await service.DeleteSectionAsync(created.Data!.Id);
+        Result<bool> deleteResult = await service.DeleteSectionAsync(created.Data!.Id, AdminScope);
         Assert.IsTrue(deleteResult.Success, deleteResult.Error);
 
-        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.HasCount(0, reloaded.Data!.Sections);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveSection_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<CourseSection> result = await service.SaveSectionAsync(
+            new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, wisbechScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("You do not have access to this course.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CourseService_DeleteSection_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+        Result<CourseSection> created = await service.SaveSectionAsync(
+            new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> deleteResult = await service.DeleteSectionAsync(created.Data!.Id, wisbechScope);
+
+        Assert.IsFalse(deleteResult.Success);
+        Assert.AreEqual("You do not have access to this course.", deleteResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.HasCount(1, reloaded.Data!.Sections);
     }
 
     private static CourseQuestion BuildQuestion(Guid courseId, params (string text, bool isCorrect)[] options)
@@ -233,7 +429,7 @@ public class CourseServiceTests
             ("Ring Play2Day and tell a manager.", true),
             ("Say nothing.", false));
 
-        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question, AdminScope);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!.Options);
@@ -249,7 +445,7 @@ public class CourseServiceTests
 
         CourseQuestion question = BuildQuestion(course.Id, ("Only option.", true));
 
-        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -263,7 +459,7 @@ public class CourseServiceTests
 
         CourseQuestion question = BuildQuestion(course.Id, ("A", false), ("B", false));
 
-        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -277,7 +473,7 @@ public class CourseServiceTests
 
         CourseQuestion question = BuildQuestion(course.Id, ("A", true), ("B", true));
 
-        Result<CourseQuestion> result = await service.SaveQuestionAsync(question);
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(question, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -289,7 +485,7 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)), AdminScope);
         Assert.IsTrue(created.Success, created.Error);
 
         CourseQuestionOption keep = created.Data!.Options.Single(x => x.OptionText == "A");
@@ -306,7 +502,7 @@ public class CourseServiceTests
             ]
         };
 
-        Result<CourseQuestion> updated = await service.SaveQuestionAsync(update);
+        Result<CourseQuestion> updated = await service.SaveQuestionAsync(update, AdminScope);
 
         Assert.IsTrue(updated.Success, updated.Error);
         Assert.HasCount(2, updated.Data!.Options);
@@ -336,14 +532,14 @@ public class CourseServiceTests
             ]
         };
 
-        Result<CourseQuestion> saved = await service.SaveQuestionAsync(question);
+        Result<CourseQuestion> saved = await service.SaveQuestionAsync(question, AdminScope);
 
         Assert.IsTrue(saved.Success, saved.Error);
         Assert.HasCount(2, saved.Data!.Options);
         Assert.AreEqual("First", saved.Data!.Options[0].OptionText);
         Assert.AreEqual("Second", saved.Data!.Options[1].OptionText);
 
-        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
 
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         CourseQuestion reloadedQuestion = reloaded.Data!.Questions.Single(x => x.Id == saved.Data!.Id);
@@ -358,10 +554,10 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<bool> deleteResult = await service.DeleteCourseAsync(course.Id);
+        Result<bool> deleteResult = await service.DeleteCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(deleteResult.Success, deleteResult.Error);
 
-        Result<Course> result = await service.GetCourseAsync(course.Id);
+        Result<Course> result = await service.GetCourseAsync(course.Id, AdminScope);
 
         Assert.IsFalse(result.Success);
     }
@@ -372,14 +568,65 @@ public class CourseServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
-        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
+        Result<CourseQuestion> created = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)), AdminScope);
 
-        Result<bool> deleteResult = await service.DeleteQuestionAsync(created.Data!.Id);
+        Result<bool> deleteResult = await service.DeleteQuestionAsync(created.Data!.Id, AdminScope);
         Assert.IsTrue(deleteResult.Success, deleteResult.Error);
 
-        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.HasCount(0, reloaded.Data!.Questions);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveQuestion_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<CourseQuestion> result = await service.SaveQuestionAsync(
+            BuildQuestion(course.Id, ("A", true), ("B", false)), wisbechScope);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("You do not have access to this course.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CourseService_DeleteQuestion_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+        Result<CourseQuestion> created = await service.SaveQuestionAsync(
+            BuildQuestion(course.Id, ("A", true), ("B", false)), AdminScope);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> deleteResult = await service.DeleteQuestionAsync(created.Data!.Id, wisbechScope);
+
+        Assert.IsFalse(deleteResult.Success);
+        Assert.AreEqual("You do not have access to this course.", deleteResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.HasCount(1, reloaded.Data!.Questions);
     }
 
     [TestMethod]
@@ -389,16 +636,46 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" });
-        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" });
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" }, AdminScope);
 
-        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], AdminScope);
         Assert.IsTrue(reorderResult.Success, reorderResult.Error);
 
-        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.AreEqual("Jewellery", reloaded.Data!.Sections[0].Title);
         Assert.AreEqual("Shoes", reloaded.Data!.Sections[1].Title);
+    }
+
+    [TestMethod]
+    public async Task CourseService_ReorderSections_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CourseSection> first = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Shoes" }, AdminScope);
+        Result<CourseSection> second = await service.SaveSectionAsync(new CourseSection { Id = Guid.Empty, CourseId = course.Id, Title = "Jewellery" }, AdminScope);
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> reorderResult = await service.ReorderSectionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], wisbechScope);
+
+        Assert.IsFalse(reorderResult.Success);
+        Assert.AreEqual("You do not have access to this course.", reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual("Shoes", reloaded.Data!.Sections[0].Title);
+        Assert.AreEqual("Jewellery", reloaded.Data!.Sections[1].Title);
     }
 
     [TestMethod]
@@ -408,15 +685,123 @@ public class CourseServiceTests
         CourseService service = GetService(options);
         Course course = await SeedCourseAsync(options);
 
-        Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)));
-        Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)));
+        Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)), AdminScope);
+        Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)), AdminScope);
 
-        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id]);
+        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], AdminScope);
         Assert.IsTrue(reorderResult.Success, reorderResult.Error);
 
-        Result<Course> reloaded = await service.GetCourseAsync(course.Id);
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
         Assert.IsTrue(reloaded.Success, reloaded.Error);
         Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[0].Id);
         Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[1].Id);
+    }
+
+    [TestMethod]
+    public async Task CourseService_ReorderQuestions_RejectsWhenScopeDoesNotOwnCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+        Course course = await SeedCourseAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Course tracked = await ctx.Courses.SingleAsync(x => x.Id == course.Id);
+            tracked.LocationId = ipswich.Id;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CourseQuestion> first = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("A", true), ("B", false)), AdminScope);
+        Result<CourseQuestion> second = await service.SaveQuestionAsync(BuildQuestion(course.Id, ("C", true), ("D", false)), AdminScope);
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<bool> reorderResult = await service.ReorderQuestionsAsync(course.Id, [second.Data!.Id, first.Data!.Id], wisbechScope);
+
+        Assert.IsFalse(reorderResult.Success);
+        Assert.AreEqual("You do not have access to this course.", reorderResult.Error);
+
+        Result<Course> reloaded = await service.GetCourseAsync(course.Id, AdminScope);
+        Assert.IsTrue(reloaded.Success, reloaded.Error);
+        Assert.AreEqual(first.Data!.Id, reloaded.Data!.Questions[0].Id);
+        Assert.AreEqual(second.Data!.Id, reloaded.Data!.Questions[1].Id);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_AdminUpdate_CanReassignLocationId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Induction", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Induction", PassMarkPercent = 80, LocationId = wisbech.Id }, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(wisbech.Id, result.Data!.LocationId);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        Course persisted = await verifyCtx.Courses.SingleAsync(x => x.Id == courseId);
+        Assert.AreEqual(wisbech.Id, persisted.LocationId);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_AdminUpdate_CanAssignLocationToACourseThatHasNone()
+    {
+        // The gap this closes: courses created through the "New Course" flow land with a null
+        // LocationId, which makes them invisible to every non-Admin. An Admin must be able to
+        // backfill one through the editor.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Orphan", PassMarkPercent = 80, IsActive = true, LocationId = null });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Orphan", PassMarkPercent = 80, LocationId = ipswich.Id }, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+    }
+
+    [TestMethod]
+    public async Task CourseService_SaveCourse_NonAdminUpdate_IgnoresSuppliedLocationId()
+    {
+        // The tamper guard on update: a non-Admin editing their own course cannot re-home it,
+        // even by posting a different LocationId.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Guid courseId = Guid.NewGuid();
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = courseId, Name = "Ipswich Course", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
+        Result<Course> result = await service.SaveCourseAsync(
+            new Course { Id = courseId, Name = "Renamed", PassMarkPercent = 80, LocationId = wisbech.Id }, ipswichScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(ipswich.Id, result.Data!.LocationId);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        Course persisted = await verifyCtx.Courses.SingleAsync(x => x.Id == courseId);
+        Assert.AreEqual(ipswich.Id, persisted.LocationId);
+        Assert.AreEqual("Renamed", persisted.Name);
     }
 }

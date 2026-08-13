@@ -1,0 +1,25 @@
+/* FluentUI component roots never receive the Blazor scope attribute, so every rule below is
+   reached with ::deep from the plain .company-location-manager wrapper div, which does. */
+
+.company-location-manager ::deep .clm-root-card {
+    min-height: 30vh;
+}
+
+.company-location-manager ::deep .clm-full-width {
+    width: 100%;
+}
+
+.company-location-manager ::deep .clm-empty-note {
+    text-align: center;
+    color: var(--neutral-foreground-hint);
+}
+
+.company-location-manager ::deep .clm-form-heading {
+    font-weight: 600;
+}
+
+.company-location-manager ::deep .clm-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+}

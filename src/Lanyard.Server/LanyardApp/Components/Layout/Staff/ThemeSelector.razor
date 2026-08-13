@@ -13,26 +13,8 @@
 </FluentStack>
 
 @code {
-    private bool isDarkMode = false;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                isDarkMode = await ThemeService.IsDarkModeAsync();
-
-                StateHasChanged();
-            }
-            catch { }
-        }
-    }
-
     private async Task ToggleDarkMode()
     {
         await ThemeService.SwitchThemeAsync();
-
-        isDarkMode = !isDarkMode;
     }
 }

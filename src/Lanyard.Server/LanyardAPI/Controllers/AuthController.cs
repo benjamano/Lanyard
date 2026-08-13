@@ -1,7 +1,9 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Lanyard.App.Controllers
 {
@@ -11,13 +13,16 @@ namespace Lanyard.App.Controllers
     {
         private readonly UserManager<UserProfile> _userManager;
         private readonly SignInManager<UserProfile> _signInManager;
+        private readonly ICompanyLocationService _companyLocationService;
 
         public AuthController(
             UserManager<UserProfile> userManager,
-            SignInManager<UserProfile> signInManager)
+            SignInManager<UserProfile> signInManager,
+            ICompanyLocationService companyLocationService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
+            _companyLocationService = companyLocationService;
         }
 
         [HttpPost("login")]
@@ -50,12 +55,23 @@ namespace Lanyard.App.Controllers
                 return Unauthorized(new { message = "Invalid username or password." });
             }
 
+            List<Claim> extraClaims = [];
+            (bool locationOk, string? locationError) = await ValidateAndBuildLocationClaimsAsync(user, dto.LocationId, extraClaims);
+
+            if (!locationOk)
+            {
+                await _signInManager.SignOutAsync();
+                return Unauthorized(new { message = locationError });
+            }
+
+            await _signInManager.SignInWithClaimsAsync(user, dto.RememberMe, extraClaims);
+
             return Ok(new { message = "Login successful", username = user.UserName });
         }
 
         [HttpPost("login-form")]
         [Consumes("application/x-www-form-urlencoded")]
-        public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null)
+        public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null)
         {
             UserProfile? user = await FindUserByUsernameOrEmailAsync(username);
             if (user is null)
@@ -78,6 +94,17 @@ namespace Lanyard.App.Controllers
             {
                 return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
             }
+
+            List<Claim> extraClaims = [];
+            (bool locationOk, string? locationError) = await ValidateAndBuildLocationClaimsAsync(user, locationId, extraClaims);
+
+            if (!locationOk)
+            {
+                await _signInManager.SignOutAsync();
+                return Redirect($"/login?error={Uri.EscapeDataString(locationError!)}");
+            }
+
+            await _signInManager.SignInWithClaimsAsync(user, rememberMe, extraClaims);
 
             // Redirect to return URL (only if it is a local path - guards against
             // open-redirect attacks) or default to /.
@@ -110,6 +137,46 @@ namespace Lanyard.App.Controllers
             }
 
             return Redirect("/login");
+        }
+
+        private async Task<(bool ok, string? error)> ValidateAndBuildLocationClaimsAsync(UserProfile user, int? locationId, List<Claim> claims)
+        {
+            bool isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
+
+            if (locationId is null)
+            {
+                // Non-admins must belong to a location; admins can skip this and keep
+                // the default Lanyard branding (no company to derive it from).
+                return isAdmin ? (true, null) : (false, "Please select your location.");
+            }
+
+            if (isAdmin)
+            {
+                // Admins aren't location members, so membership can't gate them - instead,
+                // only allow picking a location that was actually offered on the login form
+                // (i.e. an active location under an active company).
+                Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
+
+                if (!optionsResult.IsSuccess || optionsResult.Data!.All(x => x.LocationId != locationId.Value))
+                {
+                    return (false, "The selected location is no longer available.");
+                }
+
+                claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
+
+                return (true, null);
+            }
+
+            Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
+
+            if (!membershipResult.IsSuccess || membershipResult.Data != true)
+            {
+                return (false, "You do not have access to the selected location.");
+            }
+
+            claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
+
+            return (true, null);
         }
 
         private async Task<UserProfile?> FindUserByUsernameOrEmailAsync(string identifier)

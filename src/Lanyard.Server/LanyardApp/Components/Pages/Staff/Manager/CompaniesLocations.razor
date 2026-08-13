@@ -1,0 +1,25 @@
+@page "/manage/companies-locations"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+
+@using Lanyard.App.Components.Manager
+
+<PageTitle>Companies & Locations</PageTitle>
+
+<div class="p-2">
+    <CompanyLocationManager @ref="_companyLocationManager" OnLocationsChanged="HandleLocationsChanged" />
+
+    <UserLocationsManager @ref="_userLocationsManager" />
+</div>
+
+@code {
+    private CompanyLocationManager? _companyLocationManager;
+    private UserLocationsManager? _userLocationsManager;
+
+    private async Task HandleLocationsChanged()
+    {
+        if (_userLocationsManager is not null)
+        {
+            await _userLocationsManager.ReloadLocationsAsync();
+        }
+    }
+}

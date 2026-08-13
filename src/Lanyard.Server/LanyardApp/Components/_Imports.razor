@@ -10,6 +10,7 @@
 @using Lanyard.App.Components.Layout
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Locations
 @using Lanyard.Infrastructure.Branding
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.Models
@@ -28,5 +29,7 @@
 @inject ISecurityService _securityService
 @inject IDialogService _dialogService
 @inject ITimeService _timeService
+@inject ICompanyLocationService _companyLocationService
+@inject ICurrentLocationContext _currentLocationContext
 @inject INotificationService _toastService
 @inject NavigationManager _navigationManager

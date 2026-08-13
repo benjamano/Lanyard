@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging;
@@ -22,7 +21,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl)
+    public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl, string? logoUrl, string accentColorHex)
     {
         try
         {
@@ -38,7 +37,7 @@ public class EmailService : IEmailService
                 return Result<bool>.Fail("User has no email address to send a link to.");
             }
 
-            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl);
+            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex);
 
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
@@ -70,7 +69,7 @@ public class EmailService : IEmailService
         }
     }
 
-    public async Task<Result<bool>> SendCourseRecurrenceReminderEmailAsync(UserProfile user, string courseName, string trainingUrl)
+    public async Task<Result<bool>> SendCourseRecurrenceReminderEmailAsync(UserProfile user, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
         try
         {
@@ -86,7 +85,7 @@ public class EmailService : IEmailService
                 return Result<bool>.Fail("User has no email address to send a link to.");
             }
 
-            string html = BuildRecurrenceReminderHtml(user.UserName ?? user.Email, courseName, trainingUrl);
+            string html = BuildRecurrenceReminderHtml(user.UserName ?? user.Email, courseName, trainingUrl, logoUrl, accentColorHex);
 
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
@@ -118,16 +117,21 @@ public class EmailService : IEmailService
         }
     }
 
-    private static string BuildRecurrenceReminderHtml(string username, string courseName, string trainingUrl)
+    private static string BuildRecurrenceReminderHtml(string username, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
           <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(username)},</p>
           <p>It's time to retake the training course <strong>{WebUtility.HtmlEncode(courseName)}</strong>. Your previous
              completion has expired and needs to be renewed.</p>
           <p>
-            <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: #0F6CBD; color: #fff; text-decoration: none; border-radius: 4px;">
+            <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Start Training
             </a>
           </p>
@@ -135,15 +139,20 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildSetPasswordHtml(string username, string setPasswordUrl)
+    private static string BuildSetPasswordHtml(string username, string setPasswordUrl, string? logoUrl, string accentColorHex)
     {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
           <h2>Lanyard</h2>
           <p>Use the button below to set your password. Your username is:</p>
           <p style="font-size: 18px; font-weight: bold;">{WebUtility.HtmlEncode(username)}</p>
           <p>
-            <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: {BrandConstants.PrimaryColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
+            <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Set Your Password
             </a>
           </p>

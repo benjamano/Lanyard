@@ -7,6 +7,21 @@
 @inject IJSRuntime JS
 
 <div class="by-course-tab">
+    @if (scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so this tab can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCoursesAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else
+    {
     <div class="course-picker-host">
         <FluentSelect TOption="Course" TValue="Guid" Items="@courses.OrderBy(x => x.Name)"
                       OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i!.Id)" Placeholder="Select a course..."
@@ -75,6 +90,7 @@
             </FluentDataGrid>
         }
     }
+    }
 </div>
 
 @code {
@@ -83,23 +99,54 @@
     private Dictionary<string, string> userNamesById = [];
     private Guid selectedCourseId = Guid.Empty;
     private bool isLoadingAssignments;
+    private bool scopeFailed;
+    private LocationScope? currentScope;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadCoursesAsync();
+
+    private async Task LoadCoursesAsync()
     {
-        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
 
-        if (!coursesResult.IsSuccess || coursesResult.Data is null)
+        if (scope is null)
         {
-            _toastService.ShowError($"Failed to load courses: {coursesResult.Error}");
             courses = [];
         }
         else
         {
-            courses = coursesResult.Data;
+            Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope);
+
+            if (!coursesResult.IsSuccess || coursesResult.Data is null)
+            {
+                _toastService.ShowError($"Failed to load courses: {coursesResult.Error}");
+                courses = [];
+            }
+            else
+            {
+                courses = coursesResult.Data;
+            }
         }
 
         IEnumerable<UserProfile> allUsers = await _securityService.GetAllUsersAsync();
         userNamesById = allUsers.ToDictionary(x => x.Id, x => x.GetName());
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the tab renders an empty course picker
+            // with nothing left on screen explaining why.
+            scopeFailed = true;
+            return null;
+        }
+
+        scopeFailed = false;
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     private async Task OnCourseSelectedAsync(Guid value)
@@ -118,7 +165,16 @@
 
         isLoadingAssignments = true;
 
-        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForCourseAsync(selectedCourseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            assignments = [];
+            isLoadingAssignments = false;
+            return;
+        }
+
+        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForCourseAsync(selectedCourseId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {

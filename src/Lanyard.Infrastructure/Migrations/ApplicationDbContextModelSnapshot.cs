@@ -24,59 +24,6 @@ namespace Lanyard.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("CompanyTenant", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CompanyTenants");
-                });
-
-            modelBuilder.Entity("CompanyTenantMember", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyTenantId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyTenantId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("CompanyTenantMembers");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.DTO.ZoneScoreboard.ClientAvailableNetworkInterface", b =>
                 {
                     b.Property<int>("Id")
@@ -487,6 +434,40 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientProjectionSettings");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LogoFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ThemeColorHex")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LogoFileId");
+
+                    b.ToTable("Companies");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
                 {
                     b.Property<Guid>("Id")
@@ -502,6 +483,12 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsShared")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -513,6 +500,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LocationId");
 
                     b.ToTable("Courses");
                 });
@@ -541,6 +530,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("StartedDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -551,6 +543,8 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CourseId");
+
+                    b.HasIndex("LocationId");
 
                     b.ToTable("CourseAssignments");
                 });
@@ -1035,6 +1029,38 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("Folders");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Locations");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1280,6 +1306,34 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("FileMetadataId");
 
                     b.ToTable("Songs");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.UserLocationMembership", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("UserId", "LocationId")
+                        .IsUnique();
+
+                    b.ToTable("UserLocationMemberships");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserProfile", b =>
@@ -1604,25 +1658,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(2);
                 });
 
-            modelBuilder.Entity("CompanyTenantMember", b =>
-                {
-                    b.HasOne("CompanyTenant", "CompanyTenant")
-                        .WithMany("Members")
-                        .HasForeignKey("CompanyTenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CompanyTenant");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.DTO.ZoneScoreboard.ClientAvailableNetworkInterface", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
@@ -1749,6 +1784,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ProjectionProgram");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "LogoFile")
+                        .WithMany()
+                        .HasForeignKey("LogoFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("LogoFile");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId");
+
+                    b.Navigation("Location");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CourseAssignment", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Course", "Course")
@@ -1757,7 +1811,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId");
+
                     b.Navigation("Course");
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CourseQuestion", b =>
@@ -1949,6 +2009,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ParentFolder");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany("Locations")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreateByUser")
@@ -2054,6 +2125,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("FileMetadata");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.UserLocationMembership", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany("Memberships")
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.ApplicationRole", null)
@@ -2105,11 +2195,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("CompanyTenant", b =>
-                {
-                    b.Navigation("Members");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRule", b =>
                 {
                     b.Navigation("Actions");
@@ -2120,6 +2205,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleExecution", b =>
                 {
                     b.Navigation("ActionExecutions");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
+                {
+                    b.Navigation("Locations");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
@@ -2164,6 +2254,11 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Files");
 
                     b.Navigation("SubFolders");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
+                {
+                    b.Navigation("Memberships");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>

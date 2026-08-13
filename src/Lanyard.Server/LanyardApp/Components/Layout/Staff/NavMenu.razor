@@ -8,6 +8,13 @@
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
+
+    <FluentStack Width="auto">
+        <CompanyLogo Url="@CompanyLogoUrl" />
+    </FluentStack>
+
+    <FluentDivider />
+
     <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium" Padding="@Padding.All3">
         @if (_isAuthenticated)
         {
@@ -41,6 +48,10 @@
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
+                    @if (_isAdmin)
+                    {
+                        <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
+                    }
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
                 </FluentNavCategory>
@@ -90,7 +101,7 @@
             <FluentDivider />
 
             <FluentNav Padding="@Padding.Bottom0">
-                <FluentCard Appearance="CardAppearance.Subtle">
+                <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.Bottom1">
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
                         <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
                             <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
@@ -131,6 +142,8 @@
 </FluentStack>
 
 @code {
+    [Parameter] public string? CompanyLogoUrl { get; set; }
+
     private bool _isAuthenticated;
     private bool _isAdmin;
     private bool _isManager;

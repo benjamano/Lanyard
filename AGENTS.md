@@ -10,40 +10,40 @@ BEFORE STARTING EVERY REQUEST, WRITE THE MESSAGE: "Instructions Loaded" TO CONFI
 
 ## MCP Preference For This Repository
 
-When working in this repository, for any Blazor or Fluent UI Blazor question/task:
+For any Blazor or Fluent UI Blazor question or task, call the `blazor_knowledge` MCP server **before** relying on built-in knowledge — its server name in `.claude/settings.json` is `fluent-ui-blazor`.
 
-1. Call the `blazor_knowledge` MCP server first.
-2. Use these tools/resources before relying on built-in memory:
-   - `search_blazor_docs`
-   - `semantic_search_blazor_docs`
+1. Use these tools/resources first:
+   - `search_blazor_docs` / `semantic_search_blazor_docs`
    - `get_fluentui_component`
    - `compare_patterns`
-   - `blazor://overview`
-   - `blazor://component/{name}`
-   - `blazor://api/{symbol}`
-   - `blazor://search/{query}`
-   - `blazor://example/{component}/{scenario}`
-3. Prefer answers that include citations returned by the MCP server.
-4. If MCP returns no relevant results, fall back to general reasoning/web sources and clearly state the fallback.
+   - `blazor://overview`, `blazor://component/{name}`, `blazor://api/{symbol}`, `blazor://search/{query}`, `blazor://example/{component}/{scenario}`
+2. Prefer answers that include citations returned by the MCP server.
+3. If MCP returns no relevant results, fall back to general reasoning/web sources and clearly state the fallback.
 
 ## Solution Overview
 
-Lanyard is a .NET 10 solution with a layered architecture and two runtime frontends:
+Lanyard is a .NET 10 solution (`LanyardApp.sln` at repo root) with a layered architecture and several runtime frontends. Real project paths are nested under `src/` — there are no top-level `LanyardData`/`LanyardServices`/`LanyardAPI` folders, those live under `src/Lanyard.Server/`:
 
-- `LanyardApp`:
+- `src/Lanyard.Server/LanyardApp` (csproj `Lanyard.App.csproj`):
   Blazor Server app (Interactive Server rendering) and the main staff/customer web UI.
-- `LanyardAPI`:
+- `src/Lanyard.Server/LanyardAPI` (csproj `Lanyard.API.csproj`):
   HTTP API controllers for auth, music, and file management endpoints.
-- `LanyardServices`:
+- `src/Lanyard.Server/LanyardServices` (csproj `Lanyard.Services.csproj`):
   Business logic and orchestration layer used by app/API.
-- `LanyardData`:
+- `src/Lanyard.Infrastructure`:
   EF Core data access, entity models, and migrations.
-- `Lanyard.Shared`:
+- `src/Lanyard.Shared`:
   Cross-process DTOs/enums shared by server and WPF client.
-- `LanyardClient`:
-  .NET 10 WPF/console hybrid kiosk client connected over SignalR.
-- `LanyardTests`:
+- `src/Lanyard.Client`:
+  .NET 10 WPF/console hybrid kiosk client connected over SignalR. The built/runnable binary is `build\Lanyard.Client.exe` at the repo root (the csproj sets `OutputPath=..\..\build\`) — `src/Lanyard.Client/bin/...` output is not what actually runs.
+- `src/Lanyard.Client.Watchdog`:
+  Console supervisor process for `Lanyard.Client.exe` — launches it, hides its own window, and auto-restarts it on crash (with a crash-loop guard: gives up after 5 rapid crashes within 30s).
+- `src/Lanyard.Tests` (csproj `Lanyard.Tests.csproj`):
   MSTest suite for service-level behavior and regression coverage.
+- `src/Lanyard.Reach/*` — a satellite marketing/booking site for the business, sharing one Blazor UI across two hosts:
+  - `Lanyard.Reach.Shared`: Razor class library with the actual pages/layout (home, pricing, locations, cookies/privacy/terms) plus a `RedirectToLanyardServer` page that redirects out to the main Lanyard server.
+  - `Lanyard.Reach`: .NET MAUI Blazor Hybrid app (Android/iOS/MacCatalyst/Windows) hosting `Lanyard.Reach.Shared` in a native app shell.
+  - `Lanyard.Reach.Web`: ASP.NET Core web project hosting the same `Lanyard.Reach.Shared` UI as an interactive server-rendered website — the browser counterpart to the MAUI app.
 
 ## Core Programming Paradigms In This Repo
 
@@ -79,13 +79,13 @@ Lanyard is a .NET 10 solution with a layered architecture and two runtime fronte
 
 ### 1) Choose the correct project first
 
-- UI page/component behavior: `LanyardApp/Components/...`
-- API endpoint: `LanyardAPI/Controllers/...`
-- Business logic: `LanyardServices/Services/...`
-- Entity schema/migrations: `LanyardData/Models` and `LanyardData/Migrations`
-- Shared contract needed by server + client: `Lanyard.Shared/...`
-- Kiosk runtime behavior: `LanyardClient/...`
-- Tests: `LanyardTests/...`
+- UI page/component behavior: `src/Lanyard.Server/LanyardApp/Components/...`
+- API endpoint: `src/Lanyard.Server/LanyardAPI/Controllers/...`
+- Business logic: `src/Lanyard.Server/LanyardServices/Services/...`
+- Entity schema/migrations: `src/Lanyard.Infrastructure/Models` and `src/Lanyard.Infrastructure/Migrations`
+- Shared contract needed by server + client: `src/Lanyard.Shared/...`
+- Kiosk runtime behavior: `src/Lanyard.Client/...`
+- Tests: `src/Lanyard.Tests/...`
 
 ### 2) Keep responsibilities narrow
 
@@ -114,6 +114,10 @@ Lanyard is a .NET 10 solution with a layered architecture and two runtime fronte
 - Use Fluent UI components already in use across the project.
 - Prefer Bootstrap utility/classes for primary layout and spacing styling when possible.
 - Add custom CSS only when Bootstrap/Fluent component parameters cannot reasonably achieve the required result.
+- **Never use inline styling**: no raw `style="..."`/`Style="..."` and no embedded `<style>` blocks in a `.razor` file (unscoped/global, leaks across the whole app). Use that component's `<ComponentName>.razor.css` scoped stylesheet instead — see the `fluentui-v5-blazor` skill for why `::deep` is often required on Fluent component roots and how it can silently no-op.
+- **Spacing**: Fluent's defaults (unset `FluentStack` gaps, `FluentGrid`/`FluentGridItem` `Xs` splits) read as too cramped for this app — always set an explicit `FluentStack` gap, erring toward more space, not less. Observed reference values: `HorizontalGap="6"` for tightly related inline fields, `VerticalGap="18px"` for stacked form sections, `HorizontalGap="8px"` for button rows/inline pairs. For asymmetric multi-field rows (e.g. a wide field next to a narrow one), prefer a `FluentStack` wrapping plain `<div>`s with explicit proportional widths over `FluentGridItem Xs="n"` splits — gives exact control instead of the coarser 12-column grid. Fine vertical misalignment between sibling fields gets nudged with a plain `mt-5` utility class on a wrapping div, not a Fluent spacing parameter. Give dividers/panes room too: a `FluentDivider` between sections gets `Class="my-3"` (not `my-2`), multi-splitter panes get `Class="px-2"`/`Class="px-3"` padding rather than sitting flush against the edge.
+- **Icon-only buttons need a `Title`**: any `FluentButton` using only `IconStart`/`IconEnd` with no visible text content must set `Title="..."` — otherwise it has no accessible name for a screen reader. This isn't yet consistently applied across the codebase (most existing icon buttons predate the rule), but new/edited icon buttons should always include it.
+- **Mobile-first for new UI**: actively design new pages/components for phone-sized viewports rather than shrinking a desktop layout after the fact — be willing to propose a different flow (e.g. sequential drill-down instead of side-by-side master/detail) for narrow screens. Not a mandate to retroactively rework shipped pages.
 
 ### 6) SignalR patterns
 
@@ -144,22 +148,26 @@ Important FluentDataGrid note from docs:
 3. Enforce authorization on staff/admin routes and endpoints as needed.
 4. Keep identity operations in service/controller layers, not UI-only logic.
 5. Use least privilege; do not expose admin-only workflows accidentally.
+6. **Every `@page` route must declare `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]`** — there is no default-allow path (`RouteAuthorizationGate.razor` enforces this). See the `route-authorization` skill for history and edge cases.
+7. **`_currentLocationContext`/`LocationScope` is not an app-wide tenancy filter** — it's only implemented for the Training/Course module. See the `location-scoping` skill before assuming any query in another module is already location-filtered — it isn't, because the concept doesn't exist there yet.
 
 ## Database And Migration Workflow
 
 When changing EF models:
 
-1. Update entities in `LanyardData/Models`.
-2. Add migration in `LanyardData/Migrations`.
-3. Verify startup project compatibility (`LanyardApp`).
+1. Update entities in `src/Lanyard.Infrastructure/Models`.
+2. Add migration in `src/Lanyard.Infrastructure/Migrations`.
+3. Verify startup project compatibility (`src/Lanyard.Server/LanyardApp`).
 4. Update dependent DTOs/services/tests.
 
 Commands (from repository root):
 
 ```powershell
-dotnet ef migrations add <MigrationName> --project LanyardData/Lanyard.Infrastructure.csproj --startup-project LanyardApp/Lanyard.App.csproj
-dotnet ef database update --project LanyardData/Lanyard.Infrastructure.csproj --startup-project LanyardApp/Lanyard.App.csproj
+dotnet ef migrations add <MigrationName> --project src/Lanyard.Infrastructure --startup-project src/Lanyard.Server/LanyardApp
+dotnet ef database update --project src/Lanyard.Infrastructure --startup-project src/Lanyard.Server/LanyardApp
 ```
+
+There is no `IDesignTimeDbContextFactory`, so `dotnet ef` builds the App startup project to resolve the `DbContext` — these commands will fail while the app is running under the debugger (file locks).
 
 Rule:
 - Ask for confirmation before destructive schema changes (dropping/renaming columns or tables, or data-destructive migrations).
@@ -170,8 +178,8 @@ Common commands:
 
 ```powershell
 dotnet restore
-dotnet build LanyardApp.slnx
-dotnet test LanyardTests/Lanyard.Tests.csproj
+dotnet build LanyardApp.sln
+dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj
 ```
 
 App runtime defaults:
@@ -181,17 +189,31 @@ App runtime defaults:
   - `KIOSK_SERVER_URL` (example: `https://localhost:7175/staff/kiosk`)
   - `OTEL_EXPORTER_OTLP_ENDPOINT` (optional; example: `http://<home-server-ip>:5341`) — exports logs to the self-hosted Seq instance, see `deploy/seq/docker-compose.yml`. Same env var applies to the server app.
 
+For end-to-end verification beyond a plain build/test — running the app, driving the UI, or launching the full server+kiosk-client stack — see the `verify` and `kiosk-client-dev-stack` skills (the latter also explains why a full solution build can be blocked by file locks while the app runs under a debugger, and how to work around it).
+
 ## Development Seeding Notes
 
 In development, startup seeding creates default roles and an admin user.
-If troubleshooting local auth, inspect `LanyardApp/Data/DevelopmentDataSeeder.cs` first.
+If troubleshooting local auth, inspect `src/Lanyard.Server/LanyardApp/Data/DevelopmentDataSeeder.cs` first.
 
 ## Testing Expectations
 
-1. Place tests in `LanyardTests` with folder parity to source area.
+1. Place tests in `src/Lanyard.Tests` with folder parity to source area.
 2. Use Arrange-Act-Assert structure.
 3. Cover success and failure paths for new service methods.
-4. For data logic tests, prefer EF InMemory patterns already used by existing tests.
+4. For data logic tests, prefer EF InMemory patterns already used by existing tests — see the `service-testing-patterns` skill for the exact convention.
+
+### When a service-level unit test isn't enough
+
+A unit test mocks away the DI pipeline, auth middleware, and SignalR wiring — it can't catch a bug that only exists in how those pieces are wired together. Consider an integration/system test (not just a unit test) instead of — or in addition to — a service-level test whenever the change touches:
+
+1. **Authorization/routing wiring** — a new route, a new `[Authorize]`/`[AllowAnonymous]` placement, or middleware ordering. Exactly this class of bug shipped once already: `Routes.razor` used a plain `RouteView` instead of `AuthorizeRouteView`, so every `[Authorize]` attribute in the app was silently dead code — and every service-level unit test still passed, because none of them exercise routing at all.
+2. **A SignalR hub event or method name** — `SendAsync("EventName", ...)` / `.On("EventName", ...)` pairs are untyped strings with no compile-time check; a typo silently drops the event with no error anywhere (see CLAUDE.md's SignalR Event Patterns).
+3. **A cross-file "dispatch" pattern where a missing wiring step fails silently rather than throwing** — e.g. a new dashboard widget type or automation action type. See the `dashboard-widgets`/`automation-engine` skills for the concrete shape this takes in this repo (something that saves fine and looks correct but silently does nothing at runtime).
+
+If none of the above apply, a service-level unit test is sufficient — don't reach for integration-test infrastructure by default.
+
+When you do need one, reuse `src/Lanyard.Tests/Integration/CustomWebApplicationFactory.cs` (a `WebApplicationFactory<Program>` boot against an isolated EF InMemory database) rather than building a new fixture — see the `integration-testing` skill for the non-obvious setup it already solved (an EF dual-provider conflict, the `Program` visibility marker, logging in as the seeded admin, keeping the test host hermetic). `RouteAuthorizationIntegrationTests.cs` is the reference example.
 
 ## Practical Checklist For Any New Feature
 
@@ -203,3 +225,7 @@ If troubleshooting local auth, inspect `LanyardApp/Data/DevelopmentDataSeeder.cs
 6. Add migrations if schema changed.
 7. Add or update tests.
 8. Build and run tests before completion.
+
+## Deep-Dive Skills
+
+Area-specific gotchas — Fluent UI v5, charting, route authorization history, the email/invite system, client build troubleshooting, the kiosk dev stack, dashboard widgets, location scoping, the DMX/automation engines, service testing patterns, and API controller conventions — live in skills rather than in this file. See the table in `CLAUDE.md`'s "Deep-Dive Skills" section for the full list.

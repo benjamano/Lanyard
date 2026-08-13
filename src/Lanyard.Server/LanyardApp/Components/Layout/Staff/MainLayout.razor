@@ -1,8 +1,10 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 
 @inject NavigationManager NavigationManager
 @inject IThemeService ThemeService
 @inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <FluentProviders />
 
@@ -26,14 +28,16 @@
 
             <FluentSpacer />
 
-            <ThemeSelector />
+            <FluentStack Width="auto">
+                <ThemeSelector />
+            </FluentStack>
         </FluentStack>
     </FluentLayoutItem>
 
     <FluentLayoutItem Area="LayoutArea.Navigation" Height="auto">
         <AuthorizeView>
             <Authorized>
-                <NavMenu />
+                <NavMenu CompanyLogoUrl="@_companyLogoUrl" />
             </Authorized>
         </AuthorizeView>
     </FluentLayoutItem>
@@ -88,10 +92,18 @@
 
 @code {
     private ErrorBoundary? _errorBoundary;
+    private string? _companyLogoUrl;
 
     protected override void OnInitialized()
     {
         base.OnInitialized();
+
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(ApplyBrandingAsync);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -101,13 +113,36 @@
             return;
         }
 
+        await ApplyBrandingAsync();
+    }
+
+    private async Task ApplyBrandingAsync()
+    {
+        string accentColor = BrandConstants.PrimaryColorHex;
+        _companyLogoUrl = null;
+
         try
         {
-            // SetThemeAsync(color, isExact) re-derives the full ThemeSettings (incl. Mode)
-            // from FluentUI's "current effective mode", which isn't hydrated from storage
-            // yet at this point in the lifecycle and would silently reset a saved dark-mode
-            // choice back to system-preference. Read the persisted mode ourselves and apply
-            // it explicitly alongside the brand color so this call can't clobber it.
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
+            {
+                Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+                if (branding.Success && branding.Data is not null)
+                {
+                    accentColor = BrandConstants.ResolveAccentColor(branding.Data.ThemeColorHex);
+
+                    _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
+                        ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
+                        : null;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
             string? storedMode = await JSRuntime.InvokeAsync<string?>("lanyardGetStoredThemeMode");
 
             ThemeMode mode = storedMode switch
@@ -117,10 +152,17 @@
                 _ => ThemeMode.System
             };
 
-            await ThemeService.SetThemeAsync(new ThemeSettings(BrandConstants.PrimaryColorHex, 0, 0, mode, true));
+            await ThemeService.SetThemeAsync(new ThemeSettings(accentColor, 0, 0, mode, true));
         }
         catch { }
+
+        StateHasChanged();
     }
 
     private void Recover() => _errorBoundary?.Recover();
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
 }

@@ -9,8 +9,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Lanyard.Application.Services.Email;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Lanyard.Infrastructure.Branding;
 
 namespace Lanyard.Application.Services.Authentication;
 
@@ -24,6 +27,8 @@ public class SecurityService : ISecurityService
     private readonly ILogger<SecurityService> _logger;
     private readonly NavigationManager _navigationManager;
     private readonly IEmailService _emailService;
+    private readonly ICompanyLocationService _companyLocationService;
+    private readonly IOptions<EmailOptions> _emailOptions;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -33,7 +38,9 @@ public class SecurityService : ISecurityService
         ICourseService courseService,
         ILogger<SecurityService> logger,
         NavigationManager navigationManager,
-        IEmailService emailService)
+        IEmailService emailService,
+        ICompanyLocationService companyLocationService,
+        IOptions<EmailOptions> emailOptions)
     {
         _authStateProvider = authStateProvider;
         _factory = factory;
@@ -43,6 +50,8 @@ public class SecurityService : ISecurityService
         _logger = logger;
         _navigationManager = navigationManager;
         _emailService = emailService;
+        _companyLocationService = companyLocationService;
+        _emailOptions = emailOptions;
     }
 
     public async Task<Result<string>> GetCurrentUserIdAsync()
@@ -149,7 +158,7 @@ public class SecurityService : ISecurityService
         return await ctx.Users.ToListAsync();
     }
 
-    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user)
+    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds)
     {
         try
         {
@@ -174,6 +183,11 @@ public class SecurityService : ISecurityService
                 return Result<UserCreationResult>.Fail("A valid email address is required to invite a new user.");
             }
 
+            if (locationIds is null || locationIds.Count == 0)
+            {
+                return Result<UserCreationResult>.Fail("At least one location is required.");
+            }
+
             string initial = user.FirstName.ToLowerInvariant()[..1];
             string surname = user.LastName.ToLowerInvariant();
             user.UserName = initial + surname;
@@ -189,15 +203,29 @@ public class SecurityService : ISecurityService
                 return Result<UserCreationResult>.Fail($"Failed to create user: {errors}");
             }
 
+            foreach (int locationId in locationIds)
+            {
+                Result<bool> membershipResult = await _companyLocationService.AddUserToLocationAsync(user.Id, locationId);
+
+                if (!membershipResult.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to add newly created user {UserId} to location {LocationId}: {Error}", user.Id, locationId, membershipResult.Error);
+                }
+            }
+
             try
             {
-                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync();
+                // Unscoped: auto-assignment on user creation applies across all locations,
+                // matching pre-Task-3 behaviour where GetCoursesAsync() saw every course.
+                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(new LocationScope(true, null, null, null));
 
                 if (coursesResult.IsSuccess && coursesResult.Data is not null)
                 {
                     foreach (Course course in coursesResult.Data.Where(x => x.AutoAssignOnUserCreation))
                     {
-                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null);
+                        // Unscoped: mirrors the GetCoursesAsync() call above - auto-assignment on
+                        // user creation applies across all locations, matching pre-Task-4 behaviour.
+                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null, new LocationScope(true, null, null, null));
 
                         if (!assignResult.IsSuccess)
                         {
@@ -310,8 +338,41 @@ public class SecurityService : ISecurityService
     private async Task<Result<bool>> SendSetPasswordLinkEmailAsync(UserProfile user)
     {
         string token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        string setPasswordUrl = $"{_navigationManager.BaseUri}set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
-        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl);
+
+        // Both URLs below are consumed by a mail client on someone else's machine, so they must
+        // be absolute and externally reachable. NavigationManager.BaseUri is the host of whatever
+        // request happens to be running (localhost in dev, an internal hostname behind the proxy
+        // in production) and is therefore wrong here - use the configured public base URL, the
+        // same value CourseRecurrenceHostedService builds its email links from. BaseUri remains
+        // the fallback only when PublicBaseUrl has not been configured at all.
+        string baseUrl = string.IsNullOrWhiteSpace(_emailOptions.Value.PublicBaseUrl)
+            ? _navigationManager.BaseUri.TrimEnd('/')
+            : _emailOptions.Value.PublicBaseUrl.TrimEnd('/');
+
+        string setPasswordUrl = $"{baseUrl}/set-password?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(token)}";
+
+        string? logoUrl = null;
+        string accentColorHex = BrandConstants.PrimaryColorHex;
+
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(user.Id);
+
+        // Known, accepted limitation: a user who belongs to locations across more than one company
+        // gets an arbitrary company's branding here - GetLocationsForUserAsync orders by location
+        // name, so locations[0] carries no precedence meaning. Invite emails are not worth a
+        // "primary company" concept; the branding is cosmetic and the link itself is unaffected.
+        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
+        {
+            accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
+
+            if (company.LogoFileId is Guid logoFileId)
+            {
+                // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                // logo replacement needs a new URL to guarantee a fresh fetch.
+                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
+            }
+        }
+
+        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)

@@ -5,8 +5,7 @@
     "summary": "Version tracking and release notes are now visible in the app.",
     "details": [
       "Added a version number to the footer",
-      "Added a \"what's new\" panel to the left nav with full changelog history",
-      "CI now blocks PRs to main that don't bump the app version"
+      "Added a \"What's new\" panel to the left nav with full changelog history"
     ]
   },
   {
@@ -15,6 +14,18 @@
     "summary": "Minor Improvements the release notes panel",
     "details": [
       "Some minor UI improvements to the release notes panel"
+    ]
+  },
+  {
+    "version": "1.3.2",
+    "releaseDate": "2026-08-13",
+    "summary": "Added a new Companies and Locations system.",
+    "details": [
+      "Added a \"Location\" option to the login portal.",
+      "Added custom theme customisation for each company.",
+      "Added the ability to upload a logo to show in the sidebar when logged in.",
+      "Fixed the \"What's New\" panel not ordering the changelog correctly.",
+      "Added some UI improvements to the Role and User Role Managment pages."
     ]
   }
 ]

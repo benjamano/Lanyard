@@ -1,0 +1,70 @@
+using Lanyard.Application.Services;
+using Lanyard.Application.Services.Locations;
+using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Lanyard.API.Controllers
+{
+    [ApiController]
+    [Route("api/companies")]
+    public class CompanyBrandingController : ControllerBase
+    {
+        private readonly ICompanyLocationService _companyLocationService;
+        private readonly IFileService _fileService;
+
+        public CompanyBrandingController(ICompanyLocationService companyLocationService, IFileService fileService)
+        {
+            _companyLocationService = companyLocationService;
+            _fileService = fileService;
+        }
+
+        // Raster image types only. An SVG served same-origin from this anonymous URL would
+        // execute any embedded <script> when navigated to directly, and the admin-side
+        // uploader's Accept="image/*" is only a client-side hint - this is the real gate.
+        private static readonly HashSet<string> AllowedLogoContentTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp"
+        };
+
+        // Deliberately its own anonymous endpoint, not an addition to FilesController's
+        // gated /api/files/download/{id} route - it accepts only a companyId (never a raw
+        // file id) and resolves LogoFileId server-side, so it can only ever serve whatever
+        // an admin explicitly designated as that company's public logo.
+        [HttpGet("{companyId:int}/logo")]
+        [AllowAnonymous]
+        [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
+        public async Task<IActionResult> GetLogo(int companyId, CancellationToken cancellationToken)
+        {
+            Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+            if (!branding.Success || branding.Data?.LogoFileId is not Guid logoFileId)
+            {
+                return NotFound();
+            }
+
+            Result<FileMetadata> meta = await _fileService.GetFileMetadataAsync(logoFileId, cancellationToken);
+            string? contentType = meta.Data?.ContentType;
+
+            // Resolved before opening the stream so a disallowed type never gets one opened.
+            // NotFound (rather than an explanatory error) matches this endpoint's don't-leak-details posture.
+            if (contentType is null || !AllowedLogoContentTypes.Contains(contentType))
+            {
+                return NotFound();
+            }
+
+            Result<Stream> fileResult = await _fileService.DownloadFileAsync(logoFileId, cancellationToken);
+
+            if (!fileResult.Success || fileResult.Data is null)
+            {
+                return NotFound();
+            }
+
+            return File(fileResult.Data, contentType);
+        }
+    }
+}

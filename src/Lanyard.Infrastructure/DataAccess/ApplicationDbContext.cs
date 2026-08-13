@@ -19,6 +19,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanControlMusicRoleId = "dev-role-can-control-music";
         public const string SeedCanClockInRoleId = "dev-role-can-clock-in";
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
+        public const int SeedPlay2DayCompanyId = 1;
+        public const int SeedIpswichLocationId = 1;
+        public const int SeedWisbechLocationId = 2;
         public static readonly DateTime SeedRoleCreateDateUtc = new DateTime(2026, 03, 11, 0, 0, 0, DateTimeKind.Utc);
 
         public ApplicationDbContext() : base() { }
@@ -47,8 +50,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
-        public DbSet<CompanyTenant> CompanyTenants { get; set; }
-        public DbSet<CompanyTenantMember> CompanyTenantMembers { get; set; }
+        public DbSet<Company> Companies { get; set; }
+        public DbSet<Location> Locations { get; set; }
+        public DbSet<UserLocationMembership> UserLocationMemberships { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -144,6 +148,23 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CourseSectionProgress>()
                 .HasIndex(x => new { x.AssignmentId, x.SectionId })
                 .IsUnique();
+
+            modelBuilder.Entity<Location>()
+                .HasIndex(x => new { x.CompanyId, x.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<UserLocationMembership>()
+                .HasIndex(x => new { x.UserId, x.LocationId })
+                .IsUnique();
+
+            // A company may point at an uploaded file as its logo. When that file row is
+            // hard-deleted, null the link rather than cascade-deleting the company (companies
+            // are soft-deleted via IsActive instead).
+            modelBuilder.Entity<Company>()
+                .HasOne(x => x.LogoFile)
+                .WithMany()
+                .HasForeignKey(x => x.LogoFileId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

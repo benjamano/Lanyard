@@ -37,6 +37,12 @@
                                      TextInputType="TextInputType.Telephone" Style="width: 100%;">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
                     </FluentTextInput>
+                    <FluentSelect TOption="Lanyard.Infrastructure.Models.Location" TValue="int" Multiple="true"
+                                  Items="@availableLocations"
+                                  OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                                  OptionValue="@(l => l?.Id ?? 0)"
+                                  @bind-SelectedItems="selectedLocations"
+                                  Label="Location(s)" Required="true" Style="width: 100%;" />
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
                         <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
@@ -93,10 +99,19 @@
     private RegisterUserModel model = new();
     private EditContext _editContext = default!;
     private UserCreationResult? createdUserResult;
+    private List<Location> availableLocations = [];
+    private IEnumerable<Location> selectedLocations = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _editContext = new EditContext(model);
+
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+        if (locationsResult.IsSuccess)
+        {
+            availableLocations = locationsResult.Data!;
+        }
     }
 
     private async Task HandleRegisterUser()
@@ -114,7 +129,15 @@
                 PhoneNumber = model.PhoneNumber
             };
 
-            Result<UserCreationResult> result = await _securityService.CreateUserAsync(newUser);
+            if (!selectedLocations.Any())
+            {
+                ToastService.ShowError("Select at least one location.");
+                isSubmitting = false;
+                StateHasChanged();
+                return;
+            }
+
+            Result<UserCreationResult> result = await _securityService.CreateUserAsync(newUser, selectedLocations.Select(l => l.Id).ToList());
 
             if (result.IsSuccess)
             {

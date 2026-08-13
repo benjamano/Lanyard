@@ -15,12 +15,25 @@
     <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Courses</FluentText>
         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                      OnClick="CreateCourseAsync" Class="ms-auto">
+                      Disabled="@scopeFailed" OnClick="CreateCourseAsync" Class="ms-auto">
             New Course
         </FluentButton>
     </FluentStack>
 
-    @if (isLoading)
+    @if (scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so your courses can't be
+                listed. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadCoursesAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else if (isLoading)
     {
         <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
             <FluentSpinner />
@@ -35,10 +48,16 @@
                 <PropertyColumn Property="x => x.PassMarkPercent" Title="Pass Mark %" />
                 <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
                 <TemplateColumn Title="">
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Edit())"
-                                  OnClick="@(() => EditCourse(context.Id))">Edit
+                    @* A course shared from another location is readable but not writable, so it
+                       opens as a read-only view and Delete is off - the service would reject it. *@
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(CanWrite(context)
+                                               ? new Icons.Regular.Size20.Edit()
+                                               : (Icon)new Icons.Regular.Size20.Eye())"
+                                  OnClick="@(() => EditCourse(context.Id))">@(CanWrite(context) ? "Edit" : "View")
                     </FluentButton>
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                  Disabled="@(!CanWrite(context))"
                                   OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
                 </TemplateColumn>
             </ChildContent>
@@ -52,17 +71,53 @@
 @code {
     private List<Course> courses = [];
     private bool isLoading;
+    private bool scopeFailed;
+    private LocationScope? currentScope;
+
+    // Mirrors the service's write rule: Admins write anything; everyone else only writes
+    // courses owned by their own location. Shared courses from a sibling location list here
+    // (read access) but every write against them is rejected server-side.
+    private bool CanWrite(Course course) =>
+        currentScope is not null
+        && (currentScope.IsAdmin || course.LocationId == currentScope.LocationId);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCoursesAsync();
     }
 
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the list would just render as
+            // permanently empty, indistinguishable from genuinely having no courses.
+            scopeFailed = true;
+            return null;
+        }
+
+        scopeFailed = false;
+        currentScope = scopeResult.Data;
+        return currentScope;
+    }
+
     private async Task LoadCoursesAsync()
     {
         isLoading = true;
 
-        Result<List<Course>> result = await _courseService.GetCoursesAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            courses = [];
+            isLoading = false;
+            return;
+        }
+
+        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -79,12 +134,19 @@
 
     private async Task CreateCourseAsync()
     {
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
         Result<Course> result = await _courseService.SaveCourseAsync(new Course
         {
             Id = Guid.Empty,
             Name = "New Course",
             PassMarkPercent = 80
-        });
+        }, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -115,7 +177,14 @@
             return;
         }
 
-        Result<bool> result = await _courseService.DeleteCourseAsync(courseId);
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _courseService.DeleteCourseAsync(courseId, scope);
 
         if (!result.IsSuccess)
         {

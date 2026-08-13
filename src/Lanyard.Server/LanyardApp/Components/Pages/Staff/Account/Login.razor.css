@@ -1,0 +1,14 @@
+/* Negative margins pull the bar out to the edges of the FluentCard's 32px padding so it reads
+   as a full-bleed strip across the top of the card. Only the colour is set inline (dynamic). */
+.login-accent-bar {
+    height: 6px;
+    margin: -32px -32px 8px;
+}
+
+.login-company-logo {
+    max-height: 48px;
+    max-width: 100%;
+    display: block;
+    margin: 0 auto 8px;
+    object-fit: contain;
+}

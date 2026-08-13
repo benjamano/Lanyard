@@ -1,0 +1,106 @@
+@using Lanyard.Application.Services.ApplicationRoles
+@using Lanyard.Infrastructure.Models
+
+@inject ApplicationRolesService _rApi
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.ArchiveArrowBack())" />
+            <FluentText As="@TextTag.H4">Disabled Roles</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        @if (_roles is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else if (!_roles.Any())
+        {
+            <FluentText Style="text-align: center; color: var(--neutral-foreground-hint);">
+                No disabled roles.
+            </FluentText>
+        }
+        else
+        {
+            <FluentDataGrid Items="@_roles.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr"
+                            Style="width: 100%;" AutoItemsPerPage="true" ItemSize="46" RowSize="@DataGridRowSize.Medium">
+                <PropertyColumn Property="@(r => r.Name ?? string.Empty)" Title="Name" />
+                <TemplateColumn Title="Created By">
+                    @{
+                        string createdBy = context.CreatedByUser?.GetName() ?? "N/A";
+                    }
+                    @createdBy
+                </TemplateColumn>
+                <PropertyColumn Property="@(r => r.CreateDate)" Title="Created Date" Format="g" />
+                <TemplateColumn Title="Actions">
+                    <FluentButton IconEnd="@(new Icons.Regular.Size20.ArrowUndo())"
+                                  OnClick="@(() => RestoreRoleAsync(context.Id))">
+                        Restore
+                    </FluentButton>
+                </TemplateColumn>
+            </FluentDataGrid>
+        }
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@CloseAsync" Appearance="ButtonAppearance.Outline">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // Fired after every successful restore so the page behind this dialog (RoleManager)
+    // can reload its active-roles grid without this dialog needing to know how that's done.
+    [Parameter]
+    public EventCallback OnRoleRestored { get; set; }
+
+    private IEnumerable<ApplicationRole>? _roles;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDisabledRolesAsync();
+    }
+
+    private async Task LoadDisabledRolesAsync()
+    {
+        Result<List<ApplicationRole>> result = await _rApi.GetInactiveApplicationRolesAsync();
+
+        if (result.IsSuccess)
+        {
+            _roles = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load disabled roles: {result.Error!}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreRoleAsync(string roleId)
+    {
+        Result<bool> result = await _rApi.RestoreRoleAsync(roleId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to restore role: {result.Error!}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Role Restored - The role is active and assignable again.");
+
+        await LoadDisabledRolesAsync();
+        await OnRoleRestored.InvokeAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

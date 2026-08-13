@@ -1,0 +1,291 @@
+@using Lanyard.Application.Services.Locations
+@using Lanyard.App.Components.Files
+
+@inject INotificationService ToastService
+
+<div class="company-location-manager">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
+        <FluentGrid Class="w-100" Spacing="1">
+            <FluentGridItem Xs="12" Sm="4">
+                <FluentCard Height="auto">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" HorizontalGap="6">
+                            <FluentText As="@TextTag.H4">Companies</FluentText>
+                            @if (selectedCompany is null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany"
+                                              IconStart="@(new Icons.Regular.Size20.AddCircle())">Add Company
+                                </FluentButton>
+                            }
+                        </FluentStack>
+
+                        <FluentTextInput @bind-Value="companyName" Label="Company name" Class="clm-full-width"
+                                         Margin="@Margin.Bottom0" />
+                        <FluentColorPickerInput @bind-Value="companyThemeColor" Label="Theme color"
+                                                Class="clm-full-width" View="@ColorPickerView.SwatchPalette" Margin="@Margin.Top0" />
+
+                        <FileUploader Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
+                                      OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
+                                      PreviewUrl="@companyLogoPreviewUrl" />
+                        @if (companyLogoFileId is not null)
+                        {
+                            <FluentText Class="clm-empty-note">
+                                A logo is set. Upload a file to replace it, or clear it.
+                            </FluentText>
+                        }
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                            @if (selectedCompany is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany">Save Changes
+                                </FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New
+                                    Company
+                                </FluentButton>
+                            }
+
+                            @if (companyLogoFileId is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearLogo">Clear Logo
+                                </FluentButton>
+                            }
+                        </FluentStack>
+
+                        <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr"
+                                        Class="clm-full-width" RowSize="@DataGridRowSize.Medium">
+                            <TemplateColumn Title="Name">
+                                @context.Name
+                            </TemplateColumn>
+                            <TemplateColumn Title="Actions">
+                                <FluentButton
+                                    Appearance="@(selectedCompany?.Id == context.Id ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                                    OnClick="@(() => SelectCompany(context))">
+                                    Select
+                                </FluentButton>
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </FluentStack>
+                </FluentCard>
+            </FluentGridItem>
+
+            <FluentGridItem Xs="12" Sm="8">
+                @if (selectedCompany is not null)
+                {
+                    <FluentCard Height="100%">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText Typo="Typography.H6">Locations for @selectedCompany.Name</FluentText>
+
+                            <FluentTextInput @bind-Value="newLocationName" Label="New location name" Placeholder="Ipswich"
+                                             Class="clm-full-width" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddLocation">Add Location
+                            </FluentButton>
+
+                            @if (!locationsForSelectedCompany.Any())
+                            {
+                                <FluentText Class="clm-empty-note">
+                                    No locations yet for this company.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@locationsForSelectedCompany.AsQueryable()" GridTemplateColumns="2fr 1fr"
+                                                Class="clm-full-width" RowSize="@DataGridRowSize.Medium">
+                                    <TemplateColumn Title="Name">
+                                        @context.GetDisplayName()
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                      OnClick="@(() => DeactivateLocation(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentGridItem>
+        </FluentGrid>
+    </FluentStack>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnLocationsChanged { get; set; }
+
+    private List<Company> companies = [];
+    private List<Location> locationsForSelectedCompany = [];
+    private Company? selectedCompany;
+
+    // One form, two modes: with no company selected it creates, with one selected it edits that
+    // company in place. Selecting a company round-trips its complete current branding into these
+    // fields, so a save always sends the full state back (see SaveCompanyAsync's update branch).
+    private string companyName = string.Empty;
+    private string companyThemeColor = string.Empty;
+    private Guid? companyLogoFileId;
+    private string? companyLogoPreviewUrl;
+    private string newLocationName = string.Empty;
+
+    private void OnLogoUploaded(FileMetadata file)
+    {
+        companyLogoFileId = file.Id;
+        companyLogoPreviewUrl = $"/api/files/download/{file.Id}";
+    }
+
+    private void ClearLogo()
+    {
+        companyLogoFileId = null;
+        companyLogoPreviewUrl = null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompaniesAsync();
+    }
+
+    private async Task LoadCompaniesAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+
+        if (result.IsSuccess)
+        {
+            companies = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load companies: {result.Error}");
+        }
+    }
+
+    private async Task SaveCompany()
+    {
+        if (string.IsNullOrWhiteSpace(companyName))
+        {
+            return;
+        }
+
+        bool isEdit = selectedCompany is not null;
+
+        // Id 0 routes SaveCompanyAsync down its create branch; a real id routes it down the
+        // update branch, which is what makes an already-seeded company (e.g. Play2Day) brandable.
+        Result<Company> result = await _companyLocationService.SaveCompanyAsync(new Company
+        {
+            Id = selectedCompany?.Id ?? 0,
+            Name = companyName,
+            ThemeColorHex = companyThemeColor,
+            LogoFileId = companyLogoFileId
+        });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to {(isEdit ? "save" : "add")} company: {result.Error}");
+            return;
+        }
+
+        await LoadCompaniesAsync();
+
+        if (isEdit)
+        {
+            // Re-point at the freshly loaded row so the form and the Locations panel keep
+            // showing the saved state rather than the now-stale pre-save instance.
+            Company? reloaded = companies.FirstOrDefault(x => x.Id == result.Data!.Id);
+
+            if (reloaded is not null)
+            {
+                selectedCompany = reloaded;
+                PopulateFormFrom(reloaded);
+            }
+
+            ToastService.ShowSuccess("Company updated.");
+            return;
+        }
+
+        ClearForm();
+        ToastService.ShowSuccess("Company added.");
+    }
+
+    private void StartNewCompany()
+    {
+        selectedCompany = null;
+        locationsForSelectedCompany = [];
+        ClearForm();
+    }
+
+    private void ClearForm()
+    {
+        companyName = string.Empty;
+        companyThemeColor = string.Empty;
+        companyLogoFileId = null;
+        companyLogoPreviewUrl = null;
+    }
+
+    private void PopulateFormFrom(Company company)
+    {
+        companyName = company.Name;
+        companyThemeColor = company.ThemeColorHex ?? string.Empty;
+        companyLogoFileId = company.LogoFileId;
+        companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
+    }
+
+    private async Task SelectCompany(Company company)
+    {
+        selectedCompany = company;
+        PopulateFormFrom(company);
+        await LoadLocationsAsync();
+    }
+
+    private async Task LoadLocationsAsync()
+    {
+        if (selectedCompany is null)
+        {
+            return;
+        }
+
+        Result<List<Location>> result = await _companyLocationService.GetLocationsAsync(selectedCompany.Id);
+
+        if (result.IsSuccess)
+        {
+            locationsForSelectedCompany = result.Data!;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load locations: {result.Error}");
+        }
+    }
+
+    private async Task AddLocation()
+    {
+        if (selectedCompany is null || string.IsNullOrWhiteSpace(newLocationName))
+        {
+            return;
+        }
+
+        Result<Location> result = await _companyLocationService.SaveLocationAsync(new Location
+        {
+            CompanyId = selectedCompany.Id,
+            Name = newLocationName
+        });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add location: {result.Error}");
+            return;
+        }
+
+        newLocationName = string.Empty;
+        await LoadLocationsAsync();
+        await OnLocationsChanged.InvokeAsync();
+    }
+
+    private async Task DeactivateLocation(int locationId)
+    {
+        Result<bool> result = await _companyLocationService.DeactivateLocationAsync(locationId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to deactivate location: {result.Error}");
+            return;
+        }
+
+        await LoadLocationsAsync();
+        await OnLocationsChanged.InvokeAsync();
+    }
+}

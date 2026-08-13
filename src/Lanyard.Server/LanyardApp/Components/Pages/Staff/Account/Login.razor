@@ -1,8 +1,6 @@
 @page "/login"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
-@using Lanyard.Infrastructure.DTO
-
 @inject NavigationManager Navigation
 
 <PageTitle>Login</PageTitle>
@@ -11,6 +9,16 @@
              HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
 
     <FluentCard Style="width: 300px; max-width: 90vw; padding: 32px;">
+        @if (SelectedAccentColor is not null)
+        {
+            <div class="login-accent-bar" style="@AccentBarStyle"></div>
+        }
+
+        @if (SelectedLogoUrl is not null)
+        {
+            <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" onerror="this.style.display='none'" />
+        }
+
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
                      HorizontalAlignment="HorizontalAlignment.Center">
             <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
@@ -28,28 +36,36 @@
             <form method="post" class="col-12" action="/api/auth/login-form">
                 <input type="hidden" name="returnUrl" value="@ReturnUrl" />
 
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16"
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
                              HorizontalAlignment="HorizontalAlignment.Center">
-                    <div>
-                        <FluentTextInput Name="username" Label="Username or Email" Required="true"
-                                         Placeholder="Enter your username or email" Style="width: 100%;">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                        </FluentTextInput>
-                    </div>
+                    <FluentTextInput Name="username" Label="Username or Email" Required="true"
+                                     Placeholder="Enter your username or email" Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextInput>
 
-                    <div>
-                        <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
-                                         Required="true" Placeholder="Enter your password" Style="width: 100%;">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
-                        </FluentTextInput>
-                    </div>
+                    <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
+                                     Required="true" Placeholder="Enter your password" Style="width: 100%;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                    </FluentTextInput>
 
-                    @* <FluentCheckbox Name="rememberMe"
-                                    Label="Remember Me" /> *@
+                    @if (locationOptions.Any())
+                    {
+                        <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
+                                      Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
+                                      ValueChanged="@(item => OnLocationChanged(item))" Style="width: 100%;"
+                                      Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
+                                      OptionValue="@(option => option.LocationId)" />
+                    }
+                    else
+                    {
+                        <FluentText>Loading Companies...</FluentText>
+                    }
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
                                  Style="margin-top: 8px;">
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      BackgroundColor="@SelectedAccentColor"
+                                      Color="@(SelectedAccentColor is null ? null : "white")">
                             <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
                             Login
                         </FluentButton>
@@ -70,4 +86,29 @@
 
     [SupplyParameterFromQuery(Name = "error")]
     public string? ErrorMessage { get; set; }
+
+    private IEnumerable<LoginLocationOption> locationOptions = [];
+
+    private string? SelectedAccentColor;
+    private string? SelectedLogoUrl;
+
+    private string AccentBarStyle => $"background-color:{SelectedAccentColor};";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<LoginLocationOption>> result = await _companyLocationService.GetLoginLocationOptionsAsync();
+
+        if (result.IsSuccess)
+        {
+            locationOptions = result.Data!;
+        }
+    }
+
+    private void OnLocationChanged(int locationId)
+    {
+        LoginLocationOption? option = locationOptions.FirstOrDefault(x => x.LocationId == locationId);
+
+        SelectedAccentColor = option?.ThemeColorHex;
+        SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
+    }
 }
