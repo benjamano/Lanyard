@@ -117,4 +117,116 @@ public class FileServiceTests
         Assert.IsNotNull(result.Data);
         Assert.AreEqual("newname.txt", result.Data.FileName);
     }
+
+    [TestMethod]
+    public async Task GetFolderAsync_WhenFolderExistsThenReturnsIt()
+    {
+        var folderId = Guid.NewGuid();
+        var folder = new Folder
+        {
+            Id = folderId,
+            Name = "Nested",
+            ParentFolderId = null,
+            CreatedBy = "user1",
+            IsActive = true
+        };
+
+        await _dbContext.Folders.AddAsync(folder);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _fileService.GetFolderAsync(folderId, CancellationToken.None);
+
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Data);
+        Assert.AreEqual("Nested", result.Data.Name);
+    }
+
+    [TestMethod]
+    public async Task GetFolderAsync_WhenFolderDoesNotExistThenFails()
+    {
+        var result = await _fileService.GetFolderAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task CreateFolderAsync_WhenUserIsResolvedThenFolderIsCreatedWithThatUser()
+    {
+        _securityServiceMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
+
+        var result = await _fileService.CreateFolderAsync("New Folder", null, CancellationToken.None);
+
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Data);
+        Assert.AreEqual("New Folder", result.Data.Name);
+        Assert.AreEqual("user1", result.Data.CreatedBy);
+    }
+
+    [TestMethod]
+    public async Task MoveFileAsync_WhenFileAndDestinationExistThenFolderIdIsUpdated()
+    {
+        var fileId = Guid.NewGuid();
+        var destinationFolderId = Guid.NewGuid();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "move.txt",
+            FilePath = Path.GetTempFileName(),
+            FileSize = 10,
+            ContentType = "text/plain",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            FolderId = null,
+            IsActive = true
+        };
+        var destinationFolder = new Folder
+        {
+            Id = destinationFolderId,
+            Name = "Destination",
+            CreatedBy = "user1",
+            IsActive = true
+        };
+
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.Folders.AddAsync(destinationFolder);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _fileService.MoveFileAsync(fileId, destinationFolderId, CancellationToken.None);
+
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Data);
+        Assert.AreEqual(destinationFolderId, result.Data.FolderId);
+    }
+
+    [TestMethod]
+    public async Task MoveFileAsync_WhenFileDoesNotExistThenFails()
+    {
+        var result = await _fileService.MoveFileAsync(Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task MoveFileAsync_WhenDestinationFolderDoesNotExistThenFails()
+    {
+        var fileId = Guid.NewGuid();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "move.txt",
+            FilePath = Path.GetTempFileName(),
+            FileSize = 10,
+            ContentType = "text/plain",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            IsActive = true
+        };
+
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _fileService.MoveFileAsync(fileId, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+    }
 }

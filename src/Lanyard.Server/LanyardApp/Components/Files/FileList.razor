@@ -11,7 +11,7 @@
             <PropertyColumn Property="x => x.ContentType" Title="Type" Class="file-list-col-type" />
             <PropertyColumn Property="x => x.UploadedAt" Title="Uploaded" Class="file-list-col-uploaded" />
             <TemplateColumn Title="Actions" Align="DataGridCellAlignment.End">
-                <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+                <FileActionsMenu File="context" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" OnFileMoved="OnFileMoved" />
             </TemplateColumn>
         </ChildContent>
         <LoadingContent>
@@ -24,6 +24,7 @@
     [Parameter] public Guid? FolderId { get; set; }
     [Parameter] public EventCallback<Guid> OnFileDeleted { get; set; }
     [Parameter] public EventCallback<FileMetadata> OnFileRenamed { get; set; }
+    [Parameter] public EventCallback<FileMetadata> OnFileMoved { get; set; }
 
     private List<FileMetadata>? files;
 

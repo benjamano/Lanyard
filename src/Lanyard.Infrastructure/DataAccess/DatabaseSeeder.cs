@@ -134,6 +134,16 @@ public static class DatabaseSeeder
                 CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
                 CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
                 IsActive = true
+            },
+            new ApplicationRole
+            {
+                Id = ApplicationDbContext.SeedCanManageFilesRoleId,
+                Name = "CanManageFiles",
+                NormalizedName = "CANMANAGEFILES",
+                ConcurrencyStamp = "SEED-ROLE-CAN-MANAGE-FILES-CS",
+                CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
+                CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+                IsActive = true
             }
         );
 
