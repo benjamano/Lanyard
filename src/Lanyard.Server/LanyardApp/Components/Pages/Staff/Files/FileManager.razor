@@ -1,5 +1,5 @@
 @page "/files"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, CanManageFiles")]
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.App.Components.Files
@@ -19,7 +19,7 @@
                 <AuthorizeView>
                     <FileUploader SelectedFolderId="selectedFolderId" OnFileUploaded="OnFileUploaded" />
                 </AuthorizeView>
-                <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" />
+                <FileList @ref="fileList" FolderId="selectedFolderId" OnFileDeleted="OnFileDeleted" OnFileRenamed="OnFileRenamed" OnFileMoved="OnFileMoved" />
             </FluentGridItem>
         </FluentGrid>
     </FluentCard>
@@ -50,6 +50,12 @@
     }
 
     private async Task OnFileRenamed(FileMetadata file)
+    {
+        if (fileList is not null)
+            await fileList.RefreshAsync();
+    }
+
+    private async Task OnFileMoved(FileMetadata file)
     {
         if (fileList is not null)
             await fileList.RefreshAsync();

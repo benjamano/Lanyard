@@ -3,7 +3,10 @@
 @inject HttpClient Http
 @inject IFileService _fileService
 @inject INotificationService _toastService
+@inject NavigationManager Navigation
 
+<FluentButton IconEnd="@(new Icons.Regular.Size20.ArrowDownload())" OnClick="DownloadFile"></FluentButton>
+<FluentButton IconEnd="@(new Icons.Regular.Size20.ArrowMove())" OnClick="ShowMoveDialogAsync"></FluentButton>
 <FluentButton IconEnd="@(new Icons.Regular.Size20.Rename())" OnClick="ShowRenameDialogAsync"></FluentButton>
 <FluentButton IconEnd="@(new Icons.Regular.Size20.BinRecycle())" OnClick="DeleteFile"></FluentButton>
 
@@ -20,14 +23,32 @@
     </FluentDialogBody>
 </FluentDialog>
 
+<FluentDialog @ref="_moveDialog" Modal="true">
+    <FluentDialogBody>
+        <TitleTemplate>Move File</TitleTemplate>
+        <ChildContent>
+            <FolderTree @ref="_moveFolderTree" SelectedFolderId="moveTargetFolderId" SelectedFolderIdChanged="OnMoveTargetFolderChanged" />
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ConfirmMoveAsync">Move</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CloseMoveDialogAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
+
 @code {
     [Parameter] public FileMetadata File { get; set; } = default!;
     [Parameter] public EventCallback<Guid> OnFileDeleted { get; set; }
     [Parameter] public EventCallback<FileMetadata> OnFileRenamed { get; set; }
+    [Parameter] public EventCallback<FileMetadata> OnFileMoved { get; set; }
 
     private FluentDialog? _renameDialog;
     private string renameValue = string.Empty;
     private string renameValueExtensions = string.Empty;
+
+    private FluentDialog? _moveDialog;
+    private FolderTree? _moveFolderTree;
+    private Guid? moveTargetFolderId;
 
     private async Task DeleteFile()
     {
@@ -36,6 +57,48 @@
         if (result?.Success == true)
         {
             await OnFileDeleted.InvokeAsync(File.Id);
+        }
+    }
+
+    private void DownloadFile()
+    {
+        Navigation.NavigateTo($"api/Files/download/{File.Id}", forceLoad: true);
+    }
+
+    private async Task ShowMoveDialogAsync()
+    {
+        moveTargetFolderId = File.FolderId;
+
+        if (_moveFolderTree is not null)
+        {
+            await _moveFolderTree.RefreshAsync(moveTargetFolderId);
+        }
+
+        await _moveDialog!.ShowAsync();
+    }
+
+    private async Task CloseMoveDialogAsync()
+    {
+        await _moveDialog!.HideAsync();
+    }
+
+    private void OnMoveTargetFolderChanged(Guid? folderId)
+    {
+        moveTargetFolderId = folderId;
+    }
+
+    private async Task ConfirmMoveAsync()
+    {
+        Result<FileMetadata> result = await _fileService.MoveFileAsync(File.Id, moveTargetFolderId, CancellationToken.None);
+
+        if (result?.Success == true && result.Data != null)
+        {
+            await OnFileMoved.InvokeAsync(result.Data);
+            await CloseMoveDialogAsync();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to move file, {result?.Error}");
         }
     }
 

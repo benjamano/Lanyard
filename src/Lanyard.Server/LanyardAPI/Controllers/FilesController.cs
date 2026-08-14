@@ -27,7 +27,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpPost("upload")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] Guid? folderId, CancellationToken cancellationToken)
         {
             if (file == null)
@@ -66,7 +66,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
         {
             Result<bool> result = await _fileService.DeleteFileAsync(id, cancellationToken);
@@ -76,7 +76,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpPut("rename/{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> Rename(Guid id, [FromBody] string newName, CancellationToken cancellationToken)
         {
             Result<FileMetadata> result = await _fileService.RenameFileAsync(id, newName, cancellationToken);
@@ -85,8 +85,18 @@ namespace Lanyard.API.Controllers
             return Ok(result);
         }
 
+        [HttpPut("move/{id}")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
+        public async Task<IActionResult> Move(Guid id, [FromQuery] Guid? destinationFolderId, CancellationToken cancellationToken)
+        {
+            Result<FileMetadata> result = await _fileService.MoveFileAsync(id, destinationFolderId, cancellationToken);
+            if (!result.Success)
+                return BadRequest(result);
+            return Ok(result);
+        }
+
         [HttpPost("folders")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> CreateFolder([FromBody] string name, [FromQuery] Guid? parentFolderId, CancellationToken cancellationToken)
         {
             string createdBy = User.Identity?.Name ?? "unknown";
@@ -97,7 +107,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpPut("folders/rename/{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> RenameFolder(Guid id, [FromBody] string newName, CancellationToken cancellationToken)
         {
             Result<Folder> result = await _fileService.RenameFolderAsync(id, newName, cancellationToken);
@@ -107,7 +117,7 @@ namespace Lanyard.API.Controllers
         }
 
         [HttpDelete("folders/{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, CanManageFiles")]
         public async Task<IActionResult> DeleteFolder(Guid id, CancellationToken cancellationToken)
         {
             Result<bool> result = await _fileService.DeleteFolderAsync(id, cancellationToken);
