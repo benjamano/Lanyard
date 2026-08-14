@@ -18,6 +18,7 @@
         "**/Releases": true,
         "**/publish": true,
         "**/build": true,
+        "**/binVerifyOnly --no-restore": true,
     },
     "files.autoSave": "afterDelay",
     "editor.defaultFormatter": "ms-dotnettools.csharp",
