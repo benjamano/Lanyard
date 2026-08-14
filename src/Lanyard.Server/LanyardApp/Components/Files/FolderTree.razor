@@ -3,26 +3,70 @@
 @inject INotificationService _toastService
 @inject IFileService _fileService
 
-<FluentListbox TOption="string" TValue="string" Value="@(SelectedFolderId?.ToString() ?? string.Empty)" ValueChanged="OnFolderValueChanged">
-    <FluentOption Value="@string.Empty">Root</FluentOption>
-    @foreach (Folder folder in folders)
-    {
-        <FluentOption Value="@folder.Id.ToString()">@folder.Name</FluentOption>
-    }
-</FluentListbox>
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+    <FluentButton IconEnd="@(new Icons.Regular.Size20.FolderAdd())" OnClick="ShowNewFolderDialogAsync">New Folder</FluentButton>
+
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+        <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(SelectedFolderId is null)" OnClick="@(() => OnFolderChanged(null))">Root</FluentButton>
+        @foreach (Folder segment in _breadcrumbPath)
+        {
+            <FluentText>/</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@(segment.Id == SelectedFolderId)" OnClick="@(() => OnFolderChanged(segment.Id))">@segment.Name</FluentButton>
+        }
+    </FluentStack>
+
+    <FluentListbox TOption="string" TValue="string" Value="@(SelectedFolderId?.ToString() ?? string.Empty)" ValueChanged="OnFolderValueChanged">
+        <FluentOption Value="@string.Empty">Root</FluentOption>
+        @foreach (Folder folder in folders)
+        {
+            <FluentOption Value="@folder.Id.ToString()">@folder.Name</FluentOption>
+        }
+    </FluentListbox>
+</FluentStack>
+
+<FluentDialog @ref="_newFolderDialog" Modal="true">
+    <FluentDialogBody>
+        <TitleTemplate>New Folder</TitleTemplate>
+        <ChildContent>
+            <FluentTextInput @bind-Value="newFolderName" Label="Folder Name" Style="width: 100%;" />
+        </ChildContent>
+        <ActionTemplate>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ConfirmNewFolderAsync">Create</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CloseNewFolderDialogAsync">Cancel</FluentButton>
+        </ActionTemplate>
+    </FluentDialogBody>
+</FluentDialog>
 
 @code {
-    [Parameter] 
+    [Parameter]
     public Guid? SelectedFolderId { get; set; }
 
-    [Parameter] 
+    [Parameter]
     public EventCallback<Guid?> SelectedFolderIdChanged { get; set; }
 
     private List<Folder> folders = new();
+    private List<Folder> _breadcrumbPath = new();
+    private FluentDialog? _newFolderDialog;
+    private string newFolderName = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
         await LoadFoldersAsync();
+    }
+
+    public async Task RefreshAsync()
+    {
+        await LoadFoldersAsync();
+        StateHasChanged();
+    }
+
+    // Callers that update SelectedFolderId and immediately need a reload (before the normal
+    // Blazor render cycle would push the new parameter value down) should use this overload
+    // instead of relying on OnParametersSetAsync to pick up the change in time.
+    public async Task RefreshAsync(Guid? parentFolderId)
+    {
+        SelectedFolderId = parentFolderId;
+        await RefreshAsync();
     }
 
     private async Task LoadFoldersAsync()
@@ -35,11 +79,35 @@
             {
                 folders = result.Data.ToList();
             }
+
+            await LoadBreadcrumbAsync();
         }
         catch (Exception ex)
         {
             _toastService.ShowError($"An error occured while loading the files: {ex.Message}");
         }
+    }
+
+    // Walks the real folder hierarchy via ParentFolderId rather than tracking click history,
+    // so the breadcrumb stays correct even when SelectedFolderId is set programmatically
+    // (e.g. the move-file dialog's RefreshAsync(folderId) call bypasses OnFolderValueChanged).
+    private async Task LoadBreadcrumbAsync()
+    {
+        List<Folder> path = new();
+        Guid? currentId = SelectedFolderId;
+
+        while (currentId.HasValue)
+        {
+            Result<Folder> result = await _fileService.GetFolderAsync(currentId.Value, CancellationToken.None);
+
+            if (result?.Success != true || result.Data == null)
+                break;
+
+            path.Insert(0, result.Data);
+            currentId = result.Data.ParentFolderId;
+        }
+
+        _breadcrumbPath = path;
     }
 
     private async Task OnFolderChanged(Guid? folderId)
@@ -54,5 +122,37 @@
             : null;
 
         await OnFolderChanged(folderId);
+    }
+
+    private async Task ShowNewFolderDialogAsync()
+    {
+        newFolderName = string.Empty;
+        await _newFolderDialog!.ShowAsync();
+    }
+
+    private async Task CloseNewFolderDialogAsync()
+    {
+        await _newFolderDialog!.HideAsync();
+    }
+
+    private async Task ConfirmNewFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newFolderName))
+        {
+            _toastService.ShowError("Invalid folder name!");
+            return;
+        }
+
+        Result<Folder> result = await _fileService.CreateFolderAsync(newFolderName, SelectedFolderId, CancellationToken.None);
+
+        if (result?.Success == true && result.Data != null)
+        {
+            await RefreshAsync();
+            await CloseNewFolderDialogAsync();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to create folder, {result?.Error}");
+        }
     }
 }

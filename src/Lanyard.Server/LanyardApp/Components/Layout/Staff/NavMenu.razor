@@ -40,10 +40,13 @@
             {
                 <FluentNavSectionHeader Title="Management" />
 
-                <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
-                               IconActive="@(new Icons.Filled.Size20.Folder())">
-                    File Manager
-                </FluentNavItem>
+                @if (_canManageFiles)
+                {
+                    <FluentNavItem Href="/files" IconRest="@(new Icons.Regular.Size20.Folder())"
+                                   IconActive="@(new Icons.Filled.Size20.Folder())">
+                        File Manager
+                    </FluentNavItem>
+                }
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
@@ -150,6 +153,7 @@
     private bool _canControlMusic;
     private bool _canClockIn;
     private bool _canManageDmx;
+    private bool _canManageFiles;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
@@ -165,6 +169,7 @@
         _canControlMusic = _isAdmin || user.IsInRole("CanControlMusic");
         _canClockIn = _isAdmin || user.IsInRole("CanClockIn");
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
+        _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
 
         if (_isAuthenticated)
         {

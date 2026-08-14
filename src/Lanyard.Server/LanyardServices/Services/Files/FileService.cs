@@ -359,6 +359,18 @@ public class FileService : IFileService
         }
     }
 
+    public async Task<Result<Folder>> CreateFolderAsync(string name, Guid? parentFolderId, CancellationToken cancellationToken)
+    {
+        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!getResult.IsSuccess || getResult.Data is null)
+        {
+            return Result<Folder>.Fail(getResult.Error!);
+        }
+
+        return await CreateFolderAsync(name, parentFolderId, getResult.Data, cancellationToken);
+    }
+
     public async Task<Result<Folder>> CreateFolderAsync(string name, Guid? parentFolderId, string createdBy, CancellationToken cancellationToken)
     {
         try
@@ -507,6 +519,25 @@ public class FileService : IFileService
         }
     }
 
+    public async Task<Result<Folder>> GetFolderAsync(Guid folderId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
+
+            if (folder == null)
+                return Result<Folder>.Fail("Folder not found.");
+
+            return Result<Folder>.Ok(folder);
+        }
+        catch (Exception ex)
+        {
+            return Result<Folder>.Fail($"Failed to get folder: {ex.Message}");
+        }
+    }
+
     public async Task<Result<Stream>> DownloadFileAsync(Guid fileId, CancellationToken cancellationToken)
     {
         try
@@ -543,6 +574,37 @@ public class FileService : IFileService
         catch (Exception ex)
         {
             return Result<Stream>.Fail($"Failed to download file: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<FileMetadata>> MoveFileAsync(Guid fileId, Guid? destinationFolderId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+
+            if (file == null)
+                return Result<FileMetadata>.Fail("File not found.");
+
+            if (destinationFolderId.HasValue)
+            {
+                Folder? destinationFolder = await db.Folders.FindAsync(new object[] { destinationFolderId.Value }, cancellationToken);
+
+                if (destinationFolder == null)
+                    return Result<FileMetadata>.Fail("Destination folder not found.");
+            }
+
+            file.FolderId = destinationFolderId;
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            return Result<FileMetadata>.Ok(file);
+        }
+        catch (Exception ex)
+        {
+            return Result<FileMetadata>.Fail($"Failed to move file: {ex.Message}");
         }
     }
 }

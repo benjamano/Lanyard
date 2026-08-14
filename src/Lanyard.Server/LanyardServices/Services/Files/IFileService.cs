@@ -16,8 +16,11 @@ public interface IFileService
     Task<Result<FileMetadata>> GetFileMetadataAsync(Guid fileId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<FileMetadata>>> ListFilesAsync(Guid? folderId, CancellationToken cancellationToken);
     Task<Result<Folder>> CreateFolderAsync(string name, Guid? parentFolderId, string createdBy, CancellationToken cancellationToken);
+    Task<Result<Folder>> CreateFolderAsync(string name, Guid? parentFolderId, CancellationToken cancellationToken);
     Task<Result<Folder>> RenameFolderAsync(Guid folderId, string newName, CancellationToken cancellationToken);
     Task<Result<bool>> DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<Folder>>> ListFoldersAsync(Guid? parentFolderId, CancellationToken cancellationToken);
+    Task<Result<Folder>> GetFolderAsync(Guid folderId, CancellationToken cancellationToken);
     Task<Result<Stream>> DownloadFileAsync(Guid fileId, CancellationToken cancellationToken);
+    Task<Result<FileMetadata>> MoveFileAsync(Guid fileId, Guid? destinationFolderId, CancellationToken cancellationToken);
 }
