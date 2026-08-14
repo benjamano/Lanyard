@@ -70,7 +70,8 @@
     "releaseDate": "2026-08-14",
     "summary": "Added the \"CanManageFiles\" role.",
     "details": [
-      "Added a new role \"CanManageFiles\" that allows users to manage files and folders in the File Manager Page."
+      "Added a new role \"CanManageFiles\" that allows users to manage files and folders in the File Manager Page.",
+      "Added a rate limit of 25 requests per minute for endpoints that are related to logging in and logging out."
     ]
   }
 ]

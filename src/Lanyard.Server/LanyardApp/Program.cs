@@ -253,11 +253,11 @@ builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("ip-fixed", httpContext =>
     {
-        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 50,
+            PermitLimit = 25,
             Window = TimeSpan.FromMinutes(1),
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit = 0
@@ -266,8 +266,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (context, token) =>
     {
-        context.HttpContext.Response.StatusCode = 429;
-
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await context.HttpContext.Response.WriteAsync("Too many requests.", token);
     };
 });
@@ -279,18 +278,14 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment() == false)
 {
-    // Honour X-Forwarded-Proto/For from the TLS-terminating proxy so HTTPS redirection and
-    // client-IP logging see the real scheme and address. Must run before UseHttpsRedirection.
     app.UseForwardedHeaders();
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
     app.UseHttpsRedirection();
-    app.UseRateLimiter();
 }
 
-// Baseline security response headers (applied in every environment).
-// In Development, connect-src also allows dotnet watch's browser-refresh websocket, which
-// dials ws://localhost:<random-port> and would otherwise be silently blocked by the CSP.
+app.UseRateLimiter();
+
 string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
 
 app.Use(async (context, next) =>
@@ -299,13 +294,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
-    // This app has no public-facing pages - everything is staff/kiosk tooling - so it should
-    // never be crawled or indexed even if it ends up reachable from the open internet.
     context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
 
-    // Scoped to what App.razor actually loads today: Bootstrap CSS/JS from jsdelivr (with SRI),
-    // two inline <script> blocks (boot-cloak + theme detection) and an inline <style> block,
-    // plus FluentUI's dynamically-injected stylesheet.
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
         "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
@@ -326,9 +316,6 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Reject unauthenticated kiosk clients at the SignalR negotiate/handshake stage with a 401,
-// rather than letting them connect and then aborting inside the hub. Returning 401 here lets the
-// client distinguish "wrong secret" from a transient network drop and stop retrying immediately.
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/websocket"))
@@ -338,8 +325,6 @@ app.Use(async (context, next) =>
         if (validator.IsConfigured && !validator.IsValid(context.Request.Query["secret"].ToString()))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            // Write a body so UseStatusCodePagesWithReExecute does not re-run the pipeline (which
-            // would turn this into an antiforgery 400) - the client must receive a clean 401.
             await context.Response.WriteAsync("Invalid or missing client shared secret.");
             return;
         }
@@ -373,7 +358,4 @@ await DatabaseSeeder.SeedAsync(app.Services);
 
 app.Run();
 
-// Exposes the top-level-statement Program class to WebApplicationFactory<Program> in
-// src/Lanyard.Tests's integration tests - top-level statements otherwise generate an
-// internal Program type invisible outside this assembly.
 public partial class Program;
