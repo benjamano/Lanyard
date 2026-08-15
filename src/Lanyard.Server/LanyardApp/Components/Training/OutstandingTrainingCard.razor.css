@@ -11,10 +11,6 @@
     background-color: var(--colorNeutralBackground2);
 }
 
-/* FluentStack's Class="..." lands on the fluent-stack-horizontal element itself,
-   which does not receive this file's scope attribute (Fluent v5 component root
-   quirk) -- ::deep is required, hooked off the plain .outstanding-training-row
-   ancestor div above. Same pattern as MyTraining.razor.css. */
 ::deep .outstanding-training-row-inner {
     row-gap: 8px;
 }
@@ -22,4 +18,5 @@
 ::deep .outstanding-training-name {
     min-width: 0;
     overflow-wrap: anywhere;
+    max-width: 70%
 }
