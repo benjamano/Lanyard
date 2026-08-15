@@ -67,7 +67,7 @@
   },
   {
     "version": "1.3.7",
-    "releaseDate": "2026-08-14",
+    "releaseDate": "2026-08-15",
     "summary": "Added the \"CanManageFiles\" role.",
     "details": [
       "Added a new role \"CanManageFiles\" that allows users to manage files and folders in the File Manager Page.",
