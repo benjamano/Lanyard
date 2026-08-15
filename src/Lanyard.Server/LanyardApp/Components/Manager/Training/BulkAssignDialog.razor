@@ -8,8 +8,8 @@
 <FluentDialogBody>
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
-            <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" />
-            <FluentText As="TextTag.H4" Size="TextSize.Size500">Bulk Assign Course</FluentText>
+            <FluentIcon Value="@(new Icons.Regular.Size24.PersonAdd())" Margin="@Margin.End2" />
+            <FluentText As=" TextTag.H4" Size="TextSize.Size500">Bulk Assign Course</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
@@ -32,56 +32,45 @@
         }
         else
         {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                <FluentButton Appearance="@(mode == AssignMode.Individually ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                              OnClick="@(() => mode = AssignMode.Individually)">
-                    Individually
-                </FluentButton>
-                <FluentButton Appearance="@(mode == AssignMode.ByRole ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                              OnClick="@(() => mode = AssignMode.ByRole)">
-                    By Role
-                </FluentButton>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                    <FluentButton
+                        Appearance="@(mode == AssignMode.Individually ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                        OnClick="@(() => mode = AssignMode.Individually)">
+                        Individually
+                    </FluentButton>
+                    <FluentButton
+                        Appearance="@(mode == AssignMode.ByRole ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                        OnClick="@(() => mode = AssignMode.ByRole)">
+                        By Role
+                    </FluentButton>
+                </FluentStack>
+
+                @if (mode == AssignMode.Individually)
+                {
+                    <FluentListbox TOption="UserProfile" TValue="string" Items="@users.OrderBy(x => x.GetName())"
+                                   OptionText="@(i => i?.GetName() ?? string.Empty)" OptionValue="@(i => i?.Id)"
+                                   @bind-SelectedItems="selectedUsers" Multiple="true" Label="Select users" Height="220px" Width="100%">
+                    </FluentListbox>
+                }
+                else
+                {
+                    <FluentSelect TOption="ApplicationRole" TValue="string" Items="@roles.OrderBy(x => x.Name)"
+                                  OptionText="@(i => i?.Name ?? string.Empty)" OptionValue="@(i => i?.Id)" Placeholder="Select a role..."
+                                  Label="Role" @bind-Value="selectedRoleId" Width="100%">
+                    </FluentSelect>
+                }
+
+                <FluentDatePicker TValue="DateTime?" @bind-Value="dueDate" Label="Due Date (optional)" Width="100%" Margin="@Margin.Top0">
+                </FluentDatePicker>
+
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                    <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSubmitting" OnClick="SubmitAsync">
+                        Assign
+                    </FluentButton>
+                    <FluentButton OnClick="CancelAsync" Disabled="@isSubmitting">Cancel</FluentButton>
+                </FluentStack>
             </FluentStack>
-
-            @if (mode == AssignMode.Individually)
-            {
-                <FluentListbox TOption="UserProfile"
-                               TValue="string"
-                               Items="@users.OrderBy(x => x.GetName())"
-                               OptionText="@(i => i?.GetName() ?? string.Empty)"
-                               OptionValue="@(i => i?.Id)"
-                               @bind-SelectedItems="selectedUsers"
-                               Multiple="true"
-                               Label="Select users"
-                               Height="220px"
-                               Width="100%">
-                </FluentListbox>
-            }
-            else
-            {
-                <FluentSelect TOption="ApplicationRole"
-                              TValue="string"
-                              Items="@roles.OrderBy(x => x.Name)"
-                              OptionText="@(i => i?.Name ?? string.Empty)"
-                              OptionValue="@(i => i?.Id)"
-                              Placeholder="Select a role..."
-                              Label="Role"
-                              @bind-Value="selectedRoleId"
-                              Width="100%">
-                </FluentSelect>
-            }
-
-            <FluentDatePicker TValue="DateTime?" @bind-Value="dueDate" Label="Due Date (optional)" Width="100%">
-            </FluentDatePicker>
-
-            <FluentStack Orientation="Orientation.Horizontal">
-                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSubmitting" OnClick="SubmitAsync">
-                    Assign
-                </FluentButton>
-                <FluentButton OnClick="CancelAsync" Disabled="@isSubmitting">Cancel</FluentButton>
-            </FluentStack>
-        </FluentStack>
         }
     </ChildContent>
 </FluentDialogBody>
@@ -120,7 +109,8 @@
 
         if (!scope.IsAdmin)
         {
-            Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+            Result<List<UserProfile>> locationUsersResult = await
+_companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
 
             if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
             {
@@ -191,7 +181,8 @@
 
             if (!scope.IsAdmin)
             {
-                Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+                Result<List<UserProfile>> locationUsersResult = await
+_companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
 
                 if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
                 {
