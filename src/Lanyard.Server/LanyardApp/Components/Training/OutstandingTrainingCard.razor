@@ -27,9 +27,12 @@
             {
                 <div class="outstanding-training-row" @onclick="@(() => OpenAssignment(assignment.Id))">
                     <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="true" Class="w-100 outstanding-training-row-inner">
-                        <FluentText Weight="TextWeight.Semibold" Class="outstanding-training-name">@assignment.Course?.Name</FluentText>
-                        <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
+                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="false"
+                                 Class="w-100 outstanding-training-row-inner">
+                        <FluentText Weight="TextWeight.Semibold" Class="outstanding-training-name">@assignment.Course?.Name
+                        </FluentText>
+                        <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)"
+                                     Appearance="BadgeAppearance.Filled" />
                     </FluentStack>
                 </div>
             }
@@ -49,7 +52,8 @@
 
         if (currentUserResult.IsSuccess && currentUserResult.Data is not null)
         {
-            Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
+            Result<List<CourseAssignment>> result = await
+_courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
 
             if (result.IsSuccess && result.Data is not null)
             {
