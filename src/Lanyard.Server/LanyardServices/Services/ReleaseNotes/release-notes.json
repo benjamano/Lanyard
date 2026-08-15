@@ -72,7 +72,8 @@
     "details": [
       "Added a new role \"CanManageFiles\" that allows users to manage files and folders in the File Manager Page.",
       "Added a rate limit of 25 requests per minute for endpoints that are related to logging in and logging out.",
-      "Added a small UI improvement to the \"My Training\" card on the home page"
+      "Added a small UI improvement to the \"My Training\" card on the home page",
+      "Added UI updates to the Bulk Assign Course dialog to make it more user friendly."
     ]
   }
 ]
