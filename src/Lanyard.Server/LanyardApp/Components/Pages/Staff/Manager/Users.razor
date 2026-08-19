@@ -39,6 +39,8 @@
             <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
+                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
+                                OnClick="@(() => OpenEditUserDialog(context))" title="Edit User" />
                     <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
                                 OnClick="@(() => ConfirmDeleteUser(context))" />
                     <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary"
@@ -134,6 +136,27 @@
         if (!result.Cancelled)
         {
             await _securityService.DeleteUserAsync(user.Id);
+            await GetUsers();
+        }
+    }
+
+    private async Task OpenEditUserDialog(UserProfile user)
+    {
+        if (user is null)
+        {
+            ToastService.ShowError("Unable to load user profile.");
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<EditUserDialog>(options =>
+        {
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(EditUserDialog.Content), user);
+        });
+
+        if (result.Value is true)
+        {
             await GetUsers();
         }
     }

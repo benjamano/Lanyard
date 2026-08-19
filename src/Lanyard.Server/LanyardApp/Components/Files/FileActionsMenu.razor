@@ -1,4 +1,5 @@
 ﻿@using Lanyard.Infrastructure.Models
+@using Lanyard.App.Components.Manager
 
 @inject HttpClient Http
 @inject IFileService _fileService
@@ -52,11 +53,28 @@
 
     private async Task DeleteFile()
     {
+        DialogResult confirmResult = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), File.FileName);
+        });
+
+        if (confirmResult.Cancelled)
+        {
+            return;
+        }
+
         Result<bool> result = await _fileService.DeleteFileAsync(File.Id, CancellationToken.None);
 
         if (result?.Success == true)
         {
             await OnFileDeleted.InvokeAsync(File.Id);
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to delete file, {result?.Error}");
         }
     }
 
