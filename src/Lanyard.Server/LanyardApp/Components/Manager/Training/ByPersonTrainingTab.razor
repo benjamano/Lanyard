@@ -22,27 +22,41 @@
         }
         else
         {
-            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
-                            RowSize="@DataGridRowSize.Medium">
+            <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
+                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => HasExpandableDetails(g))">
                 <ChildContent>
-                    <PropertyColumn Property="@(x => x.Course!.Name)" Title="Course" Sortable="true" />
+                    <TemplateColumn Title="Course" Sortable="true">
+                        @context.Label
+                    </TemplateColumn>
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                        <FluentBadge Content="@GetStatusLabel(context.Primary)" Color="@GetStatusColor(context.Primary)"
                                      Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
-                        @GetLatestScore(context)
+                        @GetLatestScore(context.Primary)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                        @(context.Primary.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                     <TemplateColumn Title="">
-                        <FluentButton Appearance="ButtonAppearance.Outline"
-                                      IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
-                                      Tooltip="View timing" Title="View timing"
-                                      OnClick="@(() => OpenTimingDialogAsync(context))" />
+                        <div class="assignment-row-actions" @onclick:stopPropagation="true">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(context.Primary))" />
+                        </div>
                     </TemplateColumn>
                 </ChildContent>
+                <RowDetails>
+                    <AssignmentGroupDetails Assignments="@context.Assignments">
+                        <ActionsTemplate Context="assignment">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(assignment))" />
+                        </ActionsTemplate>
+                    </AssignmentGroupDetails>
+                </RowDetails>
                 <EmptyContent>
                     This person has no training assigned.
                 </EmptyContent>
@@ -54,8 +68,31 @@
 @code {
     private IEnumerable<UserProfile> users = [];
     private List<CourseAssignment> assignments = [];
+    private List<TrainingAssignmentGroup> groupedAssignments = [];
     private string selectedUserId = string.Empty;
     private bool isLoading;
+
+    // Built once whenever assignments changes, rather than recomputed on every render (a plain
+    // `=>` property was here originally) - FluentDataGrid tracks which row is expanded by the
+    // TrainingAssignmentGroup instance itself, and Blazor auto-rerenders a component after any
+    // event handler on it completes (e.g. clicking any button in a row), so a property that
+    // rebuilds fresh instances every render silently collapsed every expanded row on the very
+    // next click, anywhere on the page.
+    private void RebuildGroupedAssignments()
+    {
+        groupedAssignments = assignments
+            .GroupBy(a => a.CourseId)
+            .Select(g => new TrainingAssignmentGroup
+            {
+                Label = g.First().Course?.Name ?? "Unknown Course",
+                Assignments = g.OrderByDescending(x => x.AssignedDate).ToList()
+            })
+            .OrderBy(g => g.Label)
+            .ToList();
+    }
+
+    private static bool HasExpandableDetails(TrainingAssignmentGroup group) =>
+        group.Assignments.Count > 1 || group.Primary.Attempts.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,6 +104,7 @@
         if (string.IsNullOrEmpty(selectedUserId))
         {
             assignments = [];
+            RebuildGroupedAssignments();
             return;
         }
 
@@ -83,6 +121,8 @@
         {
             assignments = result.Data;
         }
+
+        RebuildGroupedAssignments();
 
         isLoading = false;
     }

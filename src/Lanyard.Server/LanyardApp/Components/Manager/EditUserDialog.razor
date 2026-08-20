@@ -1,0 +1,138 @@
+@using System.ComponentModel.DataAnnotations
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.Models
+@using System.Linq.Expressions
+
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Edit())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                Edit @Content.GetName()
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <EditForm EditContext="@_editContext" OnValidSubmit="HandleSave">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
+                <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true"
+                                 Style="width: 100%;" Message="@GetValidationMessage(() => model.FirstName)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextInput @bind-Value="model.LastName" Label="Last Name" Required="true"
+                                 Style="width: 100%;" Message="@GetValidationMessage(() => model.LastName)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                </FluentTextInput>
+                <FluentTextInput @bind-Value="model.PhoneNumber" Label="Phone Number"
+                                 TextInputType="TextInputType.Telephone" Style="width: 100%;"
+                                 Message="@GetValidationMessage(() => model.PhoneNumber)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                </FluentTextInput>
+                <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth" Label="Date of Birth"
+                                  Style="width: 100%;" Message="@GetValidationMessage(() => model.DateOfBirth)"
+                                  MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                </FluentDatePicker>
+
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                    <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                  Disabled="@isSubmitting" IconStart="@(new Icons.Regular.Size20.Save())">
+                        @if (isSubmitting)
+                        {
+                            <FluentSpinner Style="width: 16px; height: 16px;" />
+                            <span class="ms-2">Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Save</span>
+                        }
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                  Disabled="@isSubmitting">
+                        Cancel
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        </EditForm>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public UserProfile Content { get; set; } = default!;
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private bool isSubmitting;
+    private EditUserModel model = new();
+    private EditContext _editContext = default!;
+
+    protected override void OnInitialized()
+    {
+        model.FirstName = Content.FirstName ?? string.Empty;
+        model.LastName = Content.LastName ?? string.Empty;
+        model.PhoneNumber = Content.PhoneNumber;
+        model.DateOfBirth = Content.DateOfBirth;
+
+        _editContext = new EditContext(model);
+    }
+
+    private async Task HandleSave()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            Content.FirstName = model.FirstName;
+            Content.LastName = model.LastName;
+            Content.PhoneNumber = model.PhoneNumber;
+            Content.DateOfBirth = model.DateOfBirth;
+
+            await _securityService.UpdateUserProfileAsync(Content);
+
+            ToastService.ShowSuccess("User details updated!");
+            await Dialog.CloseAsync(true);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error updating user: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
+    {
+        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
+        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
+    }
+
+    private class EditUserModel
+    {
+        [Required(ErrorMessage = "First Name is required.")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Last Name is required.")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Phone(ErrorMessage = "Invalid phone number.")]
+        public string? PhoneNumber { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
+    }
+}

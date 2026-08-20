@@ -68,7 +68,7 @@
                                 <div class="dashboard-widget-host"
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
-                                    <RenderTextAreaWidget Widget="textAreaWidget" />
+                                    <RenderTextAreaWidget Widget="textAreaWidget" PreviewMode="PreviewMode" />
                                 </div>
                                 break;
                             case WidgetType.ClientZoneLaserGameStatus:

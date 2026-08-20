@@ -1,0 +1,52 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.Enum
+
+<div class="assignment-group-details">
+    @foreach (CourseAssignment assignment in Assignments)
+    {
+        <div class="assignment-group-item">
+            <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px" Wrap="true">
+                <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
+                <FluentText>Assigned @assignment.AssignedDate.ToString("d MMM yyyy")</FluentText>
+                @if (assignment.DueDate is not null)
+                {
+                    <FluentText>Due @assignment.DueDate.Value.ToString("d MMM yyyy")</FluentText>
+                }
+                @if (ActionsTemplate is not null)
+                {
+                    <FluentSpacer />
+                    <div class="assignment-row-actions" @onclick:stopPropagation="true">
+                        @ActionsTemplate(assignment)
+                    </div>
+                }
+            </FluentStack>
+            <AttemptHistoryList Attempts="@assignment.Attempts" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required List<CourseAssignment> Assignments { get; set; }
+
+    [Parameter]
+    public RenderFragment<CourseAssignment>? ActionsTemplate { get; set; }
+
+    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => "Not Started",
+        CourseAssignmentStatus.InProgress => "In Progress",
+        CourseAssignmentStatus.Completed => "Completed",
+        CourseAssignmentStatus.Overdue => "Overdue",
+        _ => "Unknown"
+    };
+
+    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
+    {
+        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
+        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
+        CourseAssignmentStatus.Completed => BadgeColor.Success,
+        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+}

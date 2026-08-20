@@ -1,26 +1,89 @@
 @inject IDashboardService DashboardService
+@inject IJSRuntime JS
 
-<FluentCard Appearance="CardAppearance.Subtle" 
+<FluentCard Appearance="CardAppearance.Subtle"
             Padding="@Padding.All0"
             Height="100%">
-    <FluentTextArea Class="text-area-widget-content w-100 h-100 d-flex"
-                    Width="100%"
-                    Height="100%"
-                    @bind-Value="Widget.Content"
-                    @bind-Value:after="SaveContentAsync" />
+    @if (PreviewMode)
+    {
+        <div class="text-area-widget-display ql-editor">
+            @((MarkupString)(Widget.Content ?? string.Empty))
+        </div>
+    }
+    else
+    {
+        <div class="text-area-widget-editor-host" @ref="_editorHostRef">
+            <BlazoredTextEditor @ref="_editor" Placeholder="Widget content...">
+                <ToolbarContent>
+                    <span class="ql-formats">
+                        <button class="ql-bold"></button>
+                        <button class="ql-italic"></button>
+                        <button class="ql-underline"></button>
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-list" value="ordered"></button>
+                        <button class="ql-list" value="bullet"></button>
+                    </span>
+                    <span class="ql-formats">
+                        <button type="button" class="ql-divider-insert" @onclick="InsertDividerAsync"
+                                title="Insert horizontal spacer">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.LineHorizontal1())" />
+                        </button>
+                    </span>
+                </ToolbarContent>
+                <EditorContent></EditorContent>
+            </BlazoredTextEditor>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size16.Save())"
+                          OnClick="SaveContentAsync">
+                Save
+            </FluentButton>
+        </div>
+    }
 </FluentCard>
 
 @code {
     [Parameter]
-    public required TextAreaWidget Widget { get; set; } 
+    public required TextAreaWidget Widget { get; set; }
+
+    [Parameter]
+    public bool PreviewMode { get; set; }
+
+    private BlazoredTextEditor? _editor;
+    private ElementReference _editorHostRef;
+    private Guid? _loadedWidgetId;
+
+    // BlazoredTextEditor (v1.1.3) does not accept its initial content as a bound parameter -
+    // content must be pushed in via LoadHTMLContent() after the component has mounted. See the
+    // same pattern in CourseEditor.razor.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!PreviewMode && _editor is not null && _loadedWidgetId != Widget.Id)
+        {
+            try
+            {
+                await _editor.LoadHTMLContent(Widget.Content ?? string.Empty);
+                _loadedWidgetId = Widget.Id;
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                StateHasChanged();
+            }
+        }
+    }
 
     private async Task SaveContentAsync()
     {
-        if (Widget.DashboardId == Guid.Empty)
+        if (_editor is null || Widget.DashboardId == Guid.Empty)
         {
             return;
         }
 
+        Widget.Content = await _editor.GetHTML();
         await DashboardService.SaveWidgetAsync(Widget);
+    }
+
+    private async Task InsertDividerAsync()
+    {
+        await JS.InvokeVoidAsync("kioskWidgetEditor.insertDivider", _editorHostRef);
     }
 }
