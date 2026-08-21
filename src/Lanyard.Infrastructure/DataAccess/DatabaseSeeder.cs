@@ -32,16 +32,21 @@ public static class DatabaseSeeder
         IHostEnvironment environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         ILogger logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
 
-        await SeedUsersAndRolesAsync(context, userManager, configuration, environment, logger);
-
+        // Roles are seeded first and unconditionally, like ResetIdentitySequencesAsync below - a
+        // role added to StandardRoles after go-live must still backfill even if the fixed-ID seed
+        // admin account has since been deleted (a normal thing to do once real admins exist). This
+        // also has to run before the admin user: assigning the admin's UserRoles further down
+        // depends on the Role rows already existing, since IdentityUserRole has real FK constraints.
         await EnsureStandardRolesExistAsync(context);
+
+        await SeedAdminUserAsync(context, userManager, configuration, environment, logger);
 
         await SeedCompanyAndLocationsAsync(context);
 
         await ResetIdentitySequencesAsync(context);
     }
 
-    private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context, UserManager<UserProfile> userManager, IConfiguration configuration, IHostEnvironment environment, ILogger logger)
+    private static async Task SeedAdminUserAsync(ApplicationDbContext context, UserManager<UserProfile> userManager, IConfiguration configuration, IHostEnvironment environment, ILogger logger)
     {
         if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId))
         {
@@ -90,9 +95,9 @@ public static class DatabaseSeeder
         }
 
         // UserManager.CreateAsync commits immediately (UserStore.AutoSaveChanges defaults to
-        // true), independent of the role/user-role SaveChangesAsync below. Without an explicit
-        // ambient transaction, a failure between the two would permanently persist an admin user
-        // with zero roles - the "already exists" guard above would then skip re-seeding forever.
+        // true), independent of the UserRoles SaveChangesAsync below. Without an explicit ambient
+        // transaction, a failure between the two would permanently persist an admin user with zero
+        // role assignments - the "already exists" guard above would then skip re-seeding forever.
         // Guarded by IsNpgsql() like ResetIdentitySequencesAsync below - the EF InMemory provider
         // used by tests doesn't support transactions at all.
         await using IDbContextTransaction? transaction = context.Database.IsNpgsql()
@@ -107,17 +112,6 @@ public static class DatabaseSeeder
 
             throw new InvalidOperationException($"Failed to seed admin user: {errors}");
         }
-
-        await context.Roles.AddRangeAsync(StandardRoles.Select(r => new ApplicationRole
-        {
-            Id = r.Id,
-            Name = r.Name,
-            NormalizedName = r.Name.ToUpperInvariant(),
-            ConcurrencyStamp = r.ConcurrencyStamp,
-            CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
-            CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
-            IsActive = true
-        }));
 
         await context.UserRoles.AddRangeAsync(
             new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedAdminRoleId },
@@ -137,28 +131,16 @@ public static class DatabaseSeeder
 
     private static async Task EnsureStandardRolesExistAsync(ApplicationDbContext context)
     {
-        if (!await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId))
-        {
-            return;
-        }
-
         HashSet<string> existingNormalizedNames = (await context.Roles
+            .AsNoTracking()
+            .TagWithCallSite()
             .Select(r => r.NormalizedName!)
             .ToListAsync())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         List<ApplicationRole> missingRoles = StandardRoles
             .Where(r => !existingNormalizedNames.Contains(r.Name.ToUpperInvariant()))
-            .Select(r => new ApplicationRole
-            {
-                Id = r.Id,
-                Name = r.Name,
-                NormalizedName = r.Name.ToUpperInvariant(),
-                ConcurrencyStamp = r.ConcurrencyStamp,
-                CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
-                CreateDate = DateTime.UtcNow,
-                IsActive = true
-            })
+            .Select(ToApplicationRole)
             .ToList();
 
         if (missingRoles.Count == 0)
@@ -168,6 +150,20 @@ public static class DatabaseSeeder
 
         await context.Roles.AddRangeAsync(missingRoles);
         await context.SaveChangesAsync();
+    }
+
+    private static ApplicationRole ToApplicationRole((string Id, string Name, string ConcurrencyStamp) role)
+    {
+        return new ApplicationRole
+        {
+            Id = role.Id,
+            Name = role.Name,
+            NormalizedName = role.Name.ToUpperInvariant(),
+            ConcurrencyStamp = role.ConcurrencyStamp,
+            CreatedByUserId = ApplicationDbContext.SeedAdminUserId,
+            CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+            IsActive = true
+        };
     }
 
     private static async Task SeedCompanyAndLocationsAsync(ApplicationDbContext context)

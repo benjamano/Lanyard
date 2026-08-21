@@ -358,7 +358,7 @@ app.Use(async (context, next) =>
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers();
+app.MapControllers().RequireRateLimiting("ip-fixed");
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

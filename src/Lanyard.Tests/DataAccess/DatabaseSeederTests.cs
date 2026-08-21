@@ -137,5 +137,47 @@ namespace Lanyard.Tests.DataAccess
 
             await DatabaseSeeder.SeedAsync(provider);
         }
+
+        [TestMethod]
+        public async Task SeedAsync_WhenSeedAdminWasDeletedButRolesRemain_RecreatesAdminWithoutDuplicatingRoles()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            // First run: seeds the admin user and all standard roles normally.
+            using (ServiceProvider firstRunProvider = BuildServiceProvider(options, "Configured-Admin-Pw1!", "Production"))
+            {
+                await DatabaseSeeder.SeedAsync(firstRunProvider);
+            }
+
+            // Simulate an operator deleting the seed admin account after onboarding real admins -
+            // a normal thing to do once real admins exist. Real Postgres cascade-deletes
+            // AspNetUserRoles via Identity's default FK config (ON DELETE CASCADE), regardless of
+            // what's tracked; the EF InMemory provider only cascades entities it has loaded, so
+            // the UserRoles rows are removed explicitly here to reproduce that real behavior. The
+            // shared Role rows are untouched either way.
+            await using (ApplicationDbContext context = new(options))
+            {
+                UserProfile admin = await context.Users.SingleAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId);
+                List<IdentityUserRole<string>> adminRoleAssignments = await context.UserRoles
+                    .Where(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId)
+                    .ToListAsync();
+
+                context.UserRoles.RemoveRange(adminRoleAssignments);
+                context.Users.Remove(admin);
+                await context.SaveChangesAsync();
+            }
+
+            using ServiceProvider secondRunProvider = BuildServiceProvider(options, "Configured-Admin-Pw1!", "Production");
+
+            // Must not throw trying to re-insert roles that already exist.
+            await DatabaseSeeder.SeedAsync(secondRunProvider);
+
+            await using ApplicationDbContext verifyContext = new(options);
+            bool adminRecreated = await verifyContext.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId);
+            int roleCount = await verifyContext.Roles.CountAsync();
+
+            Assert.IsTrue(adminRecreated, "The seed admin should be recreated on the next startup.");
+            Assert.AreEqual(7, roleCount, "Roles must not be duplicated when the admin is recreated.");
+        }
     }
 }

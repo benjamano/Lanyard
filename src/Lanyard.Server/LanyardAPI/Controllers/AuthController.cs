@@ -3,7 +3,6 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace Lanyard.App.Controllers
@@ -26,7 +25,6 @@ namespace Lanyard.App.Controllers
             _companyLocationService = companyLocationService;
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
@@ -71,7 +69,6 @@ namespace Lanyard.App.Controllers
             return Ok(new { message = "Login successful", username = user.UserName });
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpPost("login-form")]
         [Consumes("application/x-www-form-urlencoded")]
         public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null)
@@ -117,7 +114,6 @@ namespace Lanyard.App.Controllers
             return Redirect("/");
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
@@ -125,7 +121,6 @@ namespace Lanyard.App.Controllers
             return Ok(new { message = "Logout successful" });
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpGet("logout")]
         public async Task<IActionResult> LogoutGet([FromQuery] string? returnUrl = null)
         {

@@ -52,8 +52,7 @@
 
         if (currentUserResult.IsSuccess && currentUserResult.Data is not null)
         {
-            Result<List<CourseAssignment>> result = await
-_courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
+            Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(currentUserResult.Data);
 
             if (result.IsSuccess && result.Data is not null)
             {

@@ -10,6 +10,7 @@
 @using Microsoft.AspNetCore.Authorization
 
 @inject ISecurityService _securityService
+@inject ILogger<Home> _logger
 
 <PageTitle>Staff Home</PageTitle>
 
@@ -87,9 +88,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _currentUserName = await _securityService.GetCurrentUserName();
+        Task<string?> userNameTask = _securityService.GetCurrentUserName();
+        Task logoTask = GetCurrentCompanyLogoUrlAsync();
 
-        await GetCurrentCompanyLogoUrlAsync();
+        await Task.WhenAll(userNameTask, logoTask);
+
+        _currentUserName = userNameTask.Result;
     }
 
     private string GetGreeting()
@@ -107,17 +111,22 @@
     {
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
-        if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
+        if (!scopeResult.Success || scopeResult.Data is not { CompanyId: int companyId })
         {
-            Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
-
-            if (branding.Success && branding.Data is not null)
-            {
-
-                _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
-                    ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
-                    : null;
-            }
+            _logger.LogWarning("Failed to resolve the current location scope for the home page logo: {Error}", scopeResult.Error);
+            return;
         }
+
+        Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+        if (!branding.Success || branding.Data is null)
+        {
+            _logger.LogWarning("Failed to get company branding for company {CompanyId}: {Error}", companyId, branding.Error);
+            return;
+        }
+
+        _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
+            ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
+            : null;
     }
 }
