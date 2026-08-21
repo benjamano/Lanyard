@@ -1,14 +1,17 @@
-using System.Security.Cryptography;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 public static class DatabaseSeeder
 {
+    private const string DevelopmentAdminPassword = "Dev-Admin-Pw1!";
+
     private static readonly (string Id, string Name, string ConcurrencyStamp)[] StandardRoles =
     [
         (ApplicationDbContext.SeedAdminRoleId, "Admin", "SEED-ROLE-ADMIN-CS"),
@@ -22,12 +25,14 @@ public static class DatabaseSeeder
 
     public static async Task SeedAsync(IServiceProvider services)
     {
-        using var scope = services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
+        using IServiceScope scope = services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        UserManager<UserProfile> userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserProfile>>();
+        IConfiguration configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        IHostEnvironment environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        ILogger logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
 
-        await SeedUsersAndRolesAsync(context, configuration, logger);
+        await SeedUsersAndRolesAsync(context, userManager, configuration, environment, logger);
 
         await EnsureStandardRolesExistAsync(context);
 
@@ -36,27 +41,27 @@ public static class DatabaseSeeder
         await ResetIdentitySequencesAsync(context);
     }
 
-    private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context, IConfiguration configuration, ILogger logger)
+    private static async Task SeedUsersAndRolesAsync(ApplicationDbContext context, UserManager<UserProfile> userManager, IConfiguration configuration, IHostEnvironment environment, ILogger logger)
     {
         if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId))
         {
             return;
         }
 
-        PasswordHasher<UserProfile> passwordHasher = new();
-
         UserProfile seedAdminUser = new UserProfile
         {
             Id = ApplicationDbContext.SeedAdminUserId,
             UserName = "admin",
-            NormalizedUserName = "ADMIN",
             Email = "admin@play2day.com",
-            NormalizedEmail = "ADMIN@PLAY2DAY.COM",
             EmailConfirmed = true,
             FirstName = "System",
             LastName = "Administrator",
-            PasswordHash = null,
-            SecurityStamp = "SEED-ADMIN-SECURITY-STAMP",
+            // Left null so the admin row is visibly a first-run credential.
+            PasswordSetDate = null,
+            // NormalizedUserName/NormalizedEmail/SecurityStamp are deliberately not set here -
+            // UserManager.CreateAsync(user, password) always recomputes the first two via the
+            // configured ILookupNormalizer and always overwrites SecurityStamp with a fresh
+            // random value, so any value assigned here would be silently discarded.
             ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP"
         };
         string? configuredPassword = configuration["Seed:AdminPassword"];
@@ -68,19 +73,40 @@ public static class DatabaseSeeder
 
             logger.LogInformation("Seeding admin user with the password supplied via Seed:AdminPassword.");
         }
-        else
+        else if (environment.IsDevelopment())
         {
-            adminPassword = GenerateRandomPassword();
+            adminPassword = DevelopmentAdminPassword;
 
             logger.LogWarning(
-                "No Seed:AdminPassword configured. Seeding admin user '{UserName}' with a generated "
-                + "password: {Password}  --  log in and change it immediately, then set Seed__AdminPassword "
-                + "or remove this account.", seedAdminUser.UserName, adminPassword);
+                "No Seed:AdminPassword configured. Seeding admin user '{UserName}' with the well-known "
+                + "development password. Set Seed__AdminPassword before deploying outside Development.",
+                seedAdminUser.UserName);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Seed:AdminPassword is not configured. Set the Seed__AdminPassword environment variable "
+                + "before starting the application outside the Development environment.");
         }
 
-        seedAdminUser.PasswordHash = passwordHasher.HashPassword(seedAdminUser, adminPassword);
+        // UserManager.CreateAsync commits immediately (UserStore.AutoSaveChanges defaults to
+        // true), independent of the role/user-role SaveChangesAsync below. Without an explicit
+        // ambient transaction, a failure between the two would permanently persist an admin user
+        // with zero roles - the "already exists" guard above would then skip re-seeding forever.
+        // Guarded by IsNpgsql() like ResetIdentitySequencesAsync below - the EF InMemory provider
+        // used by tests doesn't support transactions at all.
+        await using IDbContextTransaction? transaction = context.Database.IsNpgsql()
+            ? await context.Database.BeginTransactionAsync()
+            : null;
 
-        await context.Users.AddAsync(seedAdminUser);
+        IdentityResult createResult = await userManager.CreateAsync(seedAdminUser, adminPassword);
+
+        if (!createResult.Succeeded)
+        {
+            string errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+
+            throw new InvalidOperationException($"Failed to seed admin user: {errors}");
+        }
 
         await context.Roles.AddRangeAsync(StandardRoles.Select(r => new ApplicationRole
         {
@@ -102,6 +128,11 @@ public static class DatabaseSeeder
         );
 
         await context.SaveChangesAsync();
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync();
+        }
     }
 
     private static async Task EnsureStandardRolesExistAsync(ApplicationDbContext context)
@@ -195,15 +226,5 @@ public static class DatabaseSeeder
             "SELECT setval(pg_get_serial_sequence('\"Companies\"', 'Id'), (SELECT COALESCE(MAX(\"Id\"), 1) FROM \"Companies\"));");
         await context.Database.ExecuteSqlRawAsync(
             "SELECT setval(pg_get_serial_sequence('\"Locations\"', 'Id'), (SELECT COALESCE(MAX(\"Id\"), 1) FROM \"Locations\"));");
-    }
-
-    private static string GenerateRandomPassword()
-    {
-        string random = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
-
-        return $"{random}Aa1!";
     }
 }
