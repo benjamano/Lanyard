@@ -193,5 +193,44 @@ namespace Lanyard.Tests.Services.Email
             Assert.Contains("#C8102E", handler.LastRequestBody);
             Assert.Contains("Lanyard", handler.LastRequestBody);
         }
+
+        [TestMethod]
+        public async Task SendTwoFactorCodeEmailAsync_SuccessResponse_IncludesCodeInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTwoFactorCodeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "123456");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("123456", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendTwoFactorCodeEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTwoFactorCodeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "123456");
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendTwoFactorCodeEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendTwoFactorCodeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "123456");
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
+        }
     }
 }

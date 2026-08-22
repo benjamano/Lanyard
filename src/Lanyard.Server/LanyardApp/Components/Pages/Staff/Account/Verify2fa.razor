@@ -1,0 +1,146 @@
+@page "/login/verify-2fa"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+@using Lanyard.Infrastructure.Models
+@using Microsoft.AspNetCore.Identity
+
+@inject SignInManager<UserProfile> SignInManager
+@inject UserManager<UserProfile> UserManager
+@inject NavigationManager Navigation
+
+<PageTitle>Verify your identity</PageTitle>
+
+<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center"
+             HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
+
+    <FluentCard Style="width: 340px; max-width: 90vw; padding: 32px;">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
+                     HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
+                        Style="text-align: center;">
+                Verify your identity
+            </FluentText>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error">@ErrorMessage</FluentMessageBar>
+            }
+
+            @if (CodeSent == true)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Success">A code has been sent to your email.</FluentMessageBar>
+            }
+
+            @if (pendingUser is not null)
+            {
+                @if (hasAuthenticator && hasEmail && !useRecoveryCode)
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                        <FluentButton Appearance="@(selectedProvider == TokenOptions.DefaultAuthenticatorProvider ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                      OnClick="@(() => selectedProvider = TokenOptions.DefaultAuthenticatorProvider)">
+                            Authenticator App
+                        </FluentButton>
+                        <FluentButton Appearance="@(selectedProvider == TokenOptions.DefaultEmailProvider ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                      OnClick="@(() => selectedProvider = TokenOptions.DefaultEmailProvider)">
+                            Email Code
+                        </FluentButton>
+                    </FluentStack>
+                }
+
+                @if (!useRecoveryCode && selectedProvider == TokenOptions.DefaultEmailProvider)
+                {
+                    <form method="post" action="/api/auth/resend-2fa-code" class="col-12">
+                        <input type="hidden" name="rememberMe" value="@RememberMe" />
+                        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                        <input type="hidden" name="locationId" value="@LocationId" />
+                        <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Submit" Style="width: 100%;">
+                            Send code to my email
+                        </FluentButton>
+                    </form>
+                }
+
+                <form method="post" action="/api/auth/verify-2fa-form" class="col-12">
+                    <input type="hidden" name="provider" value="@(useRecoveryCode ? "RecoveryCode" : selectedProvider)" />
+                    <input type="hidden" name="rememberMe" value="@RememberMe" />
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                    <input type="hidden" name="locationId" value="@LocationId" />
+
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
+                                 HorizontalAlignment="HorizontalAlignment.Center">
+                        <FluentTextInput Name="code" Label="@(useRecoveryCode ? "Recovery code" : "Verification code")"
+                                         Required="true"
+                                         Placeholder="@(useRecoveryCode ? "Enter a recovery code" : "6-digit code")"
+                                         Style="width: 100%;">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
+                        </FluentTextInput>
+
+                        @if (!useRecoveryCode)
+                        {
+                            <FluentCheckbox Name="rememberMachine" Label="Remember this device for 30 days" />
+                        }
+
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Style="margin-top: 8px;">
+                            <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
+                            Verify
+                        </FluentButton>
+                    </FluentStack>
+                </form>
+
+                <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ToggleRecoveryCode">
+                    @(useRecoveryCode ? "Use a verification code instead" : "Use a recovery code instead")
+                </FluentButton>
+            }
+        </FluentStack>
+    </FluentCard>
+</FluentStack>
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "locationId")]
+    public int? LocationId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "rememberMe")]
+    public bool RememberMe { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorMessage { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sent")]
+    public bool? CodeSent { get; set; }
+
+    private UserProfile? pendingUser;
+    private bool hasAuthenticator;
+    private bool hasEmail;
+    private bool useRecoveryCode;
+    private string selectedProvider = TokenOptions.DefaultAuthenticatorProvider;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pendingUser = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+
+        if (pendingUser is null)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        IList<string> providers = await UserManager.GetValidTwoFactorProvidersAsync(pendingUser);
+        hasAuthenticator = providers.Contains(TokenOptions.DefaultAuthenticatorProvider);
+        hasEmail = providers.Contains(TokenOptions.DefaultEmailProvider);
+
+        if (!hasAuthenticator && !hasEmail)
+        {
+            Navigation.NavigateTo("/login?error=" + Uri.EscapeDataString("Two-factor authentication isn't set up correctly for your account. Contact an administrator."), forceLoad: true);
+            return;
+        }
+
+        selectedProvider = hasAuthenticator ? TokenOptions.DefaultAuthenticatorProvider : TokenOptions.DefaultEmailProvider;
+    }
+
+    private void ToggleRecoveryCode()
+    {
+        useRecoveryCode = !useRecoveryCode;
+    }
+}

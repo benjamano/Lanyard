@@ -1,0 +1,63 @@
+@inject IJSRuntime JS
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ShieldKeyhole())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                Save Your Recovery Codes
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentMessageBar Intent="MessageBarIntent.Warning">
+                Save these codes somewhere safe. Each one can be used once to sign in if you lose access to your
+                authenticator app or email. They won't be shown again.
+            </FluentMessageBar>
+
+            <div style="font-family: monospace; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border: 1px solid var(--neutral-stroke-divider-rest); border-radius: 4px;">
+                @foreach (string recoveryCode in Codes)
+                {
+                    <span>@recoveryCode</span>
+                }
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())" OnClick="CopyCodes">
+                    Copy Codes
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CloseDialog">
+                    I've Saved These
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public List<string> Codes { get; set; } = [];
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private async Task CopyCodes()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join(Environment.NewLine, Codes));
+            ToastService.ShowSuccess("Recovery codes copied to clipboard.");
+        }
+        catch (Exception)
+        {
+            ToastService.ShowError("Could not copy the codes. Your browser may be blocking clipboard access.");
+        }
+    }
+
+    private async Task CloseDialog()
+    {
+        await Dialog.CloseAsync(true);
+    }
+}

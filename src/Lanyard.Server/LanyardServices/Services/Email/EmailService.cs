@@ -117,6 +117,66 @@ public class EmailService : IEmailService
         }
     }
 
+    public async Task<Result<bool>> SendTwoFactorCodeEmailAsync(UserProfile user, string code)
+    {
+        try
+        {
+            EmailOptions config = _options.Value;
+
+            if (string.IsNullOrWhiteSpace(config.ResendApiKey) || string.IsNullOrWhiteSpace(config.FromAddress))
+            {
+                return Result<bool>.Fail("Email is not configured (missing Resend API key or From address).");
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Email))
+            {
+                return Result<bool>.Fail("User has no email address to send a code to.");
+            }
+
+            string html = BuildTwoFactorCodeHtml(code);
+
+            HttpRequestMessage request = new(HttpMethod.Post, "emails")
+            {
+                Content = JsonContent.Create(new
+                {
+                    from = $"{config.FromName} <{config.FromAddress}>",
+                    to = new[] { user.Email },
+                    subject = "Your Lanyard sign-in code",
+                    html
+                })
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ResendApiKey);
+
+            HttpResponseMessage response = await _httpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Resend email send failed ({StatusCode}): {Body}", response.StatusCode, body);
+                return Result<bool>.Fail($"Email provider returned {(int)response.StatusCode}.");
+            }
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception sending two-factor code email to {UserId}", user.Id);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    private static string BuildTwoFactorCodeHtml(string code)
+    {
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          <h2>Lanyard</h2>
+          <p>Your sign-in code is:</p>
+          <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">{WebUtility.HtmlEncode(code)}</p>
+          <p style="color: #666; font-size: 13px;">This code expires shortly. If you didn't try to sign in, you can ignore this email.</p>
+        </div>
+        """;
+    }
+
     private static string BuildRecurrenceReminderHtml(string username, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
         string logoHtml = logoUrl is not null
