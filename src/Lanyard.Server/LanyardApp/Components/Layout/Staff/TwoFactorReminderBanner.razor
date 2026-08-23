@@ -1,0 +1,59 @@
+@inject AuthenticationStateProvider AuthStateProvider
+
+@if (_showBanner || true)
+{
+    <FluentStack Margin="@Margin.All3">
+        <FluentMessageBar Intent="MessageBarIntent.Info">
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6" Width="100%">
+                <FluentText>
+                    Your account doesn't have two-factor authentication enabled. We suggest you turn it on for increased
+                    security.
+                </FluentText>
+
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="GoToSecuritySettings">
+                        Enable two-factor authentication
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="Dismiss">
+                        Dismiss
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        </FluentMessageBar>
+    </FluentStack>
+}
+
+@code {
+    private const string ManageAccountPath = "/account/manage";
+
+    private bool _showBanner;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Avoid nagging the user with this exact recommendation while they're already
+        // on the page that lets them act on it.
+        if (new Uri(_navigationManager.Uri).AbsolutePath.StartsWith(ManageAccountPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        AuthenticationState auth = await AuthStateProvider.GetAuthenticationStateAsync();
+
+        if (auth.User.Identity?.IsAuthenticated != true)
+        {
+            return;
+        }
+
+        // Unlike SignInManager, GetTwoFactorStatusAsync resolves the user via
+        // AuthenticationStateProvider/UserManager only - it never touches HttpContext.Response,
+        // so (unlike Verify2fa.razor's SignInManager call) it's safe to run on every render pass.
+        Result<TwoFactorStatusDto> status = await _securityService.GetTwoFactorStatusAsync();
+
+        _showBanner = status.IsSuccess && status.Data is { IsEnabled: false };
+    }
+
+    private void Dismiss() => _showBanner = false;
+
+    private void GoToSecuritySettings() => _navigationManager.NavigateTo(ManageAccountPath);
+}

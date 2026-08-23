@@ -14,6 +14,8 @@ using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Lanyard.Infrastructure.Branding;
+using QRCoder;
+using System.Text;
 
 namespace Lanyard.Application.Services.Authentication;
 
@@ -164,12 +166,12 @@ public class SecurityService : ISecurityService
         {
             if ((await GetActiveUsersAsync()).Any())
             {
-                // Once at least one account exists, only an Admin may create further accounts -
-                // being merely logged in is not enough (any Staff-level account could otherwise
-                // create new accounts, including admin ones, for itself).
-                if (!await IsCurrentUserInRoleAsync("Admin"))
+                // Once at least one account exists, only an Admin or Manager may create further
+                // accounts - being merely logged in is not enough (any Staff-level account could
+                // otherwise create new accounts, including admin ones, for itself).
+                if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
                 {
-                    return Result<UserCreationResult>.Fail("You must be an administrator to perform this action!");
+                    return Result<UserCreationResult>.Fail("You must be an administrator or manager to perform this action!");
                 }
             }
 
@@ -259,9 +261,9 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin"))
+            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
             {
-                return Result<bool>.Fail("You must be an administrator to perform this action!");
+                return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -353,6 +355,7 @@ public class SecurityService : ISecurityService
 
         string? logoUrl = null;
         string accentColorHex = BrandConstants.PrimaryColorHex;
+        string? locationName = null;
 
         Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(user.Id);
 
@@ -360,28 +363,34 @@ public class SecurityService : ISecurityService
         // gets an arbitrary company's branding here - GetLocationsForUserAsync orders by location
         // name, so locations[0] carries no precedence meaning. Invite emails are not worth a
         // "primary company" concept; the branding is cosmetic and the link itself is unaffected.
-        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
+        // The same limitation now applies to the location name shown in the email body.
+        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations)
         {
-            accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
+            locationName = locations[0].GetDisplayName();
 
-            if (company.LogoFileId is Guid logoFileId)
+            if (locations[0].Company is Company company)
             {
-                // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
-                // logo replacement needs a new URL to guarantee a fresh fetch.
-                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
+                accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
+
+                if (company.LogoFileId is Guid logoFileId)
+                {
+                    // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                    // logo replacement needs a new URL to guarantee a fresh fetch.
+                    logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
+                }
             }
         }
 
-        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex);
+        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex, locationName);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin"))
+            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
             {
-                return Result<bool>.Fail("You must be an administrator to perform this action!");
+                return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -455,5 +464,243 @@ public class SecurityService : ISecurityService
         {
             return Result<bool>.Fail(ex.Message);
         }
+    }
+
+    public async Task<Result<TwoFactorStatusDto>> GetTwoFactorStatusAsync()
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<TwoFactorStatusDto>.Fail("User not found");
+            }
+
+            bool isEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+            bool hasAuthenticator = !string.IsNullOrEmpty(await _userManager.GetAuthenticatorKeyAsync(user));
+            int recoveryCodesRemaining = await _userManager.CountRecoveryCodesAsync(user);
+
+            return Result<TwoFactorStatusDto>.Ok(new TwoFactorStatusDto
+            {
+                IsEnabled = isEnabled,
+                HasAuthenticator = isEnabled && hasAuthenticator,
+                HasEmail = isEnabled && !hasAuthenticator,
+                RecoveryCodesRemaining = recoveryCodesRemaining
+            });
+        }
+        catch (Exception ex)
+        {
+            return Result<TwoFactorStatusDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<AuthenticatorEnrollmentDto>> BeginAuthenticatorEnrollmentAsync()
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<AuthenticatorEnrollmentDto>.Fail("User not found");
+            }
+
+            await _userManager.ResetAuthenticatorKeyAsync(user);
+            string? key = await _userManager.GetAuthenticatorKeyAsync(user);
+
+            if (string.IsNullOrEmpty(key))
+            {
+                return Result<AuthenticatorEnrollmentDto>.Fail("Failed to generate an authenticator key.");
+            }
+
+            string accountName = user.Email ?? user.UserName ?? user.Id;
+            string authenticatorUri = BuildAuthenticatorUri(accountName, key);
+
+            return Result<AuthenticatorEnrollmentDto>.Ok(new AuthenticatorEnrollmentDto
+            {
+                SharedKey = FormatKeyForDisplay(key),
+                AuthenticatorUri = authenticatorUri,
+                QrCodeDataUri = BuildQrCodeDataUri(authenticatorUri)
+            });
+        }
+        catch (Exception ex)
+        {
+            return Result<AuthenticatorEnrollmentDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code)
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<List<string>>.Fail("User not found");
+            }
+
+            bool isValid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, code);
+
+            if (!isValid)
+            {
+                return Result<List<string>>.Fail("Invalid verification code.");
+            }
+
+            await _userManager.SetTwoFactorEnabledAsync(user, true);
+            IEnumerable<string> recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 8) ?? [];
+
+            _logger.LogInformation("User {UserId} enabled two-factor authentication via authenticator app", user.Id);
+
+            return Result<List<string>>.Ok(recoveryCodes.ToList());
+        }
+        catch (Exception ex)
+        {
+            return Result<List<string>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<List<string>>> EnableEmailTwoFactorAsync()
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<List<string>>.Fail("User not found");
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Email))
+            {
+                return Result<List<string>>.Fail("You need an email address on your account before enabling email codes.");
+            }
+
+            await _userManager.SetTwoFactorEnabledAsync(user, true);
+
+            int remaining = await _userManager.CountRecoveryCodesAsync(user);
+            List<string> recoveryCodes = [];
+
+            if (remaining == 0)
+            {
+                IEnumerable<string> codes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 8) ?? [];
+                recoveryCodes = codes.ToList();
+            }
+
+            _logger.LogInformation("User {UserId} enabled two-factor authentication via email codes", user.Id);
+
+            return Result<List<string>>.Ok(recoveryCodes);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<string>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> DisableTwoFactorAsync(string currentPassword)
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found");
+            }
+
+            if (!await _userManager.CheckPasswordAsync(user, currentPassword))
+            {
+                return Result<bool>.Fail("Incorrect password.");
+            }
+
+            await _userManager.SetTwoFactorEnabledAsync(user, false);
+
+            _logger.LogInformation("User {UserId} disabled two-factor authentication", user.Id);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<List<string>>> RegenerateRecoveryCodesAsync()
+    {
+        try
+        {
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<List<string>>.Fail("User not found");
+            }
+
+            if (!await _userManager.GetTwoFactorEnabledAsync(user))
+            {
+                return Result<List<string>>.Fail("Two-factor authentication is not enabled.");
+            }
+
+            IEnumerable<string> codes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 8) ?? [];
+
+            return Result<List<string>>.Ok(codes.ToList());
+        }
+        catch (Exception ex)
+        {
+            return Result<List<string>>.Fail(ex.Message);
+        }
+    }
+
+    // UserManager.SetTwoFactorEnabledAsync/GenerateNewTwoFactorRecoveryCodesAsync/etc. attach the
+    // passed-in entity to UserManager's own tracked DbContext. GetCurrentUserProfileAsync resolves
+    // the user through a separate context (via IDbContextFactory), so passing that entity into the
+    // UserManager here would throw an EF "already tracked" conflict - resolve via FindByIdAsync
+    // instead so the entity belongs to the same context UserManager will mutate it through.
+    private async Task<UserProfile?> GetCurrentUserForTwoFactorAsync()
+    {
+        Result<string> idResult = await GetCurrentUserIdAsync();
+
+        if (!idResult.IsSuccess || idResult.Data is null)
+        {
+            return null;
+        }
+
+        return await _userManager.FindByIdAsync(idResult.Data);
+    }
+
+    private static string BuildAuthenticatorUri(string accountName, string unformattedKey)
+    {
+        const string issuer = "Lanyard";
+
+        return string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6",
+            Uri.EscapeDataString(issuer),
+            Uri.EscapeDataString(accountName),
+            unformattedKey);
+    }
+
+    private static string BuildQrCodeDataUri(string authenticatorUri)
+    {
+        using QRCodeGenerator qrGenerator = new();
+        using QRCodeData qrData = qrGenerator.CreateQrCode(authenticatorUri, QRCodeGenerator.ECCLevel.Q);
+        PngByteQRCode qrCode = new(qrData);
+        byte[] bytes = qrCode.GetGraphic(10);
+
+        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+    }
+
+    private static string FormatKeyForDisplay(string key)
+    {
+        StringBuilder sb = new();
+
+        for (int i = 0; i < key.Length; i += 4)
+        {
+            sb.Append(key.AsSpan(i, Math.Min(4, key.Length - i)));
+            sb.Append(' ');
+        }
+
+        return sb.ToString().TrimEnd().ToUpperInvariant();
     }
 }

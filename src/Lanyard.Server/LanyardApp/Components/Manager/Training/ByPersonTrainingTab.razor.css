@@ -4,3 +4,11 @@
 .person-picker-host {
     max-width: 400px;
 }
+
+/* Matches AssignmentGroupDetails.razor.css's copy of this class so the row-action icons use
+   identical spacing whether the row is expanded or collapsed. */
+.assignment-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}

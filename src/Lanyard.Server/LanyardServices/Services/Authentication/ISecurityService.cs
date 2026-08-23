@@ -20,5 +20,12 @@ namespace Lanyard.Application.Services.Authentication
         Task<Result<bool>> SendSetPasswordLinkAsync(string userId);
         Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword);
         Task<Result<string>> GetUsernameForSetPasswordAsync(string userId);
+
+        Task<Result<TwoFactorStatusDto>> GetTwoFactorStatusAsync();
+        Task<Result<AuthenticatorEnrollmentDto>> BeginAuthenticatorEnrollmentAsync();
+        Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code);
+        Task<Result<List<string>>> EnableEmailTwoFactorAsync();
+        Task<Result<bool>> DisableTwoFactorAsync(string currentPassword);
+        Task<Result<List<string>>> RegenerateRecoveryCodesAsync();
     }
 }

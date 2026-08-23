@@ -425,3 +425,5 @@ docs/superpowers/plans/
 **/binVerifyOnly --no-restore/
 docs/ARCHITECTURE-BRIEF.md
 docs/DATA-INVENTORY.md
+.claude/worktrees/
+docs/
