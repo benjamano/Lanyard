@@ -11,6 +11,7 @@
 			"**/Lanyard.Client.Watchdog": true,
 			"**/Lanyard.Reach": true,
 		},
-		"discord.enabled": true
+		"discord.enabled": true,
+		"dotnet.defaultSolution": "LanyardApp.sln"
 	}
 }

@@ -33,10 +33,6 @@
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
                     </FluentTextInput>
-                    <FluentTextInput @bind-Value="model.PhoneNumber" Label="Phone Number" Placeholder="07860603962"
-                                     TextInputType="TextInputType.Telephone" Style="width: 100%;">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-                    </FluentTextInput>
                     <FluentSelect TOption="Lanyard.Infrastructure.Models.Location" TValue="int" Multiple="true"
                                   Items="@availableLocations"
                                   OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
@@ -125,8 +121,7 @@
             {
                 Email = model.Email,
                 FirstName = model.FirstName,
-                LastName = model.LastName,
-                PhoneNumber = model.PhoneNumber
+                LastName = model.LastName
             };
 
             if (!selectedLocations.Any())
@@ -186,7 +181,5 @@
         [Required(ErrorMessage = "Email is required.")]
         [EmailAddress(ErrorMessage = "Enter a valid email address.")]
         public string Email { get; set; } = string.Empty;
-
-        public string? PhoneNumber { get; set; }
     }
 }

@@ -24,7 +24,7 @@
     </FluentStack>
 
     <FluentDataGrid Pagination="new PaginationState { ItemsPerPage = 10 }" page
-                    Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr 1fr 1fr"
+                    Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr"
                     Style="width: 100%;">
         <EmptyContent>
             No Users Found
@@ -33,9 +33,6 @@
             <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" />
             <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" />
             <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" />
-            <PropertyColumn Property="@(r => r.PhoneNumber ?? "Not Set")" Title="Phone Number" />
-            <PropertyColumn Property="@(r => r.DateOfBirth != null ? r.DateOfBirth.Value.ToString("d") : "Not Set")"
-                            Title="DOB" />
             <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
@@ -93,9 +90,7 @@
                     .Where(u =>
                         string.Join(" ",
                             u.GetName(),
-                            u.Email,
-                            u.PhoneNumber,
-                            u.DateOfBirth != null ? u.DateOfBirth?.ToString("d") : ""
+                            u.Email
                         ).ToLower().Contains(term)
                     )
                     .ToList();
