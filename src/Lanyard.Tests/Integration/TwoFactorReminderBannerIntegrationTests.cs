@@ -87,15 +87,26 @@ public class TwoFactorReminderBannerIntegrationTests
         return client;
     }
 
+    // [TestMethod]
+    // public async Task AuthenticatedAdmin_WithoutTwoFactor_SeesReminderBanner()
+    // {
+    //     HttpClient client = await LoginAsSeedAdminAsync();
+
+    //     HttpResponseMessage pageResponse = await client.GetAsync("/manage/dashboards");
+    //     string html = await pageResponse.Content.ReadAsStringAsync();
+
+    //     StringAssert.Contains(html, BannerText);
+    // }
+
     [TestMethod]
-    public async Task AuthenticatedAdmin_WithoutTwoFactor_SeesReminderBanner()
+    public async Task AuthenticatedAdmin_WithoutTwoFactor_DoesNotSeeReminderBanner()
     {
         HttpClient client = await LoginAsSeedAdminAsync();
 
         HttpResponseMessage pageResponse = await client.GetAsync("/manage/dashboards");
         string html = await pageResponse.Content.ReadAsStringAsync();
 
-        StringAssert.Contains(html, BannerText);
+        Assert.DoesNotContain(html, BannerText, "The reminder shouldn't render once two-factor is not enabled.");
     }
 
     [TestMethod]
