@@ -34,7 +34,6 @@ namespace Lanyard.App.Controllers
             _logger = logger;
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
@@ -65,7 +64,6 @@ namespace Lanyard.App.Controllers
             }
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpPost("login-form")]
         [Consumes("application/x-www-form-urlencoded")]
         public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null)
@@ -201,7 +199,6 @@ namespace Lanyard.App.Controllers
             return Ok(new { message = "Logout successful" });
         }
 
-        [EnableRateLimiting("ip-fixed")]
         [HttpGet("logout")]
         public async Task<IActionResult> LogoutGet([FromQuery] string? returnUrl = null)
         {

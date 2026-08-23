@@ -64,7 +64,7 @@
                 <FluentDatePicker TValue="DateTime?" @bind-Value="dueDate" Label="Due Date (optional)" Width="100%" Margin="@Margin.Top0">
                 </FluentDatePicker>
 
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
                     <FluentButton Appearance="ButtonAppearance.Primary" Loading="@isSubmitting" OnClick="SubmitAsync">
                         Assign
                     </FluentButton>
@@ -109,8 +109,7 @@
 
         if (!scope.IsAdmin)
         {
-            Result<List<UserProfile>> locationUsersResult = await
-_companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+            Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
 
             if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
             {
@@ -181,8 +180,7 @@ _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
 
             if (!scope.IsAdmin)
             {
-                Result<List<UserProfile>> locationUsersResult = await
-_companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+                Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
 
                 if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
                 {
