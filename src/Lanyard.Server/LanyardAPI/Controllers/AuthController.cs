@@ -104,11 +104,16 @@ namespace Lanyard.App.Controllers
         public async Task<IActionResult> VerifyTwoFactorForm(
             [FromForm] string code,
             [FromForm] string provider,
-            [FromForm] bool rememberMachine = false,
+            [FromForm] string? rememberMachine = null,
             [FromForm] bool rememberMe = false,
             [FromForm] string? returnUrl = null,
             [FromForm] int? locationId = null)
         {
+            // FluentCheckbox posts as a native HTML checkbox: present with browser-default value "on"
+            // when checked, and absent entirely when unchecked - not a "true"/"false" bool the model
+            // binder understands, so bind it as a string and use standard checkbox presence semantics.
+            bool rememberMachineChecked = !string.IsNullOrEmpty(rememberMachine);
+
             UserProfile? user = await _signInManager.GetTwoFactorAuthenticationUserAsync();
 
             if (user is null)
@@ -143,7 +148,7 @@ namespace Lanyard.App.Controllers
                 return Redirect($"/login?error={Uri.EscapeDataString(locationError!)}");
             }
 
-            if (rememberMachine)
+            if (rememberMachineChecked)
             {
                 await _signInManager.RememberTwoFactorClientAsync(user);
             }

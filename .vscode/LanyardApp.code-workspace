@@ -10,6 +10,7 @@
 			"**/Lanyard.Client": true,
 			"**/Lanyard.Client.Watchdog": true,
 			"**/Lanyard.Reach": true,
-		}
+		},
+		"dotnet.defaultSolution": "LanyardApp.sln"
 	}
 }

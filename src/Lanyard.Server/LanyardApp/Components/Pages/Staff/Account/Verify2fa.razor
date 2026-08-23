@@ -31,9 +31,9 @@
                 <FluentMessageBar Intent="MessageBarIntent.Success">A code has been sent to your email.</FluentMessageBar>
             }
 
-            @if (pendingUser is not null)
+            @if (Initialized)
             {
-                @if (hasAuthenticator && hasEmail && !useRecoveryCode)
+                @if (HasAuthenticator && HasEmail && !useRecoveryCode)
                 {
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
                         <FluentButton Appearance="@(selectedProvider == TokenOptions.DefaultAuthenticatorProvider ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
@@ -50,7 +50,7 @@
                 @if (!useRecoveryCode && selectedProvider == TokenOptions.DefaultEmailProvider)
                 {
                     <form method="post" action="/api/auth/resend-2fa-code" class="col-12">
-                        <input type="hidden" name="rememberMe" value="@RememberMe" />
+                        <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
                         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                         <input type="hidden" name="locationId" value="@LocationId" />
                         <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Submit" Style="width: 100%;">
@@ -61,7 +61,7 @@
 
                 <form method="post" action="/api/auth/verify-2fa-form" class="col-12">
                     <input type="hidden" name="provider" value="@(useRecoveryCode ? "RecoveryCode" : selectedProvider)" />
-                    <input type="hidden" name="rememberMe" value="@RememberMe" />
+                    <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <input type="hidden" name="locationId" value="@LocationId" />
 
@@ -110,33 +110,49 @@
     [SupplyParameterFromQuery(Name = "sent")]
     public bool? CodeSent { get; set; }
 
-    private UserProfile? pendingUser;
-    private bool hasAuthenticator;
-    private bool hasEmail;
+    [PersistentState]
+    public bool Initialized { get; set; }
+
+    [PersistentState]
+    public bool HasAuthenticator { get; set; }
+
+    [PersistentState]
+    public bool HasEmail { get; set; }
+
     private bool useRecoveryCode;
     private string selectedProvider = TokenOptions.DefaultAuthenticatorProvider;
 
     protected override async Task OnInitializedAsync()
     {
-        pendingUser = await SignInManager.GetTwoFactorAuthenticationUserAsync();
-
-        if (pendingUser is null)
+        // SignInManager reads the two-factor cookie, which requires writing response headers.
+        // That only works during the static-SSR prerender pass - by the time this component
+        // re-initializes on the interactive circuit, the original response has already started
+        // and any Identity call here throws "OnStarting cannot be set". [PersistentState] carries
+        // the prerendered result forward so this block only ever runs once, during prerendering.
+        if (!Initialized)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
-            return;
+            UserProfile? pendingUser = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+
+            if (pendingUser is null)
+            {
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            IList<string> providers = await UserManager.GetValidTwoFactorProvidersAsync(pendingUser);
+            HasAuthenticator = providers.Contains(TokenOptions.DefaultAuthenticatorProvider);
+            HasEmail = providers.Contains(TokenOptions.DefaultEmailProvider);
+
+            if (!HasAuthenticator && !HasEmail)
+            {
+                Navigation.NavigateTo("/login?error=" + Uri.EscapeDataString("Two-factor authentication isn't set up correctly for your account. Contact an administrator."), forceLoad: true);
+                return;
+            }
+
+            Initialized = true;
         }
 
-        IList<string> providers = await UserManager.GetValidTwoFactorProvidersAsync(pendingUser);
-        hasAuthenticator = providers.Contains(TokenOptions.DefaultAuthenticatorProvider);
-        hasEmail = providers.Contains(TokenOptions.DefaultEmailProvider);
-
-        if (!hasAuthenticator && !hasEmail)
-        {
-            Navigation.NavigateTo("/login?error=" + Uri.EscapeDataString("Two-factor authentication isn't set up correctly for your account. Contact an administrator."), forceLoad: true);
-            return;
-        }
-
-        selectedProvider = hasAuthenticator ? TokenOptions.DefaultAuthenticatorProvider : TokenOptions.DefaultEmailProvider;
+        selectedProvider = HasAuthenticator ? TokenOptions.DefaultAuthenticatorProvider : TokenOptions.DefaultEmailProvider;
     }
 
     private void ToggleRecoveryCode()
