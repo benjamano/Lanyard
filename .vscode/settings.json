@@ -26,5 +26,6 @@
     "editor.wordWrap": "off",
     "editor.mouseWheelZoom": true,
     "editor.formatOnPaste": true,
-    "editor.minimap.enabled": true
+    "editor.minimap.enabled": true,
+    "dotnet.defaultSolution": "LanyardApp.sln"
 }
