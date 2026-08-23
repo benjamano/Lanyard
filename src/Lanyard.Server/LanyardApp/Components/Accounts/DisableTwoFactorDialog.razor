@@ -27,8 +27,9 @@
                         <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                     </FluentTextInput>
 
-                    <FluentStack Orientation="Orientation.Horizontal">
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Disabled="@isSubmitting">
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      Disabled="@isSubmitting">
                             @if (isSubmitting)
                             {
                                 <FluentSpinner Style="width: 16px; height: 16px;" />
@@ -39,7 +40,8 @@
                                 <span>Disable 2FA</span>
                             }
                         </FluentButton>
-                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isSubmitting">
+                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                      Disabled="@isSubmitting">
                             Cancel
                         </FluentButton>
                     </FluentStack>
