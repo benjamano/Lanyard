@@ -1,24 +1,27 @@
 @inject AuthenticationStateProvider AuthStateProvider
 
-@if (_showBanner)
+@if (_showBanner || true)
 {
-    <FluentMessageBar Intent="MessageBarIntent.Warning" Style="margin-bottom: 12px;">
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                     VerticalAlignment="VerticalAlignment.Center" Style="width: 100%; flex-wrap: wrap; gap: 8px;">
-            <FluentText>
-                Your account doesn't have two-factor authentication enabled. Turn it on for increased security.
-            </FluentText>
+    <FluentStack Margin="@Margin.All3">
+        <FluentMessageBar Intent="MessageBarIntent.Info">
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
+                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6" Width="100%">
+                <FluentText>
+                    Your account doesn't have two-factor authentication enabled. We suggest you turn it on for increased
+                    security.
+                </FluentText>
 
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="GoToSecuritySettings">
-                    Enable two-factor authentication
-                </FluentButton>
-                <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="Dismiss">
-                    Dismiss
-                </FluentButton>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="GoToSecuritySettings">
+                        Enable two-factor authentication
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="Dismiss">
+                        Dismiss
+                    </FluentButton>
+                </FluentStack>
             </FluentStack>
-        </FluentStack>
-    </FluentMessageBar>
+        </FluentMessageBar>
+    </FluentStack>
 }
 
 @code {
