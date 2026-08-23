@@ -655,42 +655,6 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
-        public async Task UpdateUserProfileAsync_UnspecifiedKindDateOfBirth_SavesAsUtc()
-        {
-            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-            UserManager<UserProfile> userManager = BuildUserManager(options);
-
-            Mock<IEmailService> emailServiceMock = new();
-            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
-                .ReturnsAsync(Result<bool>.Ok(true));
-
-            SecurityService service = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
-
-            Result<UserCreationResult> createResult = await service.CreateUserAsync(new UserProfile
-            {
-                FirstName = "Jane",
-                LastName = "Doe",
-                Email = "jane@example.com"
-            }, locationIds: [1]);
-
-            UserProfile user = createResult.Data!.User;
-
-            // Date pickers hand back Kind=Unspecified DateTimes - this must not throw when the
-            // underlying column is "timestamp with time zone" (Postgres in production; the
-            // InMemory provider used here doesn't enforce Kind, so this only proves the value is
-            // normalized, not that Npgsql would accept it).
-            user.DateOfBirth = new DateTime(1995, 6, 15, 0, 0, 0, DateTimeKind.Unspecified);
-
-            await service.UpdateUserProfileAsync(user);
-
-            UserProfile? persisted = await userManager.FindByIdAsync(user.Id);
-            Assert.IsNotNull(persisted);
-            Assert.IsNotNull(persisted.DateOfBirth);
-            Assert.AreEqual(DateTimeKind.Utc, persisted.DateOfBirth!.Value.Kind);
-            Assert.AreEqual(new DateTime(1995, 6, 15, 0, 0, 0, DateTimeKind.Utc), persisted.DateOfBirth);
-        }
-
-        [TestMethod]
         public async Task DeleteUserAsync_NonAdminNonManager_Fails()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

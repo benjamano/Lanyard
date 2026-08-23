@@ -150,14 +150,6 @@ public class SecurityService : ISecurityService
         UserProfile? userProfile = await ctx.Users.FirstOrDefaultAsync(x => x.Id == updatedUserProfile.Id);
         if (userProfile is null) return;
 
-        // DateOfBirth is "timestamp with time zone" in Postgres, which Npgsql only accepts as a
-        // UTC-kind DateTime - date-picker input arrives as Kind=Unspecified and would otherwise
-        // throw on SaveChangesAsync. Same normalization CourseAssignmentService applies to DueDate.
-        if (updatedUserProfile.DateOfBirth is DateTime dateOfBirth && dateOfBirth.Kind != DateTimeKind.Utc)
-        {
-            updatedUserProfile.DateOfBirth = DateTime.SpecifyKind(dateOfBirth, DateTimeKind.Utc);
-        }
-
         ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
         await ctx.SaveChangesAsync();
     }

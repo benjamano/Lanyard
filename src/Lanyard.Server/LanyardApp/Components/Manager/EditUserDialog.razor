@@ -78,7 +78,6 @@
         model.FirstName = Content.FirstName ?? string.Empty;
         model.LastName = Content.LastName ?? string.Empty;
         model.PhoneNumber = Content.PhoneNumber;
-        model.DateOfBirth = Content.DateOfBirth;
 
         _editContext = new EditContext(model);
     }
@@ -93,7 +92,6 @@
             Content.FirstName = model.FirstName;
             Content.LastName = model.LastName;
             Content.PhoneNumber = model.PhoneNumber;
-            Content.DateOfBirth = model.DateOfBirth;
 
             await _securityService.UpdateUserProfileAsync(Content);
 
