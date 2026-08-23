@@ -9,3 +9,16 @@
 body[data-theme="dark"] img.adapt-to-theme {
     filter: invert(1);
 }
+
+/* FluentText's root doesn't get this file's scope attribute (Fluent v5 component-root quirk) --
+   ::deep is required. Truncates the What's New summary to one line instead of wrapping.
+   The sidebar itself has no fixed width (it's sized by its widest nav item's content), so
+   max-width must be a concrete value here - "100%" would resolve against an unbounded flex
+   ancestor and just grow the whole sidebar instead of clipping the text. */
+::deep .whats-new-summary {
+    display: block;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

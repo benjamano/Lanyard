@@ -1,0 +1,29 @@
+@using Lanyard.Infrastructure.Models
+
+<div class="attempt-history-list">
+    @if (Attempts.Count == 0)
+    {
+        <FluentText Color="Color.Disabled">No attempts yet.</FluentText>
+    }
+    else
+    {
+        <FluentDataGrid Items="@Attempts.OrderByDescending(x => x.AttemptNumber).AsQueryable()"
+                        GridTemplateColumns="1fr 1fr 1fr 1fr" RowSize="@DataGridRowSize.Small">
+            <ChildContent>
+                <PropertyColumn Property="@(x => x.AttemptNumber)" Title="Attempt #" />
+                <PropertyColumn Property="@(x => x.SubmittedDate.ToString("d MMM yyyy HH:mm"))" Title="Submitted" />
+                <PropertyColumn Property="@(x => $"{x.ScorePercent}%")" Title="Score" />
+                <TemplateColumn Title="Result">
+                    <FluentBadge Content="@(context.Passed ? "Passed" : "Failed")"
+                                 Color="@(context.Passed ? BadgeColor.Success : BadgeColor.Danger)"
+                                 Appearance="BadgeAppearance.Filled" />
+                </TemplateColumn>
+            </ChildContent>
+        </FluentDataGrid>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required List<CourseQuizAttempt> Attempts { get; set; }
+}

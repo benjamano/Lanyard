@@ -47,43 +47,65 @@
         }
         else
         {
-            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
-                            RowSize="@DataGridRowSize.Medium">
+            <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
+                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => HasExpandableDetails(g))">
                 <ChildContent>
                     <TemplateColumn Title="Person">
-                        @GetUserName(context.UserId)
+                        @context.Label
                     </TemplateColumn>
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                        <FluentBadge Content="@GetStatusLabel(context.Primary)" Color="@GetStatusColor(context.Primary)"
                                      Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
-                        @GetLatestScore(context)
+                        @GetLatestScore(context.Primary)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                        @(context.Primary.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                     <TemplateColumn Title="">
-                        <div class="assignment-row-actions">
+                        <div class="assignment-row-actions" @onclick:stopPropagation="true">
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
                                           Tooltip="Copy link to this assignment" Title="Copy link to this assignment"
-                                          OnClick="@(() => CopyLinkAsync(context))" />
+                                          OnClick="@(() => CopyLinkAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
                                           Tooltip="Edit due date" Title="Edit due date"
-                                          OnClick="@(() => OpenEditDueDateDialogAsync(context))" />
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
                                           Tooltip="View timing" Title="View timing"
-                                          OnClick="@(() => OpenTimingDialogAsync(context))" />
+                                          OnClick="@(() => OpenTimingDialogAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
                                           Tooltip="Unassign" Title="Unassign"
-                                          OnClick="@(() => UnassignAsync(context))" />
+                                          OnClick="@(() => UnassignAsync(context.Primary))" />
                         </div>
                     </TemplateColumn>
                 </ChildContent>
+                <RowDetails>
+                    <AssignmentGroupDetails Assignments="@context.Assignments">
+                        <ActionsTemplate Context="assignment">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
+                                          Tooltip="Copy link to this assignment" Title="Copy link to this assignment"
+                                          OnClick="@(() => CopyLinkAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
+                                          Tooltip="Edit due date" Title="Edit due date"
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
+                                          Tooltip="Unassign" Title="Unassign"
+                                          OnClick="@(() => UnassignAsync(assignment))" />
+                        </ActionsTemplate>
+                    </AssignmentGroupDetails>
+                </RowDetails>
                 <EmptyContent>
                     No one is assigned to this course yet.
                 </EmptyContent>
@@ -101,6 +123,30 @@
     private bool isLoadingAssignments;
     private bool scopeFailed;
     private LocationScope? currentScope;
+
+    private List<TrainingAssignmentGroup> groupedAssignments = [];
+
+    // Built once whenever assignments changes, rather than recomputed on every render (a plain
+    // `=>` property was here originally) - FluentDataGrid tracks which row is expanded by the
+    // TrainingAssignmentGroup instance itself, and Blazor auto-rerenders a component after any
+    // event handler on it completes (e.g. clicking any button in a row), so a property that
+    // rebuilds fresh instances every render silently collapsed every expanded row on the very
+    // next click, anywhere on the page.
+    private void RebuildGroupedAssignments()
+    {
+        groupedAssignments = assignments
+            .GroupBy(a => a.UserId)
+            .Select(g => new TrainingAssignmentGroup
+            {
+                Label = GetUserName(g.Key),
+                Assignments = g.OrderByDescending(x => x.AssignedDate).ToList()
+            })
+            .OrderBy(g => g.Label)
+            .ToList();
+    }
+
+    private static bool HasExpandableDetails(TrainingAssignmentGroup group) =>
+        group.Assignments.Count > 1 || group.Primary.Attempts.Count > 0;
 
     protected override Task OnInitializedAsync() => LoadCoursesAsync();
 
@@ -160,6 +206,7 @@
         if (selectedCourseId == Guid.Empty)
         {
             assignments = [];
+            RebuildGroupedAssignments();
             return;
         }
 
@@ -170,6 +217,7 @@
         if (scope is null)
         {
             assignments = [];
+            RebuildGroupedAssignments();
             isLoadingAssignments = false;
             return;
         }
@@ -186,6 +234,7 @@
             assignments = result.Data;
         }
 
+        RebuildGroupedAssignments();
         isLoadingAssignments = false;
     }
 

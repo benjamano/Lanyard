@@ -21,7 +21,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl, string? logoUrl, string accentColorHex)
+    public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl, string? logoUrl, string accentColorHex, string? locationName)
     {
         try
         {
@@ -37,7 +37,7 @@ public class EmailService : IEmailService
                 return Result<bool>.Fail("User has no email address to send a link to.");
             }
 
-            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex);
+            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex, locationName);
 
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
@@ -199,10 +199,14 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildSetPasswordHtml(string username, string setPasswordUrl, string? logoUrl, string accentColorHex)
+    private static string BuildSetPasswordHtml(string username, string setPasswordUrl, string? logoUrl, string accentColorHex, string? locationName)
     {
         string logoHtml = logoUrl is not null
             ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        string locationHtml = locationName is not null
+            ? $"""<p>Log in at: <strong>{WebUtility.HtmlEncode(locationName)}</strong></p>"""
             : string.Empty;
 
         return $"""
@@ -211,6 +215,7 @@ public class EmailService : IEmailService
           <h2>Lanyard</h2>
           <p>Use the button below to set your password. Your username is:</p>
           <p style="font-size: 18px; font-weight: bold;">{WebUtility.HtmlEncode(username)}</p>
+          {locationHtml}
           <p>
             <a href="{setPasswordUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Set Your Password

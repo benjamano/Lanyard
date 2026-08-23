@@ -166,12 +166,12 @@ public class SecurityService : ISecurityService
         {
             if ((await GetActiveUsersAsync()).Any())
             {
-                // Once at least one account exists, only an Admin may create further accounts -
-                // being merely logged in is not enough (any Staff-level account could otherwise
-                // create new accounts, including admin ones, for itself).
-                if (!await IsCurrentUserInRoleAsync("Admin"))
+                // Once at least one account exists, only an Admin or Manager may create further
+                // accounts - being merely logged in is not enough (any Staff-level account could
+                // otherwise create new accounts, including admin ones, for itself).
+                if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
                 {
-                    return Result<UserCreationResult>.Fail("You must be an administrator to perform this action!");
+                    return Result<UserCreationResult>.Fail("You must be an administrator or manager to perform this action!");
                 }
             }
 
@@ -261,9 +261,9 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin"))
+            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
             {
-                return Result<bool>.Fail("You must be an administrator to perform this action!");
+                return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -355,6 +355,7 @@ public class SecurityService : ISecurityService
 
         string? logoUrl = null;
         string accentColorHex = BrandConstants.PrimaryColorHex;
+        string? locationName = null;
 
         Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(user.Id);
 
@@ -362,28 +363,34 @@ public class SecurityService : ISecurityService
         // gets an arbitrary company's branding here - GetLocationsForUserAsync orders by location
         // name, so locations[0] carries no precedence meaning. Invite emails are not worth a
         // "primary company" concept; the branding is cosmetic and the link itself is unaffected.
-        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations && locations[0].Company is Company company)
+        // The same limitation now applies to the location name shown in the email body.
+        if (locationsResult.IsSuccess && locationsResult.Data is { Count: > 0 } locations)
         {
-            accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
+            locationName = locations[0].GetDisplayName();
 
-            if (company.LogoFileId is Guid logoFileId)
+            if (locations[0].Company is Company company)
             {
-                // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
-                // logo replacement needs a new URL to guarantee a fresh fetch.
-                logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
+                accentColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex);
+
+                if (company.LogoFileId is Guid logoFileId)
+                {
+                    // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                    // logo replacement needs a new URL to guarantee a fresh fetch.
+                    logoUrl = $"{baseUrl}/api/companies/{company.Id}/logo?v={logoFileId:N}";
+                }
             }
         }
 
-        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex);
+        return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex, locationName);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin"))
+            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
             {
-                return Result<bool>.Fail("You must be an administrator to perform this action!");
+                return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
