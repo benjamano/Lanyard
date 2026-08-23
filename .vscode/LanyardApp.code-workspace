@@ -10,7 +10,6 @@
 			"**/Lanyard.Client": true,
 			"**/Lanyard.Client.Watchdog": true,
 			"**/Lanyard.Reach": true,
-		},
-		"discord.enabled": true
+		}
 	}
 }
