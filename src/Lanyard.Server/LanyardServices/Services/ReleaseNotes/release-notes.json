@@ -88,7 +88,8 @@
       "Added the ability to edit a user's name, phone number, and date of birth on the Users page.",
       "The company logo area in the side navbar is now hidden when no logo is set.",
       "My Training and the manager's per-course and per-person training views now collapse multiple attempts into one row per course, expandable to see each attempt's score and result.",
-      "The kiosk text widget now supports rich text formatting (bold, italic, underline, lists)."
+      "The kiosk text widget now supports rich text formatting (bold, italic, underline, lists).",
+      "Added 2fa support into the login system, enabled via the Account Managment Page"
     ]
   }
 ]

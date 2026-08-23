@@ -46,6 +46,11 @@
         <AutoLogoutManager />
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
+                <AuthorizeView>
+                    <Authorized>
+                        @* <TwoFactorReminderBanner /> *@
+                    </Authorized>
+                </AuthorizeView>
                 @Body
             </ChildContent>
             <ErrorContent Context="ex">
