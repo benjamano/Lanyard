@@ -77,6 +77,30 @@ namespace Lanyard.Tests.Services.Authentication
             return mock;
         }
 
+        private static async Task AddUserToRoleAsync(DbContextOptions<ApplicationDbContext> options, UserManager<UserProfile> userManager, UserProfile user, string roleName)
+        {
+            await using ApplicationDbContext context = new(options);
+
+            string normalizedRoleName = roleName.ToUpperInvariant();
+
+            if (!await context.Roles.AnyAsync(r => r.NormalizedName == normalizedRoleName))
+            {
+                context.Roles.Add(new ApplicationRole
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = roleName,
+                    NormalizedName = normalizedRoleName,
+                    ConcurrencyStamp = Guid.NewGuid().ToString(),
+                    CreatedByUserId = user.Id,
+                    CreateDate = DateTime.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+
+            IdentityResult addToRoleResult = await userManager.AddToRoleAsync(user, roleName);
+            Assert.IsTrue(addToRoleResult.Succeeded, string.Join(", ", addToRoleResult.Errors.Select(e => e.Description)));
+        }
+
         private class TestNavigationManager : NavigationManager
         {
             public TestNavigationManager()
@@ -679,6 +703,88 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsFalse(deleteResult.IsSuccess);
             Assert.Contains("administrator", deleteResult.Error);
+        }
+
+        [TestMethod]
+        public async Task DeleteUserAsync_Manager_TargetingAdmin_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile targetAdmin = createResult.Data!.User;
+            await AddUserToRoleAsync(options, userManager, targetAdmin, "Admin");
+
+            SecurityService managerService = BuildServiceWithAuthProvider(options, userManager, BuildAuthProviderWithRole("Manager").Object, emailServiceMock.Object);
+            Result<bool> deleteResult = await managerService.DeleteUserAsync(targetAdmin.Id);
+
+            Assert.IsFalse(deleteResult.IsSuccess, "A Manager must not be able to delete an Admin account.");
+            Assert.IsNotNull(await userManager.FindByIdAsync(targetAdmin.Id));
+        }
+
+        [TestMethod]
+        public async Task SendSetPasswordLinkAsync_Manager_TargetingAdmin_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile targetAdmin = createResult.Data!.User;
+            await AddUserToRoleAsync(options, userManager, targetAdmin, "Admin");
+
+            SecurityService managerService = BuildServiceWithAuthProvider(options, userManager, BuildAuthProviderWithRole("Manager").Object, emailServiceMock.Object);
+            Result<bool> resendResult = await managerService.SendSetPasswordLinkAsync(targetAdmin.Id);
+
+            Assert.IsFalse(resendResult.IsSuccess, "A Manager must not be able to trigger a password reset for an Admin account.");
+        }
+
+        [TestMethod]
+        public async Task DeleteUserAsync_Admin_CanTargetAdmin_Succeeds()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile targetAdmin = createResult.Data!.User;
+            await AddUserToRoleAsync(options, userManager, targetAdmin, "Admin");
+
+            Result<bool> deleteResult = await adminService.DeleteUserAsync(targetAdmin.Id);
+
+            Assert.IsTrue(deleteResult.IsSuccess, deleteResult.Error);
+            Assert.IsNull(await userManager.FindByIdAsync(targetAdmin.Id));
         }
     }
 }

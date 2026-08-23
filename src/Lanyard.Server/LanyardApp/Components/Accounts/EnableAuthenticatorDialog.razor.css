@@ -1,0 +1,19 @@
+.enable-authenticator-dialog .qr-code-image {
+    width: 200px;
+    height: 200px;
+    align-self: center;
+}
+
+.enable-authenticator-dialog ::deep .shared-key-text {
+    text-align: center;
+    font-family: monospace;
+}
+
+.enable-authenticator-dialog ::deep .enable-authenticator-field {
+    width: 100%;
+}
+
+.enable-authenticator-dialog ::deep .enable-authenticator-spinner {
+    width: 16px;
+    height: 16px;
+}

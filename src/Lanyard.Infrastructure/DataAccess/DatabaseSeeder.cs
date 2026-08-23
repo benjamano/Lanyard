@@ -131,15 +131,19 @@ public static class DatabaseSeeder
 
     private static async Task EnsureStandardRolesExistAsync(ApplicationDbContext context)
     {
-        HashSet<string> existingNormalizedNames = (await context.Roles
+        // Compared by Id, not NormalizedName - every StandardRoles entry has a fixed, known Id, and
+        // an Id-based check stays correct even if a deployment renames a seeded role afterwards
+        // (a name-based check would then find no match and try to re-insert the same Id, throwing
+        // a primary-key violation on every startup from then on).
+        HashSet<string> existingIds = (await context.Roles
             .AsNoTracking()
             .TagWithCallSite()
-            .Select(r => r.NormalizedName!)
+            .Select(r => r.Id)
             .ToListAsync())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet();
 
         List<ApplicationRole> missingRoles = StandardRoles
-            .Where(r => !existingNormalizedNames.Contains(r.Name.ToUpperInvariant()))
+            .Where(r => !existingIds.Contains(r.Id))
             .Select(ToApplicationRole)
             .ToList();
 

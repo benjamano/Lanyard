@@ -1,6 +1,5 @@
 ﻿@using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
-@using System.Linq.Expressions
 
 @inject INotificationService ToastService
 
@@ -18,18 +17,18 @@
                 <DataAnnotationsValidator />
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
                     <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true" Placeholder="Ben"
-                                     Style="width: 100%;" Message="@GetValidationMessage(() => model.FirstName)"
+                                     Style="width: 100%;" Message="@_editContext.GetValidationMessage(() => model.FirstName)"
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
                     <FluentTextInput @bind-Value="model.LastName" Label="Last Name" Required="true" Placeholder="Mercer"
-                                     Style="width: 100%;" Message="@GetValidationMessage(() => model.LastName)"
+                                     Style="width: 100%;" Message="@_editContext.GetValidationMessage(() => model.LastName)"
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
                     <FluentTextInput @bind-Value="model.Email" Label="Email" Required="true"
                                      Placeholder="ben.mercer@lanyard.com" Style="width: 100%;"
-                                     Message="@GetValidationMessage(() => model.Email)"
+                                     Message="@_editContext.GetValidationMessage(() => model.Email)"
                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="start" />
                     </FluentTextInput>
@@ -162,12 +161,6 @@
     private async Task CloseDialog()
     {
         await Dialog.CloseAsync(true);
-    }
-
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class RegisterUserModel

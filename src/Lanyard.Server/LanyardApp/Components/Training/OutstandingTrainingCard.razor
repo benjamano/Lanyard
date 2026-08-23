@@ -31,7 +31,7 @@
                                  Class="w-100 outstanding-training-row-inner">
                         <FluentText Weight="TextWeight.Semibold" Class="outstanding-training-name">@assignment.Course?.Name
                         </FluentText>
-                        <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)"
+                        <FluentBadge Content="@assignment.GetStatusLabel()" Color="@assignment.GetStatusColor()"
                                      Appearance="BadgeAppearance.Filled" />
                     </FluentStack>
                 </div>
@@ -68,19 +68,4 @@
         _navigationManager.NavigateTo($"/training/{assignmentId}");
     }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
 }

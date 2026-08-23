@@ -1,0 +1,9 @@
+.recovery-codes-grid {
+    font-family: monospace;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--neutral-stroke-divider-rest);
+    border-radius: 4px;
+}

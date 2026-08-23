@@ -13,41 +13,43 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-            <FluentMessageBar Intent="MessageBarIntent.Warning">
-                This will remove the extra sign-in step from your account. Enter your password to confirm.
-            </FluentMessageBar>
+        <div class="disable-2fa-dialog">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentMessageBar Intent="MessageBarIntent.Warning">
+                    This will remove the extra sign-in step from your account. Enter your password to confirm.
+                </FluentMessageBar>
 
-            <EditForm Model="@model" OnValidSubmit="HandleDisable">
-                <DataAnnotationsValidator />
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-                    <FluentTextInput @bind-Value="model.CurrentPassword" Label="Password" Required="true"
-                                     TextInputType="TextInputType.Password" Placeholder="Enter your password" Style="width: 100%;"
-                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
-                    </FluentTextInput>
+                <EditForm Model="@model" OnValidSubmit="HandleDisable">
+                    <DataAnnotationsValidator />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                        <FluentTextInput @bind-Value="model.CurrentPassword" Label="Password" Required="true"
+                                         TextInputType="TextInputType.Password" Placeholder="Enter your password" Class="disable-2fa-field"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
 
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
-                                      Disabled="@isSubmitting">
-                            @if (isSubmitting)
-                            {
-                                <FluentSpinner Style="width: 16px; height: 16px;" />
-                                <span class="ms-2">Disabling...</span>
-                            }
-                            else
-                            {
-                                <span>Disable 2FA</span>
-                            }
-                        </FluentButton>
-                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
-                                      Disabled="@isSubmitting">
-                            Cancel
-                        </FluentButton>
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                            <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                          Disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <FluentSpinner Class="disable-2fa-spinner" />
+                                    <span class="ms-2">Disabling...</span>
+                                }
+                                else
+                                {
+                                    <span>Disable 2FA</span>
+                                }
+                            </FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                          Disabled="@isSubmitting">
+                                Cancel
+                            </FluentButton>
+                        </FluentStack>
                     </FluentStack>
-                </FluentStack>
-            </EditForm>
-        </FluentStack>
+                </EditForm>
+            </FluentStack>
+        </div>
     </ChildContent>
 </FluentDialogBody>
 

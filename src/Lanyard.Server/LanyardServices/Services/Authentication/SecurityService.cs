@@ -91,6 +91,9 @@ public class SecurityService : ISecurityService
         return authState.User?.Identity?.IsAuthenticated == true && authState.User.IsInRole(role);
     }
 
+    private async Task<bool> IsCurrentUserAdminOrManagerAsync() =>
+        await IsCurrentUserInRoleAsync("Admin") || await IsCurrentUserInRoleAsync("Manager");
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
         try
@@ -169,7 +172,7 @@ public class SecurityService : ISecurityService
                 // Once at least one account exists, only an Admin or Manager may create further
                 // accounts - being merely logged in is not enough (any Staff-level account could
                 // otherwise create new accounts, including admin ones, for itself).
-                if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
+                if (!await IsCurrentUserAdminOrManagerAsync())
                 {
                     return Result<UserCreationResult>.Fail("You must be an administrator or manager to perform this action!");
                 }
@@ -261,7 +264,7 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
+            if (!await IsCurrentUserAdminOrManagerAsync())
             {
                 return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
@@ -270,6 +273,11 @@ public class SecurityService : ISecurityService
             if (user is null)
             {
                 return Result<bool>.Fail("User not found!");
+            }
+
+            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
             }
 
             user.InvitedDate = DateTime.UtcNow;
@@ -388,7 +396,7 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if (!await IsCurrentUserInRoleAsync("Admin") && !await IsCurrentUserInRoleAsync("Manager"))
+            if (!await IsCurrentUserAdminOrManagerAsync())
             {
                 return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
             }
@@ -398,6 +406,11 @@ public class SecurityService : ISecurityService
             if (user is null)
             {
                 return Result<bool>.Fail("User not found!");
+            }
+
+            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
             }
 
             IdentityResult result = await _userManager.DeleteAsync(user);
@@ -485,7 +498,6 @@ public class SecurityService : ISecurityService
             {
                 IsEnabled = isEnabled,
                 HasAuthenticator = isEnabled && hasAuthenticator,
-                HasEmail = isEnabled && !hasAuthenticator,
                 RecoveryCodesRemaining = recoveryCodesRemaining
             });
         }

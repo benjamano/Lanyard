@@ -17,7 +17,7 @@
                 authenticator app or email. They won't be shown again.
             </FluentMessageBar>
 
-            <div style="font-family: monospace; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border: 1px solid var(--neutral-stroke-divider-rest); border-radius: 4px;">
+            <div class="recovery-codes-grid">
                 @foreach (string recoveryCode in Codes)
                 {
                     <span>@recoveryCode</span>
@@ -45,12 +45,13 @@
 
     private async Task CopyCodes()
     {
-        try
+        bool success = await JS.TryCopyToClipboardAsync(string.Join(Environment.NewLine, Codes));
+
+        if (success)
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join(Environment.NewLine, Codes));
             ToastService.ShowSuccess("Recovery codes copied to clipboard.");
         }
-        catch (Exception)
+        else
         {
             ToastService.ShowError("Could not copy the codes. Your browser may be blocking clipboard access.");
         }

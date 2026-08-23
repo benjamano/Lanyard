@@ -7,7 +7,7 @@
     }
     else
     {
-        <FluentDataGrid Items="@Attempts.OrderByDescending(x => x.AttemptNumber).AsQueryable()"
+        <FluentDataGrid Items="@_sortedAttempts.AsQueryable()"
                         GridTemplateColumns="1fr 1fr 1fr 1fr" RowSize="@DataGridRowSize.Small">
             <ChildContent>
                 <PropertyColumn Property="@(x => x.AttemptNumber)" Title="Attempt #" />
@@ -24,6 +24,18 @@
 </div>
 
 @code {
+    private List<CourseQuizAttempt> _sortedAttempts = [];
+    private List<CourseQuizAttempt>? _sourceAttempts;
+
     [Parameter, EditorRequired]
     public required List<CourseQuizAttempt> Attempts { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_sourceAttempts, Attempts))
+        {
+            _sourceAttempts = Attempts;
+            _sortedAttempts = [.. Attempts.OrderByDescending(x => x.AttemptNumber)];
+        }
+    }
 }

@@ -23,101 +23,43 @@ public class EmailService : IEmailService
 
     public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl, string? logoUrl, string accentColorHex, string? locationName)
     {
-        try
+        if (string.IsNullOrWhiteSpace(user.Email))
         {
-            EmailOptions config = _options.Value;
-
-            if (string.IsNullOrWhiteSpace(config.ResendApiKey) || string.IsNullOrWhiteSpace(config.FromAddress))
-            {
-                return Result<bool>.Fail("Email is not configured (missing Resend API key or From address).");
-            }
-
-            if (string.IsNullOrWhiteSpace(user.Email))
-            {
-                return Result<bool>.Fail("User has no email address to send a link to.");
-            }
-
-            string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex, locationName);
-
-            HttpRequestMessage request = new(HttpMethod.Post, "emails")
-            {
-                Content = JsonContent.Create(new
-                {
-                    from = $"{config.FromName} <{config.FromAddress}>",
-                    to = new[] { user.Email },
-                    subject = "Set your Lanyard password",
-                    html
-                })
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ResendApiKey);
-
-            HttpResponseMessage response = await _httpClient.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                string body = await response.Content.ReadAsStringAsync();
-                _logger.LogError("Resend email send failed ({StatusCode}): {Body}", response.StatusCode, body);
-                return Result<bool>.Fail($"Email provider returned {(int)response.StatusCode}.");
-            }
-
-            return Result<bool>.Ok(true);
+            return Result<bool>.Fail("User has no email address to send a link to.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Exception sending set-password email to {UserId}", user.Id);
-            return Result<bool>.Fail(ex.Message);
-        }
+
+        string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex, locationName);
+
+        return await SendResendEmailAsync(user.Id, user.Email, "Set your Lanyard password", html);
     }
 
     public async Task<Result<bool>> SendCourseRecurrenceReminderEmailAsync(UserProfile user, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
-        try
+        if (string.IsNullOrWhiteSpace(user.Email))
         {
-            EmailOptions config = _options.Value;
-
-            if (string.IsNullOrWhiteSpace(config.ResendApiKey) || string.IsNullOrWhiteSpace(config.FromAddress))
-            {
-                return Result<bool>.Fail("Email is not configured (missing Resend API key or From address).");
-            }
-
-            if (string.IsNullOrWhiteSpace(user.Email))
-            {
-                return Result<bool>.Fail("User has no email address to send a link to.");
-            }
-
-            string html = BuildRecurrenceReminderHtml(user.UserName ?? user.Email, courseName, trainingUrl, logoUrl, accentColorHex);
-
-            HttpRequestMessage request = new(HttpMethod.Post, "emails")
-            {
-                Content = JsonContent.Create(new
-                {
-                    from = $"{config.FromName} <{config.FromAddress}>",
-                    to = new[] { user.Email },
-                    subject = $"Time to retake: {courseName}",
-                    html
-                })
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ResendApiKey);
-
-            HttpResponseMessage response = await _httpClient.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                string body = await response.Content.ReadAsStringAsync();
-                _logger.LogError("Resend email send failed ({StatusCode}): {Body}", response.StatusCode, body);
-                return Result<bool>.Fail($"Email provider returned {(int)response.StatusCode}.");
-            }
-
-            return Result<bool>.Ok(true);
+            return Result<bool>.Fail("User has no email address to send a link to.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Exception sending course recurrence reminder email to {UserId}", user.Id);
-            return Result<bool>.Fail(ex.Message);
-        }
+
+        string html = BuildRecurrenceReminderHtml(user.UserName ?? user.Email, courseName, trainingUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Time to retake: {courseName}", html);
     }
 
     public async Task<Result<bool>> SendTwoFactorCodeEmailAsync(UserProfile user, string code)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a code to.");
+        }
+
+        string html = BuildTwoFactorCodeHtml(code);
+
+        return await SendResendEmailAsync(user.Id, user.Email, "Your Lanyard sign-in code", html);
+    }
+
+    // Single decision point for the Resend HTTP call - the config check, request shape,
+    // auth header, and error handling used to be copy-pasted into each Send*Async method above.
+    private async Task<Result<bool>> SendResendEmailAsync(string userId, string toEmail, string subject, string html)
     {
         try
         {
@@ -128,20 +70,13 @@ public class EmailService : IEmailService
                 return Result<bool>.Fail("Email is not configured (missing Resend API key or From address).");
             }
 
-            if (string.IsNullOrWhiteSpace(user.Email))
-            {
-                return Result<bool>.Fail("User has no email address to send a code to.");
-            }
-
-            string html = BuildTwoFactorCodeHtml(code);
-
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
                 Content = JsonContent.Create(new
                 {
                     from = $"{config.FromName} <{config.FromAddress}>",
-                    to = new[] { user.Email },
-                    subject = "Your Lanyard sign-in code",
+                    to = new[] { toEmail },
+                    subject,
                     html
                 })
             };
@@ -160,7 +95,7 @@ public class EmailService : IEmailService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception sending two-factor code email to {UserId}", user.Id);
+            _logger.LogError(ex, "Exception sending email to {UserId}", userId);
             return Result<bool>.Fail(ex.Message);
         }
     }

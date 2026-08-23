@@ -1,0 +1,8 @@
+.edit-user-dialog ::deep .edit-user-field {
+    width: 100%;
+}
+
+.edit-user-dialog ::deep .edit-user-spinner {
+    width: 16px;
+    height: 16px;
+}

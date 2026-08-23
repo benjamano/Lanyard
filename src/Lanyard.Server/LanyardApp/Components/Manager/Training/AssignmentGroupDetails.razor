@@ -6,7 +6,7 @@
     {
         <div class="assignment-group-item">
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px" Wrap="true">
-                <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
+                <FluentBadge Content="@assignment.GetStatusLabel()" Color="@assignment.GetStatusColor()" Appearance="BadgeAppearance.Filled" />
                 <FluentText>Assigned @assignment.AssignedDate.ToString("d MMM yyyy")</FluentText>
                 @if (assignment.DueDate is not null)
                 {
@@ -32,21 +32,4 @@
     [Parameter]
     public RenderFragment<CourseAssignment>? ActionsTemplate { get; set; }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Completed => "Completed",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Completed => BadgeColor.Success,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
 }

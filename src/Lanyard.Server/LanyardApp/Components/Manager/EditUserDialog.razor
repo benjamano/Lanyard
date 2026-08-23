@@ -1,7 +1,6 @@
 @using System.ComponentModel.DataAnnotations
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
-@using System.Linq.Expressions
 
 @inject INotificationService ToastService
 
@@ -15,50 +14,48 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
-        <EditForm EditContext="@_editContext" OnValidSubmit="HandleSave">
-            <DataAnnotationsValidator />
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
-                <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true"
-                                 Style="width: 100%;" Message="@GetValidationMessage(() => model.FirstName)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextInput>
-                <FluentTextInput @bind-Value="model.LastName" Label="Last Name" Required="true"
-                                 Style="width: 100%;" Message="@GetValidationMessage(() => model.LastName)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                </FluentTextInput>
-                <FluentTextInput @bind-Value="model.PhoneNumber" Label="Phone Number"
-                                 TextInputType="TextInputType.Telephone" Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.PhoneNumber)"
-                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
-                </FluentTextInput>
-                <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth" Label="Date of Birth"
-                                  Style="width: 100%;" Message="@GetValidationMessage(() => model.DateOfBirth)"
-                                  MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                </FluentDatePicker>
+        <div class="edit-user-dialog">
+            <EditForm EditContext="@_editContext" OnValidSubmit="HandleSave">
+                <DataAnnotationsValidator />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
+                    <FluentTextInput @bind-Value="model.FirstName" Label="First Name" Required="true"
+                                     Class="edit-user-field" Message="@_editContext.GetValidationMessage(() => model.FirstName)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextInput>
+                    <FluentTextInput @bind-Value="model.LastName" Label="Last Name" Required="true"
+                                     Class="edit-user-field" Message="@_editContext.GetValidationMessage(() => model.LastName)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                    </FluentTextInput>
+                    <FluentTextInput @bind-Value="model.PhoneNumber" Label="Phone Number"
+                                     TextInputType="TextInputType.Telephone" Class="edit-user-field"
+                                     Message="@_editContext.GetValidationMessage(() => model.PhoneNumber)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                    </FluentTextInput>
 
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
-                    <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
-                                  Disabled="@isSubmitting" IconStart="@(new Icons.Regular.Size20.Save())">
-                        @if (isSubmitting)
-                        {
-                            <FluentSpinner Style="width: 16px; height: 16px;" />
-                            <span class="ms-2">Saving...</span>
-                        }
-                        else
-                        {
-                            <span>Save</span>
-                        }
-                    </FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
-                                  Disabled="@isSubmitting">
-                        Cancel
-                    </FluentButton>
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      Disabled="@isSubmitting" IconStart="@(new Icons.Regular.Size20.Save())">
+                            @if (isSubmitting)
+                            {
+                                <FluentSpinner Class="edit-user-spinner" />
+                                <span class="ms-2">Saving...</span>
+                            }
+                            else
+                            {
+                                <span>Save</span>
+                            }
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                      Disabled="@isSubmitting">
+                            Cancel
+                        </FluentButton>
+                    </FluentStack>
                 </FluentStack>
-            </FluentStack>
-        </EditForm>
+            </EditForm>
+        </div>
     </ChildContent>
 </FluentDialogBody>
 
@@ -114,12 +111,6 @@
         await Dialog.CancelAsync();
     }
 
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
-    }
-
     private class EditUserModel
     {
         [Required(ErrorMessage = "First Name is required.")]
@@ -130,7 +121,5 @@
 
         [Phone(ErrorMessage = "Invalid phone number.")]
         public string? PhoneNumber { get; set; }
-
-        public DateTime? DateOfBirth { get; set; }
     }
 }

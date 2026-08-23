@@ -5,10 +5,8 @@
 
 <PageTitle>Login</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center"
-             HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
-
-    <FluentCard Style="width: 300px; max-width: 90vw; padding: 32px;">
+<AuthPageShell Title="Please Login">
+    <HeaderContent>
         @if (SelectedAccentColor is not null)
         {
             <div class="login-accent-bar" style="@AccentBarStyle"></div>
@@ -18,14 +16,9 @@
         {
             <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" onerror="this.style.display='none'" />
         }
-
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
-                     HorizontalAlignment="HorizontalAlignment.Center">
-            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
-                        Style="text-align: center; margin-bottom: 8px;">
-                Please Login
-            </FluentText>
-
+    </HeaderContent>
+    <ChildContent>
+        <div class="login-fields">
             @if (!string.IsNullOrEmpty(ErrorMessage))
             {
                 <FluentMessageBar Intent="MessageBarIntent.Error">
@@ -39,12 +32,12 @@
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
                              HorizontalAlignment="HorizontalAlignment.Center">
                     <FluentTextInput Name="username" Label="Username or Email" Required="true"
-                                     Placeholder="Enter your username or email" Style="width: 100%;">
+                                     Placeholder="Enter your username or email" Class="login-full-width">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
                     </FluentTextInput>
 
                     <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
-                                     Required="true" Placeholder="Enter your password" Style="width: 100%;">
+                                     Required="true" Placeholder="Enter your password" Class="login-full-width">
                         <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                     </FluentTextInput>
 
@@ -52,7 +45,7 @@
                     {
                         <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
                                       Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
-                                      ValueChanged="@(item => OnLocationChanged(item))" Style="width: 100%;"
+                                      ValueChanged="@(item => OnLocationChanged(item))" Class="login-full-width"
                                       Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
                                       OptionValue="@(option => option.LocationId)" />
                     }
@@ -62,7 +55,7 @@
                     }
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                                 Style="margin-top: 8px;">
+                                 Class="login-submit-row">
                         <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
                                       BackgroundColor="@SelectedAccentColor"
                                       Color="@(SelectedAccentColor is null ? null : "white")">
@@ -73,12 +66,12 @@
                 </FluentStack>
             </form>
 
-            <FluentText Align="TextAlign.Center" Size="TextSize.Size200" Style="text-align: center;">
+            <FluentText Align="TextAlign.Center" Size="TextSize.Size200">
                 <a href="/privacy">Privacy Policy</a>
             </FluentText>
-        </FluentStack>
-    </FluentCard>
-</FluentStack>
+        </div>
+    </ChildContent>
+</AuthPageShell>
 
 @code {
     [SupplyParameterFromQuery(Name = "returnUrl")]

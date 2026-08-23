@@ -329,22 +329,25 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
+// Both IClientSecretValidator and ILoggerFactory are app-wide singletons, so resolving them once
+// here - rather than via context.RequestServices inside the request delegate below - avoids a
+// per-request DI resolve on every SignalR connection attempt without changing behavior.
+IClientSecretValidator websocketGateValidator = app.Services.GetRequiredService<IClientSecretValidator>();
+ILogger websocketGateLogger = app.Services
+    .GetRequiredService<ILoggerFactory>()
+    .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
+
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/websocket"))
     {
-        IClientSecretValidator validator = context.RequestServices.GetRequiredService<IClientSecretValidator>();
-        ILogger logger = context.RequestServices
-            .GetRequiredService<ILoggerFactory>()
-            .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
-
         string? providedSecret = context.Request.Query["secret"].ToString();
         string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         // Delegates to the same decision point the client REST endpoints use
         // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
         // unconfigured-secret case can never be decided differently here than there.
-        if (!ClientRequestAuthorization.EvaluateAndLog(validator, providedSecret, logger, remoteIp, context.Request.Path.ToString()))
+        if (!ClientRequestAuthorization.EvaluateAndLog(websocketGateValidator, providedSecret, websocketGateLogger, remoteIp, context.Request.Path.ToString()))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Invalid or missing client shared secret.");

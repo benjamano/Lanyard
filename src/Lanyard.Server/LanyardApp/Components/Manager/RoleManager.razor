@@ -2,7 +2,6 @@
 @using Lanyard.Application.Services.ApplicationRoles
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.Models
-@using System.Linq.Expressions
 
 @inject ApplicationRolesService _rApi
 @inject ISecurityService _securityService
@@ -73,7 +72,7 @@
                                                      Label="Role Name"
                                                      Required="true"
                                                      Style="width: 100%;"
-                                                     Message="@GetValidationMessage(() => model.RoleName)"
+                                                     Message="@_editContext.GetValidationMessage(() => model.RoleName)"
                                                      MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
                                                      MessageState="MessageState.Error" />
 
@@ -221,12 +220,6 @@
         {
             await OnRolesChanged.InvokeAsync(roles);
         }
-    }
-
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class CreateNewRolesModel

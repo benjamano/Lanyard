@@ -10,17 +10,9 @@
 
 <PageTitle>Verify your identity</PageTitle>
 
-<FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.Center"
-             HorizontalAlignment="HorizontalAlignment.Center" Style="min-height: 70vh; padding: 16px;">
-
-    <FluentCard Style="width: 340px; max-width: 90vw; padding: 32px;">
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24"
-                     HorizontalAlignment="HorizontalAlignment.Center">
-            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold"
-                        Style="text-align: center;">
-                Verify your identity
-            </FluentText>
-
+<AuthPageShell Title="Verify your identity">
+    <ChildContent>
+        <div class="verify2fa-fields">
             @if (!string.IsNullOrEmpty(ErrorMessage))
             {
                 <FluentMessageBar Intent="MessageBarIntent.Error">@ErrorMessage</FluentMessageBar>
@@ -53,7 +45,7 @@
                         <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
                         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                         <input type="hidden" name="locationId" value="@LocationId" />
-                        <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Submit" Style="width: 100%;">
+                        <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Submit" Class="verify2fa-full-width">
                             Send code to my email
                         </FluentButton>
                     </form>
@@ -70,7 +62,7 @@
                         <FluentTextInput Name="code" Label="@(useRecoveryCode ? "Recovery code" : "Verification code")"
                                          Required="true"
                                          Placeholder="@(useRecoveryCode ? "Enter a recovery code" : "6-digit code")"
-                                         Style="width: 100%;">
+                                         Class="verify2fa-full-width">
                             <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
                         </FluentTextInput>
 
@@ -79,7 +71,7 @@
                             <FluentCheckbox Name="rememberMachine" Label="Remember this device for 30 days" />
                         }
 
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Style="margin-top: 8px;">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Class="verify2fa-submit-btn">
                             <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
                             Verify
                         </FluentButton>
@@ -90,9 +82,9 @@
                     @(useRecoveryCode ? "Use a verification code instead" : "Use a recovery code instead")
                 </FluentButton>
             }
-        </FluentStack>
-    </FluentCard>
-</FluentStack>
+        </div>
+    </ChildContent>
+</AuthPageShell>
 
 @code {
     [SupplyParameterFromQuery(Name = "returnUrl")]

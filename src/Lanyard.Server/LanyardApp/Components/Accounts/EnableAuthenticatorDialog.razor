@@ -20,43 +20,45 @@
         }
         else
         {
-            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-                <FluentText>
-                    Scan this QR code with your authenticator app (e.g. Google Authenticator, Authy), or enter the key manually.
-                </FluentText>
+            <div class="enable-authenticator-dialog">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                    <FluentText>
+                        Scan this QR code with your authenticator app (e.g. Google Authenticator, Authy), or enter the key manually.
+                    </FluentText>
 
-                <img src="@enrollment.QrCodeDataUri" alt="Authenticator QR code" style="width: 200px; height: 200px; align-self: center;" />
+                    <img src="@enrollment.QrCodeDataUri" alt="Authenticator QR code" class="qr-code-image" />
 
-                <FluentText Style="text-align: center; font-family: monospace;">@enrollment.SharedKey</FluentText>
+                    <FluentText Class="shared-key-text">@enrollment.SharedKey</FluentText>
 
-                <EditForm Model="@model" OnValidSubmit="HandleConfirm">
-                    <DataAnnotationsValidator />
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
-                        <FluentTextInput @bind-Value="model.Code" Label="Verification Code" Required="true"
-                                         Placeholder="6-digit code" Style="width: 100%;"
-                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
-                        </FluentTextInput>
+                    <EditForm Model="@model" OnValidSubmit="HandleConfirm">
+                        <DataAnnotationsValidator />
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                            <FluentTextInput @bind-Value="model.Code" Label="Verification Code" Required="true"
+                                             Placeholder="6-digit code" Class="enable-authenticator-field"
+                                             MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
+                            </FluentTextInput>
 
-                        <FluentStack Orientation="Orientation.Horizontal">
-                            <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Disabled="@isSubmitting">
-                                @if (isSubmitting)
-                                {
-                                    <FluentSpinner Style="width: 16px; height: 16px;" />
-                                    <span class="ms-2">Verifying...</span>
-                                }
-                                else
-                                {
-                                    <span>Verify and Enable</span>
-                                }
-                            </FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isSubmitting">
-                                Cancel
-                            </FluentButton>
+                            <FluentStack Orientation="Orientation.Horizontal">
+                                <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <FluentSpinner Class="enable-authenticator-spinner" />
+                                        <span class="ms-2">Verifying...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Verify and Enable</span>
+                                    }
+                                </FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isSubmitting">
+                                    Cancel
+                                </FluentButton>
+                            </FluentStack>
                         </FluentStack>
-                    </FluentStack>
-                </EditForm>
-            </FluentStack>
+                    </EditForm>
+                </FluentStack>
+            </div>
         }
     </ChildContent>
 </FluentDialogBody>

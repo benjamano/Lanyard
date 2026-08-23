@@ -48,13 +48,13 @@
         else
         {
             <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
-                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => HasExpandableDetails(g))">
+                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
                     <TemplateColumn Title="Person">
                         @context.Label
                     </TemplateColumn>
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context.Primary)" Color="@GetStatusColor(context.Primary)"
+                        <FluentBadge Content="@context.Primary.GetStatusLabel()" Color="@context.Primary.GetStatusColor()"
                                      Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
@@ -126,27 +126,10 @@
 
     private List<TrainingAssignmentGroup> groupedAssignments = [];
 
-    // Built once whenever assignments changes, rather than recomputed on every render (a plain
-    // `=>` property was here originally) - FluentDataGrid tracks which row is expanded by the
-    // TrainingAssignmentGroup instance itself, and Blazor auto-rerenders a component after any
-    // event handler on it completes (e.g. clicking any button in a row), so a property that
-    // rebuilds fresh instances every render silently collapsed every expanded row on the very
-    // next click, anywhere on the page.
     private void RebuildGroupedAssignments()
     {
-        groupedAssignments = assignments
-            .GroupBy(a => a.UserId)
-            .Select(g => new TrainingAssignmentGroup
-            {
-                Label = GetUserName(g.Key),
-                Assignments = g.OrderByDescending(x => x.AssignedDate).ToList()
-            })
-            .OrderBy(g => g.Label)
-            .ToList();
+        groupedAssignments = TrainingAssignmentGroup.BuildGroups(assignments, a => a.UserId, g => GetUserName(g.Key));
     }
-
-    private static bool HasExpandableDetails(TrainingAssignmentGroup group) =>
-        group.Assignments.Count > 1 || group.Primary.Attempts.Count > 0;
 
     protected override Task OnInitializedAsync() => LoadCoursesAsync();
 
@@ -246,34 +229,16 @@
         return latest is null ? "-" : $"{latest.ScorePercent}%";
     }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Completed => "Completed",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Completed => BadgeColor.Success,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
-
     private async Task CopyLinkAsync(CourseAssignment assignment)
     {
         string link = $"{_navigationManager.BaseUri}training/{assignment.Id}";
+        bool success = await JS.TryCopyToClipboardAsync(link);
 
-        try
+        if (success)
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", link);
             _toastService.ShowSuccess("Link copied to clipboard.");
         }
-        catch (Exception)
+        else
         {
             _toastService.ShowError("Could not copy the link. Your browser may be blocking clipboard access.");
         }

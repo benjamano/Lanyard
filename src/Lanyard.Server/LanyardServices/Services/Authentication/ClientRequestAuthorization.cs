@@ -19,6 +19,12 @@ namespace Lanyard.Application.Services.Authentication
         public const string SecretHeaderName = "X-Lanyard-Client-Secret";
         public const string SecretQueryName = "secret";
 
+        // ILoggerFactory is an app-wide singleton, so the logger it produces for this fixed
+        // category name is the same on every call - resolving and creating it fresh per request
+        // was pure overhead on the kiosk file/audio endpoints, which anonymous clients hit
+        // repeatedly. Cached lazily rather than injected, since this stays a static helper.
+        private static ILogger? _logger;
+
         public static bool IsAuthorized(HttpContext httpContext, IClientSecretValidator clientSecretValidator)
         {
             if (httpContext.User?.Identity?.IsAuthenticated == true)
@@ -33,7 +39,7 @@ namespace Lanyard.Application.Services.Authentication
                 providedSecret = httpContext.Request.Query[SecretQueryName].ToString();
             }
 
-            ILogger logger = httpContext.RequestServices
+            ILogger logger = _logger ??= httpContext.RequestServices
                 .GetRequiredService<ILoggerFactory>()
                 .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
 
