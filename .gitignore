@@ -424,3 +424,4 @@ src/Lanyard.Server/LanyardApp/appsettings.json
 docs/superpowers/plans/
 **/binVerifyOnly --no-restore/
 .claude/worktrees/
+docs/
