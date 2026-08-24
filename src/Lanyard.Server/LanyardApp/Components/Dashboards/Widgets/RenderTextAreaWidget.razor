@@ -1,26 +1,146 @@
+@implements IDisposable
 @inject IDashboardService DashboardService
+@inject IJSRuntime JS
 
-<FluentCard Appearance="CardAppearance.Subtle" 
+<FluentCard Appearance="CardAppearance.Subtle"
             Padding="@Padding.All0"
             Height="100%">
-    <FluentTextArea Class="text-area-widget-content w-100 h-100 d-flex"
-                    Width="100%"
-                    Height="100%"
-                    @bind-Value="Widget.Content"
-                    @bind-Value:after="SaveContentAsync" />
+    @if (PreviewMode)
+    {
+        <div class="text-area-widget-display ql-editor">
+            @((MarkupString)_sanitizer.Sanitize(Widget.Content ?? string.Empty))
+        </div>
+    }
+    else
+    {
+        <div class="text-area-widget-editor-host" @ref="_editorHostRef">
+            <BlazoredTextEditor @ref="_editor" Placeholder="Widget content...">
+                <ToolbarContent>
+                    <span class="ql-formats">
+                        <button class="ql-bold"></button>
+                        <button class="ql-italic"></button>
+                        <button class="ql-underline"></button>
+                    </span>
+                    <span class="ql-formats">
+                        <button class="ql-list" value="ordered"></button>
+                        <button class="ql-list" value="bullet"></button>
+                    </span>
+                    <span class="ql-formats">
+                        <button type="button" class="ql-divider-insert" @onclick="InsertDividerAsync"
+                                title="Insert horizontal spacer">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.LineHorizontal1())" />
+                        </button>
+                    </span>
+                </ToolbarContent>
+                <EditorContent></EditorContent>
+            </BlazoredTextEditor>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size16.Save())"
+                          OnClick="SaveContentAsync">
+                Save
+            </FluentButton>
+        </div>
+    }
 </FluentCard>
 
 @code {
     [Parameter]
-    public required TextAreaWidget Widget { get; set; } 
+    public required TextAreaWidget Widget { get; set; }
+
+    [Parameter]
+    public bool PreviewMode { get; set; }
+
+    // Rendered content comes from the WYSIWYG editor as raw HTML, which is fundamentally
+    // untrusted the moment it's read back out of storage - sanitize at the point it becomes
+    // live markup rather than trusting whatever produced/persisted it.
+    private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
+
+    private BlazoredTextEditor? _editor;
+    private ElementReference _editorHostRef;
+    private Guid? _loadedWidgetId;
+    private string _lastSavedContent = string.Empty;
+    private Timer? _autoSaveTimer;
+
+    // BlazoredTextEditor (v1.1.3) does not accept its initial content as a bound parameter -
+    // content must be pushed in via LoadHTMLContent() after the component has mounted. See the
+    // same pattern in CourseEditor.razor.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!PreviewMode && _editor is not null && _loadedWidgetId != Widget.Id)
+        {
+            try
+            {
+                await _editor.LoadHTMLContent(Widget.Content ?? string.Empty);
+                _loadedWidgetId = Widget.Id;
+                _lastSavedContent = Widget.Content ?? string.Empty;
+                StartAutoSaveTimer();
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                StateHasChanged();
+            }
+        }
+    }
 
     private async Task SaveContentAsync()
     {
-        if (Widget.DashboardId == Guid.Empty)
+        if (_editor is null || Widget.DashboardId == Guid.Empty)
         {
             return;
         }
 
+        string content = await _editor.GetHTML();
+        Widget.Content = content;
         await DashboardService.SaveWidgetAsync(Widget);
+        _lastSavedContent = content;
+    }
+
+    // Explicit Save gives immediate feedback, but BlazoredTextEditor has no bindable
+    // change event to hook a debounced auto-save off - poll instead, so edits aren't lost
+    // if the user navigates away or closes the editor without clicking Save.
+    private void StartAutoSaveTimer()
+    {
+        _autoSaveTimer?.Dispose();
+        _autoSaveTimer = new Timer(async _ => await AutoSaveIfChangedAsync(), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    private Task AutoSaveIfChangedAsync()
+    {
+        return InvokeAsync(async () =>
+        {
+            if (PreviewMode || _editor is null || Widget.DashboardId == Guid.Empty)
+            {
+                return;
+            }
+
+            string current;
+
+            try
+            {
+                current = await _editor.GetHTML();
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                return;
+            }
+
+            if (current == _lastSavedContent)
+            {
+                return;
+            }
+
+            Widget.Content = current;
+            await DashboardService.SaveWidgetAsync(Widget);
+            _lastSavedContent = current;
+        });
+    }
+
+    private async Task InsertDividerAsync()
+    {
+        await JS.InvokeVoidAsync("kioskWidgetEditor.insertDivider", _editorHostRef);
+    }
+
+    public void Dispose()
+    {
+        _autoSaveTimer?.Dispose();
     }
 }

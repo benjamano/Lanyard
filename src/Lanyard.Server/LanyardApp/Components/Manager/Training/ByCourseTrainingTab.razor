@@ -47,43 +47,65 @@
         }
         else
         {
-            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
-                            RowSize="@DataGridRowSize.Medium">
+            <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
+                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
                     <TemplateColumn Title="Person">
-                        @GetUserName(context.UserId)
+                        @context.Label
                     </TemplateColumn>
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                        <FluentBadge Content="@context.Primary.GetStatusLabel()" Color="@context.Primary.GetStatusColor()"
                                      Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
-                        @GetLatestScore(context)
+                        @GetLatestScore(context.Primary)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                        @(context.Primary.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                     <TemplateColumn Title="">
-                        <div class="assignment-row-actions">
+                        <div class="assignment-row-actions" @onclick:stopPropagation="true">
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
                                           Tooltip="Copy link to this assignment" Title="Copy link to this assignment"
-                                          OnClick="@(() => CopyLinkAsync(context))" />
+                                          OnClick="@(() => CopyLinkAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
                                           Tooltip="Edit due date" Title="Edit due date"
-                                          OnClick="@(() => OpenEditDueDateDialogAsync(context))" />
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
                                           Tooltip="View timing" Title="View timing"
-                                          OnClick="@(() => OpenTimingDialogAsync(context))" />
+                                          OnClick="@(() => OpenTimingDialogAsync(context.Primary))" />
                             <FluentButton Appearance="ButtonAppearance.Outline"
                                           IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
                                           Tooltip="Unassign" Title="Unassign"
-                                          OnClick="@(() => UnassignAsync(context))" />
+                                          OnClick="@(() => UnassignAsync(context.Primary))" />
                         </div>
                     </TemplateColumn>
                 </ChildContent>
+                <RowDetails>
+                    <AssignmentGroupDetails Assignments="@context.Assignments">
+                        <ActionsTemplate Context="assignment">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Link())" IconOnly="true"
+                                          Tooltip="Copy link to this assignment" Title="Copy link to this assignment"
+                                          OnClick="@(() => CopyLinkAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.CalendarEdit())" IconOnly="true"
+                                          Tooltip="Edit due date" Title="Edit due date"
+                                          OnClick="@(() => OpenEditDueDateDialogAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(assignment))" />
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.PersonDelete())" IconOnly="true"
+                                          Tooltip="Unassign" Title="Unassign"
+                                          OnClick="@(() => UnassignAsync(assignment))" />
+                        </ActionsTemplate>
+                    </AssignmentGroupDetails>
+                </RowDetails>
                 <EmptyContent>
                     No one is assigned to this course yet.
                 </EmptyContent>
@@ -101,6 +123,13 @@
     private bool isLoadingAssignments;
     private bool scopeFailed;
     private LocationScope? currentScope;
+
+    private List<TrainingAssignmentGroup> groupedAssignments = [];
+
+    private void RebuildGroupedAssignments()
+    {
+        groupedAssignments = TrainingAssignmentGroup.BuildGroups(assignments, a => a.UserId, g => GetUserName(g.Key));
+    }
 
     protected override Task OnInitializedAsync() => LoadCoursesAsync();
 
@@ -160,6 +189,7 @@
         if (selectedCourseId == Guid.Empty)
         {
             assignments = [];
+            RebuildGroupedAssignments();
             return;
         }
 
@@ -170,6 +200,7 @@
         if (scope is null)
         {
             assignments = [];
+            RebuildGroupedAssignments();
             isLoadingAssignments = false;
             return;
         }
@@ -186,6 +217,7 @@
             assignments = result.Data;
         }
 
+        RebuildGroupedAssignments();
         isLoadingAssignments = false;
     }
 
@@ -197,34 +229,16 @@
         return latest is null ? "-" : $"{latest.ScorePercent}%";
     }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Completed => "Completed",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Completed => BadgeColor.Success,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
-
     private async Task CopyLinkAsync(CourseAssignment assignment)
     {
         string link = $"{_navigationManager.BaseUri}training/{assignment.Id}";
+        bool success = await JS.TryCopyToClipboardAsync(link);
 
-        try
+        if (success)
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", link);
             _toastService.ShowSuccess("Link copied to clipboard.");
         }
-        catch (Exception)
+        else
         {
             _toastService.ShowError("Could not copy the link. Your browser may be blocking clipboard access.");
         }

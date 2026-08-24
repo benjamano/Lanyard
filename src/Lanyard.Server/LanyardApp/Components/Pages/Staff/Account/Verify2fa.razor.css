@@ -1,0 +1,7 @@
+.verify2fa-fields ::deep .verify2fa-full-width {
+    width: 100%;
+}
+
+.verify2fa-fields ::deep .verify2fa-submit-btn {
+    margin-top: 8px;
+}

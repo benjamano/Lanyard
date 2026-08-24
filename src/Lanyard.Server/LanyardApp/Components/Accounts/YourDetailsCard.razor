@@ -1,5 +1,4 @@
 ﻿@using Lanyard.Application.Services.Authentication
-@using System.Linq.Expressions
 @inject INotificationService ToastService
 
 <EditForm EditContext="@_editContext">
@@ -21,7 +20,7 @@
                                 Required="true"
                                 Placeholder="Enter your first name"
                                 Width="100%"
-                                Message="@GetValidationMessage(() => model.FirstName)"
+                                Message="@_editContext.GetValidationMessage(() => model.FirstName)"
                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
                                 MessageState="MessageState.Error">
                 <EndTemplate>
@@ -33,7 +32,7 @@
                                 Required="true"
                                 Placeholder="Enter your last name"
                                 Width="100%"
-                                Message="@GetValidationMessage(() => model.LastName)"
+                                Message="@_editContext.GetValidationMessage(() => model.LastName)"
                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
                                 MessageState="MessageState.Error">
                 <EndTemplate>
@@ -83,12 +82,6 @@
 
             ToastService.ShowSuccess("Details Saved!");
         }
-    }
-
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class UserDetailsModel

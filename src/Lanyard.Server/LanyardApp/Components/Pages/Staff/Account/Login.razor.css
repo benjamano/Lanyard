@@ -12,3 +12,11 @@
     margin: 0 auto 8px;
     object-fit: contain;
 }
+
+.login-fields ::deep .login-full-width {
+    width: 100%;
+}
+
+.login-fields ::deep .login-submit-row {
+    margin-top: 8px;
+}

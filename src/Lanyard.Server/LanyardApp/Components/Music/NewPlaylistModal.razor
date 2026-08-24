@@ -1,5 +1,4 @@
 ﻿@using System.ComponentModel.DataAnnotations
-@using System.Linq.Expressions
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
@@ -23,7 +22,7 @@
                                  Required="true"
                                  Placeholder="My Awesome Playlist"
                                  Style="width: 100%;"
-                                 Message="@GetValidationMessage(() => model.Name)"
+                                 Message="@_editContext.GetValidationMessage(() => model.Name)"
                                  MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
                                  MessageState="MessageState.Error">
                     <FluentIcon Value="@(new Icons.Regular.Size16.MusicNote2())" Slot="start" />
@@ -110,12 +109,6 @@
     private async Task CancelDialog()
     {
         await Dialog.CancelAsync();
-    }
-
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
     }
 
     private class NewPlaylistModel

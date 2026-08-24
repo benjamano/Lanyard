@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Training
 @using Lanyard.Infrastructure.Enum
+@using Lanyard.App.Components.Manager.Training
 
 @inject ICourseAssignmentService _courseAssignmentService
 
@@ -26,30 +27,37 @@
     }
     else
     {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="mt-3">
-            @foreach (CourseAssignment assignment in assignments)
-            {
-                <div class="training-assignment-row" @onclick="@(() => OpenAssignment(assignment.Id))">
-                    <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center"
-                                 HorizontalAlignment="HorizontalAlignment.SpaceBetween" Wrap="true" Class="w-100 training-assignment-row-inner">
-                        <FluentText Weight="TextWeight.Bold" Class="training-assignment-name">@assignment.Course?.Name</FluentText>
-                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="12px" Wrap="true" Width="auto">
-                            @if (assignment.DueDate is not null)
-                            {
-                                <FluentText>Due @assignment.DueDate.Value.ToString("d MMM yyyy")</FluentText>
-                            }
-                            <FluentBadge Content="@GetStatusLabel(assignment)" Color="@GetStatusColor(assignment)" Appearance="BadgeAppearance.Filled" />
-                        </FluentStack>
-                    </FluentStack>
-                </div>
-            }
-        </FluentStack>
+        <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr" Class="w-100 mt-2"
+                        RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
+            <ChildContent>
+                <TemplateColumn Title="Course">
+                    <FluentButton Appearance="ButtonAppearance.Transparent" OnClick="@(() => OpenAssignment(context.Primary.Id))">
+                        @context.Label
+                    </FluentButton>
+                </TemplateColumn>
+                <TemplateColumn Title="Due Date">
+                    @(context.Primary.DueDate?.ToString("d MMM yyyy") ?? "-")
+                </TemplateColumn>
+                <TemplateColumn Title="Status">
+                    <FluentBadge Content="@context.Primary.GetStatusLabel()" Color="@context.Primary.GetStatusColor()" Appearance="BadgeAppearance.Filled" />
+                </TemplateColumn>
+            </ChildContent>
+            <RowDetails>
+                <AssignmentGroupDetails Assignments="@context.Assignments" />
+            </RowDetails>
+        </FluentDataGrid>
     }
 </FluentCard>
 
 @code {
     private List<CourseAssignment> assignments = [];
+    private List<TrainingAssignmentGroup> groupedAssignments = [];
     private bool isLoading;
+
+    private void RebuildGroupedAssignments()
+    {
+        groupedAssignments = TrainingAssignmentGroup.BuildGroups(assignments, a => a.CourseId, g => g.First().Course?.Name ?? "Unknown Course");
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -76,6 +84,7 @@
             assignments = result.Data;
         }
 
+        RebuildGroupedAssignments();
         isLoading = false;
     }
 
@@ -84,21 +93,4 @@
         _navigationManager.NavigateTo($"/training/{assignmentId}");
     }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Completed => "Completed",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Completed => BadgeColor.Success,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
 }

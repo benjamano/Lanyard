@@ -1,0 +1,27 @@
+.assignment-group-details {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px 16px;
+}
+
+.assignment-group-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.assignment-group-item + .assignment-group-item {
+    border-top: 1px solid var(--colorNeutralStroke2);
+    padding-top: 16px;
+}
+
+/* Matches the collapsed row's .assignment-row-actions in ByCourseTrainingTab.razor.css /
+   ByPersonTrainingTab.razor.css so the same icons use identical spacing whether the row is
+   expanded or collapsed - Blazor's CSS isolation scopes each .razor.css file independently, so
+   the class has to be duplicated here rather than shared. */
+.assignment-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}

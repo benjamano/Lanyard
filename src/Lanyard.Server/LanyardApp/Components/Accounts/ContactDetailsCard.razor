@@ -1,5 +1,4 @@
 ﻿@using Lanyard.Application.Services.Authentication
-@using System.Linq.Expressions
 @inject INotificationService ToastService
 
 <EditForm EditContext="@_editContext">
@@ -9,31 +8,13 @@
                             Label="Email Address"
                             TextInputType="TextInputType.Email"
                             Width="61%"
-                            Message="@GetValidationMessage(() => model.Email)"
+                            Message="@_editContext.GetValidationMessage(() => model.Email)"
                             MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
                             MessageState="MessageState.Error">
             <EndTemplate>
                 <FluentIcon Value="@(new Icons.Regular.Size16.Mail())" Slot="end" />
             </EndTemplate>
         </FluentTextInput>
-        <FluentTextInput @bind-Value="model.PhoneNumber"
-                            Label="Phone Number"
-                            TextInputType="TextInputType.Telephone"
-                            Width="61%"
-                            Message="@GetValidationMessage(() => model.PhoneNumber)"
-                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                            MessageState="MessageState.Error">
-            <EndTemplate>
-                <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="end" />
-            </EndTemplate>
-        </FluentTextInput>
-        <FluentDatePicker TValue="DateTime?" @bind-Value="model.DateOfBirth"
-                            Label="Date of Birth"
-                            Width="61%"
-                            Message="@GetValidationMessage(() => model.DateOfBirth)"
-                            MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))"
-                            MessageState="MessageState.Error">
-        </FluentDatePicker>
     </FluentStack>
 </EditForm>
 
@@ -56,8 +37,6 @@
         if (getResult.IsSuccess && getResult.Data is not null)
         {
             model.Email = getResult.Data.Email;
-            model.PhoneNumber = getResult.Data.PhoneNumber;
-            model.DateOfBirth = getResult.Data.DateOfBirth;
         }
     }
 
@@ -68,8 +47,6 @@
         if (getResult.IsSuccess && getResult.Data is not null)
         {
             getResult.Data.Email = model.Email;
-            getResult.Data.PhoneNumber = model.PhoneNumber;
-            getResult.Data.DateOfBirth = model.DateOfBirth;
 
             await _securityService.UpdateUserProfileAsync(getResult.Data);
 
@@ -77,20 +54,9 @@
         }
     }
 
-    private string? GetValidationMessage<T>(Expression<Func<T>> accessor)
-    {
-        FieldIdentifier fieldId = FieldIdentifier.Create(accessor);
-        return _editContext.GetValidationMessages(fieldId).FirstOrDefault();
-    }
-
     private class ContactDetailsModel
     {
         [EmailAddress(ErrorMessage = "Invalid email address.")]
         public string? Email { get; set; }
-
-        [Phone(ErrorMessage = "Invalid phone number.")]
-        public string? PhoneNumber { get; set; }
-
-        public DateTime? DateOfBirth { get; set; }
     }
 }

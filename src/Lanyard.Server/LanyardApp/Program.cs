@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using System.Reflection;
 using System.Security.Claims;
 using Lanyard.App.Services;
@@ -135,6 +136,18 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "Connection string 'DefaultConnection' is not configured. Set the "
         + "ConnectionStrings__DefaultConnection environment variable (production) or run the "
         + "local docker-compose Postgres for development.");
+}
+
+// Outside Development, kiosk clients authenticate to the file/audio endpoints and the
+// /websocket control hub with this shared secret and nothing else - there is no user login for
+// them to fall back to. Failing here means a misconfigured deploy never reaches a serving state,
+// instead of quietly running with every kiosk endpoint open to anyone who can reach the host.
+if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(builder.Configuration["Clients:SharedSecret"]))
+{
+    throw new InvalidOperationException(
+        "Clients:SharedSecret is not configured. Set the Clients__SharedSecret environment variable "
+        + "before starting the server outside Development - the client file/audio endpoints and the "
+        + "/websocket control hub must not run with kiosk authentication disabled.");
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
@@ -316,13 +329,25 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
+// Both IClientSecretValidator and ILoggerFactory are app-wide singletons, so resolving them once
+// here - rather than via context.RequestServices inside the request delegate below - avoids a
+// per-request DI resolve on every SignalR connection attempt without changing behavior.
+IClientSecretValidator websocketGateValidator = app.Services.GetRequiredService<IClientSecretValidator>();
+ILogger websocketGateLogger = app.Services
+    .GetRequiredService<ILoggerFactory>()
+    .CreateLogger("Lanyard.Application.Services.Authentication.ClientRequestAuthorization");
+
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/websocket"))
     {
-        IClientSecretValidator validator = context.RequestServices.GetRequiredService<IClientSecretValidator>();
+        string? providedSecret = context.Request.Query["secret"].ToString();
+        string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
-        if (validator.IsConfigured && !validator.IsValid(context.Request.Query["secret"].ToString()))
+        // Delegates to the same decision point the client REST endpoints use
+        // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
+        // unconfigured-secret case can never be decided differently here than there.
+        if (!ClientRequestAuthorization.EvaluateAndLog(websocketGateValidator, providedSecret, websocketGateLogger, remoteIp, context.Request.Path.ToString()))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Invalid or missing client shared secret.");
@@ -336,7 +361,7 @@ app.Use(async (context, next) =>
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers();
+app.MapControllers().RequireRateLimiting("ip-fixed");
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

@@ -1,0 +1,103 @@
+@using Lanyard.Application.Services.Authentication
+@using System.ComponentModel.DataAnnotations
+
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.LockOpen())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                Disable Two-Factor Authentication
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="disable-2fa-dialog">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                <FluentMessageBar Intent="MessageBarIntent.Warning">
+                    This will remove the extra sign-in step from your account. Enter your password to confirm.
+                </FluentMessageBar>
+
+                <EditForm Model="@model" OnValidSubmit="HandleDisable">
+                    <DataAnnotationsValidator />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                        <FluentTextInput @bind-Value="model.CurrentPassword" Label="Password" Required="true"
+                                         TextInputType="TextInputType.Password" Placeholder="Enter your password" Class="disable-2fa-field"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                            <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                          Disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <FluentSpinner Class="disable-2fa-spinner" />
+                                    <span class="ms-2">Disabling...</span>
+                                }
+                                else
+                                {
+                                    <span>Disable 2FA</span>
+                                }
+                            </FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog"
+                                          Disabled="@isSubmitting">
+                                Cancel
+                            </FluentButton>
+                        </FluentStack>
+                    </FluentStack>
+                </EditForm>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private bool isSubmitting;
+    private DisableTwoFactorModel model = new();
+
+    private async Task HandleDisable()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            Result<bool> result = await _securityService.DisableTwoFactorAsync(model.CurrentPassword);
+
+            if (result.IsSuccess)
+            {
+                await Dialog.CloseAsync(true);
+            }
+            else
+            {
+                ToastService.ShowError($"Failed to disable two-factor authentication: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error disabling two-factor authentication: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private class DisableTwoFactorModel
+    {
+        [Required(ErrorMessage = "Password is required.")]
+        [DataType(DataType.Password)]
+        public string CurrentPassword { get; set; } = string.Empty;
+    }
+}

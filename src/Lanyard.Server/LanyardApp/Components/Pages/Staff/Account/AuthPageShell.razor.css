@@ -1,0 +1,14 @@
+.auth-page-shell {
+    min-height: 70vh;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-page-shell ::deep .auth-page-shell-card {
+    width: 340px;
+    max-width: 90vw;
+    padding: 32px;
+}

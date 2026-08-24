@@ -1,0 +1,147 @@
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DTO
+
+@inject INotificationService ToastService
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    @if (status is null)
+    {
+        <FluentText>Loading...</FluentText>
+    }
+    else if (!status.IsEnabled)
+    {
+        <FluentText>Two-factor authentication is currently <strong>off</strong>.</FluentText>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.QrCode())"
+                          OnClick="OpenEnableAuthenticatorDialog">
+                Set Up Authenticator App
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.Mail())"
+                          OnClick="EnableEmail">
+                Enable Email Codes
+            </FluentButton>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentText>
+            Two-factor authentication is <strong>on</strong>, via @(status.HasAuthenticator ? "an authenticator app" : "email codes").
+        </FluentText>
+        <FluentText Size="TextSize.Size200" Color="Color.Disabled">
+            Recovery codes remaining: @status.RecoveryCodesRemaining
+        </FluentText>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.ArrowSync())"
+                          OnClick="RegenerateRecoveryCodes">
+                Regenerate Recovery Codes
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.LockOpen())"
+                          OnClick="OpenDisableDialog">
+                Disable 2FA
+            </FluentButton>
+        </FluentStack>
+    }
+</FluentStack>
+
+@code {
+    private TwoFactorStatusDto? status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatus();
+    }
+
+    private async Task LoadStatus()
+    {
+        Result<TwoFactorStatusDto> result = await _securityService.GetTwoFactorStatusAsync();
+        status = result.IsSuccess ? result.Data : new TwoFactorStatusDto();
+    }
+
+    private async Task OpenEnableAuthenticatorDialog()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<EnableAuthenticatorDialog>(options =>
+        {
+            options.Header.Title = "Set Up Authenticator App";
+            options.Width = "460px";
+            options.Modal = true;
+        });
+
+        if (result.Value is List<string> codes)
+        {
+            await LoadStatus();
+            StateHasChanged();
+
+            if (codes.Count > 0)
+            {
+                await ShowRecoveryCodes(codes);
+            }
+        }
+    }
+
+    private async Task EnableEmail()
+    {
+        Result<List<string>> result = await _securityService.EnableEmailTwoFactorAsync();
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to enable email codes: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Email codes enabled.");
+        await LoadStatus();
+        StateHasChanged();
+
+        if (result.Data is { Count: > 0 })
+        {
+            await ShowRecoveryCodes(result.Data);
+        }
+    }
+
+    private async Task RegenerateRecoveryCodes()
+    {
+        Result<List<string>> result = await _securityService.RegenerateRecoveryCodesAsync();
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            ToastService.ShowError($"Failed to regenerate recovery codes: {result.Error}");
+            return;
+        }
+
+        await ShowRecoveryCodes(result.Data);
+        await LoadStatus();
+        StateHasChanged();
+    }
+
+    private async Task ShowRecoveryCodes(List<string> codes)
+    {
+        await _dialogService.ShowDialogAsync<RecoveryCodesDialog>(options =>
+        {
+            options.Header.Title = "Save Your Recovery Codes";
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RecoveryCodesDialog.Codes), codes);
+        });
+    }
+
+    private async Task OpenDisableDialog()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<DisableTwoFactorDialog>(options =>
+        {
+            options.Header.Title = "Disable Two-Factor Authentication";
+            options.Width = "420px";
+            options.Modal = true;
+        });
+
+        if (result.Value is true)
+        {
+            ToastService.ShowSuccess("Two-factor authentication disabled.");
+            await LoadStatus();
+            StateHasChanged();
+        }
+    }
+}

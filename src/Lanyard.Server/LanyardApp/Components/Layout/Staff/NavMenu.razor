@@ -9,11 +9,14 @@
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
     <FluentNav UseSingleExpanded="true" Density="NavDensity.Medium">
-        <FluentStack Width="auto">
-            <CompanyLogo Url="@CompanyLogoUrl" />
-        </FluentStack>
+        @if (CompanyLogoUrl is not null)
+        {
+            <FluentStack Width="auto">
+                <CompanyLogo Url="@CompanyLogoUrl" />
+            </FluentStack>
 
-        <FluentDivider />
+            <FluentDivider />
+        }
 
         @if (_isAuthenticated)
         {
@@ -110,7 +113,7 @@
                             <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
                             <FluentText Weight="TextWeight.Bold">What's new in v@(_latestRelease.Version)</FluentText>
                         </FluentStack>
-                        <FluentText>@_latestRelease.Summary</FluentText>
+                        <FluentText Class="whats-new-summary" Title="@_latestRelease.Summary">@_latestRelease.Summary</FluentText>
                         <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@OpenReleaseNotesAsync">
                             More info
                         </FluentButton>

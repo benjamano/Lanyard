@@ -1,0 +1,130 @@
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Infrastructure.DTO
+@using System.ComponentModel.DataAnnotations
+
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.QrCode())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                Set Up Authenticator App
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        @if (enrollment is null)
+        {
+            <FluentText>Loading...</FluentText>
+        }
+        else
+        {
+            <div class="enable-authenticator-dialog">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+                    <FluentText>
+                        Scan this QR code with your authenticator app (e.g. Google Authenticator, Authy), or enter the key manually.
+                    </FluentText>
+
+                    <img src="@enrollment.QrCodeDataUri" alt="Authenticator QR code" class="qr-code-image" />
+
+                    <FluentText Class="shared-key-text">@enrollment.SharedKey</FluentText>
+
+                    <EditForm Model="@model" OnValidSubmit="HandleConfirm">
+                        <DataAnnotationsValidator />
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                            <FluentTextInput @bind-Value="model.Code" Label="Verification Code" Required="true"
+                                             Placeholder="6-digit code" Class="enable-authenticator-field"
+                                             MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.LockClosed())" Slot="start" />
+                            </FluentTextInput>
+
+                            <FluentStack Orientation="Orientation.Horizontal">
+                                <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit" Disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <FluentSpinner Class="enable-authenticator-spinner" />
+                                        <span class="ms-2">Verifying...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Verify and Enable</span>
+                                    }
+                                </FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isSubmitting">
+                                    Cancel
+                                </FluentButton>
+                            </FluentStack>
+                        </FluentStack>
+                    </EditForm>
+                </FluentStack>
+            </div>
+        }
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private AuthenticatorEnrollmentDto? enrollment;
+    private bool isSubmitting;
+    private ConfirmModel model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<AuthenticatorEnrollmentDto> result = await _securityService.BeginAuthenticatorEnrollmentAsync();
+
+        if (result.IsSuccess)
+        {
+            enrollment = result.Data;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to start enrollment: {result.Error}");
+            await Dialog.CancelAsync();
+        }
+    }
+
+    private async Task HandleConfirm()
+    {
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            Result<List<string>> result = await _securityService.ConfirmAuthenticatorEnrollmentAsync(model.Code);
+
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess("Authenticator app enabled.");
+                await Dialog.CloseAsync(result.Data ?? []);
+            }
+            else
+            {
+                ToastService.ShowError($"Failed to verify code: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error verifying code: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private class ConfirmModel
+    {
+        [Required(ErrorMessage = "Verification code is required.")]
+        [StringLength(6, MinimumLength = 6, ErrorMessage = "Enter the 6-digit code.")]
+        public string Code { get; set; } = string.Empty;
+    }
+}

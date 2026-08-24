@@ -1,0 +1,22 @@
+<div class="auth-page-shell">
+    <FluentCard Class="auth-page-shell-card">
+        @HeaderContent
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="24" HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentText Align="TextAlign.Center" Size="TextSize.Size600" Weight="TextWeight.Semibold">
+                @Title
+            </FluentText>
+            @ChildContent
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? HeaderContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

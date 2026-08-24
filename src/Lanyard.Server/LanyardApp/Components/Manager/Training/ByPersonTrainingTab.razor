@@ -22,27 +22,41 @@
         }
         else
         {
-            <FluentDataGrid Items="@assignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
-                            RowSize="@DataGridRowSize.Medium">
+            <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
+                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
-                    <PropertyColumn Property="@(x => x.Course!.Name)" Title="Course" Sortable="true" />
+                    <TemplateColumn Title="Course" Sortable="true">
+                        @context.Label
+                    </TemplateColumn>
                     <TemplateColumn Title="Status">
-                        <FluentBadge Content="@GetStatusLabel(context)" Color="@GetStatusColor(context)"
+                        <FluentBadge Content="@context.Primary.GetStatusLabel()" Color="@context.Primary.GetStatusColor()"
                                      Appearance="BadgeAppearance.Filled" />
                     </TemplateColumn>
                     <TemplateColumn Title="Latest Score">
-                        @GetLatestScore(context)
+                        @GetLatestScore(context.Primary)
                     </TemplateColumn>
                     <TemplateColumn Title="Due Date">
-                        @(context.DueDate?.ToString("d MMM yyyy") ?? "-")
+                        @(context.Primary.DueDate?.ToString("d MMM yyyy") ?? "-")
                     </TemplateColumn>
                     <TemplateColumn Title="">
-                        <FluentButton Appearance="ButtonAppearance.Outline"
-                                      IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
-                                      Tooltip="View timing" Title="View timing"
-                                      OnClick="@(() => OpenTimingDialogAsync(context))" />
+                        <div class="assignment-row-actions" @onclick:stopPropagation="true">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(context.Primary))" />
+                        </div>
                     </TemplateColumn>
                 </ChildContent>
+                <RowDetails>
+                    <AssignmentGroupDetails Assignments="@context.Assignments">
+                        <ActionsTemplate Context="assignment">
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.Timer())" IconOnly="true"
+                                          Tooltip="View timing" Title="View timing"
+                                          OnClick="@(() => OpenTimingDialogAsync(assignment))" />
+                        </ActionsTemplate>
+                    </AssignmentGroupDetails>
+                </RowDetails>
                 <EmptyContent>
                     This person has no training assigned.
                 </EmptyContent>
@@ -54,8 +68,14 @@
 @code {
     private IEnumerable<UserProfile> users = [];
     private List<CourseAssignment> assignments = [];
+    private List<TrainingAssignmentGroup> groupedAssignments = [];
     private string selectedUserId = string.Empty;
     private bool isLoading;
+
+    private void RebuildGroupedAssignments()
+    {
+        groupedAssignments = TrainingAssignmentGroup.BuildGroups(assignments, a => a.CourseId, g => g.First().Course?.Name ?? "Unknown Course");
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,6 +87,7 @@
         if (string.IsNullOrEmpty(selectedUserId))
         {
             assignments = [];
+            RebuildGroupedAssignments();
             return;
         }
 
@@ -83,6 +104,8 @@
         {
             assignments = result.Data;
         }
+
+        RebuildGroupedAssignments();
 
         isLoading = false;
     }
@@ -110,21 +133,4 @@
         return latest is null ? "-" : $"{latest.ScorePercent}%";
     }
 
-    private static string GetStatusLabel(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => "Not Started",
-        CourseAssignmentStatus.InProgress => "In Progress",
-        CourseAssignmentStatus.Completed => "Completed",
-        CourseAssignmentStatus.Overdue => "Overdue",
-        _ => "Unknown"
-    };
-
-    private static BadgeColor GetStatusColor(CourseAssignment assignment) => assignment.GetStatus() switch
-    {
-        CourseAssignmentStatus.NotStarted => BadgeColor.Subtle,
-        CourseAssignmentStatus.InProgress => BadgeColor.Informative,
-        CourseAssignmentStatus.Completed => BadgeColor.Success,
-        CourseAssignmentStatus.Overdue => BadgeColor.Danger,
-        _ => BadgeColor.Subtle
-    };
 }

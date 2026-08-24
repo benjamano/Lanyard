@@ -60,21 +60,16 @@ public class SignalRControlHub(
         }
 
         // Kiosk clients have no interactive user login, so they authenticate with the shared
-        // secret. When a secret is configured, reject any connection that does not present it -
-        // this is what stops an anonymous caller from driving clients by guessing a client-ID GUID.
-        if (_clientSecretValidator.IsConfigured)
+        // secret. Delegates to the same decision point the client REST endpoints use
+        // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
+        // unconfigured-secret case can never be decided differently here than there.
+        string providedSecret = httpContext?.Request.Query["secret"].ToString() ?? string.Empty;
+        string connectingIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+
+        if (!ClientRequestAuthorization.EvaluateAndLog(_clientSecretValidator, providedSecret, _logger, connectingIp, "/websocket"))
         {
-            string providedSecret = httpContext?.Request.Query["secret"].ToString() ?? string.Empty;
-
-            if (!_clientSecretValidator.IsValid(providedSecret))
-            {
-                string rejectedIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
-
-                _logger.LogWarning("Client connection from {IpAddress} rejected: missing or invalid shared secret", rejectedIp);
-
-                Context.Abort();
-                return;
-            }
+            Context.Abort();
+            return;
         }
 
         if (!Guid.TryParse(httpContext?.Request.Query["clientId"].ToString(), out Guid clientId))
