@@ -2,7 +2,7 @@
 @inject IDashboardService DashboardService
 @inject IJSRuntime JS
 
-<FluentCard Appearance="CardAppearance.Subtle"
+<FluentCard Appearance="CardAppearance.Outline"
             Padding="@Padding.All0"
             Height="100%">
     @if (PreviewMode)
@@ -13,7 +13,7 @@
     }
     else
     {
-        <div class="text-area-widget-editor-host" @ref="_editorHostRef">
+        <div class="text-area-widget-editor-host" @ref="_editorHostRef" @onfocusout="SaveContentAsync">
             <BlazoredTextEditor @ref="_editor" Placeholder="Widget content...">
                 <ToolbarContent>
                     <span class="ql-formats">
@@ -34,10 +34,6 @@
                 </ToolbarContent>
                 <EditorContent></EditorContent>
             </BlazoredTextEditor>
-            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size16.Save())"
-                          OnClick="SaveContentAsync">
-                Save
-            </FluentButton>
         </div>
     }
 </FluentCard>
@@ -65,7 +61,7 @@
     // same pattern in CourseEditor.razor.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!PreviewMode && _editor is not null && _loadedWidgetId != Widget.Id)
+        if (_editor is not null && _loadedWidgetId != Widget.Id)
         {
             try
             {
@@ -88,10 +84,16 @@
             return;
         }
 
-        string content = await _editor.GetHTML();
-        Widget.Content = content;
+        string html = await _editor.GetHTML();
+
+        if (html == (Widget.Content ?? string.Empty))
+        {
+            return;
+        }
+
+        Widget.Content = html;
         await DashboardService.SaveWidgetAsync(Widget);
-        _lastSavedContent = content;
+        _lastSavedContent = html;
     }
 
     // Explicit Save gives immediate feedback, but BlazoredTextEditor has no bindable
