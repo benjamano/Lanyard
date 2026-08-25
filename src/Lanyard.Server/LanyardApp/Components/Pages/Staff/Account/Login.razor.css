@@ -13,6 +13,10 @@
     object-fit: contain;
 }
 
+.login-fields {
+    text-align: center;
+}
+
 .login-fields ::deep .login-full-width {
     width: 100%;
 }
