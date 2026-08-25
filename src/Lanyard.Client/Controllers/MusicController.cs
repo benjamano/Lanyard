@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Lanyard.Infrastructure.DTO;
 using NAudio.Wave;
 using Lanyard.Shared.DTO;
+using Timer = System.Threading.Timer;
 
 namespace Lanyard.Client.Controllers;
 

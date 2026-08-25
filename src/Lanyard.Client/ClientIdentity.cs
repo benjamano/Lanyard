@@ -1,3 +1,5 @@
+using System.IO;
+
 public static class ClientIdentity
 {
     private const string ClientIdEnvironmentVariable = "LANYARD_CLIENT_ID";

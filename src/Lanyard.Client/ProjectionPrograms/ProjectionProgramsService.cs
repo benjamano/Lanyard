@@ -1,7 +1,7 @@
-﻿using Lanyard.Client.SignalR;
+using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
+using Microsoft.Web.WebView2.Core;
 using System.IO;
 using System.Windows.Forms;
 
@@ -14,8 +14,11 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     private List<ClientProjectionSettingsDTO> loadedProjectionPrograms = [];
 
-    // One entry per physical display; triggering/refreshing one display must never touch another's process.
-    private readonly Dictionary<int, (Guid ProgramId, Process Process)> _runningByDisplay = [];
+    // One entry per physical display, keyed by the monitor's device name (resolved fresh from
+    // DisplayIndex on every call) rather than the raw ordinal index - so tracking is based on
+    // which physical monitor is actually being targeted right now, not a possibly-stale index
+    // from before a replug/reorder. Entries remove themselves when their window closes.
+    private readonly Dictionary<string, (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs)> _runningByDisplayKey = [];
 
     public async Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms)
     {
@@ -41,12 +44,12 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     private async Task StartProjectionProgramAsync(ClientProjectionSettingsDTO projectionProgram)
     {
-        int displayIndex = projectionProgram.DisplayIndex;
+        Screen screen = ResolveScreen(projectionProgram.DisplayIndex);
+        string displayKey = screen.DeviceName;
         Guid programId = projectionProgram.ProjectionProgram.Id;
 
-        if (_runningByDisplay.TryGetValue(displayIndex, out (Guid ProgramId, Process Process) running)
-            && running.ProgramId == programId
-            && !running.Process.HasExited)
+        if (_runningByDisplayKey.TryGetValue(displayKey, out (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs) running)
+            && running.ProgramId == programId)
         {
             // This display is already showing the desired program - leave it running untouched.
             return;
@@ -56,34 +59,41 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         _logger.LogInformation(" - Fullscreen: {isFullScreen}", projectionProgram.IsFullScreen);
         _logger.LogInformation(" - Borderless: {isBorderless}", projectionProgram.IsBorderless);
         _logger.LogInformation(" - Resolution: {width}x{height}", projectionProgram.Width, projectionProgram.Height);
-        _logger.LogInformation(" - Display Index: {displayIndex}", displayIndex);
+        _logger.LogInformation(" - Display Index: {displayIndex}", projectionProgram.DisplayIndex);
 
-        HideWindow(displayIndex);
+        await HideWindowAsync(displayKey);
 
-        await ShowWindow(displayIndex, projectionProgram.Width, projectionProgram.Height, projectionProgram.IsFullScreen, programId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+        await ShowWindowAsync(
+            displayKey,
+            screen,
+            projectionProgram.Width,
+            projectionProgram.Height,
+            projectionProgram.IsFullScreen,
+            projectionProgram.IsBorderless,
+            programId,
+            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
     }
 
-    private void HideWindow(int displayIndex)
+    private async Task HideWindowAsync(string displayKey)
     {
-        if (!_runningByDisplay.TryGetValue(displayIndex, out (Guid ProgramId, Process Process) running))
+        await System.Windows.Application.Current!.Dispatcher.InvokeAsync(() =>
         {
-            return;
-        }
+            if (!_runningByDisplayKey.TryGetValue(displayKey, out (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs) running))
+            {
+                return;
+            }
 
-        try
-        {
-            running.Process.Kill();
-            running.Process.WaitForExit();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to kill kiosk process on display {displayIndex}.", displayIndex);
-        }
-        finally
-        {
-            running.Process.Dispose();
-            _runningByDisplay.Remove(displayIndex);
-        }
+            try
+            {
+                // The Closed handler registered in ShowWindowAsync removes the dictionary entry
+                // and completes ClosedTcs - no need to do either here.
+                running.Window.Close();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to close projection window on display {displayKey}.", displayKey);
+            }
+        });
     }
 
     public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted)
@@ -91,6 +101,8 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         // A button/automation rule with no explicit target screen defaults to display 0,
         // rather than guessing from whichever program happened to load first.
         int resolvedDisplayIndex = displayIndex ?? 0;
+        Screen screen = ResolveScreen(resolvedDisplayIndex);
+        string displayKey = screen.DeviceName;
 
         ClientProjectionSettingsDTO? displaySettings = loadedProjectionPrograms
             .FirstOrDefault(x => x.DisplayIndex == resolvedDisplayIndex);
@@ -98,32 +110,34 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         int width = displaySettings?.Width ?? 1920;
         int height = displaySettings?.Height ?? 1080;
         bool isFullScreen = displaySettings?.IsFullScreen ?? true;
+        bool isBorderless = displaySettings?.IsBorderless ?? true;
 
-        HideWindow(resolvedDisplayIndex);
+        await HideWindowAsync(displayKey);
 
-        await ShowWindow(resolvedDisplayIndex, width, height, isFullScreen, projectionProgramId, Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+        TaskCompletionSource closedTcs = await ShowWindowAsync(
+            displayKey, screen, width, height, isFullScreen, isBorderless, projectionProgramId,
+            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
 
-        if (_runningByDisplay.TryGetValue(resolvedDisplayIndex, out (Guid ProgramId, Process Process) running))
-        {
-            await running.Process.WaitForExitAsync();
-        }
+        await closedTcs.Task;
 
         await onCompleted();
     }
 
-    async Task ShowWindow(int displayIndex, int width, int height, bool isFullScreen, Guid projectionProgramId, Guid clientId)
+    private static Screen ResolveScreen(int displayIndex)
     {
         Screen[] screens = Screen.AllScreens;
 
         int screenIndex = displayIndex;
         if (screenIndex < 0 || screenIndex >= screens.Length)
+        {
             screenIndex = 0;
+        }
 
-        Screen screen = screens[screenIndex];
+        return screens[screenIndex];
+    }
 
-        int x = screen.Bounds.Left;
-        int y = screen.Bounds.Top;
-
+    private async Task<TaskCompletionSource> ShowWindowAsync(string displayKey, Screen screen, int width, int height, bool isFullScreen, bool isBorderless, Guid projectionProgramId, Guid clientId)
+    {
         // A viewer token authorises this kiosk to open remote (cross-client) video streams.
         // Fetching it over the hub proves the kiosk was launched by this client, not by someone
         // who simply knows the URL. A failure here only disables remote capture, not the kiosk.
@@ -150,53 +164,65 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             projectionProgramId.ToString()
         );
 
-        _logger.LogInformation("Opening page with URL: {url}", url);
-
         Directory.CreateDirectory(userDataDir);
 
-        // Each program gets a fresh user-data-dir, so camera/mic permission grants never persist;
-        // auto-accept is required for Live Capture steps to start without a prompt.
-        // (Edge < 133 does not support this flag and would need the legacy
-        // --use-fake-ui-for-media-stream instead — the two must not be combined.)
-        string mediaCaptureArgs = "--auto-accept-camera-and-microphone-capture ";
+        string additionalBrowserArguments = "--no-first-run --disable-session-crashed-bubble ";
 
         // getUserMedia only exists on secure origins; when the server is plain http on the LAN,
-        // Edge must be told to treat that origin as secure or navigator.mediaDevices is undefined.
+        // WebView2 must be told to treat that origin as secure or navigator.mediaDevices is undefined.
         if (Uri.TryCreate(url, UriKind.Absolute, out Uri? serverUri)
             && serverUri.Scheme == Uri.UriSchemeHttp
             && !serverUri.IsLoopback)
         {
             string origin = serverUri.GetLeftPart(UriPartial.Authority);
-            mediaCaptureArgs += $"--unsafely-treat-insecure-origin-as-secure=\"{origin}\" ";
+            additionalBrowserArguments += $"--unsafely-treat-insecure-origin-as-secure=\"{origin}\" ";
         }
 
-        string args =
-            $"--kiosk \"{url}\" " +
-            $"--user-data-dir=\"{userDataDir}\" " +
-            $"--window-position={x},{y} " +
-            $"--window-size={width/2},{height/2} " +
-            $"--no-first-run --disable-session-crashed-bubble " +
-            mediaCaptureArgs +
+        additionalBrowserArguments +=
             // The server uses the .NET dev cert over HTTPS, which is only valid for localhost and
             // untrusted on other machines; accept it so the kiosk loads without a cert interstitial.
             // The origin stays HTTPS (a valid secure context for camera + WebRTC).
-            $"--ignore-certificate-errors " +
+            "--ignore-certificate-errors " +
             // Real LAN host ICE candidates (not mDNS .local names) so cross-client WebRTC
             // streams connect, and no gesture requirement for audible playback.
-            $"--disable-features=WebRtcHideLocalIpsWithMdns " +
-            $"--autoplay-policy=no-user-gesture-required " +
-            (isFullScreen ? "--edge-kiosk-type=fullscreen " : "");
+            "--disable-features=WebRtcHideLocalIpsWithMdns " +
+            "--autoplay-policy=no-user-gesture-required";
 
-        Process? process = Process.Start(new ProcessStartInfo
+        _logger.LogInformation("Opening page with URL: {url}", url);
+
+        TaskCompletionSource closedTcs = new();
+
+        await await System.Windows.Application.Current!.Dispatcher.InvokeAsync(async () =>
         {
-            FileName = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-            Arguments = args,
-            UseShellExecute = false
+            try
+            {
+                ProjectionWindow window = new();
+                window.ApplyLayout(screen, width, height, isFullScreen, isBorderless);
+
+                window.Closed += (_, _) =>
+                {
+                    _runningByDisplayKey.Remove(displayKey);
+                    closedTcs.TrySetResult();
+                };
+
+                _runningByDisplayKey[displayKey] = (projectionProgramId, window, closedTcs);
+
+                CoreWebView2EnvironmentOptions options = new(additionalBrowserArguments);
+                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userDataDir, options);
+
+                // Show() must happen before EnsureCoreWebView2Async (called inside InitializeAsync) -
+                // the WebView2 control needs a realized parent HWND to complete its Chromium child-window
+                // hosting setup, otherwise EnsureCoreWebView2Async hangs indefinitely.
+                window.Show();
+
+                await window.InitializeAsync(environment, url);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to open projection window for program {ProgramId} on display {DisplayKey}.", projectionProgramId, displayKey);
+            }
         });
 
-        if (process != null)
-        {
-            _runningByDisplay[displayIndex] = (projectionProgramId, process);
-        }
+        return closedTcs;
     }
 }
