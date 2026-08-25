@@ -1,4 +1,5 @@
 using Microsoft.Win32.TaskScheduler;
+using System.IO;
 
 public static class StartupScheduler
 {

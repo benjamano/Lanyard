@@ -20,6 +20,7 @@ public static class ClientServiceBootstrapper
         {
             config.ClearProviders();
             config.SetMinimumLevel(LogLevel.Information);
+            config.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
             config.AddSimpleConsole(options =>
             {
                 options.SingleLine = true;
