@@ -93,6 +93,15 @@
     ]
   },
   {
+    "version": "1.3.9",
+    "releaseDate": "2026-08-26",
+    "summary": "Added email reminders for training assignments.",
+    "details": [
+      "Users are now emailed when a training course is assigned to them.",
+      "Users are now emailed a reminder when an assigned course's due date is within 7 days and still incomplete."
+    ]
+  },
+  {
     "version": "1.3.10",
     "releaseDate": "2026-08-26",
     "summary": "Login page overhaul with a company picker and optional background image.",

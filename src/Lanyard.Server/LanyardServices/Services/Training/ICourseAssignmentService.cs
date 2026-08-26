@@ -7,18 +7,20 @@ namespace Lanyard.Application.Services.Training;
 
 public interface ICourseAssignmentService
 {
-    Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope);
+    Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true);
     Task<Result<List<CourseAssignment>>> GetAssignmentsForUserAsync(string userId);
     Task<Result<CourseAssignment>> GetAssignmentAsync(Guid assignmentId, string requestingUserId);
     Task<Result<CourseAssignment>> StartAssignmentAsync(Guid assignmentId, string requestingUserId);
     Task<Result<QuizGradeResult>> SubmitQuizAttemptAsync(Guid assignmentId, string requestingUserId, Dictionary<Guid, Guid> answers);
     Task<Result<List<CourseAssignment>>> GetAssignmentsForCourseAsync(Guid courseId, LocationScope scope);
-    Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate, LocationScope scope);
+    Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true);
     Task<Result<CourseAssignment>> UpdateAssignmentDueDateAsync(Guid assignmentId, DateTime? newDueDate);
     Task<Result<bool>> UnassignAsync(Guid assignmentId);
     Task<Result<int>> UnassignAllForUserAsync(string userId);
     Task<Result<List<CourseAssignment>>> GetAssignmentsDueForRecurrenceAsync();
     Task<Result<CourseAssignment>> ProcessRecurrenceCycleAsync(Guid previousAssignmentId);
+    Task<Result<List<CourseAssignment>>> GetAssignmentsDueSoonAsync(int daysThreshold);
+    Task<Result<bool>> MarkDueSoonReminderSentAsync(Guid assignmentId);
     Task<Result<bool>> RecordSectionTransitionAsync(Guid assignmentId, string requestingUserId, Guid? departedSectionId, Guid? arrivedSectionId, DateTime transitionTimeUtc);
     Task<Result<CourseTimingSummary>> GetCourseTimingSummaryAsync(Guid courseId, LocationScope scope);
     Task<Result<List<AssignmentSectionTiming>>> GetSectionTimingsForAssignmentAsync(Guid assignmentId);

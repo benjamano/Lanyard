@@ -271,5 +271,129 @@ namespace Lanyard.Tests.Services.Email
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("401", result.Error);
         }
+
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_WithDueDate_IncludesDueDateInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                new DateTime(2026, 12, 25, 0, 0, 0, DateTimeKind.Utc),
+                "https://lanyard.example.com/training/123",
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("25 December 2026", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_NoDueDate_OmitsDueDateLine()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                null,
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.DoesNotContain("due by", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "Fire Safety",
+                null,
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                null,
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingDueSoonEmailAsync_SuccessResponse_IncludesCourseNameAndDueDateInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingDueSoonEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc),
+                "https://lanyard.example.com/training/123",
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("Fire Safety", handler.LastRequestBody);
+            Assert.Contains("2 September 2026", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingDueSoonEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingDueSoonEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "Fire Safety",
+                DateTime.UtcNow.AddDays(3),
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendTrainingDueSoonEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendTrainingDueSoonEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                DateTime.UtcNow.AddDays(3),
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
+        }
     }
 }

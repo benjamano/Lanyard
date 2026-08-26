@@ -83,6 +83,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
+builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
