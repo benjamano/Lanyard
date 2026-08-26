@@ -110,6 +110,9 @@ Plain `ILogger<T>` — no Serilog, no correlation-ID/trace-ID propagation anywhe
 ### Before marking a task complete
 Run `dotnet build LanyardApp.sln` and `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj` and confirm both pass.
 
+### Release notes — update whenever a change is user-noticeable
+If a change would be noticeable to a user (new feature, behaviour change, visible bug fix, new email, new UI element, etc. — not internal refactors, test-only changes, or dev-tooling tweaks), add an entry to `src/Lanyard.Server/LanyardServices/Services/ReleaseNotes/release-notes.json` describing it, and bump `<Version>` in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` to match the new release-notes entry's `version`. Do this as part of the same piece of work — don't wait to be asked.
+
 ### Route authorization — the one rule that must never get missed
 Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]` — there is no third option; a missing attribute redirects to login by design (`RouteAuthorizationGate.razor`). For the history, edge cases (`StaffNotFound.razor`), and why this matters, see the `route-authorization` skill.
 
