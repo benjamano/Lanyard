@@ -21,7 +21,7 @@
             <FluentLink Href="/" Class="nav-brand">
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
-                        Lan<span class="nav-brand-flip">y</span>ard
+                        Lanλard
                     </span>
                 </FluentText>
             </FluentLink>
@@ -85,7 +85,7 @@
         </ErrorBoundary>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Footer" Height="auto">
+    <FluentLayoutItem Area="LayoutArea.Footer" Height="auto" Style="@(IsLoginPage ? "padding:0" : null)">
         <Footer />
     </FluentLayoutItem>
 </FluentLayout>

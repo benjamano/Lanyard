@@ -1,8 +1,12 @@
 .auth-page-shell {
     position: relative;
     overflow: hidden;
-    min-height: 70vh;
-    height: 100%;
+    /* height:100% is a no-op here - nothing in this app's ancestor chain (html/body/the
+       Fluent layout grid) sets an explicit height, so percentage heights never resolve.
+       Viewport units don't depend on that chain; the dvh variant additionally accounts for
+       mobile browsers' collapsing address bar, which plain vh can undershoot. */
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;

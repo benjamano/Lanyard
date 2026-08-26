@@ -19,8 +19,12 @@
             </FluentCard>
         </footer>
     </FluentGridItem>
-    <FluentGridItem Xs="12" HiddenWhen="GridItemHidden.MdAndUp">
-        <div class="mt-5 pb-3"></div>
-        <MobileNavMenu />
-    </FluentGridItem>
+    <AuthorizeView>
+        <Authorized>
+            <FluentGridItem Xs="12" HiddenWhen="GridItemHidden.MdAndUp">
+                <div class="mt-5 pb-3"></div>
+                <MobileNavMenu />
+            </FluentGridItem>
+        </Authorized>
+    </AuthorizeView>
 </FluentGrid>
