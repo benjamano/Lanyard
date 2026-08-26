@@ -48,6 +48,11 @@
     margin-top: 8px;
 }
 
+.login-fields ::deep .login-privacy-link {
+    margin-top: 16px;
+    display: block;
+}
+
 .company-picker ::deep .company-picker-button {
     width: 100%;
     justify-content: flex-start;

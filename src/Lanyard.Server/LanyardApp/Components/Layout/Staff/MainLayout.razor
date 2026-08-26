@@ -122,6 +122,14 @@
 
     private async Task ApplyBrandingAsync()
     {
+        // Login.razor owns the theme on this route (it reflects whichever company was picked
+        // there) - applying the authenticated-user/default branding here on a fresh load of
+        // /login would immediately stomp on that choice back to the default accent color.
+        if (IsLoginPage)
+        {
+            return;
+        }
+
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
 
