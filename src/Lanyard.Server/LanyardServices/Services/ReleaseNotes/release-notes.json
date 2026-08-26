@@ -113,5 +113,13 @@
       "Fixed the \"Lanyard\" wordmark rendering incorrectly on mobile browsers.",
       "Fixed the login background not filling the full page height and an unwanted scrollbar on some screen sizes."
     ]
+  },
+  {
+    "version": "1.3.11",
+    "releaseDate": "2026-08-26",
+    "summary": "Fixed the brief error flash when logging out.",
+    "details": [
+      "Logging out now goes straight to the login page instead of briefly showing an error screen on the way."
+    ]
   }
 ]
