@@ -30,7 +30,7 @@
                             Text="Messages" /> *@
                     </div>
                     <div style="flex: 1;" class="d-flex justify-content-end">
-                        <FluentAppBarItem Href="/api/auth/logout" Match="NavLinkMatch.All"
+                        <FluentAppBarItem OnClick="@(_ => Logout())"
                                           IconRest="new Icons.Regular.Size28.HomeEmpty()"
                                           IconActive="new Icons.Filled.Size28.HomeEmpty()" Text="Logout" />
                     </div>
@@ -47,3 +47,9 @@
         </AuthorizeView>
     </FluentAppBar>
 </FluentCard>
+@code {
+    // Kept off Href deliberately - see the matching comment in NavMenu.razor. /api/auth/logout is a
+    // controller endpoint with no @page, so routing the click through Blazor's interactive router
+    // makes it push a routeless URL into history before falling back to a full browser navigation.
+    private void Logout() => _navigationManager.NavigateTo("/api/auth/logout", forceLoad: true);
+}
