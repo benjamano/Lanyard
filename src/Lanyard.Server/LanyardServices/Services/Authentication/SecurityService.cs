@@ -160,7 +160,9 @@ public class SecurityService : ISecurityService
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
         using ApplicationDbContext ctx = _factory.CreateDbContext();
-        return await ctx.Users.ToListAsync();
+        return await ctx.Users
+            .Where(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+            .ToListAsync();
     }
 
     public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds)
