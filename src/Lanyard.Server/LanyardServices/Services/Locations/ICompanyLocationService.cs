@@ -4,7 +4,8 @@ using Lanyard.Infrastructure.Models;
 namespace Lanyard.Application.Services.Locations;
 
 public record LoginLocationOption(int LocationId, string DisplayName, int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
-public record CompanyBrandingInfo(int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
+public record LoginCompanyOption(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
+public record CompanyBrandingInfo(int CompanyId, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
 
 public interface ICompanyLocationService
 {
@@ -22,7 +23,8 @@ public interface ICompanyLocationService
     Task<Result<bool>> RemoveUserFromLocationAsync(string userId, int locationId);
 
     Task<Result<bool>> IsUserMemberOfLocationAsync(string userId, int locationId);
-    Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync();
+    Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync(int? companyId = null);
+    Task<Result<List<LoginCompanyOption>>> GetLoginCompanyOptionsAsync();
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId);
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForLocationAsync(int locationId);
 }

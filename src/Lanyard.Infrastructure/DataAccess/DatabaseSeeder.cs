@@ -32,14 +32,9 @@ public static class DatabaseSeeder
         IHostEnvironment environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         ILogger logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
 
-        // Roles are seeded first and unconditionally, like ResetIdentitySequencesAsync below - a
-        // role added to StandardRoles after go-live must still backfill even if the fixed-ID seed
-        // admin account has since been deleted (a normal thing to do once real admins exist). This
-        // also has to run before the admin user: assigning the admin's UserRoles further down
-        // depends on the Role rows already existing, since IdentityUserRole has real FK constraints.
-        await EnsureStandardRolesExistAsync(context);
-
         await SeedAdminUserAsync(context, userManager, configuration, environment, logger);
+
+        await SeedGdprPlaceholderUserAsync(context, userManager);
 
         await SeedCompanyAndLocationsAsync(context);
 
@@ -48,84 +43,140 @@ public static class DatabaseSeeder
 
     private static async Task SeedAdminUserAsync(ApplicationDbContext context, UserManager<UserProfile> userManager, IConfiguration configuration, IHostEnvironment environment, ILogger logger)
     {
-        if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId))
-        {
-            return;
-        }
+        bool adminExists = await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId);
 
-        UserProfile seedAdminUser = new UserProfile
-        {
-            Id = ApplicationDbContext.SeedAdminUserId,
-            UserName = "admin",
-            Email = "admin@play2day.com",
-            EmailConfirmed = true,
-            FirstName = "System",
-            LastName = "Administrator",
-            // Left null so the admin row is visibly a first-run credential.
-            PasswordSetDate = null,
-            // NormalizedUserName/NormalizedEmail/SecurityStamp are deliberately not set here -
-            // UserManager.CreateAsync(user, password) always recomputes the first two via the
-            // configured ILookupNormalizer and always overwrites SecurityStamp with a fresh
-            // random value, so any value assigned here would be silently discarded.
-            ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP"
-        };
-        string? configuredPassword = configuration["Seed:AdminPassword"];
-        string adminPassword;
-
-        if (!string.IsNullOrWhiteSpace(configuredPassword))
-        {
-            adminPassword = configuredPassword;
-
-            logger.LogInformation("Seeding admin user with the password supplied via Seed:AdminPassword.");
-        }
-        else if (environment.IsDevelopment())
-        {
-            adminPassword = DevelopmentAdminPassword;
-
-            logger.LogWarning(
-                "No Seed:AdminPassword configured. Seeding admin user '{UserName}' with the well-known "
-                + "development password. Set Seed__AdminPassword before deploying outside Development.",
-                seedAdminUser.UserName);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "Seed:AdminPassword is not configured. Set the Seed__AdminPassword environment variable "
-                + "before starting the application outside the Development environment.");
-        }
-
-        // UserManager.CreateAsync commits immediately (UserStore.AutoSaveChanges defaults to
-        // true), independent of the UserRoles SaveChangesAsync below. Without an explicit ambient
-        // transaction, a failure between the two would permanently persist an admin user with zero
-        // role assignments - the "already exists" guard above would then skip re-seeding forever.
+        // Creating the admin user, backfilling standard roles, and assigning those roles to the
+        // admin are a genuine circular dependency, not just an ordering nicety: AspNetRoles.
+        // CreatedByUserId (NOT NULL, FK to AspNetUsers) requires the admin user row to exist
+        // first, while the admin's AspNetUserRoles rows require the Role rows to exist first.
+        // Postgres resolves FK checks against rows already inserted earlier in the same
+        // transaction even before commit, so doing all three inside one transaction - in the
+        // order below - satisfies both constraints on a genuinely empty database. Wrapping
+        // everything together also preserves the original guarantee that a failure partway
+        // through cannot leave a permanently role-less admin - the "already exists"/"already
+        // assigned" guards here would otherwise skip re-seeding it on every later startup.
         // Guarded by IsNpgsql() like ResetIdentitySequencesAsync below - the EF InMemory provider
         // used by tests doesn't support transactions at all.
         await using IDbContextTransaction? transaction = context.Database.IsNpgsql()
             ? await context.Database.BeginTransactionAsync()
             : null;
 
-        IdentityResult createResult = await userManager.CreateAsync(seedAdminUser, adminPassword);
-
-        if (!createResult.Succeeded)
+        if (!adminExists)
         {
-            string errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+            UserProfile seedAdminUser = new UserProfile
+            {
+                Id = ApplicationDbContext.SeedAdminUserId,
+                UserName = "admin",
+                Email = "admin@play2day.com",
+                EmailConfirmed = true,
+                FirstName = "System",
+                LastName = "Administrator",
+                // Left null so the admin row is visibly a first-run credential.
+                PasswordSetDate = null,
+                // NormalizedUserName/NormalizedEmail/SecurityStamp are deliberately not set here -
+                // UserManager.CreateAsync(user, password) always recomputes the first two via the
+                // configured ILookupNormalizer and always overwrites SecurityStamp with a fresh
+                // random value, so any value assigned here would be silently discarded.
+                ConcurrencyStamp = "SEED-ADMIN-CONCURRENCY-STAMP"
+            };
+            string? configuredPassword = configuration["Seed:AdminPassword"];
+            string adminPassword;
 
-            throw new InvalidOperationException($"Failed to seed admin user: {errors}");
+            if (!string.IsNullOrWhiteSpace(configuredPassword))
+            {
+                adminPassword = configuredPassword;
+
+                logger.LogInformation("Seeding admin user with the password supplied via Seed:AdminPassword.");
+            }
+            else if (environment.IsDevelopment())
+            {
+                adminPassword = DevelopmentAdminPassword;
+
+                logger.LogWarning(
+                    "No Seed:AdminPassword configured. Seeding admin user '{UserName}' with the well-known "
+                    + "development password. Set Seed__AdminPassword before deploying outside Development.",
+                    seedAdminUser.UserName);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Seed:AdminPassword is not configured. Set the Seed__AdminPassword environment variable "
+                    + "before starting the application outside the Development environment.");
+            }
+
+            IdentityResult createResult = await userManager.CreateAsync(seedAdminUser, adminPassword);
+
+            if (!createResult.Succeeded)
+            {
+                string errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+
+                throw new InvalidOperationException($"Failed to seed admin user: {errors}");
+            }
         }
 
-        await context.UserRoles.AddRangeAsync(
-            new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedAdminRoleId },
-            new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedManagerRoleId },
-            new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedStaffRoleId },
-            new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId },
-            new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanClockInRoleId }
-        );
+        // Unconditional, like ResetIdentitySequencesAsync below - a role added to StandardRoles
+        // after go-live must still backfill even if the fixed-ID seed admin account has since
+        // been deleted (a normal thing to do once real admins exist).
+        await EnsureStandardRolesExistAsync(context);
 
-        await context.SaveChangesAsync();
+        // Guarded rather than folded into the `!adminExists` branch above: once the admin exists,
+        // this must still run and be idempotent, since a pre-existing admin (recreated after
+        // deletion, or one whose roles previously failed to save) can no longer be assumed to
+        // have its role assignments already made.
+        if (!await context.UserRoles.AnyAsync(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId))
+        {
+            await context.UserRoles.AddRangeAsync(
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedAdminRoleId },
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedManagerRoleId },
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedStaffRoleId },
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId },
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanClockInRoleId }
+            );
+
+            await context.SaveChangesAsync();
+        }
 
         if (transaction is not null)
         {
             await transaction.CommitAsync();
+        }
+    }
+
+    // Reserved account that non-nullable attribution FKs (DmxScene/DmxSceneStep/
+    // DmxSceneStepChannelValue.CreateByUserId, ApplicationRole.CreatedByUserId) are repointed to
+    // by GdprService when the real author's account is erased - those fields are `required string`,
+    // so nulling them out is not an option. Never assigned a password, permanently locked out, and
+    // excluded from SecurityService.GetActiveUsersAsync so it can never be used or shown as a real user.
+    private static async Task SeedGdprPlaceholderUserAsync(ApplicationDbContext context, UserManager<UserProfile> userManager)
+    {
+        if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SystemDeletedUserPlaceholderId))
+        {
+            return;
+        }
+
+        UserProfile placeholder = new()
+        {
+            Id = ApplicationDbContext.SystemDeletedUserPlaceholderId,
+            UserName = "deleted-user",
+            Email = null,
+            EmailConfirmed = false,
+            FirstName = "Deleted",
+            LastName = "User",
+            PasswordSetDate = null,
+            LockoutEnabled = true,
+            LockoutEnd = DateTimeOffset.MaxValue,
+            ConcurrencyStamp = "SEED-GDPR-PLACEHOLDER-CONCURRENCY-STAMP"
+        };
+
+        // CreateAsync (no password overload) leaves PasswordHash null - there is no credential
+        // that could ever authenticate as this account, on top of the permanent lockout above.
+        IdentityResult result = await userManager.CreateAsync(placeholder);
+
+        if (!result.Succeeded)
+        {
+            string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+
+            throw new InvalidOperationException($"Failed to seed GDPR placeholder user: {errors}");
         }
     }
 

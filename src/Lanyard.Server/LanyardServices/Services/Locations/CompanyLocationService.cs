@@ -62,7 +62,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                     CreateDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow,
                     ThemeColorHex = normalizedColor,
-                    LogoFileId = company.LogoFileId
+                    LogoFileId = company.LogoFileId,
+                    BackgroundImageFileId = company.BackgroundImageFileId
                 };
                 ctx.Companies.Add(target);
             }
@@ -76,6 +77,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 // means "the admin cleared it", not "the caller omitted it".
                 target.ThemeColorHex = normalizedColor;
                 target.LogoFileId = company.LogoFileId;
+                target.BackgroundImageFileId = company.BackgroundImageFileId;
             }
 
             await ctx.SaveChangesAsync();
@@ -376,7 +378,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -401,7 +403,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -409,17 +411,24 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         }
     }
 
-    public async Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync()
+    public async Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync(int? companyId = null)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<Location> locations = await ctx.Locations
+            IQueryable<Location> query = ctx.Locations
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Company)
-                .Where(x => x.IsActive && x.Company!.IsActive)
+                .Where(x => x.IsActive && x.Company!.IsActive);
+
+            if (companyId.HasValue)
+            {
+                query = query.Where(x => x.CompanyId == companyId.Value);
+            }
+
+            List<Location> locations = await query
                 .OrderBy(x => x.Company!.Name).ThenBy(x => x.Name)
                 .ToListAsync();
 
@@ -431,6 +440,30 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         catch (Exception ex)
         {
             return Result<List<LoginLocationOption>>.Fail($"Failed to retrieve login locations: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<LoginCompanyOption>>> GetLoginCompanyOptionsAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Company> companies = await ctx.Companies
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive && x.Locations.Any(l => l.IsActive))
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+            List<LoginCompanyOption> options = [.. companies.Select(x =>
+                new LoginCompanyOption(x.Id, x.Name, x.ThemeColorHex, x.LogoFileId, x.BackgroundImageFileId))];
+
+            return Result<List<LoginCompanyOption>>.Ok(options);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<LoginCompanyOption>>.Fail($"Failed to retrieve login companies: {ex.Message}");
         }
     }
 }

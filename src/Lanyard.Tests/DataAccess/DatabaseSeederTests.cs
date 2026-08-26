@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -20,6 +23,61 @@ namespace Lanyard.Tests.DataAccess
         {
             return new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+        }
+
+        // EF InMemory has no foreign keys, so it can't reproduce the real Postgres 23503 error
+        // (AspNetRoles.CreatedByUserId FK to AspNetUsers) on its own. This interceptor simulates
+        // that constraint by failing a SaveChanges that would insert an ApplicationRole whose
+        // CreatedByUserId doesn't reference a User row that a *previous* SaveChanges already
+        // persisted - which is exactly what a real FK check does when the referenced row hasn't
+        // been inserted yet, even within the same transaction.
+        private sealed class CreatedByUserIdForeignKeySimulator : SaveChangesInterceptor
+        {
+            public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+            {
+                Validate(eventData.Context);
+                return base.SavingChanges(eventData, result);
+            }
+
+            public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+            {
+                Validate(eventData.Context);
+                return base.SavingChangesAsync(eventData, result, cancellationToken);
+            }
+
+            private static void Validate(DbContext? context)
+            {
+                if (context is null)
+                {
+                    return;
+                }
+
+                foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ApplicationRole> entry in context.ChangeTracker.Entries<ApplicationRole>())
+                {
+                    if (entry.State != EntityState.Added)
+                    {
+                        continue;
+                    }
+
+                    string createdByUserId = entry.Entity.CreatedByUserId;
+                    bool referencedUserAlreadyPersisted = context.Set<UserProfile>().Any(u => u.Id == createdByUserId);
+
+                    if (!referencedUserAlreadyPersisted)
+                    {
+                        throw new InvalidOperationException(
+                            $"Simulated FK violation: AspNetRoles.CreatedByUserId '{createdByUserId}' does not "
+                            + "reference an AspNetUsers row that has been saved yet.");
+                    }
+                }
+            }
+        }
+
+        private static DbContextOptions<ApplicationDbContext> GetInMemoryOptionsWithCreatedByUserIdFkSimulation()
+        {
+            return new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .AddInterceptors(new CreatedByUserIdForeignKeySimulator())
                 .Options;
         }
 
@@ -136,6 +194,27 @@ namespace Lanyard.Tests.DataAccess
             using ServiceProvider provider = BuildServiceProvider(options, seedAdminPassword: null, "Production");
 
             await DatabaseSeeder.SeedAsync(provider);
+        }
+
+        [TestMethod]
+        public async Task SeedAsync_OnGenuinelyEmptyDatabase_CreatesAdminUserBeforeRolesReferenceIt()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptionsWithCreatedByUserIdFkSimulation();
+            using ServiceProvider provider = BuildServiceProvider(options, "Configured-Admin-Pw1!", "Production");
+
+            // Would throw the simulated FK violation above if standard roles were seeded before
+            // the admin user they're stamped with as CreatedByUserId - reproducing the real
+            // Postgres 23503 error on AspNetRoles.CreatedByUserId against an empty database.
+            await DatabaseSeeder.SeedAsync(provider);
+
+            await using ApplicationDbContext context = new(options);
+            bool adminExists = await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SeedAdminUserId);
+            int roleCount = await context.Roles.CountAsync();
+            int adminRoleAssignmentCount = await context.UserRoles.CountAsync(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId);
+
+            Assert.IsTrue(adminExists);
+            Assert.AreEqual(7, roleCount);
+            Assert.AreEqual(5, adminRoleAssignmentCount);
         }
 
         [TestMethod]

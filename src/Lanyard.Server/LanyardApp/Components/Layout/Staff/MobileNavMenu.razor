@@ -1,8 +1,11 @@
-<FluentCard Appearance="CardAppearance.Subtle" Class="rounded-0 position-fixed bottom-0 start-0 end-0 z-100 p-0"
-            Height="auto">
-    <FluentAppBar Orientation="Orientation.Horizontal" Class="w-100" PopoverShowSearch="true">
-        <AuthorizeView>
-            <Authorized>
+@* No NotAuthorized branch: the bar itself (not just its content) should not render at all
+   until the user is signed in - a fixed-position bar with just a "Login" link on it is
+   redundant clutter, especially on the login page itself. *@
+<AuthorizeView>
+    <Authorized>
+        <FluentCard Appearance="CardAppearance.Subtle" Class="rounded-0 position-fixed bottom-0 start-0 end-0 z-100 p-0"
+                    Height="auto">
+            <FluentAppBar Orientation="Orientation.Horizontal" Class="w-100" PopoverShowSearch="true">
                 <div class="d-flex align-items-center w-100">
                     <div style="flex: 1;">
                         <FluentAppBarItem Href="/account/manage" Match="NavLinkMatch.All"
@@ -35,18 +38,11 @@
                                           IconActive="new Icons.Filled.Size28.HomeEmpty()" Text="Logout" />
                     </div>
                 </div>
-            </Authorized>
-            <NotAuthorized>
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                             VerticalAlignment="VerticalAlignment.Center" HorizontalGap="0">
-                    <FluentAppBarItem Href="/login" Match="NavLinkMatch.All"
-                                      IconRest="new Icons.Regular.Size28.PersonHome()"
-                                      IconActive="new Icons.Filled.Size28.PersonHome()" Text="Login" />
-                </FluentStack>
-            </NotAuthorized>
-        </AuthorizeView>
-    </FluentAppBar>
-</FluentCard>
+            </FluentAppBar>
+        </FluentCard>
+    </Authorized>
+</AuthorizeView>
+
 @code {
     // Kept off Href deliberately - see the matching comment in NavMenu.razor. /api/auth/logout is a
     // controller endpoint with no @page, so routing the click through Blazor's interactive router
