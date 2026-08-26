@@ -26,9 +26,3 @@ html, body {
 .nav-brand:hover span {
     text-decoration: none;
 }
-
-.nav-brand-flip {
-    display: inline-block;
-    transform: rotate(180deg) translateY(-22%);
-    padding-bottom: 0.1rem;
-}

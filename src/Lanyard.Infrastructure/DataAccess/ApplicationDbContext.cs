@@ -169,6 +169,13 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.LogoFileId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Same reasoning as LogoFile above, for the optional login background image.
+            modelBuilder.Entity<Company>()
+                .HasOne(x => x.BackgroundImageFile)
+                .WithMany()
+                .HasForeignKey(x => x.BackgroundImageFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             modelBuilder.Entity<UserErasureRecord>()
                 .HasIndex(x => x.ErasedAtUtc);
         }

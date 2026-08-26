@@ -100,5 +100,18 @@
       "Users are now emailed when a training course is assigned to them.",
       "Users are now emailed a reminder when an assigned course's due date is within 7 days and still incomplete."
     ]
+  },
+  {
+    "version": "1.3.10",
+    "releaseDate": "2026-08-26",
+    "summary": "Login page overhaul with a company picker and optional background image.",
+    "details": [
+      "Login now starts with a company-selection step before showing the username/password/location form, scoped to that company's locations.",
+      "Admins can set an optional login background image per company from the Companies and Locations page.",
+      "The login page's accent color now follows the selected company's brand color, and persists across a page refresh.",
+      "The mobile bottom navigation bar no longer shows on the login page until signed in.",
+      "Fixed the \"Lanyard\" wordmark rendering incorrectly on mobile browsers.",
+      "Fixed the login background not filling the full page height and an unwanted scrollbar on some screen sizes."
+    ]
   }
 ]
