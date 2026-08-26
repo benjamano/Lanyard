@@ -3,8 +3,10 @@
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Gdpr
 
 @inject INotificationService ToastService
+@inject IGdprService _gdprService
 
 <PageTitle>User Management</PageTitle>
 
@@ -45,6 +47,12 @@
                     <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
                                 OnClick="@(() => SendSetPasswordLink(context))"
                                 title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
+                    <AuthorizeView Roles="Admin" Context="authContext">
+                        <Authorized>
+                            <FluentIcon Icon="Icons.Regular.Size20.PersonDelete" Color="Color.Error"
+                                        OnClick="@(() => ConfirmGdprEraseUser(context))" title="Delete User Data (GDPR)" />
+                        </Authorized>
+                    </AuthorizeView>
                 </div>
             </TemplateColumn>
         </ChildContent>
@@ -131,6 +139,33 @@
         if (!result.Cancelled)
         {
             await _securityService.DeleteUserAsync(user.Id);
+            await GetUsers();
+        }
+    }
+
+    private async Task ConfirmGdprEraseUser(UserProfile user)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Erase User Data (GDPR)";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Message),
+                $"This will permanently remove {user.GetName()}'s personal data and delete their account. " +
+                "Content they authored will be kept but no longer attributed to them. This cannot be undone.");
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.ConfirmLabel), "Erase Data");
+        });
+
+        if (!result.Cancelled)
+        {
+            Result<bool> eraseResult = await _gdprService.EraseUserDataAsync(user.Id);
+
+            if (!eraseResult.IsSuccess)
+            {
+                ToastService.ShowError(eraseResult.Error ?? "Failed to erase user data.");
+            }
+
             await GetUsers();
         }
     }

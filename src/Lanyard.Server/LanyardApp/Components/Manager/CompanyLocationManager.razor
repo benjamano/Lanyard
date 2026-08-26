@@ -24,13 +24,23 @@
                         <FluentColorPickerInput @bind-Value="companyThemeColor" Label="Theme color"
                                                 Class="clm-full-width" View="@ColorPickerView.SwatchPalette" Margin="@Margin.Top0" />
 
-                        <FileUploader Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
+                        <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
                                       PreviewUrl="@companyLogoPreviewUrl" />
                         @if (companyLogoFileId is not null)
                         {
                             <FluentText Class="clm-empty-note">
                                 A logo is set. Upload a file to replace it, or clear it.
+                            </FluentText>
+                        }
+
+                        <FileUploader Id="company-background-image-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
+                                      OnFileUploaded="OnBackgroundImageUploaded" Label="Upload a login background image (optional)"
+                                      MaximumFileCount="1" PreviewUrl="@companyBackgroundImagePreviewUrl" />
+                        @if (companyBackgroundImageFileId is not null)
+                        {
+                            <FluentText Class="clm-empty-note">
+                                A login background image is set. Upload a file to replace it, or clear it.
                             </FluentText>
                         }
 
@@ -47,6 +57,13 @@
                             @if (companyLogoFileId is not null)
                             {
                                 <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearLogo">Clear Logo
+                                </FluentButton>
+                            }
+
+                            @if (companyBackgroundImageFileId is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearBackgroundImage">Clear
+                                    Background Image
                                 </FluentButton>
                             }
                         </FluentStack>
@@ -122,6 +139,8 @@
     private string companyThemeColor = string.Empty;
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
+    private Guid? companyBackgroundImageFileId;
+    private string? companyBackgroundImagePreviewUrl;
     private string newLocationName = string.Empty;
 
     private void OnLogoUploaded(FileMetadata file)
@@ -134,6 +153,18 @@
     {
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
+    }
+
+    private void OnBackgroundImageUploaded(FileMetadata file)
+    {
+        companyBackgroundImageFileId = file.Id;
+        companyBackgroundImagePreviewUrl = $"/api/files/download/{file.Id}";
+    }
+
+    private void ClearBackgroundImage()
+    {
+        companyBackgroundImageFileId = null;
+        companyBackgroundImagePreviewUrl = null;
     }
 
     protected override async Task OnInitializedAsync()
@@ -171,7 +202,8 @@
             Id = selectedCompany?.Id ?? 0,
             Name = companyName,
             ThemeColorHex = companyThemeColor,
-            LogoFileId = companyLogoFileId
+            LogoFileId = companyLogoFileId,
+            BackgroundImageFileId = companyBackgroundImageFileId
         });
 
         if (!result.IsSuccess)
@@ -215,6 +247,8 @@
         companyThemeColor = string.Empty;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
+        companyBackgroundImageFileId = null;
+        companyBackgroundImagePreviewUrl = null;
     }
 
     private void PopulateFormFrom(Company company)
@@ -223,6 +257,10 @@
         companyThemeColor = company.ThemeColorHex ?? string.Empty;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
+        companyBackgroundImageFileId = company.BackgroundImageFileId;
+        companyBackgroundImagePreviewUrl = company.BackgroundImageFileId is Guid backgroundImageFileId
+            ? $"/api/files/download/{backgroundImageFileId}"
+            : null;
     }
 
     private async Task SelectCompany(Company company)

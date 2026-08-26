@@ -57,6 +57,30 @@ public class EmailService : IEmailService
         return await SendResendEmailAsync(user.Id, user.Email, "Your Lanyard sign-in code", html);
     }
 
+    public async Task<Result<bool>> SendTrainingAssignedEmailAsync(UserProfile user, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a link to.");
+        }
+
+        string html = BuildTrainingAssignedHtml(user.UserName ?? user.Email, courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"New training assigned: {courseName}", html);
+    }
+
+    public async Task<Result<bool>> SendTrainingDueSoonEmailAsync(UserProfile user, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a link to.");
+        }
+
+        string html = BuildTrainingDueSoonHtml(user.UserName ?? user.Email, courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Training due soon: {courseName}", html);
+    }
+
     // Single decision point for the Resend HTTP call - the config check, request shape,
     // auth header, and error handling used to be copy-pasted into each Send*Async method above.
     private async Task<Result<bool>> SendResendEmailAsync(string userId, string toEmail, string subject, string html)
@@ -128,6 +152,54 @@ public class EmailService : IEmailService
           <p>
             <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Start Training
+            </a>
+          </p>
+        </div>
+        """;
+    }
+
+    private static string BuildTrainingAssignedHtml(string username, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        string dueDateHtml = dueDate is not null
+            ? $"""<p>It is due by <strong>{dueDate.Value.Date:d MMMM yyyy}</strong>.</p>"""
+            : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(username)},</p>
+          <p>You've been assigned a new training course: <strong>{WebUtility.HtmlEncode(courseName)}</strong>.</p>
+          {dueDateHtml}
+          <p>
+            <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
+              Start Training
+            </a>
+          </p>
+        </div>
+        """;
+    }
+
+    private static string BuildTrainingDueSoonHtml(string username, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(username)},</p>
+          <p>Your training course <strong>{WebUtility.HtmlEncode(courseName)}</strong> is due soon, by
+             <strong>{dueDate.Date:d MMMM yyyy}</strong>.</p>
+          <p>
+            <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
+              Continue Training
             </a>
           </p>
         </div>

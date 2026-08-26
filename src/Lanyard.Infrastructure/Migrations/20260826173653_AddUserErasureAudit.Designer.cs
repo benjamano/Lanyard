@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826173653_AddUserErasureAudit")]
+    partial class AddUserErasureAudit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -442,9 +445,6 @@ namespace Lanyard.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<Guid?>("BackgroundImageFileId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -465,8 +465,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BackgroundImageFileId");
 
                     b.HasIndex("LogoFileId");
 
@@ -530,9 +528,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("DueSoonReminderSentDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsActive")
@@ -1822,17 +1817,10 @@ namespace Lanyard.Infrastructure.Migrations
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
                 {
-                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "BackgroundImageFile")
-                        .WithMany()
-                        .HasForeignKey("BackgroundImageFileId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "LogoFile")
                         .WithMany()
                         .HasForeignKey("LogoFileId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("BackgroundImageFile");
 
                     b.Navigation("LogoFile");
                 });

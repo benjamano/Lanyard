@@ -2,6 +2,7 @@ using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Gdpr;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.SignalR;
@@ -68,6 +69,7 @@ builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<ISecurityService, SecurityService>();
+builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
@@ -81,6 +83,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
+builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();

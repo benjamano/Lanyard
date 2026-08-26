@@ -98,9 +98,16 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         {
             Stop(false);
 
+            _cacheService.SetActiveSong(songId);
+
             string audioSource = await _cacheService.GetAudioSourceAsync(songId);
 
-            _logger.LogInformation("MusicPlayer: Loading audio from {Source}", audioSource);
+            // audioSource may be a direct API URL carrying the client's shared secret in the
+            // query string (see SongCacheService.BuildApiUrl) - strip it before logging so the
+            // secret never ends up in the client's log file.
+            int queryIndex = audioSource.IndexOf('?');
+            string logSafeSource = queryIndex >= 0 ? audioSource[..queryIndex] : audioSource;
+            _logger.LogInformation("MusicPlayer: Loading audio from {Source}", logSafeSource);
 
             SongAndPlaylistQueue[songId] = playlistId;
 

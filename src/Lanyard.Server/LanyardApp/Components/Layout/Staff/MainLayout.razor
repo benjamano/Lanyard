@@ -21,7 +21,7 @@
             <FluentLink Href="/" Class="nav-brand">
                 <FluentText Weight="TextWeight.Bold" Size="TextSize.Size500" Style="color:white;">
                     <span>
-                        Lan<span class="nav-brand-flip">y</span>ard
+                        Lanλard
                     </span>
                 </FluentText>
             </FluentLink>
@@ -42,7 +42,7 @@
         </AuthorizeView>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content" Margin="@Margin.All3">
+    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
@@ -85,7 +85,7 @@
         </ErrorBoundary>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Footer" Height="auto">
+    <FluentLayoutItem Area="LayoutArea.Footer" Height="auto" Style="@(IsLoginPage ? "padding:0" : null)">
         <Footer />
     </FluentLayoutItem>
 </FluentLayout>
@@ -93,6 +93,10 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+
+    // The login page's background image should bleed to the viewport edges - the standard
+    // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
+    private bool IsLoginPage => NavigationManager.Uri.Contains("/login");
 
     protected override void OnInitialized()
     {
@@ -118,6 +122,14 @@
 
     private async Task ApplyBrandingAsync()
     {
+        // Login.razor owns the theme on this route (it reflects whichever company was picked
+        // there) - applying the authenticated-user/default branding here on a fresh load of
+        // /login would immediately stomp on that choice back to the default accent color.
+        if (IsLoginPage)
+        {
+            return;
+        }
+
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
 

@@ -15,6 +15,7 @@ public class SongCacheService : ISongCacheService, IDisposable
     private Dictionary<Guid, DateTime> _lastAccessed = [];
     private long _cacheLimitBytes = 500L * 1024 * 1024;
     private readonly SemaphoreSlim _downloadLock = new(1, 1);
+    private Guid? _activeSongId;
 
     public SongCacheService(ILogger<SongCacheService> logger, IHttpClientFactory httpClientFactory)
     {
@@ -30,10 +31,16 @@ public class SongCacheService : ISongCacheService, IDisposable
         LoadMetadata();
     }
 
+    // A limit at or near zero makes EnsureSpaceAvailable never succeed, silently disabling the
+    // cache and forcing every track to stream directly - guard against that regardless of what
+    // the server sends.
+    private const int MinCacheLimitMb = 50;
+
     public void UpdateCacheLimit(int cacheLimitMb)
     {
-        _cacheLimitBytes = (long)cacheLimitMb * 1024 * 1024;
-        _logger.LogInformation("SongCache: Cache limit set to {Mb}MB", cacheLimitMb);
+        int clampedMb = Math.Max(MinCacheLimitMb, cacheLimitMb);
+        _cacheLimitBytes = (long)clampedMb * 1024 * 1024;
+        _logger.LogInformation("SongCache: Cache limit set to {Mb}MB", clampedMb);
     }
 
     public async Task<string> GetAudioSourceAsync(Guid songId)
@@ -51,6 +58,11 @@ public class SongCacheService : ISongCacheService, IDisposable
 
         string? downloaded = await DownloadToCache(songId);
         return downloaded ?? BuildApiUrl(songId);
+    }
+
+    public void SetActiveSong(Guid songId)
+    {
+        _activeSongId = songId;
     }
 
     public void PreCacheInBackground(Guid songId)
@@ -157,6 +169,10 @@ public class SongCacheService : ISongCacheService, IDisposable
         foreach ((Guid id, _, string path) in entries.OrderBy(x => x.lastAccessed))
         {
             if (GetCacheSize() <= targetSize) break;
+
+            // Never evict the song that's currently loaded/playing - its file may still be
+            // open for playback, and pulling it out from under the reader would stall playback.
+            if (id == _activeSongId) continue;
 
             try
             {
