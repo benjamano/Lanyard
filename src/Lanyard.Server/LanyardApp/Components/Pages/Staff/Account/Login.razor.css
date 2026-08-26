@@ -5,6 +5,27 @@
     margin: -32px -32px 8px;
 }
 
+/* Positioned relative to .auth-page-shell-card (set position:relative in
+   AuthPageShell.razor.css) - sits in the card's own padding, out of the form's flow, instead
+   of competing with the submit button/Privacy Policy links at the bottom of the card. */
+.login-back-link {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: var(--neutral-foreground-hint);
+    text-decoration: none;
+}
+
+.login-back-link:hover {
+    background-color: var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+}
+
 .login-company-logo {
     max-height: 48px;
     max-width: 100%;
@@ -13,10 +34,27 @@
     object-fit: contain;
 }
 
+/* text-align:center on the FluentText itself has no effect - it's an inline element, so
+   centering has to be set on this block-level parent instead. */
+.login-fields {
+    text-align: center;
+}
+
 .login-fields ::deep .login-full-width {
     width: 100%;
 }
 
 .login-fields ::deep .login-submit-row {
     margin-top: 8px;
+}
+
+.company-picker ::deep .company-picker-button {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.company-picker-logo {
+    max-height: 28px;
+    max-width: 80px;
+    object-fit: contain;
 }

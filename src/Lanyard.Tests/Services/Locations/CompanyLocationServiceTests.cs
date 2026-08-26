@@ -204,6 +204,62 @@ public class CompanyLocationServiceTests
     }
 
     [TestMethod]
+    public async Task CompanyLocationService_GetLoginLocationOptions_FiltersByCompanyWhenProvided()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        (Company companyA, Location ipswich) = await SeedCompanyAndLocationAsync(options, "Play2Day", "Ipswich");
+        (Company companyB, _) = await SeedCompanyAndLocationAsync(options, "Partyman", "Norwich");
+
+        Result<List<LoginLocationOption>> result = await service.GetLoginLocationOptionsAsync(companyA.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(ipswich.Id, result.Data![0].LocationId);
+        Assert.AreEqual(companyA.Id, result.Data[0].CompanyId);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetLoginLocationOptions_ReturnsAllCompaniesWhenNoFilterGiven()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        await SeedCompanyAndLocationAsync(options, "Play2Day", "Ipswich");
+        await SeedCompanyAndLocationAsync(options, "Partyman", "Norwich");
+
+        Result<List<LoginLocationOption>> result = await service.GetLoginLocationOptionsAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_GetLoginCompanyOptions_ReturnsOnlyActiveCompaniesWithAnActiveLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        (Company companyWithLocation, _) = await SeedCompanyAndLocationAsync(options, "Play2Day", "Ipswich");
+
+        Result<Company> companyWithNoLocations = await service.SaveCompanyAsync(new Company { Name = "No Locations Yet" });
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Company deactivatedLocationsOnly = new() { Name = "Closed Co", IsActive = true };
+            ctx.Companies.Add(deactivatedLocationsOnly);
+            await ctx.SaveChangesAsync();
+            ctx.Locations.Add(new Location { CompanyId = deactivatedLocationsOnly.Id, Name = "Closed Site", IsActive = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<List<LoginCompanyOption>> result = await service.GetLoginCompanyOptionsAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(companyWithLocation.Id, result.Data![0].CompanyId);
+        Assert.IsFalse(result.Data.Any(x => x.CompanyId == companyWithNoLocations.Data!.Id));
+    }
+
+    [TestMethod]
     public async Task CompanyLocationService_SaveCompany_RejectsMalformedHexColor()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
@@ -233,6 +289,38 @@ public class CompanyLocationServiceTests
     }
 
     [TestMethod]
+    public async Task CompanyLocationService_SaveCompany_AcceptsBackgroundImageFileId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        Guid backgroundImageFileId = Guid.NewGuid();
+
+        Result<Company> result = await service.SaveCompanyAsync(new Company { Name = "Play2Day", BackgroundImageFileId = backgroundImageFileId });
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Company dbCompany = await ctx.Companies.SingleAsync(x => x.Id == result.Data!.Id);
+        Assert.AreEqual(backgroundImageFileId, dbCompany.BackgroundImageFileId);
+    }
+
+    [TestMethod]
+    public async Task CompanyLocationService_SaveCompany_ClearingBackgroundImageOnUpdateSetsNull()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+        Result<Company> created = await service.SaveCompanyAsync(new Company { Name = "Play2Day", BackgroundImageFileId = Guid.NewGuid() });
+
+        Result<Company> updated = await service.SaveCompanyAsync(new Company { Id = created.Data!.Id, Name = "Play2Day", BackgroundImageFileId = null });
+
+        Assert.IsTrue(updated.Success, updated.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Company dbCompany = await ctx.Companies.SingleAsync(x => x.Id == created.Data.Id);
+        Assert.IsNull(dbCompany.BackgroundImageFileId);
+    }
+
+    [TestMethod]
     public async Task CompanyLocationService_SaveCompany_EmptyHexColorIsStoredAsNull()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
@@ -253,14 +341,23 @@ public class CompanyLocationServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         CompanyLocationService service = GetService(options);
         Guid logoFileId = Guid.NewGuid();
+        Guid backgroundImageFileId = Guid.NewGuid();
         (Company company, _) = await SeedCompanyAndLocationAsync(options);
-        await service.SaveCompanyAsync(new Company { Id = company.Id, Name = company.Name, ThemeColorHex = "#C8102E", LogoFileId = logoFileId });
+        await service.SaveCompanyAsync(new Company
+        {
+            Id = company.Id,
+            Name = company.Name,
+            ThemeColorHex = "#C8102E",
+            LogoFileId = logoFileId,
+            BackgroundImageFileId = backgroundImageFileId
+        });
 
         Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingAsync(company.Id);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.AreEqual("#C8102E", result.Data!.ThemeColorHex);
         Assert.AreEqual(logoFileId, result.Data.LogoFileId);
+        Assert.AreEqual(backgroundImageFileId, result.Data.BackgroundImageFileId);
     }
 
     [TestMethod]

@@ -1,13 +1,34 @@
 .auth-page-shell {
+    position: relative;
+    overflow: hidden;
     min-height: 70vh;
-    padding: 16px;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
 }
 
+.auth-page-shell-backdrop {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(4px);
+    transform: scale(1.1); /* hides blurred edge artifacts */
+    z-index: 0;
+}
+
+.auth-page-shell-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+}
+
 .auth-page-shell ::deep .auth-page-shell-card {
+    position: relative;
+    z-index: 1;
     width: 340px;
     max-width: 90vw;
     padding: 32px;

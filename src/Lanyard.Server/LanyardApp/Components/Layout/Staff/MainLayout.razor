@@ -42,7 +42,7 @@
         </AuthorizeView>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content" Margin="@Margin.All3">
+    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
@@ -93,6 +93,10 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+
+    // The login page's background image should bleed to the viewport edges - the standard
+    // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
+    private bool IsLoginPage => NavigationManager.Uri.Contains("/login");
 
     protected override void OnInitialized()
     {
