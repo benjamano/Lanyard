@@ -230,7 +230,9 @@ public class SecurityService : ISecurityService
                     {
                         // Unscoped: mirrors the GetCoursesAsync() call above - auto-assignment on
                         // user creation applies across all locations, matching pre-Task-4 behaviour.
-                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null, new LocationScope(true, null, null, null));
+                        // sendAssignedEmail: false - the user already gets a welcome/set-password
+                        // email in this same flow; a second "training assigned" email would be noise.
+                        Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null, new LocationScope(true, null, null, null), sendAssignedEmail: false);
 
                         if (!assignResult.IsSuccess)
                         {
