@@ -34,6 +34,8 @@ public static class DatabaseSeeder
 
         await SeedAdminUserAsync(context, userManager, configuration, environment, logger);
 
+        await SeedGdprPlaceholderUserAsync(context, userManager);
+
         await SeedCompanyAndLocationsAsync(context);
 
         await ResetIdentitySequencesAsync(context);
@@ -137,6 +139,44 @@ public static class DatabaseSeeder
         if (transaction is not null)
         {
             await transaction.CommitAsync();
+        }
+    }
+
+    // Reserved account that non-nullable attribution FKs (DmxScene/DmxSceneStep/
+    // DmxSceneStepChannelValue.CreateByUserId, ApplicationRole.CreatedByUserId) are repointed to
+    // by GdprService when the real author's account is erased - those fields are `required string`,
+    // so nulling them out is not an option. Never assigned a password, permanently locked out, and
+    // excluded from SecurityService.GetActiveUsersAsync so it can never be used or shown as a real user.
+    private static async Task SeedGdprPlaceholderUserAsync(ApplicationDbContext context, UserManager<UserProfile> userManager)
+    {
+        if (await context.Users.AnyAsync(u => u.Id == ApplicationDbContext.SystemDeletedUserPlaceholderId))
+        {
+            return;
+        }
+
+        UserProfile placeholder = new()
+        {
+            Id = ApplicationDbContext.SystemDeletedUserPlaceholderId,
+            UserName = "deleted-user",
+            Email = null,
+            EmailConfirmed = false,
+            FirstName = "Deleted",
+            LastName = "User",
+            PasswordSetDate = null,
+            LockoutEnabled = true,
+            LockoutEnd = DateTimeOffset.MaxValue,
+            ConcurrencyStamp = "SEED-GDPR-PLACEHOLDER-CONCURRENCY-STAMP"
+        };
+
+        // CreateAsync (no password overload) leaves PasswordHash null - there is no credential
+        // that could ever authenticate as this account, on top of the permanent lockout above.
+        IdentityResult result = await userManager.CreateAsync(placeholder);
+
+        if (!result.Succeeded)
+        {
+            string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+
+            throw new InvalidOperationException($"Failed to seed GDPR placeholder user: {errors}");
         }
     }
 
