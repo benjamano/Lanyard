@@ -1,12 +1,15 @@
 .auth-page-shell {
     position: relative;
     overflow: hidden;
-    /* height:100% is a no-op here - nothing in this app's ancestor chain (html/body/the
-       Fluent layout grid) sets an explicit height, so percentage heights never resolve.
-       Viewport units don't depend on that chain; the dvh variant additionally accounts for
-       mobile browsers' collapsing address bar, which plain vh can undershoot. */
-    min-height: 100vh;
-    min-height: 100dvh;
+    /* .fluent-layout-item[area="content"] (this element's direct parent) is a genuine,
+       definitely-sized box - Fluent's grid already stretches it to exactly "the viewport minus
+       header/footer" - so height:100% resolves correctly here. A viewport-unit height
+       (100vh/100dvh) would instead match the FULL viewport, overshooting that box by roughly
+       the header+footer height and creating an unwanted extra scroll range within Fluent's own
+       internally-scrolling content pane (confirmed via computed styles: that pane is
+       overflow:auto, not the page itself). */
+    height: 100%;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -14,7 +17,13 @@
 }
 
 .auth-page-shell-backdrop {
-    position: absolute;
+    /* Fixed to the actual browser viewport, not sized off .auth-page-shell's own box - on
+       mobile, dvh recalculates live as the address bar collapses/expands during scroll, so an
+       absolutely-positioned backdrop sized off a dvh-tall parent could shrink out from under
+       itself mid-scroll and expose blank page background. position:fixed sidesteps that
+       entirely: it always covers exactly the current viewport, independent of scroll position
+       or document height, so it also can't add any extra scrollable height of its own. */
+    position: fixed;
     inset: 0;
     background-size: cover;
     background-position: center;
