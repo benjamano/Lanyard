@@ -20,5 +20,11 @@ public interface ISongCacheService
     /// </summary>
     void PreCacheInBackground(Guid songId);
 
+    /// <summary>
+    /// Marks the given song as the one currently loaded/playing, protecting its cached file
+    /// from LRU eviction while another song is being downloaded in the background.
+    /// </summary>
+    void SetActiveSong(Guid songId);
+
     Result<IEnumerable<CachedSongDTO>> GetCachedSongs();
 }

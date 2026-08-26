@@ -261,7 +261,7 @@ public class MusicPlayerService
 
         songs = await context.Songs
             .AsNoTracking()
-            .Where(x => songIds.Contains(x.Id))
+            .Where(x => songIds.Contains(x.Id) && x.IsActive)
             .OrderByDescending(x => x.CreateDate)
             .ToListAsync();
 
@@ -464,7 +464,7 @@ public class MusicPlayerService
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         List<Song> playlistSongs = await context.PlaylistSongMembers
-            .Where(x => x.PlaylistId == playlistId)
+            .Where(x => x.PlaylistId == playlistId && x.DeleteDate == null && x.Song!.IsActive)
             .Select(x => x.Song!)
             .OrderByDescending(x => x.CreateDate)
             .ToListAsync();
