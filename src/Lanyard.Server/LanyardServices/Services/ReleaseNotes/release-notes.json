@@ -91,5 +91,14 @@
       "The kiosk text widget now supports rich text formatting (bold, italic, underline, lists).",
       "Added 2fa support into the login system, enabled via the Account Managment Page"
     ]
+  },
+  {
+    "version": "1.3.9",
+    "releaseDate": "2026-08-26",
+    "summary": "Added email reminders for training assignments.",
+    "details": [
+      "Users are now emailed when a training course is assigned to them.",
+      "Users are now emailed a reminder when an assigned course's due date is within 7 days and still incomplete."
+    ]
   }
 ]

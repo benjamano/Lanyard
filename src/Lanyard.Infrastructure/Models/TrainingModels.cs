@@ -90,6 +90,12 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? StartedDate { get; set; }
         public DateTime? CompletedDate { get; set; }
 
+        // Set once the training-due-soon reminder email has been sent for the current
+        // DueDate, so the periodic sweep in TrainingDueSoonHostedService doesn't re-send it
+        // every cycle. Reset to null by CourseAssignmentService.UpdateAssignmentDueDateAsync
+        // whenever the due date changes, so a pushed-out date can trigger a fresh reminder.
+        public DateTime? DueSoonReminderSentDate { get; set; }
+
         public bool IsActive { get; set; }
 
         // Nullable for now, same reasoning as Course.LocationId (see Task 3).

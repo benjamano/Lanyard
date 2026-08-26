@@ -1,17 +1,30 @@
+using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Lanyard.Application.Services.Training;
 
-public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> factory) : ICourseAssignmentService
+public class CourseAssignmentService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    IEmailService emailService,
+    IOptions<EmailOptions> emailOptions,
+    ICompanyLocationService companyLocationService,
+    ILogger<CourseAssignmentService> logger) : ICourseAssignmentService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IEmailService _emailService = emailService;
+    private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
+    private readonly ICompanyLocationService _companyLocationService = companyLocationService;
+    private readonly ILogger<CourseAssignmentService> _logger = logger;
 
-    public async Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope)
+    public async Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true)
     {
         try
         {
@@ -82,6 +95,11 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
 
             ctx.CourseAssignments.Add(assignment);
             await ctx.SaveChangesAsync();
+
+            if (sendAssignedEmail)
+            {
+                await SendAssignedEmailSafeAsync(ctx, assignment, course.Name);
+            }
 
             return Result<CourseAssignment>.Ok(assignment);
         }
@@ -319,7 +337,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         }
     }
 
-    public async Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate, LocationScope scope)
+    public async Task<Result<BulkAssignResult>> AssignCourseToUsersAsync(Guid courseId, List<string> userIds, string? assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true)
     {
         try
         {
@@ -370,6 +388,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 .ToHashSet();
 
             int assignedCount = 0;
+            List<CourseAssignment> newAssignments = [];
 
             // userIds are sourced from GetAllUsersAsync (individual picks) or
             // GetUsersInRoleAsync (role members) by the caller - both already
@@ -381,7 +400,7 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                     continue;
                 }
 
-                ctx.CourseAssignments.Add(new CourseAssignment
+                CourseAssignment newAssignment = new()
                 {
                     Id = Guid.NewGuid(),
                     CourseId = courseId,
@@ -391,12 +410,23 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                     DueDate = normalizedDueDate,
                     IsActive = true,
                     LocationId = assignmentLocationId
-                });
+                };
+
+                ctx.CourseAssignments.Add(newAssignment);
+                newAssignments.Add(newAssignment);
 
                 assignedCount++;
             }
 
             await ctx.SaveChangesAsync();
+
+            if (sendAssignedEmail)
+            {
+                foreach (CourseAssignment newAssignment in newAssignments)
+                {
+                    await SendAssignedEmailSafeAsync(ctx, newAssignment, course.Name);
+                }
+            }
 
             // Two distinct reasons a requested user ends up unassigned, reported separately so
             // the caller can explain the shortfall: already had the course (a duplicate, counted
@@ -427,7 +457,14 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
                 return Result<CourseAssignment>.Fail("Assignment not found.");
             }
 
-            assignment.DueDate = NormalizeDueDate(newDueDate);
+            DateTime? normalizedNewDueDate = NormalizeDueDate(newDueDate);
+
+            if (normalizedNewDueDate != assignment.DueDate)
+            {
+                assignment.DueSoonReminderSentDate = null;
+            }
+
+            assignment.DueDate = normalizedNewDueDate;
 
             await ctx.SaveChangesAsync();
 
@@ -569,6 +606,107 @@ public class CourseAssignmentService(IDbContextFactory<ApplicationDbContext> fac
         catch (Exception ex)
         {
             return Result<CourseAssignment>.Fail($"Failed to process recurrence cycle: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<CourseAssignment>>> GetAssignmentsDueSoonAsync(int daysThreshold)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CourseAssignment> candidates = await ctx.CourseAssignments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Course)
+                .Where(x => x.IsActive && x.CompletedDate == null && x.DueDate != null && x.DueSoonReminderSentDate == null)
+                .ToListAsync();
+
+            DateTime utcNow = DateTime.UtcNow;
+            DateTime threshold = utcNow.AddDays(daysThreshold);
+
+            List<CourseAssignment> dueSoon = [.. candidates
+                .Where(x => x.DueDate!.Value > utcNow && x.DueDate.Value <= threshold)];
+
+            return Result<List<CourseAssignment>>.Ok(dueSoon);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<CourseAssignment>>.Fail($"Failed to retrieve assignments due soon: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> MarkDueSoonReminderSentAsync(Guid assignmentId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CourseAssignment? assignment = await ctx.CourseAssignments.FirstOrDefaultAsync(x => x.Id == assignmentId);
+
+            if (assignment is null)
+            {
+                return Result<bool>.Fail("Assignment not found.");
+            }
+
+            assignment.DueSoonReminderSentDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to mark due-soon reminder as sent: {ex.Message}");
+        }
+    }
+
+    // Best-effort: an email failure must never fail the assignment itself, matching the
+    // swallow-and-log precedent in SecurityService's auto-assign-on-creation loop. Uses the
+    // caller's still-open ctx to look up the user rather than opening a new one.
+    private async Task SendAssignedEmailSafeAsync(ApplicationDbContext ctx, CourseAssignment assignment, string courseName)
+    {
+        try
+        {
+            UserProfile? user = await ctx.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == assignment.UserId);
+
+            if (user is null)
+            {
+                return;
+            }
+
+            string trainingUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/training/{assignment.Id}";
+
+            string? logoUrl = null;
+            string accentColorHex = BrandConstants.PrimaryColorHex;
+
+            if (assignment.LocationId is int locationId)
+            {
+                Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
+
+                if (brandingResult.Success && brandingResult.Data is not null)
+                {
+                    accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
+
+                    if (brandingResult.Data.LogoFileId is Guid logoFileId)
+                    {
+                        logoUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
+                    }
+                }
+            }
+
+            Result<bool> emailResult = await _emailService.SendTrainingAssignedEmailAsync(
+                user, courseName, assignment.DueDate, trainingUrl, logoUrl, accentColorHex);
+
+            if (!emailResult.IsSuccess)
+            {
+                _logger.LogWarning("Failed to send training-assigned email for assignment {AssignmentId}: {Error}",
+                    assignment.Id, emailResult.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error sending training-assigned email for assignment {AssignmentId}", assignment.Id);
         }
     }
 
