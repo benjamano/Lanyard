@@ -7,8 +7,9 @@ description: Build, launch, and drive the Lanyard server app to verify changes e
 
 ## Prerequisites
 - Docker Postgres must be running: container `lanyard-postgres` (localhost:5432, db/user `lanyard_dev`, password `lanyard_dev_password`). Check: `docker ps`.
-- Don't build `LanyardApp.sln` (or the `.slnx`) as a whole — it fails with `NETSDK1147: workloads must be installed: maui-android` because `Lanyard.Reach` targets `net10.0-android` and that workload isn't installed in this sandbox. Build only the server project directly:
+- Don't build `LanyardApp.sln` (or the `.slnx`) as a whole — on Linux it fails on a project that can't build there. Which one you hit depends on the sandbox: `NETSDK1147: workloads must be installed: maui-android` from `Lanyard.Reach` (targets `net10.0-android`), or `NETSDK1100: To build a project targeting Windows on this operating system, set EnableWindowsTargeting` from `Lanyard.Client`. Build only the server project directly:
   `dotnet build src/Lanyard.Server/LanyardApp/Lanyard.App.csproj`
+- `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj` does work and is the check CLAUDE.md asks for before calling a task done.
 - First time in a fresh sandbox, Playwright's browser isn't installed yet — `mcp__playwright__browser_navigate` fails with `Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome`. Fix once with:
   `npx playwright install chrome` (takes 1-2 min; run it in the background and wait rather than polling with short sleeps).
 
@@ -37,10 +38,38 @@ There's no dedicated screenshot skill; it's just two calls:
 For anything below the fold (e.g. a footer link), `browser_resize` to a taller viewport first, or the screenshot will only show what's visible at default size. Delete the PNG files (`rm -f *.png` at repo root, or scope to the filenames used) once you're done — they're scratch output, not something to leave lying around or commit.
 
 ## Login (Playwright MCP)
-Navigate to `http://localhost:5096/login?returnUrl=/<target>`, then:
-- `page.getByPlaceholder('Username').last().fill('bmercer')` (Fluent inputs resolve to 2 elements — use `.last()`)
-- password is in the `reference_lanyard_login` memory
-- submit control: `page.locator('.fluent-stack-vertical > .fluent-stack-horizontal').click()`
+
+The seeded dev account is `admin` / `Dev-Admin-Pw1!` — that's `DatabaseSeeder.DevelopmentAdminPassword`, used whenever `Seed:AdminPassword` isn't configured. It is usually the *only* row in `AspNetUsers`; don't expect `bmercer` or any other name to exist.
+
+**Check 2FA before you start.** If the seeded admin has `TwoFactorEnabled = true`, login stops at `/login/verify-2fa` and you cannot get past it unattended — email 2FA needs a Resend key that dev doesn't have, and the authenticator code isn't derivable. Check first:
+
+```sql
+SELECT "UserName", "TwoFactorEnabled" FROM "AspNetUsers";
+```
+
+If it's on, **ask the user before changing it** — 2FA state is shared with anything else using this database, and toggling it mid-session can break another session's testing. If they agree, flip it off, do the run, and set it back to `true` when finished.
+
+Login is **two steps** — company picker, then credentials:
+
+```js
+await page.goto('http://localhost:5096/login');
+await page.waitForTimeout(2500);
+await page.locator('.company-picker-button').first().click();   // step 1
+await page.waitForTimeout(2500);
+await page.getByRole('textbox', { name: /Username/ }).fill('admin');
+await page.getByRole('textbox', { name: /Password/ }).fill('Dev-Admin-Pw1!');
+await page.locator('fluent-dropdown#locationId').click();       // location is required
+await page.waitForTimeout(500);
+await page.locator('fluent-option:visible').first().click();
+await page.locator('.fluent-stack-horizontal.login-submit-row').click();
+await page.waitForTimeout(4000);                                 // lands on /
+```
+
+Selector notes, all of which cost time when guessed wrong:
+- Use `getByRole('textbox', ...)`, **not** `getByPlaceholder(...)`. The placeholder matches the `<fluent-text-input>` custom element as well as the inner `<input>`, and `.fill()` on the custom element fails with "Element is not an `<input>`...". Whether `.first()` or `.last()` is the real input flips depending on how much of the placeholder string you match, so don't rely on either.
+- Filling the inner `<input>` via a raw CSS selector "works" but submits **empty** — the value never reaches the form-associated custom element, and the POST comes back `400` with "The username field is required".
+- The location control is `fluent-dropdown#locationId`, not `fluent-select#locationId`.
+- Submit is `.fluent-stack-horizontal.login-submit-row`. The older `.fluent-stack-vertical > .fluent-stack-horizontal` now matches 3 elements and fails Playwright strict mode.
 
 ## Fluent UI v5 driving gotchas
 - Dialog content is slotted: locate via the `fluent-dialog` element, NOT `[role="alertdialog"]` (that native element only contains a `<slot>`).
@@ -48,6 +77,10 @@ Navigate to `http://localhost:5096/login?returnUrl=/<target>`, then:
 - Toolbar icon buttons have no text; identify by tooltip (`aria-describedby` → tooltip element text) or position. On `/manage/dashboards/{id}`: buttons in order are name, Save, preview-toggle, `#DashboardWidgetList` (add widget), Delete.
 - Dashboard edit page loads in preview mode; right-click-to-configure only works in edit-layout mode (toggle the preview button first). Widget hosts: `.dashboard-widget-host`.
 - Escape closes Fluent dialogs (fires the dismiss/cancel path).
+- Nav items rendered from `FluentNavItem`/`FluentAppBarItem` are easy to mis-target: the same label can match several elements, including zero-sized copies in a collapsed nav. Filter on a non-zero `getBoundingClientRect()` before clicking, or you will "click" something invisible and see nothing happen.
+
+## Timing measurements — clear CDP throttling
+`Network.emulateNetworkConditions` sticks to the *page*, not the CDP session that set it. Opening a new session and setting `latency: 0` does **not** reliably undo an earlier `latency: 3000`, so every later measurement silently inherits it — which looks exactly like the app being slow. If timings seem implausible, sanity-check with a `fetch()` of a static file (should be ~2ms locally); if it isn't, close the page (`browser_close`) and navigate again to get a clean context.
 
 ## Useful flows
 - Dashboards list: `/manage/dashboards` ("Create blank dashboard" button + row click to edit).
