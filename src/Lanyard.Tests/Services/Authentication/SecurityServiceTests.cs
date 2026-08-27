@@ -146,6 +146,7 @@ namespace Lanyard.Tests.Services.Authentication
 
             return new SecurityService(
                 authProvider,
+                new CurrentUserAccessor(authProvider),
                 factoryMock.Object,
                 userManager,
                 courseAssignmentServiceMock.Object,

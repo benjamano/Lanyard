@@ -16,12 +16,14 @@ public class CourseAssignmentService(
     IEmailService emailService,
     IOptions<EmailOptions> emailOptions,
     ICompanyLocationService companyLocationService,
+    ICertificateService certificateService,
     ILogger<CourseAssignmentService> logger) : ICourseAssignmentService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IEmailService _emailService = emailService;
     private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
     private readonly ICompanyLocationService _companyLocationService = companyLocationService;
+    private readonly ICertificateService _certificateService = certificateService;
     private readonly ILogger<CourseAssignmentService> _logger = logger;
 
     public async Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true)
@@ -288,12 +290,23 @@ public class CourseAssignmentService(
 
             ctx.CourseQuizAttempts.Add(attempt);
 
-            if (passed && assignment.CompletedDate is null)
+            // Captured before the save, because afterwards "CompletedDate is null" can no
+            // longer tell a first pass apart from a retake of an already-completed course -
+            // and this flag is the only thing stopping the certificate being re-sent on every
+            // subsequent passing attempt.
+            bool justCompleted = passed && assignment.CompletedDate is null;
+
+            if (justCompleted)
             {
                 assignment.CompletedDate = DateTime.UtcNow;
             }
 
             await ctx.SaveChangesAsync();
+
+            if (justCompleted)
+            {
+                await SendCertificateEmailSafeAsync(ctx, assignment, requestingUserId);
+            }
 
             return Result<QuizGradeResult>.Ok(new QuizGradeResult(scorePercent, passed, attemptNumber, questionResults));
         }
@@ -707,6 +720,64 @@ public class CourseAssignmentService(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled error sending training-assigned email for assignment {AssignmentId}", assignment.Id);
+        }
+    }
+
+    // Same best-effort contract as SendAssignedEmailSafeAsync above, for the same reason:
+    // a learner who has just passed their quiz must get their result back regardless of
+    // whether the PDF rendered or the mail provider was reachable. Returns void so there is
+    // no failure for the caller to accidentally propagate.
+    private async Task SendCertificateEmailSafeAsync(ApplicationDbContext ctx, CourseAssignment assignment, string requestingUserId)
+    {
+        try
+        {
+            UserProfile? user = await ctx.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == assignment.UserId);
+
+            if (user is null)
+            {
+                return;
+            }
+
+            Result<byte[]> certificateResult = await _certificateService.GenerateCertificatePdfAsync(assignment.Id, requestingUserId);
+
+            if (!certificateResult.IsSuccess || certificateResult.Data is null)
+            {
+                _logger.LogWarning("Failed to generate completion certificate for assignment {AssignmentId}: {Error}",
+                    assignment.Id, certificateResult.Error);
+
+                return;
+            }
+
+            string? logoUrl = null;
+            string accentColorHex = BrandConstants.PrimaryColorHex;
+
+            if (assignment.LocationId is int locationId)
+            {
+                Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
+
+                if (brandingResult.Success && brandingResult.Data is not null)
+                {
+                    accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
+
+                    if (brandingResult.Data.LogoFileId is Guid logoFileId)
+                    {
+                        logoUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
+                    }
+                }
+            }
+
+            Result<bool> emailResult = await _emailService.SendCourseCompletionCertificateEmailAsync(
+                user, assignment.Course?.Name ?? "your course", certificateResult.Data, logoUrl, accentColorHex);
+
+            if (!emailResult.IsSuccess)
+            {
+                _logger.LogWarning("Failed to send completion certificate email for assignment {AssignmentId}: {Error}",
+                    assignment.Id, emailResult.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error sending completion certificate for assignment {AssignmentId}", assignment.Id);
         }
     }
 

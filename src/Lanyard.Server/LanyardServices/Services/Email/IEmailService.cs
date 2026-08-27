@@ -10,4 +10,5 @@ public interface IEmailService
     Task<Result<bool>> SendTwoFactorCodeEmailAsync(UserProfile user, string code);
     Task<Result<bool>> SendTrainingAssignedEmailAsync(UserProfile user, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex);
     Task<Result<bool>> SendTrainingDueSoonEmailAsync(UserProfile user, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex);
+    Task<Result<bool>> SendCourseCompletionCertificateEmailAsync(UserProfile user, string courseName, byte[] certificatePdf, string? logoUrl, string accentColorHex);
 }

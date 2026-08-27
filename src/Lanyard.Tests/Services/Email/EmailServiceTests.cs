@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Lanyard.Application.Services.Email;
@@ -394,6 +395,85 @@ namespace Lanyard.Tests.Services.Email
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("401", result.Error);
+        }
+    
+        [TestMethod]
+        public async Task SendCourseCompletionCertificateEmailAsync_AttachesPdfAsBase64()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+            byte[] pdfBytes = [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37];
+
+            Result<bool> result = await service.SendCourseCompletionCertificateEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                pdfBytes,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsNotNull(handler.LastRequestBody);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            JsonElement attachments = body.RootElement.GetProperty("attachments");
+
+            Assert.AreEqual(1, attachments.GetArrayLength());
+
+            JsonElement attachment = attachments[0];
+            Assert.AreEqual("Fire Safety Certificate.pdf", attachment.GetProperty("filename").GetString());
+            CollectionAssert.AreEqual(pdfBytes, Convert.FromBase64String(attachment.GetProperty("content").GetString()!));
+        }
+
+        [TestMethod]
+        public async Task SendCourseCompletionCertificateEmailAsync_NoEmailAddress_Fails()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendCourseCompletionCertificateEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "Fire Safety",
+                [1, 2, 3],
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+        }
+
+        [TestMethod]
+        public async Task SendCourseCompletionCertificateEmailAsync_StripsUnsafeCharactersFromFileName()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendCourseCompletionCertificateEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Health \"&\" Safety / Level 2",
+                [1, 2, 3],
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string? fileName = body.RootElement.GetProperty("attachments")[0].GetProperty("filename").GetString();
+
+            Assert.AreEqual("Health  Safety  Level 2 Certificate.pdf", fileName);
+        }
+
+        // Regression guard: adding attachment support must not change the request body of
+        // the five send methods that predate it - Resend rejects a null "attachments" key.
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_OmitsAttachmentsPropertyEntirely()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                dueDate: null,
+                "https://lanyard.example.com/training/1",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+
+            Assert.IsFalse(body.RootElement.TryGetProperty("attachments", out _));
         }
     }
 }
