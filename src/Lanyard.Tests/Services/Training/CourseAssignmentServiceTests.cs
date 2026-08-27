@@ -28,7 +28,8 @@ public class CourseAssignmentServiceTests
     private static CourseAssignmentService GetService(
         DbContextOptions<ApplicationDbContext> options,
         Mock<IEmailService>? emailServiceMock = null,
-        Mock<ICompanyLocationService>? companyLocationServiceMock = null)
+        Mock<ITrainingBrandingResolver>? brandingResolverMock = null,
+        Mock<ICertificateService>? certificateServiceMock = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -39,14 +40,27 @@ public class CourseAssignmentServiceTests
             .Setup(e => e.SendTrainingAssignedEmailAsync(
                 It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
             .ReturnsAsync(Result<bool>.Ok(true));
+        resolvedEmailServiceMock
+            .Setup(e => e.SendCourseCompletionCertificateEmailAsync(
+                It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string?>(), It.IsAny<string>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
 
-        Mock<ICompanyLocationService> resolvedCompanyLocationServiceMock = companyLocationServiceMock ?? new Mock<ICompanyLocationService>();
+        Mock<ITrainingBrandingResolver> resolvedBrandingResolverMock = brandingResolverMock ?? new Mock<ITrainingBrandingResolver>();
+        resolvedBrandingResolverMock
+            .Setup(b => b.ResolveAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int?>()))
+            .ReturnsAsync(TrainingBranding.Default);
+
+        Mock<ICertificateService> resolvedCertificateServiceMock = certificateServiceMock ?? new Mock<ICertificateService>();
+        resolvedCertificateServiceMock
+            .Setup(c => c.GenerateCertificatePdfAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<byte[]>.Ok([1, 2, 3]));
 
         return new CourseAssignmentService(
             factoryMock.Object,
             resolvedEmailServiceMock.Object,
             Options.Create(new EmailOptions { PublicBaseUrl = "https://lanyard.example.com" }),
-            resolvedCompanyLocationServiceMock.Object,
+            resolvedBrandingResolverMock.Object,
+            resolvedCertificateServiceMock.Object,
             NullLogger<CourseAssignmentService>.Instance);
     }
 
@@ -380,6 +394,101 @@ public class CourseAssignmentServiceTests
         await using ApplicationDbContext verifyCtx = new(options);
         CourseAssignment dbAssignment = await verifyCtx.CourseAssignments.SingleAsync(x => x.Id == assignment.Id);
         Assert.IsNull(dbAssignment.CompletedDate);
+    }
+
+    [TestMethod]
+    public async Task SubmitQuizAttemptAsync_FirstPass_SendsCertificateEmailExactlyOnce()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options, passMarkPercent: 80);
+        CourseQuestionOption correctOption = await SeedQuestionAsync(options, course.Id);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Dictionary<Guid, Guid> answers = new() { [correctOption.QuestionId] = correctOption.Id };
+
+        Result<QuizGradeResult> result = await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+
+        Assert.IsTrue(result.Success, result.Error);
+        emailServiceMock.Verify(e => e.SendCourseCompletionCertificateEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Once());
+    }
+
+    [TestMethod]
+    public async Task SubmitQuizAttemptAsync_RetakeOfCompletedCourse_DoesNotResendCertificateEmail()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options, passMarkPercent: 80);
+        CourseQuestionOption correctOption = await SeedQuestionAsync(options, course.Id);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Dictionary<Guid, Guid> answers = new() { [correctOption.QuestionId] = correctOption.Id };
+
+        await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+        await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+
+        // Still Once across both passes - the assignment was only ever completed once.
+        emailServiceMock.Verify(e => e.SendCourseCompletionCertificateEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Once());
+    }
+
+    [TestMethod]
+    public async Task SubmitQuizAttemptAsync_FailedAttempt_DoesNotSendCertificateEmail()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options, passMarkPercent: 80);
+        CourseQuestionOption correctOption = await SeedQuestionAsync(options, course.Id);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        CourseQuestionOption wrongOption;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            wrongOption = await ctx.CourseQuestionOptions.SingleAsync(x => x.QuestionId == correctOption.QuestionId && !x.IsCorrect);
+        }
+
+        Dictionary<Guid, Guid> answers = new() { [correctOption.QuestionId] = wrongOption.Id };
+
+        await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+
+        emailServiceMock.Verify(e => e.SendCourseCompletionCertificateEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string?>(), It.IsAny<string>()), Times.Never());
+    }
+
+    [TestMethod]
+    public async Task SubmitQuizAttemptAsync_CertificateGenerationFails_StillReturnsQuizResult()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<ICertificateService> certificateServiceMock = new();
+        certificateServiceMock
+            .Setup(c => c.GenerateCertificatePdfAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<byte[]>.Fail("renderer exploded"));
+
+        CourseAssignmentService service = GetService(options, certificateServiceMock: certificateServiceMock);
+        Course course = await SeedCourseAsync(options, passMarkPercent: 80);
+        CourseQuestionOption correctOption = await SeedQuestionAsync(options, course.Id);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id);
+
+        Dictionary<Guid, Guid> answers = new() { [correctOption.QuestionId] = correctOption.Id };
+
+        Result<QuizGradeResult> result = await service.SubmitQuizAttemptAsync(assignment.Id, user.Id, answers);
+
+        // A certificate problem must never cost the learner their pass.
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(100, result.Data!.ScorePercent);
+        Assert.IsTrue(result.Data!.Passed);
+
+        await using ApplicationDbContext ctx = new(options);
+        CourseAssignment dbAssignment = await ctx.CourseAssignments.SingleAsync(x => x.Id == assignment.Id);
+        Assert.IsNotNull(dbAssignment.CompletedDate);
     }
 
     [TestMethod]

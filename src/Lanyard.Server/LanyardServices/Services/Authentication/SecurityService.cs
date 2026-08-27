@@ -6,7 +6,6 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
@@ -22,6 +21,7 @@ namespace Lanyard.Application.Services.Authentication;
 public class SecurityService : ISecurityService
 {
     private readonly AuthenticationStateProvider _authStateProvider;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IDbContextFactory<ApplicationDbContext> _factory;
     private readonly UserManager<UserProfile> _userManager;
     private readonly ICourseAssignmentService _courseAssignmentService;
@@ -34,6 +34,7 @@ public class SecurityService : ISecurityService
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
+        ICurrentUserAccessor currentUserAccessor,
         IDbContextFactory<ApplicationDbContext> factory,
         UserManager<UserProfile> userManager,
         ICourseAssignmentService courseAssignmentService,
@@ -45,6 +46,7 @@ public class SecurityService : ISecurityService
         IOptions<EmailOptions> emailOptions)
     {
         _authStateProvider = authStateProvider;
+        _currentUserAccessor = currentUserAccessor;
         _factory = factory;
         _userManager = userManager;
         _courseAssignmentService = courseAssignmentService;
@@ -56,27 +58,12 @@ public class SecurityService : ISecurityService
         _emailOptions = emailOptions;
     }
 
-    public async Task<Result<string>> GetCurrentUserIdAsync()
+    // Delegates to ICurrentUserAccessor so this and FileService can never disagree about
+    // which claim identifies the user. Kept on ISecurityService because plenty of callers
+    // already reach for it here.
+    public Task<Result<string>> GetCurrentUserIdAsync()
     {
-        AuthenticationState authState = await _authStateProvider.GetAuthenticationStateAsync();
-        ClaimsPrincipal user = authState.User;
-
-        if (user is null || user.Identity == null)
-        {
-            return Result<string>.Fail("User information is not available");
-        }
-
-        if (user.Identity?.IsAuthenticated == false)
-        {
-            return Result<string>.Fail("User is not authenticated");
-        }
-
-        if (user.FindFirst(ClaimTypes.NameIdentifier) is null && user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier") is null && user.FindFirst("sub") is null)
-        {
-            return Result<string>.Fail("User ID claim not found");
-        }
-
-        return Result<string>.Ok((user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value ?? user.FindFirst("sub")?.Value)!);
+        return _currentUserAccessor.GetCurrentUserIdAsync();
     }
 
     public async Task<bool> IsUserLoggedIn()

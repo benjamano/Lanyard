@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using System.Data;
 
 namespace Lanyard.Infrastructure.Models
@@ -16,6 +16,23 @@ namespace Lanyard.Infrastructure.Models
         public string GetName()
         {
             return FirstName + " " + LastName;
+        }
+
+        // Emails address people by first name - a username is an internal handle and reads
+        // oddly in a sentence ("Hi jdoe,"). Falls back through full name then username so a
+        // user with no first name still gets a sensible greeting rather than a blank one.
+        public string GetGreetingName()
+        {
+            if (!string.IsNullOrWhiteSpace(FirstName))
+            {
+                return FirstName.Trim();
+            }
+
+            string fullName = GetName().Trim();
+
+            return !string.IsNullOrWhiteSpace(fullName)
+                ? fullName
+                : UserName ?? Email ?? "there";
         }
     }
 

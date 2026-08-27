@@ -87,8 +87,11 @@ namespace Lanyard.Tests.Services.Authentication
             Mock<ICompanyLocationService> companyLocationServiceMock = new();
             Mock<IEmailService> emailServiceMock = new();
 
+            AuthenticationStateProvider authProvider = BuildAuthProviderForUser(userId).Object;
+
             return new SecurityService(
-                BuildAuthProviderForUser(userId).Object,
+                authProvider,
+                new CurrentUserAccessor(authProvider),
                 factoryMock.Object,
                 userManager,
                 courseAssignmentServiceMock.Object,

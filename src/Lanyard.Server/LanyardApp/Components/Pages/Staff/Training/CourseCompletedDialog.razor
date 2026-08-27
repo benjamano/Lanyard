@@ -8,10 +8,16 @@
             <FluentText>
                 You've completed @CourseName. No further action is needed - you're all set.
             </FluentText>
+            <FluentText>
+                Your certificate has been emailed to you, and you can download it below or from My Training at any time.
+            </FluentText>
         </FluentStack>
     </ChildContent>
     <ActionTemplate>
         <FluentStack HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                          OnClick="DownloadCertificate">Download Certificate</FluentButton>
             <FluentButton Appearance="ButtonAppearance.Primary" OnClick="GoHomeAsync">Back to Home</FluentButton>
         </FluentStack>
     </ActionTemplate>
@@ -21,11 +27,21 @@
     [Parameter]
     public string CourseName { get; set; } = string.Empty;
 
+    [Parameter]
+    public Guid AssignmentId { get; set; }
+
     [CascadingParameter]
     public required IDialogInstance Dialog { get; set; }
 
     [Inject]
     public required NavigationManager NavigationManager { get; set; }
+
+    private void DownloadCertificate()
+    {
+        // forceLoad so the browser performs a real navigation and handles the PDF response
+        // as a download, the same way the file manager triggers /api/Files/download.
+        NavigationManager.NavigateTo($"api/training/assignments/{AssignmentId}/certificate", forceLoad: true);
+    }
 
     private async Task GoHomeAsync()
     {
