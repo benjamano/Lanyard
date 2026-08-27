@@ -18,3 +18,20 @@
     height: 100%;
     min-height: 0;
 }
+
+::deep .music-seek-stack {
+    width: 100%;
+    max-width: 600px;
+}
+
+@media (max-width: 599px) {
+    ::deep .music-bottom-controls-stack {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .music-volume-wrapper,
+    .music-client-controls {
+        width: 100%;
+    }
+}
