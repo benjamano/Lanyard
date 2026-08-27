@@ -1,4 +1,4 @@
-@using Lanyard.App.Components.Dialogs
+﻿@using Lanyard.App.Components.Dialogs
 @using Lanyard.Shared.DTO
 
 @inject NavigationManager NavigationManager
@@ -85,6 +85,9 @@
                     <FluentNavItem Href="/manage/projectionprograms"
                                    IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())"
                                    IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
+                    <FluentNavItem Href="/manage/projectioncontrol"
+                                   IconRest="@(new Icons.Regular.Size20.ProjectionScreenText())"
+                                   IconActive="@(new Icons.Filled.Size20.ProjectionScreenText())">Projection Control</FluentNavItem>
                     <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())"
                                    IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
 
@@ -131,7 +134,7 @@
                                IconActive="@(new Icons.Filled.Size20.Person())">
                     @_displayName
                 </FluentNavItem>
-                <FluentNavItem Href="/api/auth/logout" IconRest="@(new Icons.Regular.Size20.SignOut())"
+                <FluentNavItem OnClick="Logout" IconRest="@(new Icons.Regular.Size20.SignOut())"
                                IconActive="@(new Icons.Filled.Size20.SignOut())">
                     Logout
                 </FluentNavItem>
@@ -187,6 +190,13 @@
             }
         }
     }
+
+    // /api/auth/logout is a controller endpoint, not an @page, so it must not be reached through
+    // Href: Blazor's interactive router intercepts the anchor click, pushes the URL into history,
+    // finds no matching route, and only then falls back to a forced browser navigation - leaving
+    // the still-authenticated layout rendered at a URL that has no route for the duration of the
+    // round trip. forceLoad bypasses the router so the browser hits the endpoint in one hop.
+    private void Logout() => NavigationManager.NavigateTo("/api/auth/logout", forceLoad: true);
 
     private async Task OpenReleaseNotesAsync()
     {

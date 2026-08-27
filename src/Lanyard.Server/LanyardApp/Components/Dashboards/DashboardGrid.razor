@@ -1,4 +1,4 @@
-@using Lanyard.App.Components.Dashboards.Widgets
+﻿@using Lanyard.App.Components.Dashboards.Widgets
 @using Lanyard.App.Components.Dialogs
 @using Lanyard.App.Components.Home
 @using Lanyard.Infrastructure.Enum
@@ -68,7 +68,7 @@
                                 <div class="dashboard-widget-host"
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
-                                    <RenderTextAreaWidget Widget="textAreaWidget" PreviewMode="PreviewMode" />
+                                    <RenderTextAreaWidget Widget="textAreaWidget" />
                                 </div>
                                 break;
                             case WidgetType.ClientZoneLaserGameStatus:
@@ -153,6 +153,20 @@
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderAutomationRuleStatusWidget Widget="automationRuleStatusWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
+                            case WidgetType.KioskHealth:
+                                KioskHealthWidget? kioskHealthWidget = widget as KioskHealthWidget;
+
+                                if (kioskHealthWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderKioskHealthWidget Widget="kioskHealthWidget" />
                                 </div>
                                 break;
                         }
@@ -333,6 +347,9 @@
             case AutomationRuleStatusWidget automationRuleStatusWidget:
                 await ShowConfigureAutomationRuleStatusDialog(automationRuleStatusWidget);
                 break;
+            case KioskHealthWidget kioskHealthWidget:
+                await ShowConfigureKioskHealthDialog(kioskHealthWidget);
+                break;
         }
     }
 
@@ -433,6 +450,20 @@
         _toastService.ShowError($"Failed to load clients, {result.Error}");
 
         return [];
+    }
+
+    private async Task ShowConfigureKioskHealthDialog(KioskHealthWidget kioskHealthWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureKioskHealthDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureKioskHealthDialog.Widget), kioskHealthWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
     }
 
     private async Task ShowConfigureDigitalClockDialog(DigitalClockWidget clockWidget)

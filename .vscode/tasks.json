@@ -136,6 +136,37 @@
             "dependsOn": ["Start Dev Database (Docker)", "Build LanyardClient", "Build LanyardApp"],
             "dependsOrder": "sequence",
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Update Database (EF Migrations)",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "ef",
+                "database",
+                "update",
+                "--project",
+                "src/Lanyard.Infrastructure",
+                "--startup-project",
+                "src/Lanyard.Server/LanyardApp"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Start Database and Update Database",
+            "dependsOn": [
+                "Start Dev Database (Docker)",
+                "Update Database (EF Migrations)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
         }
     ]
 }

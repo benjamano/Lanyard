@@ -386,6 +386,43 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         }
     }
 
+    public async Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForUserAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Company> companies = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.UserId == userId && x.Location!.IsActive && x.Location.Company!.IsActive)
+                .Select(x => x.Location!.Company!)
+                .Distinct()
+                .ToListAsync();
+
+            if (companies.Count == 0)
+            {
+                return Result<CompanyBrandingInfo>.Fail("User does not belong to an active company.");
+            }
+
+            // Belonging to two companies at once has no single right answer, so rather than
+            // pick one arbitrarily the caller is told to fall back to another signal.
+            if (companies.Count > 1)
+            {
+                return Result<CompanyBrandingInfo>.Fail("User belongs to more than one company.");
+            }
+
+            Company company = companies[0];
+
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(
+                company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyBrandingInfo>.Fail($"Failed to retrieve company branding for user: {ex.Message}");
+        }
+    }
+
     public async Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForLocationAsync(int locationId)
     {
         try

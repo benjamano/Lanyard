@@ -4,6 +4,8 @@
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
 
+@implements IDisposable
+
 @inject IClientService _clientService
 @inject INotificationService _toastService
 
@@ -34,10 +36,10 @@
                 </TemplateColumn>
                 <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
                 <TemplateColumn Title="Current Session Length" Class="clients-col-session">
-                    @if (context.IsCurrentlyConnected)
+                    @if (context.IsCurrentlyConnected && context.LastLogin is DateTime lastLogin)
                     {
                         <span>
-                            @(((TimeSpan)(now - context.LastLogin)!).ToString(@"hh\:mm\:ss"))s
+                            @((now - lastLogin).ToString(@"hh\:mm\:ss"))s
                         </span>
                     }
                     else
@@ -61,7 +63,13 @@
     private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
 
     private PeriodicTimer? timer;
+    private CancellationTokenSource? timerCancellation;
     private DateTime now;
+
+    // The clock column needs a 1s tick, but connectivity comes from an in-memory set on the
+    // hub with no change event, so the grid itself is refetched on a slower cadence.
+    private const int RefreshEverySeconds = 10;
+    private int ticksSinceRefresh;
 
     protected override async Task OnInitializedAsync()
     {
@@ -69,24 +77,48 @@
 
         now = DateTime.UtcNow;
 
+        timerCancellation = new CancellationTokenSource();
         timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        CancellationToken token = timerCancellation.Token;
 
         _ = Task.Run(async () =>
         {
-            while (await timer.WaitForNextTickAsync())
+            try
             {
-                now = DateTime.UtcNow;
-                await InvokeAsync(StateHasChanged);
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    now = DateTime.UtcNow;
+
+                    ticksSinceRefresh++;
+
+                    if (ticksSinceRefresh >= RefreshEverySeconds)
+                    {
+                        ticksSinceRefresh = 0;
+
+                        // Silent on the timer path: a persistent failure would otherwise
+                        // raise a toast every refresh.
+                        await GetClientsAsync(showErrors: false);
+                    }
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
             }
         });
     }
 
     public void Dispose()
     {
+        timerCancellation?.Cancel();
         timer?.Dispose();
+        timerCancellation?.Dispose();
     }
 
-    private async Task GetClientsAsync()
+    private async Task GetClientsAsync(bool showErrors = true)
     {
         Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
 
@@ -94,7 +126,7 @@
         {
             clients = result.Data!;
         }
-        else
+        else if (showErrors)
         {
             _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }

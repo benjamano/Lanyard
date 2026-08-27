@@ -297,6 +297,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastDisconnectDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LastLogin")
                         .HasColumnType("timestamp with time zone");
 
@@ -1657,6 +1660,16 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(1);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.KioskHealthWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("OnlyShowOffline")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(9);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicPlaylistSelectorWidget", b =>
