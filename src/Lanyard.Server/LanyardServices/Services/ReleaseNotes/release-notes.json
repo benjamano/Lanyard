@@ -129,7 +129,9 @@
     "details": [
       "Passing a training course now emails you a branded PDF certificate automatically.",
       "Added a \"Download Certificate\" button to the course completion dialog and to each completed course on My Training.",
-      "Certificates carry your company's logo and brand colour, and can be re-downloaded at any time."
+      "Certificates carry your company's logo and brand colour, and can be re-downloaded at any time.",
+      "Training emails now greet you by first name instead of your username.",
+      "Training emails and certificates now take their logo and brand colour from your own company, so everyone at a company gets consistent branding regardless of who assigned the course."
     ]
   }
 ]

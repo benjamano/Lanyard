@@ -15,14 +15,14 @@ public class CourseAssignmentService(
     IDbContextFactory<ApplicationDbContext> factory,
     IEmailService emailService,
     IOptions<EmailOptions> emailOptions,
-    ICompanyLocationService companyLocationService,
+    ITrainingBrandingResolver brandingResolver,
     ICertificateService certificateService,
     ILogger<CourseAssignmentService> logger) : ICourseAssignmentService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IEmailService _emailService = emailService;
     private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
-    private readonly ICompanyLocationService _companyLocationService = companyLocationService;
+    private readonly ITrainingBrandingResolver _brandingResolver = brandingResolver;
     private readonly ICertificateService _certificateService = certificateService;
     private readonly ILogger<CourseAssignmentService> _logger = logger;
 
@@ -690,23 +690,11 @@ public class CourseAssignmentService(
 
             string trainingUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/training/{assignment.Id}";
 
-            string? logoUrl = null;
-            string accentColorHex = BrandConstants.PrimaryColorHex;
+            TrainingBranding branding = await _brandingResolver.ResolveAsync(
+                assignment.UserId, assignment.LocationId, assignment.Course?.LocationId);
 
-            if (assignment.LocationId is int locationId)
-            {
-                Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
-
-                if (brandingResult.Success && brandingResult.Data is not null)
-                {
-                    accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
-
-                    if (brandingResult.Data.LogoFileId is Guid logoFileId)
-                    {
-                        logoUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
-                    }
-                }
-            }
+            string accentColorHex = branding.AccentColorHex;
+            string? logoUrl = BuildLogoUrl(branding);
 
             Result<bool> emailResult = await _emailService.SendTrainingAssignedEmailAsync(
                 user, courseName, assignment.DueDate, trainingUrl, logoUrl, accentColorHex);
@@ -748,23 +736,11 @@ public class CourseAssignmentService(
                 return;
             }
 
-            string? logoUrl = null;
-            string accentColorHex = BrandConstants.PrimaryColorHex;
+            TrainingBranding branding = await _brandingResolver.ResolveAsync(
+                assignment.UserId, assignment.LocationId, assignment.Course?.LocationId);
 
-            if (assignment.LocationId is int locationId)
-            {
-                Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
-
-                if (brandingResult.Success && brandingResult.Data is not null)
-                {
-                    accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
-
-                    if (brandingResult.Data.LogoFileId is Guid logoFileId)
-                    {
-                        logoUrl = $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
-                    }
-                }
-            }
+            string accentColorHex = branding.AccentColorHex;
+            string? logoUrl = BuildLogoUrl(branding);
 
             Result<bool> emailResult = await _emailService.SendCourseCompletionCertificateEmailAsync(
                 user, assignment.Course?.Name ?? "your course", certificateResult.Data, logoUrl, accentColorHex);
@@ -780,6 +756,11 @@ public class CourseAssignmentService(
             _logger.LogError(ex, "Unhandled error sending completion certificate for assignment {AssignmentId}", assignment.Id);
         }
     }
+
+    private string? BuildLogoUrl(TrainingBranding branding) =>
+        branding is { CompanyId: int companyId, LogoFileId: Guid logoFileId }
+            ? $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
+            : null;
 
     public async Task<Result<bool>> RecordSectionTransitionAsync(Guid assignmentId, string requestingUserId, Guid? departedSectionId, Guid? arrivedSectionId, DateTime transitionTimeUtc)
     {

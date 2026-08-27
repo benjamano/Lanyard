@@ -28,7 +28,7 @@ public class CourseAssignmentServiceTests
     private static CourseAssignmentService GetService(
         DbContextOptions<ApplicationDbContext> options,
         Mock<IEmailService>? emailServiceMock = null,
-        Mock<ICompanyLocationService>? companyLocationServiceMock = null,
+        Mock<ITrainingBrandingResolver>? brandingResolverMock = null,
         Mock<ICertificateService>? certificateServiceMock = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
@@ -45,7 +45,10 @@ public class CourseAssignmentServiceTests
                 It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string?>(), It.IsAny<string>()))
             .ReturnsAsync(Result<bool>.Ok(true));
 
-        Mock<ICompanyLocationService> resolvedCompanyLocationServiceMock = companyLocationServiceMock ?? new Mock<ICompanyLocationService>();
+        Mock<ITrainingBrandingResolver> resolvedBrandingResolverMock = brandingResolverMock ?? new Mock<ITrainingBrandingResolver>();
+        resolvedBrandingResolverMock
+            .Setup(b => b.ResolveAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int?>()))
+            .ReturnsAsync(TrainingBranding.Default);
 
         Mock<ICertificateService> resolvedCertificateServiceMock = certificateServiceMock ?? new Mock<ICertificateService>();
         resolvedCertificateServiceMock
@@ -56,7 +59,7 @@ public class CourseAssignmentServiceTests
             factoryMock.Object,
             resolvedEmailServiceMock.Object,
             Options.Create(new EmailOptions { PublicBaseUrl = "https://lanyard.example.com" }),
-            resolvedCompanyLocationServiceMock.Object,
+            resolvedBrandingResolverMock.Object,
             resolvedCertificateServiceMock.Object,
             NullLogger<CourseAssignmentService>.Instance);
     }

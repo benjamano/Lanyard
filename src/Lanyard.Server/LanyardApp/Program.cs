@@ -81,6 +81,7 @@ builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>(
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
 builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>();
+builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();

@@ -13,12 +13,12 @@ namespace Lanyard.Application.Services.Training;
 
 public class CertificateService(
     IDbContextFactory<ApplicationDbContext> factory,
-    ICompanyLocationService companyLocationService,
+    ITrainingBrandingResolver brandingResolver,
     IFileService fileService,
     ILogger<CertificateService> logger) : ICertificateService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-    private readonly ICompanyLocationService _companyLocationService = companyLocationService;
+    private readonly ITrainingBrandingResolver _brandingResolver = brandingResolver;
     private readonly IFileService _fileService = fileService;
     private readonly ILogger<CertificateService> _logger = logger;
 
@@ -92,31 +92,23 @@ public class CertificateService(
     // the logo to bytes instead of a URL - a PDF has to carry the image itself so it still
     // renders when printed or opened offline. A logo that can't be loaded is dropped rather
     // than failing the certificate: the rest of the document is still valid without it.
-    private async Task<(byte[]? LogoBytes, string AccentColorHex)> ResolveBrandingAsync(CourseAssignment assignment, CancellationToken cancellationToken)
+    // Branding comes from ITrainingBrandingResolver (learner's company first) rather than
+    // assignment.LocationId, which records the assigner rather than the learner - see that
+    // class for why. Only the logo bytes are fetched here, since a PDF has to embed the
+    // image itself to survive printing and offline viewing.
+    private async Task<(byte[]? LogoBytes, string AccentColorHex)> ResolveBrandingAsync(
+        CourseAssignment assignment, CancellationToken cancellationToken)
     {
-        string accentColorHex = BrandConstants.PrimaryColorHex;
+        TrainingBranding branding = await _brandingResolver.ResolveAsync(
+            assignment.UserId, assignment.LocationId, assignment.Course?.LocationId);
 
-        if (assignment.LocationId is not int locationId)
+        if (branding.LogoFileId is not Guid logoFileId)
         {
-            return (null, accentColorHex);
+            return (null, branding.AccentColorHex);
         }
 
         try
         {
-            Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
-
-            if (!brandingResult.IsSuccess || brandingResult.Data is null)
-            {
-                return (null, accentColorHex);
-            }
-
-            accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
-
-            if (brandingResult.Data.LogoFileId is not Guid logoFileId)
-            {
-                return (null, accentColorHex);
-            }
-
             Result<Stream> logoResult = await _fileService.DownloadFileAsync(logoFileId, cancellationToken);
 
             if (!logoResult.IsSuccess || logoResult.Data is null)
@@ -124,20 +116,21 @@ public class CertificateService(
                 _logger.LogWarning("Could not load logo {LogoFileId} for certificate on assignment {AssignmentId}: {Error}",
                     logoFileId, assignment.Id, logoResult.Error);
 
-                return (null, accentColorHex);
+                return (null, branding.AccentColorHex);
             }
 
             await using Stream logoStream = logoResult.Data;
             using MemoryStream buffer = new();
             await logoStream.CopyToAsync(buffer, cancellationToken);
 
-            return (buffer.ToArray(), accentColorHex);
+            return (buffer.ToArray(), branding.AccentColorHex);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not resolve branding for certificate on assignment {AssignmentId}", assignment.Id);
+            // A missing or unreadable logo must not cost the learner their certificate.
+            _logger.LogWarning(ex, "Could not load logo for certificate on assignment {AssignmentId}", assignment.Id);
 
-            return (null, accentColorHex);
+            return (null, branding.AccentColorHex);
         }
     }
 

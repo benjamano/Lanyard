@@ -62,7 +62,7 @@ public class TrainingDueSoonHostedService(
         IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
         IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
         EmailOptions emailOptions = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
-        ICompanyLocationService companyLocationService = scope.ServiceProvider.GetRequiredService<ICompanyLocationService>();
+        ITrainingBrandingResolver brandingResolver = scope.ServiceProvider.GetRequiredService<ITrainingBrandingResolver>();
 
         Result<List<CourseAssignment>> dueResult = await assignmentService.GetAssignmentsDueSoonAsync(_dueSoonDaysThreshold);
 
@@ -94,25 +94,16 @@ public class TrainingDueSoonHostedService(
 
                 string trainingUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/training/{assignment.Id}";
 
-                string? logoUrl = null;
-                string accentColorHex = BrandConstants.PrimaryColorHex;
+                TrainingBranding branding = await brandingResolver.ResolveAsync(
+                    assignment.UserId, assignment.LocationId, assignment.Course?.LocationId);
 
-                if (assignment.LocationId is int locationId)
-                {
-                    Result<CompanyBrandingInfo> brandingResult = await companyLocationService.GetCompanyBrandingForLocationAsync(locationId);
+                string accentColorHex = branding.AccentColorHex;
 
-                    if (brandingResult.Success && brandingResult.Data is not null)
-                    {
-                        accentColorHex = BrandConstants.ResolveAccentColor(brandingResult.Data.ThemeColorHex);
-
-                        if (brandingResult.Data.LogoFileId is Guid logoFileId)
-                        {
-                            // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
-                            // logo replacement needs a new URL to guarantee a fresh fetch.
-                            logoUrl = $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{brandingResult.Data.CompanyId}/logo?v={logoFileId:N}";
-                        }
-                    }
-                }
+                // See MainLayout.ApplyBrandingAsync - the endpoint is cache-keyed by URL, so a
+                // logo replacement needs a new URL to guarantee a fresh fetch.
+                string? logoUrl = branding is { CompanyId: int companyId, LogoFileId: Guid logoFileId }
+                    ? $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
+                    : null;
 
                 Result<bool> emailResult = await emailService.SendTrainingDueSoonEmailAsync(
                     user, assignment.Course?.Name ?? "your training course", assignment.DueDate!.Value, trainingUrl, logoUrl, accentColorHex);

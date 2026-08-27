@@ -24,16 +24,21 @@ public class CertificateServiceTests
 
     private static CertificateService GetService(
         DbContextOptions<ApplicationDbContext> options,
-        Mock<ICompanyLocationService>? companyLocationServiceMock = null,
+        Mock<ITrainingBrandingResolver>? brandingResolverMock = null,
         Mock<IFileService>? fileServiceMock = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
+        Mock<ITrainingBrandingResolver> resolvedBrandingResolverMock = brandingResolverMock ?? new Mock<ITrainingBrandingResolver>();
+        resolvedBrandingResolverMock
+            .Setup(b => b.ResolveAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int?>()))
+            .ReturnsAsync(TrainingBranding.Default);
+
         return new CertificateService(
             factoryMock.Object,
-            (companyLocationServiceMock ?? new Mock<ICompanyLocationService>()).Object,
+            resolvedBrandingResolverMock.Object,
             (fileServiceMock ?? new Mock<IFileService>()).Object,
             NullLogger<CertificateService>.Instance);
     }
@@ -135,12 +140,12 @@ public class CertificateServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
 
-        Mock<ICompanyLocationService> companyLocationServiceMock = new();
-        companyLocationServiceMock
-            .Setup(c => c.GetCompanyBrandingForLocationAsync(It.IsAny<int>()))
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock
+            .Setup(b => b.ResolveAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int?>()))
             .ThrowsAsync(new InvalidOperationException("branding lookup exploded"));
 
-        CertificateService service = GetService(options, companyLocationServiceMock);
+        CertificateService service = GetService(options, brandingResolverMock);
         (_, UserProfile user, CourseAssignment assignment) = await SeedAsync(options, DateTime.UtcNow, locationId: 7);
 
         Result<byte[]> result = await service.GenerateCertificatePdfAsync(assignment.Id, user.Id);
@@ -155,17 +160,17 @@ public class CertificateServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
 
-        Mock<ICompanyLocationService> companyLocationServiceMock = new();
-        companyLocationServiceMock
-            .Setup(c => c.GetCompanyBrandingForLocationAsync(It.IsAny<int>()))
-            .ReturnsAsync(Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(1, "#123456", Guid.NewGuid(), null)));
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock
+            .Setup(b => b.ResolveAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<int?>()))
+            .ReturnsAsync(new TrainingBranding("#123456", 1, Guid.NewGuid()));
 
         Mock<IFileService> fileServiceMock = new();
         fileServiceMock
             .Setup(f => f.DownloadFileAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<Stream>.Fail("file missing"));
 
-        CertificateService service = GetService(options, companyLocationServiceMock, fileServiceMock);
+        CertificateService service = GetService(options, brandingResolverMock, fileServiceMock);
         (_, UserProfile user, CourseAssignment assignment) = await SeedAsync(options, DateTime.UtcNow, locationId: 7);
 
         Result<byte[]> result = await service.GenerateCertificatePdfAsync(assignment.Id, user.Id);

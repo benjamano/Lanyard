@@ -27,4 +27,14 @@ public interface ICompanyLocationService
     Task<Result<List<LoginCompanyOption>>> GetLoginCompanyOptionsAsync();
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId);
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForLocationAsync(int locationId);
+
+    /// <summary>
+    /// Branding for the company a user belongs to, resolved from their location memberships.
+    /// </summary>
+    /// <remarks>
+    /// Branding is per-company, so which of a user's locations we pick is irrelevant as long
+    /// as they all belong to one company - which is the normal case. Fails when the user
+    /// belongs to no company, or to more than one, since neither has a single right answer.
+    /// </remarks>
+    Task<Result<CompanyBrandingInfo>> GetCompanyBrandingForUserAsync(string userId);
 }

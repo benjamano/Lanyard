@@ -475,5 +475,75 @@ namespace Lanyard.Tests.Services.Email
 
             Assert.IsFalse(body.RootElement.TryGetProperty("attachments", out _));
         }
+    
+        [TestMethod]
+        public async Task SendCourseCompletionCertificateEmailAsync_GreetsByFirstName_NotUsername()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendCourseCompletionCertificateEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com", FirstName = "Jane", LastName = "Doe" },
+                "Fire Safety",
+                [1, 2, 3],
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Hi Jane,");
+            Assert.IsFalse(html.Contains("Hi jdoe,"), "greeting should not fall back to the username when a first name exists");
+        }
+
+        [TestMethod]
+        public async Task SendTrainingAssignedEmailAsync_GreetsByFirstName_NotUsername()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendTrainingAssignedEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com", FirstName = "Jane", LastName = "Doe" },
+                "Fire Safety",
+                dueDate: null,
+                "https://lanyard.example.com/training/1",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "Hi Jane,");
+        }
+
+        [TestMethod]
+        public async Task SendCourseCompletionCertificateEmailAsync_NoFirstName_FallsBackRatherThanGreetingNobody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendCourseCompletionCertificateEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                [1, 2, 3],
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "Hi jdoe,");
+        }
+
+        // The set-password email deliberately still shows the username - it IS the credential
+        // being communicated, so switching it to a first name would break the email's purpose.
+        [TestMethod]
+        public async Task SendSetPasswordEmailAsync_StillShowsTheUsername()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendSetPasswordEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com", FirstName = "Jane", LastName = "Doe" },
+                "https://lanyard.example.com/set-password?userId=1&token=abc",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                locationName: null);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "jdoe");
+        }
     }
 }
