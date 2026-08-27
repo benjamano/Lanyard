@@ -117,8 +117,11 @@
   {
     "version": "1.3.11",
     "releaseDate": "2026-08-27",
-    "summary": "Projection programs can now be paused, skipped and monitored live from the server.",
+    "summary": "Fixed slow volume dragging, a slow kiosk startup countdown, and made the Music page phone-friendly.",
     "details": [
+      "Fixed the volume slider on the Music page taking up to 20 seconds to reach the client after a drag - it now applies the change as soon as you release the slider.",
+      "Fixed the kiosk client's startup countdown taking around 20 seconds instead of the 5 seconds it displays.",
+      "The Music page now switches to a Playlists/Songs tab view on phone-sized screens instead of squeezing both side by side.",
       "Added a Projection Control page showing every projection program currently running, which client and display it is on, and which step it is showing.",
       "Projection programs can now be paused, resumed, stepped forwards or backwards, and stopped while they are playing.",
       "A projection program triggered on a client now closes itself and returns the display to its normal programme once it has finished, instead of leaving its last step on screen.",
