@@ -1,4 +1,4 @@
-using Lanyard.Client.SignalR;
+﻿using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
@@ -71,7 +71,25 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             projectionProgram.IsFullScreen,
             projectionProgram.IsBorderless,
             programId,
-            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
+            projectionProgram.DisplayIndex,
+            isTemporaryTrigger: false);
+    }
+
+    /// <summary>
+    /// Closes whatever projection window is open on a display. Called when the server's
+    /// projection program runner reports that a triggered program finished its repeats -
+    /// closing the window is what completes the ClosedTcs that
+    /// <see cref="TriggerTemporaryProjectionProgramAsync"/> is awaiting, which in turn
+    /// reports ProjectionProgramCompleted and restores this client's ambient projection.
+    /// </summary>
+    public async Task CloseWindowForDisplayAsync(int displayIndex)
+    {
+        Screen screen = ResolveScreen(displayIndex);
+
+        _logger.LogInformation("Closing projection window on display {displayIndex} ({displayKey})", displayIndex, screen.DeviceName);
+
+        await HideWindowAsync(screen.DeviceName);
     }
 
     private async Task HideWindowAsync(string displayKey)
@@ -116,7 +134,8 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
         TaskCompletionSource closedTcs = await ShowWindowAsync(
             displayKey, screen, width, height, isFullScreen, isBorderless, projectionProgramId,
-            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!));
+            Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
+            resolvedDisplayIndex, isTemporaryTrigger: true);
 
         await closedTcs.Task;
 
@@ -136,7 +155,7 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         return screens[screenIndex];
     }
 
-    private async Task<TaskCompletionSource> ShowWindowAsync(string displayKey, Screen screen, int width, int height, bool isFullScreen, bool isBorderless, Guid projectionProgramId, Guid clientId)
+    private async Task<TaskCompletionSource> ShowWindowAsync(string displayKey, Screen screen, int width, int height, bool isFullScreen, bool isBorderless, Guid projectionProgramId, Guid clientId, int displayIndex, bool isTemporaryTrigger)
     {
         // A viewer token authorises this kiosk to open remote (cross-client) video streams.
         // Fetching it over the hub proves the kiosk was launched by this client, not by someone
@@ -151,11 +170,17 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             _logger.LogWarning(ex, "Failed to obtain kiosk viewer token; remote video capture will be unavailable.");
         }
 
-        string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/kiosk/{clientId}/{projectionProgramId}";
+        // display tells the server which run this page owns - the same client can project a
+        // different program on each display, and the runner keys runs by (client, display).
+        // temporary tells it this is the one-shot trigger path, so it closes this window again
+        // once the program's repeats are done.
+        string url = $"{Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")}/kiosk/{clientId}/{projectionProgramId}"
+            + $"?display={displayIndex}"
+            + $"&temporary={(isTemporaryTrigger ? "true" : "false")}";
 
         if (!string.IsNullOrEmpty(viewerToken))
         {
-            url += $"?token={Uri.EscapeDataString(viewerToken)}";
+            url += $"&token={Uri.EscapeDataString(viewerToken)}";
         }
 
         string userDataDir = Path.Combine(

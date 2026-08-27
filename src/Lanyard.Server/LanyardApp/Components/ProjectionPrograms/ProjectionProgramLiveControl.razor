@@ -1,0 +1,181 @@
+﻿@implements IDisposable
+@using Lanyard.App.Components.Kiosk
+
+@inject IProjectionProgramRunnerService _programRunner
+@inject IClientService _clientService
+
+<FluentCard Height="auto">
+    <FluentStack Orientation="@Orientation.Horizontal"
+                 VerticalAlignment="@VerticalAlignment.Center"
+                 HorizontalAlignment="@HorizontalAlignment.SpaceBetween">
+        <FluentText Typo="Typography.PaneHeader">
+            Live Projection Control
+        </FluentText>
+        <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                      Appearance="@ButtonAppearance.Transparent"
+                      Tooltip="Refresh"
+                      OnClick="RefreshAsync" />
+    </FluentStack>
+
+    <FluentDivider Class="my-3" />
+
+    @if (runs.Count == 0)
+    {
+        <FluentText Size="@TextSize.Size400">
+            No projection programs are currently running.
+        </FluentText>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Vertical" VerticalGap="10">
+            @foreach (ProjectionRunState run in runs)
+            {
+                <FluentCard Height="auto" Class="w-100">
+                    <FluentStack Orientation="@Orientation.Horizontal"
+                                 VerticalAlignment="@VerticalAlignment.Center"
+                                 HorizontalAlignment="@HorizontalAlignment.SpaceBetween"
+                                 Wrap="true">
+                        <FluentStack Orientation="@Orientation.Vertical" VerticalGap="4" Width="auto">
+                            <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="8"
+                                         VerticalAlignment="@VerticalAlignment.Center" Width="auto">
+                                <FluentText Size="@TextSize.Size500">@run.ProgramName</FluentText>
+
+                                <FluentBadge Appearance="@BadgeAppearance.Filled">
+                                    @(run.IsPaused ? "Paused" : "Playing")
+                                </FluentBadge>
+
+                                @if (run.IsTemporaryTrigger)
+                                {
+                                    <FluentBadge Appearance="@BadgeAppearance.Outline">Triggered</FluentBadge>
+                                }
+                            </FluentStack>
+
+                            <FluentText Color="@Color.Info">
+                                @ClientName(run.ClientId) &mdash; display @run.DisplayIndex
+                            </FluentText>
+
+                            <FluentText Size="@TextSize.Size300">
+                                Step @(run.CurrentStepIndex + 1) of @run.Steps.Count: @StepName(run)
+                            </FluentText>
+
+                            <FluentProgressBar Min="0" Max="100" Value="@Progress(run)" Width="240px" />
+                        </FluentStack>
+
+                        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="4"
+                                     VerticalAlignment="@VerticalAlignment.Center" Width="auto">
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowPrevious())"
+                                          Appearance="@ButtonAppearance.Transparent"
+                                          Tooltip="Previous step"
+                                          OnClick="@(() => Handle(_programRunner.SkipToPreviousStep(run.ClientId, run.DisplayIndex)))" />
+
+                            <FluentButton IconStart="@(run.IsPaused ? new Icons.Regular.Size20.Play() : new Icons.Regular.Size20.Pause())"
+                                          Appearance="@ButtonAppearance.Primary"
+                                          Tooltip="@(run.IsPaused ? "Resume" : "Pause")"
+                                          OnClick="@(() => Handle(run.IsPaused
+                                                        ? _programRunner.Resume(run.ClientId, run.DisplayIndex)
+                                                        : _programRunner.Pause(run.ClientId, run.DisplayIndex)))" />
+
+                            <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowNext())"
+                                          Appearance="@ButtonAppearance.Transparent"
+                                          Tooltip="Next step"
+                                          OnClick="@(() => Handle(_programRunner.SkipToNextStep(run.ClientId, run.DisplayIndex)))" />
+
+                            <FluentButton IconStart="@(new Icons.Filled.Size20.Stop())"
+                                          Appearance="@ButtonAppearance.Transparent"
+                                          Tooltip="Stop"
+                                          OnClick="@(() => Handle(_programRunner.Stop(run.ClientId, run.DisplayIndex)))" />
+                        </FluentStack>
+                    </FluentStack>
+                </FluentCard>
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    private List<ProjectionRunState> runs = [];
+
+    // Client id -> display name, so each row can name the machine rather than show a raw GUID.
+    private Dictionary<Guid, string> clientNames = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The runner is a singleton in this same process, so these are plain in-process
+        // subscriptions - no SignalR hop is involved in keeping this panel live.
+        _programRunner.OnProgramStarted += HandleProgramChanged;
+        _programRunner.OnProgramStopped += HandleProgramChanged;
+        _programRunner.OnProgramStepAdvanced += HandleStepAdvanced;
+        _programRunner.OnProgramPauseChanged += HandlePauseChanged;
+
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> clientsResult = await _clientService.GetClientsWithCapabilitiesAsync();
+
+        if (clientsResult.IsSuccess && clientsResult.Data is not null)
+        {
+            clientNames = clientsResult.Data.ToDictionary(x => x.Id, x => x.Name);
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load clients: {clientsResult.Error}");
+        }
+
+        runs = _programRunner.GetRunningStates();
+    }
+
+    private Task RefreshAsync()
+    {
+        runs = _programRunner.GetRunningStates();
+
+        return Task.CompletedTask;
+    }
+
+    private void HandleProgramChanged(Guid clientId, int displayIndex, Guid programId) => Reload();
+
+    private void HandleStepAdvanced(Guid clientId, int displayIndex, int stepIndex) => Reload();
+
+    private void HandlePauseChanged(Guid clientId, int displayIndex, bool isPaused) => Reload();
+
+    // Every event re-reads the runner's snapshot rather than patching a local copy, so the
+    // panel can't drift out of sync with playback if an event is raised while it re-renders.
+    private void Reload()
+    {
+        runs = _programRunner.GetRunningStates();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Handle(Result<bool> result)
+    {
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The projection program command failed.");
+
+            return;
+        }
+
+        Reload();
+    }
+
+    private string ClientName(Guid clientId) =>
+        clientNames.TryGetValue(clientId, out string? name) ? name : clientId.ToString();
+
+    private static string StepName(ProjectionRunState run)
+    {
+        if (run.CurrentStepIndex < 0 || run.CurrentStepIndex >= run.Steps.Count)
+        {
+            return "Unknown";
+        }
+
+        return run.Steps[run.CurrentStepIndex].Template?.Name ?? "Unknown";
+    }
+
+    private static int Progress(ProjectionRunState run) =>
+        run.Steps.Count == 0 ? 0 : (int)Math.Round((run.CurrentStepIndex + 1) / (double)run.Steps.Count * 100);
+
+    public void Dispose()
+    {
+        _programRunner.OnProgramStarted -= HandleProgramChanged;
+        _programRunner.OnProgramStopped -= HandleProgramChanged;
+        _programRunner.OnProgramStepAdvanced -= HandleStepAdvanced;
+        _programRunner.OnProgramPauseChanged -= HandlePauseChanged;
+    }
+}

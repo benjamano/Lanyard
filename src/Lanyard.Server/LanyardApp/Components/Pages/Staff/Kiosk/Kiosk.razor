@@ -6,7 +6,6 @@
 
 @inject IProjectionProgramService _projectionProgramService
 @inject IClientService _clientService
-@inject INotificationService _toastService
 
 <PageTitle>Kiosk</PageTitle>
 
@@ -56,12 +55,17 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
     <KioskDisplay @ref="kioskDisplay"
                     ProjectionProgram="@projectionProgram"
                     ClientId="clientGuid"
+                    DisplayIndex="@ResolvedDisplayIndex"
                     ViewerToken="@Token"
                     RepeatCount="clientProjectionSettings.RepeatNumberOfTimes"
-                    RepeatInfinitely="clientProjectionSettings.RepeatInfinitely" />
+                    RepeatInfinitely="clientProjectionSettings.RepeatInfinitely"
+                    IsTemporaryTrigger="@(Temporary == true)"
+                    OnCurrentStepChanged="HandleCurrentStepChanged"
+                    OnPauseChanged="HandlePauseChanged" />
 
     <KioskDebugInfo Hidden="@(clientProjectionSettings.ShowDebugMode)" 
                     CurrentStep="CurrentStep" 
+                    IsPaused="@isPaused"
                     StepsCount="projectionProgram.ProjectionProgramSteps.Count()" />
 }
 
@@ -76,6 +80,16 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    // The kiosk client appends this when it opens the window, so one client running a
+    // different program per physical display gives the runner a distinct run key for each.
+    [SupplyParameterFromQuery(Name = "display")]
+    public int? DisplayIndex { get; set; }
+
+    // Set by the client only on the one-shot TriggerProjectionProgram path, so the runner
+    // knows to tell the client to close this window once the program's repeats are done.
+    [SupplyParameterFromQuery(Name = "temporary")]
+    public bool? Temporary { get; set; }
+
     public ProjectionProgramStep? CurrentStep { get; set; } = null;
 
     private ClientProjectionSettings? clientProjectionSettings { get; set; } = null;
@@ -86,7 +100,13 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     private Guid clientGuid;
 
+    private bool isPaused;
+
     private string? errorMessage { get; set; } = null;
+
+    // Matches ResolveScreen's fallback on the client, which treats an out-of-range or
+    // absent display index as display 0.
+    private int ResolvedDisplayIndex => DisplayIndex ?? 0;
 
     protected async override Task OnInitializedAsync()
     {
@@ -119,14 +139,21 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
         if (settingsResult.IsSuccess && settingsResult.Data is not null)
         {
+            // Prefer the row for this exact display - the same program can be configured on
+            // more than one display for a client, and each display is a separate run.
             clientProjectionSettings = settingsResult.Data
-                .FirstOrDefault(x => x.ProjectionProgramId == projectionProgramGuid);
+                .FirstOrDefault(x => x.ProjectionProgramId == projectionProgramGuid && x.DisplayIndex == ResolvedDisplayIndex)
+                ?? settingsResult.Data.FirstOrDefault(x => x.ProjectionProgramId == projectionProgramGuid);
         }
 
         clientProjectionSettings ??= new ClientProjectionSettings
         {
             ClientId = clientGuid,
-            ProjectionProgramId = projectionProgramGuid
+            ProjectionProgramId = projectionProgramGuid,
+
+            // A triggered program with no configured settings plays once and hands the display
+            // back, rather than inheriting the ambient default of repeating forever.
+            RepeatInfinitely = Temporary != true
         };
 
         StateHasChanged();
@@ -134,7 +161,7 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     private bool _processingStarted;
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!_processingStarted
             && kioskDisplay is not null
@@ -143,7 +170,21 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
         {
             _processingStarted = true;
 
-            kioskDisplay.StartProcessing();
+            await kioskDisplay.StartProcessingAsync();
         }
+    }
+
+    private void HandleCurrentStepChanged(ProjectionProgramStep? step)
+    {
+        CurrentStep = step;
+
+        StateHasChanged();
+    }
+
+    private void HandlePauseChanged(bool paused)
+    {
+        isPaused = paused;
+
+        StateHasChanged();
     }
 }

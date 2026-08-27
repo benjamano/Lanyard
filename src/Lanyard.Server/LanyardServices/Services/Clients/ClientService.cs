@@ -596,6 +596,43 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    /// <summary>
+    /// Tells a kiosk client to close the temporary projection window it opened on a display.
+    /// Sent when the server-side runner finishes a triggered program's configured repeats:
+    /// closing the window is what makes the client report ProjectionProgramCompleted, which
+    /// restores that client's ambient projection settings.
+    /// </summary>
+    public async Task<Result<bool>> CloseTemporaryProjectionWindowOnClientAsync(Guid clientId, int displayIndex)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client has no active connection.");
+            }
+
+            _logger.LogInformation("Telling client {ClientId} to close its temporary projection window on display {DisplayIndex}", clientId, displayIndex);
+
+            await _hubContext.Clients.Client(connectionId).SendAsync("CloseTemporaryProjectionWindow", displayIndex);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error telling client {ClientId} to close its temporary projection window on display {DisplayIndex}", clientId, displayIndex);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId)
     {
         try

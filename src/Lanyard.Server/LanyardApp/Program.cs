@@ -1,4 +1,4 @@
-using Lanyard.App.Components;
+﻿using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
@@ -103,6 +103,9 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+
+builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
+builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();

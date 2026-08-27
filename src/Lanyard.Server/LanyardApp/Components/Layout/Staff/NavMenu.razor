@@ -1,4 +1,4 @@
-@using Lanyard.App.Components.Dialogs
+﻿@using Lanyard.App.Components.Dialogs
 @using Lanyard.Shared.DTO
 
 @inject NavigationManager NavigationManager
@@ -85,6 +85,9 @@
                     <FluentNavItem Href="/manage/projectionprograms"
                                    IconRest="@(new Icons.Regular.Size20.ProjectionScreenTextSparkle())"
                                    IconActive="@(new Icons.Filled.Size20.ProjectionScreenTextSparkle())">Projection</FluentNavItem>
+                    <FluentNavItem Href="/manage/projectioncontrol"
+                                   IconRest="@(new Icons.Regular.Size20.ProjectionScreenText())"
+                                   IconActive="@(new Icons.Filled.Size20.ProjectionScreenText())">Projection Control</FluentNavItem>
                     <FluentNavItem Href="/automation" IconRest="@(new Icons.Regular.Size20.SettingsCogMultiple())"
                                    IconActive="@(new Icons.Filled.Size20.SettingsCogMultiple())">Automation</FluentNavItem>
 
