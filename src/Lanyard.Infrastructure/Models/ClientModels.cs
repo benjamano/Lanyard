@@ -14,6 +14,11 @@ public class Client
     public DateTime? LastLogin { get; set; }
     public DateTime? LastUpdateDate { get; set; }
 
+    // Only written on a clean SignalR disconnect - a hard server kill never runs
+    // OnDisconnectedAsync - so consumers fall back to LastLogin rather than reading
+    // null as "has never been offline".
+    public DateTime? LastDisconnectDate { get; set; }
+
     public DateTime CreateDate { get; set; }
 
     public int MusicCacheLimitMb { get; set; } = 500;
