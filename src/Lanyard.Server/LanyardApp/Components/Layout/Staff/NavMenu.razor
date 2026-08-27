@@ -57,7 +57,7 @@
                     {
                         <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
                     }
-                    
+
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
                 </FluentNavCategory>
@@ -116,7 +116,8 @@
                             <FluentIcon Value="@(new Icons.Regular.Size16.MegaphoneLoud())" />
                             <FluentText Weight="TextWeight.Bold">What's new in v@(_latestRelease.Version)</FluentText>
                         </FluentStack>
-                        <FluentText Class="whats-new-summary" Title="@_latestRelease.Summary">@_latestRelease.Summary</FluentText>
+                        <FluentText Class="whats-new-summary" Title="@_latestRelease.Summary">@_latestRelease.Summary
+                        </FluentText>
                         <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@OpenReleaseNotesAsync">
                             More info
                         </FluentButton>
@@ -186,7 +187,7 @@
             if (releaseNotesResult.IsSuccess)
             {
                 _releaseNotes = releaseNotesResult.Data ?? [];
-                _latestRelease = _releaseNotes.OrderByDescending(x => x.Version).FirstOrDefault();
+                _latestRelease = _releaseNotes.OrderByDescending(x => x.ReleaseDate).ThenByDescending(x => Version.Parse(x.Version)).FirstOrDefault();
             }
         }
     }
