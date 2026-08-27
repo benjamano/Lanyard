@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "version": "1.3.0",
     "releaseDate": "2026-08-11",
@@ -116,17 +116,18 @@
   },
   {
     "version": "1.3.11",
-    "releaseDate": "2026-08-26",
-    "summary": "Fixed the brief error flash when logging out.",
-    "details": [
-      "Logging out now goes straight to the login page instead of briefly showing an error screen on the way."
-    ]
-  },
-  {
-    "version": "1.3.13",
     "releaseDate": "2026-08-27",
-    "summary": "Training courses now issue a PDF certificate on completion.",
+    "summary": "Projection programs can now be paused, skipped and monitored live from the server.",
     "details": [
+      "Added a Projection Control page showing every projection program currently running, which client and display it is on, and which step it is showing.",
+      "Projection programs can now be paused, resumed, stepped forwards or backwards, and stopped while they are playing.",
+      "A projection program triggered on a client now closes itself and returns the display to its normal programme once it has finished, instead of leaving its last step on screen.",
+      "The kiosk debug overlay now shows the current step and whether playback is paused.",
+      "Added a Kiosk Health dashboard widget listing every kiosk, offline ones first, with an online count and a \"last seen\" time for anything that has dropped.",
+      "The Kiosk Health widget can be set to show only offline kiosks, for a problems-only dashboard.",
+      "Kiosks now record when they disconnect, so downtime can be shown rather than just a bare online/offline state.",
+      "The Clients management page now refreshes on its own, so a kiosk going offline no longer needs a manual page reload to show up.",
+      "Logging out now goes straight to the login page instead of briefly showing an error screen on the way.",
       "Passing a training course now emails you a branded PDF certificate automatically.",
       "Added a \"Download Certificate\" button to the course completion dialog and to each completed course on My Training.",
       "Certificates carry your company's logo and brand colour, and can be re-downloaded at any time.",

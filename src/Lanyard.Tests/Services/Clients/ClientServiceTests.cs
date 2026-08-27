@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -43,6 +43,46 @@ namespace Lanyard.Tests.Services.Clients
             var cacheMock = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
 
             return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock.Object);
+        }
+
+        // SignalRControlHub.ConnectedIds is a private static set with no InternalsVisibleTo, so
+        // connectivity is exercised through the overridable seam on ClientService - the same
+        // approach the automation action executor tests use for IsClientConnected.
+        private sealed class TestableClientService : ClientService
+        {
+            private readonly IReadOnlyCollection<string> _connectedIds;
+
+            public TestableClientService(IDbContextFactory<ApplicationDbContext> factory,
+                IHubContext<SignalRControlHub> hubContext,
+                Microsoft.Extensions.Logging.ILogger<ClientService> logger,
+                Microsoft.Extensions.Caching.Memory.IMemoryCache cache,
+                IReadOnlyCollection<string> connectedIds)
+                : base(factory, hubContext, logger, cache)
+            {
+                _connectedIds = connectedIds;
+            }
+
+            // protected, not protected internal: overriding a protected internal member from
+            // another assembly narrows it, matching the action executor test subclasses.
+            protected override IReadOnlyCollection<string> GetConnectedConnectionIds()
+            {
+                return _connectedIds;
+            }
+        }
+
+        private static TestableClientService GetServiceWithConnectedIds(DbContextOptions<ApplicationDbContext> options, params string[] connectedIds)
+        {
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+
+            var hubContextMock = new Mock<IHubContext<SignalRControlHub>>();
+
+            var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
+
+            var cacheMock = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+
+            return new TestableClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock.Object, connectedIds);
         }
 
         private static ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
@@ -163,6 +203,140 @@ namespace Lanyard.Tests.Services.Clients
             Assert.IsTrue(result.Success);
             Assert.IsNotNull(result.Data);
             Assert.AreEqual(0, result.Data?.Count(), "Expected zero connected clients.");
+        }
+
+        [TestMethod]
+        public async Task GetClientsAsync_ShouldProjectLastDisconnectDate()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetService(options);
+
+            var disconnectedAt = new DateTime(2026, 8, 27, 9, 30, 0, DateTimeKind.Utc);
+
+            var createResult = await service.CreateClientAsync(new Client
+            {
+                Id = Guid.NewGuid(),
+                Name = "Kiosk 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+                LastDisconnectDate = disconnectedAt
+            });
+
+            Assert.IsTrue(createResult.Success, createResult.Error);
+
+            var result = await service.GetClientsAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+
+            var client = result.Data!.Single();
+
+            Assert.AreEqual(disconnectedAt, client.LastDisconnectDate, "Expected LastDisconnectDate to survive the projection.");
+        }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldProjectLastDisconnectDate()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetService(options);
+
+            var disconnectedAt = new DateTime(2026, 8, 27, 9, 30, 0, DateTimeKind.Utc);
+
+            var createResult = await service.CreateClientAsync(new Client
+            {
+                Id = Guid.NewGuid(),
+                Name = "Kiosk 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+                LastDisconnectDate = disconnectedAt
+            });
+
+            Assert.IsTrue(createResult.Success, createResult.Error);
+
+            var result = await service.GetClientsWithCapabilitiesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+
+            var client = result.Data!.Single();
+
+            Assert.AreEqual(disconnectedAt, client.LastDisconnectDate, "Expected LastDisconnectDate to survive the projection.");
+        }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldReturnNullLastDisconnectDateForClientThatHasNeverDisconnected()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetService(options);
+
+            var createResult = await service.CreateClientAsync(new Client
+            {
+                Id = Guid.NewGuid(),
+                Name = "Kiosk 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+                LastLogin = DateTime.UtcNow
+            });
+
+            Assert.IsTrue(createResult.Success, createResult.Error);
+
+            var result = await service.GetClientsWithCapabilitiesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+
+            var client = result.Data!.Single();
+
+            Assert.IsNull(client.LastDisconnectDate, "A client that has never dropped should project a null disconnect date.");
+        }
+
+        [TestMethod]
+        public async Task GetClientsAsync_ShouldMarkClientConnectedWhenItsConnectionIdIsConnected()
+        {
+            var options = GetInMemoryOptions();
+
+            var connectionId = Guid.NewGuid().ToString();
+
+            var service = GetServiceWithConnectedIds(options, connectionId);
+
+            var createResult = await service.CreateClientAsync(new Client
+            {
+                Id = Guid.NewGuid(),
+                Name = "Kiosk 1",
+                MostRecentConnectionId = connectionId
+            });
+
+            Assert.IsTrue(createResult.Success, createResult.Error);
+
+            var result = await service.GetClientsAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+            Assert.IsTrue(result.Data!.Single().IsCurrentlyConnected, "Expected the client to read as connected.");
+        }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldMarkClientDisconnectedWhenItsConnectionIdIsAbsent()
+        {
+            var options = GetInMemoryOptions();
+
+            var service = GetServiceWithConnectedIds(options, Guid.NewGuid().ToString());
+
+            var createResult = await service.CreateClientAsync(new Client
+            {
+                Id = Guid.NewGuid(),
+                Name = "Kiosk 1",
+                MostRecentConnectionId = Guid.NewGuid().ToString(),
+                LastDisconnectDate = DateTime.UtcNow.AddMinutes(-42)
+            });
+
+            Assert.IsTrue(createResult.Success, createResult.Error);
+
+            var result = await service.GetClientsWithCapabilitiesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsNotNull(result.Data);
+            Assert.IsFalse(result.Data!.Single().IsCurrentlyConnected, "A connection ID absent from the hub set should read as offline.");
         }
 
         [TestMethod]

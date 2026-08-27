@@ -1,0 +1,9 @@
+﻿@page "/manage/projectioncontrol"
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.App.Components.ProjectionPrograms
+
+<PageTitle>Projection Control</PageTitle>
+
+<ProjectionProgramLiveControl />

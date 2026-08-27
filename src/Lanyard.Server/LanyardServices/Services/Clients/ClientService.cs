@@ -131,11 +131,20 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    // Wraps the process-static hub connection set behind an overridable member so tests can
+    // substitute it, mirroring IsClientConnected on the automation action executors. The set
+    // is private static readonly on the hub with no InternalsVisibleTo, so there is no other
+    // way to exercise IsCurrentlyConnected.
+    protected internal virtual IReadOnlyCollection<string> GetConnectedConnectionIds()
+    {
+        return SignalRControlHub.ConnectedIds;
+    }
+
     public async Task<Result<IEnumerable<Client>>> GetConnectedClientsAsync()
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -155,7 +164,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -169,6 +178,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     MostRecentConnectionId = x.MostRecentConnectionId,
                     LastLogin = x.LastLogin,
                     LastUpdateDate = x.LastUpdateDate,
+                    LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
                 })
@@ -186,7 +196,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -200,6 +210,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     MostRecentConnectionId = x.MostRecentConnectionId,
                     LastLogin = x.LastLogin,
                     LastUpdateDate = x.LastUpdateDate,
+                    LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
@@ -581,6 +592,43 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
         catch (Exception ex)
         {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Tells a kiosk client to close the temporary projection window it opened on a display.
+    /// Sent when the server-side runner finishes a triggered program's configured repeats:
+    /// closing the window is what makes the client report ProjectionProgramCompleted, which
+    /// restores that client's ambient projection settings.
+    /// </summary>
+    public async Task<Result<bool>> CloseTemporaryProjectionWindowOnClientAsync(Guid clientId, int displayIndex)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client has no active connection.");
+            }
+
+            _logger.LogInformation("Telling client {ClientId} to close its temporary projection window on display {DisplayIndex}", clientId, displayIndex);
+
+            await _hubContext.Clients.Client(connectionId).SendAsync("CloseTemporaryProjectionWindow", displayIndex);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error telling client {ClientId} to close its temporary projection window on display {DisplayIndex}", clientId, displayIndex);
             return Result<bool>.Fail(ex.Message);
         }
     }
