@@ -131,11 +131,20 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    // Wraps the process-static hub connection set behind an overridable member so tests can
+    // substitute it, mirroring IsClientConnected on the automation action executors. The set
+    // is private static readonly on the hub with no InternalsVisibleTo, so there is no other
+    // way to exercise IsCurrentlyConnected.
+    protected internal virtual IReadOnlyCollection<string> GetConnectedConnectionIds()
+    {
+        return SignalRControlHub.ConnectedIds;
+    }
+
     public async Task<Result<IEnumerable<Client>>> GetConnectedClientsAsync()
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -155,7 +164,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -169,6 +178,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     MostRecentConnectionId = x.MostRecentConnectionId,
                     LastLogin = x.LastLogin,
                     LastUpdateDate = x.LastUpdateDate,
+                    LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
                 })
@@ -186,7 +196,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            List<string> ids = SignalRControlHub.ConnectedIds.ToList();
+            List<string> ids = GetConnectedConnectionIds().ToList();
 
             ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
@@ -200,6 +210,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     MostRecentConnectionId = x.MostRecentConnectionId,
                     LastLogin = x.LastLogin,
                     LastUpdateDate = x.LastUpdateDate,
+                    LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings

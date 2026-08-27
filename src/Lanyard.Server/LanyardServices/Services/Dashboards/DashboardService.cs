@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.DataAccess;
+﻿using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -280,6 +280,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case AutomationRuleStatusWidget existingRuleStatus when widget is AutomationRuleStatusWidget incomingRuleStatus:
                     existingRuleStatus.AutomationRuleId = incomingRuleStatus.AutomationRuleId;
                     break;
+                case KioskHealthWidget existingKioskHealth when widget is KioskHealthWidget incomingKioskHealth:
+                    existingKioskHealth.OnlyShowOffline = incomingKioskHealth.OnlyShowOffline;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -345,6 +348,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             AutomationRuleStatusWidget ruleStatusWidget => new AutomationRuleStatusWidget
             {
                 AutomationRuleId = ruleStatusWidget.AutomationRuleId
+            },
+            KioskHealthWidget kioskHealthWidget => new KioskHealthWidget
+            {
+                OnlyShowOffline = kioskHealthWidget.OnlyShowOffline
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -418,6 +425,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is AutomationRuleStatusWidget targetRuleStatus && source is AutomationRuleStatusWidget sourceRuleStatus)
         {
             targetRuleStatus.AutomationRuleId = sourceRuleStatus.AutomationRuleId;
+            return;
+        }
+
+        if (target is KioskHealthWidget targetKioskHealth && source is KioskHealthWidget sourceKioskHealth)
+        {
+            targetKioskHealth.OnlyShowOffline = sourceKioskHealth.OnlyShowOffline;
         }
     }
 }
