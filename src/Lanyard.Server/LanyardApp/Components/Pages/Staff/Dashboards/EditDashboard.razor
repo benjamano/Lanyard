@@ -1,4 +1,4 @@
-@page "/manage/dashboards/{DashboardId:guid}"
+﻿@page "/manage/dashboards/{DashboardId:guid}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @using Lanyard.App.Components.Dashboards
 @using Lanyard.App.Components.Dialogs
@@ -83,6 +83,9 @@
                     </FluentMenuItem>
                     <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new AutomationRuleStatusWidget())">
                         Automation Rule Status
+                    </FluentMenuItem>
+                    <FluentMenuItem OnClick="() => Dashboard.Widgets.Add(new KioskHealthWidget())">
+                        Kiosk Health
                     </FluentMenuItem>
                 </FluentMenuList>
             </FluentMenu>

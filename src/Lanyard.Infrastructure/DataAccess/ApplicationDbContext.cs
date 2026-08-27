@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -20,6 +20,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanClockInRoleId = "dev-role-can-clock-in";
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
+        public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
         public const int SeedIpswichLocationId = 1;
         public const int SeedWisbechLocationId = 2;
@@ -70,6 +71,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CourseQuizAttempt> CourseQuizAttempts { get; set; }
         public DbSet<CourseQuizAttemptAnswer> CourseQuizAttemptAnswers { get; set; }
         public DbSet<CourseSectionProgress> CourseSectionProgresses { get; set; }
+        public DbSet<UserErasureRecord> UserErasureRecords { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -112,7 +114,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<TextAreaWidget>(WidgetType.TextArea)
                 .HasValue<MusicPlaylistSelectorWidget>(WidgetType.MusicPlaylistSelector)
                 .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline)
-                .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus);
+                .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
+                .HasValue<KioskHealthWidget>(WidgetType.KioskHealth);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -166,6 +169,16 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LogoFileId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Same reasoning as LogoFile above, for the optional login background image.
+            modelBuilder.Entity<Company>()
+                .HasOne(x => x.BackgroundImageFile)
+                .WithMany()
+                .HasForeignKey(x => x.BackgroundImageFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<UserErasureRecord>()
+                .HasIndex(x => x.ErasedAtUtc);
         }
     }
 }

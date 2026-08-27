@@ -102,11 +102,8 @@
 
     <script src="@Assets["js/bootCloak.js"]"></script>
 
-    @if (NavigationManager.Uri.Contains("/", StringComparison.OrdinalIgnoreCase))
-    {
-        <link rel="manifest" href="manifest.webmanifest" />
-        <meta name="theme-color" content="#0d6efd" />
-    }
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0d6efd" />
 </head>
 
 <body>
@@ -128,10 +125,7 @@
 
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <ReconnectModal />
-    @if (NavigationManager.Uri.Contains("/", StringComparison.OrdinalIgnoreCase))
-    {
-        <script src="@Assets["js/registerServiceWorker.js"]"></script>
-    }
+    <script src="@Assets["js/registerServiceWorker.js"]"></script>
 
     <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.

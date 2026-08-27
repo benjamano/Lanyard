@@ -1,4 +1,4 @@
-namespace Lanyard.Infrastructure.Enum;
+﻿namespace Lanyard.Infrastructure.Enum;
 
 public enum WidgetType
 {
@@ -10,5 +10,6 @@ public enum WidgetType
     Button = 5,
     MusicPlaylistSelector = 6,
     MusicTimeline = 7,
-    AutomationRuleStatus = 8
+    AutomationRuleStatus = 8,
+    KioskHealth = 9
 }

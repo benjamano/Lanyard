@@ -101,15 +101,17 @@ Plain `ILogger<T>` — no Serilog, no correlation-ID/trace-ID propagation anywhe
 - For Blazor/FluentUI tasks, query the `blazor_knowledge` MCP server first (see above).
 
 ### Ask for confirmation before
-- Any destructive migration: dropping or renaming a column or table, or any migration whose `Down()` method loses data.
 - Force-pushing any branch.
 - Deleting files that are not obviously temporary.
 
 ### Migration safety
-Never run `dotnet ef database update` automatically for destructive schema changes. Describe the migration and wait for explicit approval. Safe additive migrations (new table, new nullable column) can proceed without asking.
+`dotnet ef database update` may be run automatically for any migration, including destructive ones (dropping/renaming a column or table, or a migration whose `Down()` method loses data) — no approval needed first. Still describe what the migration does (and flag if it's destructive) before running it, so the action is visible, but do not wait for a go-ahead.
 
 ### Before marking a task complete
 Run `dotnet build LanyardApp.sln` and `dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj` and confirm both pass.
+
+### Release notes — update whenever a change is user-noticeable
+If a change would be noticeable to a user (new feature, behaviour change, visible bug fix, new email, new UI element, etc. — not internal refactors, test-only changes, or dev-tooling tweaks), add an entry to `src/Lanyard.Server/LanyardServices/Services/ReleaseNotes/release-notes.json` describing it, and bump `<Version>` in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` to match the new release-notes entry's `version`. Do this as part of the same piece of work — don't wait to be asked.
 
 ### Route authorization — the one rule that must never get missed
 Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]` — there is no third option; a missing attribute redirects to login by design (`RouteAuthorizationGate.razor`). For the history, edge cases (`StaffNotFound.razor`), and why this matters, see the `route-authorization` skill.
@@ -127,6 +129,7 @@ The topics below used to live in this file as long-form sections. They moved to 
 | `route-authorization` | Full history/edge cases behind the default-deny route gate |
 | `email-invite-system` | Resend-based invite emails, username-or-email login |
 | `client-build-troubleshooting` | Client "No frameworks were found" — stray host DLLs in `build\`, not a missing runtime |
+| `client-release-pipeline` | `release.yml` auto-publishes whatever `<Version>` is in `Lanyard.Client.csproj` on every client-touching push to `main`, with no increment check; how kiosks auto-update on next restart |
 | `kiosk-client-dev-stack` | Launching the full server+client exe stack for SignalR/DMX end-to-end testing |
 | `verify` | Lighter Playwright-driven UI verification loop (server only, no kiosk client) |
 | `dashboard-widgets` | 6-touchpoint checklist for adding a new dashboard widget type; failure modes when a step is missed |

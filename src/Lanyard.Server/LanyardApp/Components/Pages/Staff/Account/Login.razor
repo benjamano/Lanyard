@@ -2,76 +2,117 @@
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
 @inject NavigationManager Navigation
+@inject IThemeService ThemeService
 
 <PageTitle>Login</PageTitle>
 
-<AuthPageShell Title="Please Login">
-    <HeaderContent>
-        @if (SelectedAccentColor is not null)
-        {
-            <div class="login-accent-bar" style="@AccentBarStyle"></div>
-        }
+@if (CompanyId is null)
+{
+    <AuthPageShell Title="Please select your company">
+        <ChildContent>
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="10"
+                         HorizontalAlignment="HorizontalAlignment.Stretch" Class="company-picker">
+                @if (!companyOptions.Any())
+                {
+                    <FluentText>Loading companies...</FluentText>
+                }
+                else
+                {
+                    @foreach (LoginCompanyOption company in companyOptions)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Outline" Class="company-picker-button"
+                                      OnClick="@(() => SelectCompany(company.CompanyId))">
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                                         VerticalAlignment="VerticalAlignment.Center">
+                                @if (company.LogoFileId is not null)
+                                {
+                                    <img src="@($"/api/companies/{company.CompanyId}/logo")" alt="@($"{company.Name} logo")"
+                                         class="company-picker-logo" onerror="this.style.display='none'" />
+                                }
+                                <FluentText>@company.Name</FluentText>
+                            </FluentStack>
+                        </FluentButton>
+                    }
+                }
+            </FluentStack>
+        </ChildContent>
+    </AuthPageShell>
+}
+else
+{
+    <AuthPageShell Title="Please Login" BackgroundImageUrl="@BackgroundImageUrl">
+        <HeaderContent>
+            <a href="@BackLinkHref" class="login-back-link" title="Choose a different company"
+               aria-label="Choose a different company">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowLeft())" />
+            </a>
 
-        @if (SelectedLogoUrl is not null)
-        {
-            <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" onerror="this.style.display='none'" />
-        }
-    </HeaderContent>
-    <ChildContent>
-        <div class="login-fields">
-            @if (!string.IsNullOrEmpty(ErrorMessage))
+            @if (SelectedAccentColor is not null)
             {
-                <FluentMessageBar Intent="MessageBarIntent.Error">
-                    @ErrorMessage
-                </FluentMessageBar>
+                <div class="login-accent-bar" style="@AccentBarStyle"></div>
             }
 
-            <form method="post" class="col-12" action="/api/auth/login-form">
-                <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            @if (SelectedLogoUrl is not null)
+            {
+                <img src="@SelectedLogoUrl" alt="Company logo" class="login-company-logo" onerror="this.style.display='none'" />
+            }
+        </HeaderContent>
+        <ChildContent>
+            <div class="login-fields">
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Error">
+                        @ErrorMessage
+                    </FluentMessageBar>
+                }
 
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
-                             HorizontalAlignment="HorizontalAlignment.Center">
-                    <FluentTextInput Name="username" Label="Username or Email" Required="true"
-                                     Placeholder="Enter your username or email" Class="login-full-width">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
-                    </FluentTextInput>
+                <form method="post" class="col-12" action="/api/auth/login-form">
+                    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
 
-                    <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
-                                     Required="true" Placeholder="Enter your password" Class="login-full-width">
-                        <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
-                    </FluentTextInput>
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
+                                 HorizontalAlignment="HorizontalAlignment.Center">
+                        <FluentTextInput Name="username" Label="Username or Email" Required="true"
+                                         Placeholder="Enter your username or email" Class="login-full-width">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                        </FluentTextInput>
 
-                    @if (locationOptions.Any())
-                    {
-                        <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
-                                      Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
-                                      ValueChanged="@(item => OnLocationChanged(item))" Class="login-full-width"
-                                      Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
-                                      OptionValue="@(option => option.LocationId)" />
-                    }
-                    else
-                    {
-                        <FluentText>Loading Companies...</FluentText>
-                    }
+                        <FluentTextInput Name="password" Label="Password" TextInputType="TextInputType.Password"
+                                         Required="true" Placeholder="Enter your password" Class="login-full-width">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
 
-                    <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                                 Class="login-submit-row">
-                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
-                                      BackgroundColor="@SelectedAccentColor"
-                                      Color="@(SelectedAccentColor is null ? null : "white")">
-                            <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
-                            Login
-                        </FluentButton>
+                        @if (locationOptions.Any())
+                        {
+                            <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
+                                          Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
+                                          ValueChanged="@(item => OnLocationChanged(item))" Class="login-full-width"
+                                          Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
+                                          OptionValue="@(option => option.LocationId)" />
+                        }
+                        else
+                        {
+                            <FluentText>Loading Companies...</FluentText>
+                        }
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
+                                     Class="login-submit-row">
+                            <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                          BackgroundColor="@SelectedAccentColor"
+                                          Color="@(SelectedAccentColor is null ? null : "white")">
+                                <FluentIcon Icon="Icons.Filled.Size20.ArrowEnter" Slot="start" />
+                                Login
+                            </FluentButton>
+                        </FluentStack>
                     </FluentStack>
-                </FluentStack>
-            </form>
+                </form>
 
-            <FluentText Align="TextAlign.Center" Size="TextSize.Size200">
-                <a href="/privacy">Privacy Policy</a>
-            </FluentText>
-        </div>
-    </ChildContent>
-</AuthPageShell>
+                <FluentText Align="TextAlign.Center" Size="TextSize.Size200" Class="login-privacy-link">
+                    <a href="/privacy">Privacy Policy</a>
+                </FluentText>
+            </div>
+        </ChildContent>
+    </AuthPageShell>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "returnUrl")]
@@ -80,21 +121,97 @@
     [SupplyParameterFromQuery(Name = "error")]
     public string? ErrorMessage { get; set; }
 
+    [SupplyParameterFromQuery(Name = "company")]
+    public int? CompanyId { get; set; }
+
     private IEnumerable<LoginLocationOption> locationOptions = [];
+    private IEnumerable<LoginCompanyOption> companyOptions = [];
 
     private string? SelectedAccentColor;
     private string? SelectedLogoUrl;
+    private string? BackgroundImageUrl;
+
+    // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
+    private string? _pendingThemeColor;
+    private string? _appliedThemeColor;
 
     private string AccentBarStyle => $"background-color:{SelectedAccentColor};";
 
-    protected override async Task OnInitializedAsync()
+    private string BackLinkHref => BuildLoginUrl(null);
+
+    // OnParametersSetAsync, not OnInitializedAsync: both login steps are the same routed
+    // component, so moving between them only changes the "company" query string - Blazor
+    // reuses this instance and re-invokes parameter binding rather than recreating it.
+    protected override async Task OnParametersSetAsync()
     {
-        Result<List<LoginLocationOption>> result = await _companyLocationService.GetLoginLocationOptionsAsync();
+        if (CompanyId is null)
+        {
+            await LoadCompanyOptionsAsync();
+            _pendingThemeColor = BrandConstants.PrimaryColorHex;
+            return;
+        }
+
+        Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(CompanyId.Value);
+
+        if (!branding.IsSuccess)
+        {
+            // Stale/invalid company id in the URL - fall back to the company picker.
+            CompanyId = null;
+            await LoadCompanyOptionsAsync();
+            _pendingThemeColor = BrandConstants.PrimaryColorHex;
+            return;
+        }
+
+        SelectedAccentColor = branding.Data!.ThemeColorHex;
+        SelectedLogoUrl = branding.Data!.LogoFileId is Guid ? $"/api/companies/{CompanyId}/logo" : null;
+        BackgroundImageUrl = branding.Data!.BackgroundImageFileId is Guid ? $"/api/companies/{CompanyId}/background" : null;
+
+        // Reflects the chosen company's brand color in the page's overall Fluent theme (not
+        // just the accent bar/submit button), using whatever light/dark mode is already active.
+        _pendingThemeColor = BrandConstants.ResolveAccentColor(SelectedAccentColor);
+
+        Result<List<LoginLocationOption>> result = await _companyLocationService.GetLoginLocationOptionsAsync(CompanyId);
 
         if (result.IsSuccess)
         {
             locationOptions = result.Data!;
         }
+    }
+
+    // ThemeService.SetThemeAsync goes through JS interop, and this page is statically prerendered
+    // before the interactive circuit exists. Calling it from OnParametersSetAsync threw
+    // "JavaScript interop calls cannot be issued at this time" on every single render of /login;
+    // MainLayout's ErrorBoundary caught that and rendered its error content, so the prerendered
+    // HTML shipped "Something went wrong" and only got replaced by the real page a beat later when
+    // the circuit connected and the component re-ran successfully. That was the error flash people
+    // saw after logging out.
+    //
+    // So the colour is chosen during parameter binding and applied here, where interop is legal.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingThemeColor is null || _pendingThemeColor == _appliedThemeColor)
+        {
+            return;
+        }
+
+        _appliedThemeColor = _pendingThemeColor;
+
+        await ThemeService.SetThemeAsync(_pendingThemeColor);
+    }
+
+    private async Task LoadCompanyOptionsAsync()
+    {
+        Result<List<LoginCompanyOption>> result = await _companyLocationService.GetLoginCompanyOptionsAsync();
+
+        if (result.IsSuccess)
+        {
+            companyOptions = result.Data!;
+        }
+    }
+
+    private void SelectCompany(int companyId)
+    {
+        Navigation.NavigateTo(BuildLoginUrl(companyId));
     }
 
     private void OnLocationChanged(int locationId)
@@ -103,5 +220,14 @@
 
         SelectedAccentColor = option?.ThemeColorHex;
         SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
+    }
+
+    private string BuildLoginUrl(int? companyId)
+    {
+        return Navigation.GetUriWithQueryParameters("/login", new Dictionary<string, object?>
+        {
+            ["company"] = companyId,
+            ["returnUrl"] = string.IsNullOrEmpty(ReturnUrl) ? null : ReturnUrl
+        });
     }
 }

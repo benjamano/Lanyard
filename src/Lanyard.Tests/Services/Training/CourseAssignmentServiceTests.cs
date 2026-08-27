@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
@@ -5,6 +6,8 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
@@ -22,13 +25,29 @@ public class CourseAssignmentServiceTests
             .Options;
     }
 
-    private static CourseAssignmentService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static CourseAssignmentService GetService(
+        DbContextOptions<ApplicationDbContext> options,
+        Mock<IEmailService>? emailServiceMock = null,
+        Mock<ICompanyLocationService>? companyLocationServiceMock = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new CourseAssignmentService(factoryMock.Object);
+        Mock<IEmailService> resolvedEmailServiceMock = emailServiceMock ?? new Mock<IEmailService>();
+        resolvedEmailServiceMock
+            .Setup(e => e.SendTrainingAssignedEmailAsync(
+                It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        Mock<ICompanyLocationService> resolvedCompanyLocationServiceMock = companyLocationServiceMock ?? new Mock<ICompanyLocationService>();
+
+        return new CourseAssignmentService(
+            factoryMock.Object,
+            resolvedEmailServiceMock.Object,
+            Options.Create(new EmailOptions { PublicBaseUrl = "https://lanyard.example.com" }),
+            resolvedCompanyLocationServiceMock.Object,
+            NullLogger<CourseAssignmentService>.Instance);
     }
 
     private static async Task<(Location ipswich, Location wisbech)> SeedTwoLocationsAsync(DbContextOptions<ApplicationDbContext> options)
@@ -132,7 +151,8 @@ public class CourseAssignmentServiceTests
 
     private static async Task<CourseAssignment> SeedAssignmentAsync(
         DbContextOptions<ApplicationDbContext> options, Guid courseId, string userId,
-        DateTime? startedDate = null, DateTime? completedDate = null)
+        DateTime? startedDate = null, DateTime? completedDate = null,
+        DateTime? dueDate = null, DateTime? dueSoonReminderSentDate = null, bool isActive = true)
     {
         await using ApplicationDbContext ctx = new(options);
 
@@ -144,7 +164,9 @@ public class CourseAssignmentServiceTests
             AssignedDate = DateTime.UtcNow,
             StartedDate = startedDate,
             CompletedDate = completedDate,
-            IsActive = true
+            DueDate = dueDate,
+            DueSoonReminderSentDate = dueSoonReminderSentDate,
+            IsActive = isActive
         };
 
         ctx.CourseAssignments.Add(assignment);
@@ -957,5 +979,218 @@ public class CourseAssignmentServiceTests
         Assert.AreEqual(
             4,
             result.Data!.AssignedCount + result.Data!.SkippedDuplicateCount + result.Data!.SkippedOutsideLocationCount);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_SendsAssignedEmail_ByDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", null, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        emailServiceMock.Verify(e => e.SendTrainingAssignedEmailAsync(
+            It.Is<UserProfile>(u => u.Id == user.Id), course.Name, It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseAsync_SuppressesAssignedEmail_WhenSendAssignedEmailIsFalse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        Result<CourseAssignment> result = await service.AssignCourseAsync(course.Id, user.Id, "manager-1", null, AdminScope, sendAssignedEmail: false);
+
+        Assert.IsTrue(result.Success, result.Error);
+        emailServiceMock.Verify(e => e.SendTrainingAssignedEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_SendsOneAssignedEmailPerNewAssignment()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options);
+        UserProfile userA = await SeedUserAsync(options, "user-a");
+        UserProfile userB = await SeedUserAsync(options, "user-b");
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            course.Id, [userA.Id, userB.Id], "manager-1", null, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        emailServiceMock.Verify(e => e.SendTrainingAssignedEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()),
+            Times.Exactly(2));
+    }
+
+    [TestMethod]
+    public async Task AssignCourseToUsersAsync_SuppressesAssignedEmail_WhenSendAssignedEmailIsFalse()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Mock<IEmailService> emailServiceMock = new();
+        CourseAssignmentService service = GetService(options, emailServiceMock);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        Result<BulkAssignResult> result = await service.AssignCourseToUsersAsync(
+            course.Id, [user.Id], null, null, AdminScope, sendAssignedEmail: false);
+
+        Assert.IsTrue(result.Success, result.Error);
+        emailServiceMock.Verify(e => e.SendTrainingAssignedEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueSoonAsync_ReturnsAssignment_WhenDueDateIsWithinThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(3));
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueSoonAsync(7);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(assignment.Id, result.Data![0].Id);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueSoonAsync_ExcludesAssignment_WhenDueDateIsBeyondThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(14));
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueSoonAsync(7);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueSoonAsync_ExcludesAssignment_WhenAlreadyReminded()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(3), dueSoonReminderSentDate: DateTime.UtcNow);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueSoonAsync(7);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueSoonAsync_ExcludesAssignment_WhenAlreadyCompleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(3), completedDate: DateTime.UtcNow);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueSoonAsync(7);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueSoonAsync_ExcludesAssignment_WhenAlreadyOverdue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(-1));
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueSoonAsync(7);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
+
+    [TestMethod]
+    public async Task MarkDueSoonReminderSentAsync_StampsReminderDate()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(3));
+
+        Result<bool> result = await service.MarkDueSoonReminderSentAsync(assignment.Id);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+        CourseAssignment dbAssignment = await verifyCtx.CourseAssignments.SingleAsync(x => x.Id == assignment.Id);
+        Assert.IsNotNull(dbAssignment.DueSoonReminderSentDate);
+    }
+
+    [TestMethod]
+    public async Task MarkDueSoonReminderSentAsync_FailsWhenAssignmentNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+
+        Result<bool> result = await service.MarkDueSoonReminderSentAsync(Guid.NewGuid());
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task UpdateAssignmentDueDateAsync_ResetsDueSoonReminderSentDate_WhenDueDateChanges()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+        CourseAssignment assignment = await SeedAssignmentAsync(
+            options, course.Id, user.Id, dueDate: DateTime.UtcNow.AddDays(3), dueSoonReminderSentDate: DateTime.UtcNow);
+
+        Result<CourseAssignment> result = await service.UpdateAssignmentDueDateAsync(assignment.Id, DateTime.UtcNow.AddDays(30));
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data!.DueSoonReminderSentDate);
+    }
+
+    [TestMethod]
+    public async Task UpdateAssignmentDueDateAsync_KeepsDueSoonReminderSentDate_WhenDueDateIsUnchanged()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedCourseAsync(options);
+        UserProfile user = await SeedUserAsync(options);
+
+        // Seed with an already-normalized DueDate (same shape UpdateAssignmentDueDateAsync
+        // produces via NormalizeDueDate) so re-submitting the same calendar day is a true no-op.
+        DateTime rawDueDate = DateTime.UtcNow.AddDays(3);
+        DateTime normalizedDueDate = DateTime.SpecifyKind(rawDueDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+        CourseAssignment assignment = await SeedAssignmentAsync(
+            options, course.Id, user.Id, dueDate: normalizedDueDate, dueSoonReminderSentDate: DateTime.UtcNow);
+
+        Result<CourseAssignment> result = await service.UpdateAssignmentDueDateAsync(assignment.Id, rawDueDate);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNotNull(result.Data!.DueSoonReminderSentDate);
     }
 }

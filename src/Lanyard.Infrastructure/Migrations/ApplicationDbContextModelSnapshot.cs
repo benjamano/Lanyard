@@ -297,6 +297,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastDisconnectDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LastLogin")
                         .HasColumnType("timestamp with time zone");
 
@@ -442,6 +445,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<Guid?>("BackgroundImageFileId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -462,6 +468,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BackgroundImageFileId");
 
                     b.HasIndex("LogoFileId");
 
@@ -525,6 +533,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DueSoonReminderSentDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsActive")
@@ -1308,6 +1319,37 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("Songs");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.UserErasureRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ErasedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErasedEmailHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErasedUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PerformedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PerformedByUserName")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ErasedAtUtc");
+
+                    b.ToTable("UserErasureRecords");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserLocationMembership", b =>
                 {
                     b.Property<int>("Id")
@@ -1620,6 +1662,16 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(1);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.KioskHealthWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<bool>("OnlyShowOffline")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(9);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicPlaylistSelectorWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -1783,10 +1835,17 @@ namespace Lanyard.Infrastructure.Migrations
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
                 {
+                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "BackgroundImageFile")
+                        .WithMany()
+                        .HasForeignKey("BackgroundImageFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "LogoFile")
                         .WithMany()
                         .HasForeignKey("LogoFileId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BackgroundImageFile");
 
                     b.Navigation("LogoFile");
                 });

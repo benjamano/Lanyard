@@ -5,12 +5,12 @@
 @inject INotificationService _toastService
 
 <div class="file-uploader-wrapper w-100">
-    <FluentInputFile Id="my-file-uploader" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="true"
+    <FluentInputFile Id="@Id" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="true"
                      MaximumFileCount="@MaximumFileCount" MaximumFileSize="@MaximumFileSize" Accept="@Accept"
                      @bind-ProgressPercent="@ProgressPercent" OnCompleted="@OnCompletedAsync" Class="file-uploader-dropzone"
                      Padding="@Padding.Top5">
         <ChildContent>
-            <label for="my-file-uploader">
+            <label for="@Id">
                 @if (PreviewUrl is not null)
                 {
                     <img src="@PreviewUrl" alt="Current file preview" class="file-uploader-preview" />
@@ -23,7 +23,7 @@
 
             <div>
                 @Label,
-                or <label for="my-file-uploader">browse</label>
+                or <label for="@Id">browse</label>
                 for them.
                 <br />
                 <em>Maximum of @MaximumFileCount file@(MaximumFileCount > 1 ? "s" : "") allowed.</em>
@@ -36,6 +36,9 @@
 
 @code
 {
+    // Must be unique per page: two instances sharing this id break the <label for> association
+    // and duplicate the DOM id, since HTML ids are not scoped per-component.
+    [Parameter] public string Id { get; set; } = "my-file-uploader";
     [Parameter] public Guid? SelectedFolderId { get; set; }
     [Parameter] public EventCallback<FileMetadata> OnFileUploaded { get; set; }
     [Parameter] public string? Accept { get; set; }

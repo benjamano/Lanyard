@@ -1,4 +1,8 @@
 <div class="auth-page-shell">
+    @if (BackgroundImageUrl is not null)
+    {
+        <div class="auth-page-shell-backdrop" style="background-image:url('@BackgroundImageUrl')"></div>
+    }
     <FluentCard Class="auth-page-shell-card">
         @HeaderContent
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="24" HorizontalAlignment="HorizontalAlignment.Center">
@@ -19,4 +23,7 @@
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string? BackgroundImageUrl { get; set; }
 }

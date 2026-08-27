@@ -1,0 +1,51 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Pulse())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Kiosk Health
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentCheckbox @bind-Value="Widget.OnlyShowOffline" Label="Only show offline kiosks" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required KioskHealthWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private bool _originalOnlyShowOffline;
+
+    protected override void OnInitialized()
+    {
+        _originalOnlyShowOffline = Widget.OnlyShowOffline;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.OnlyShowOffline = _originalOnlyShowOffline;
+
+        await Dialog.CancelAsync();
+    }
+}

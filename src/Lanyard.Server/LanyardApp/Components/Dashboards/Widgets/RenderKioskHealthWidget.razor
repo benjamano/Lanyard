@@ -1,0 +1,186 @@
+﻿@using Lanyard.Application.Services.Clients
+@using Humanizer;
+@implements IDisposable
+
+@inject IClientService _clientService
+
+@* Known limitation: Client has no LocationId, so this roster is not location-scoped - it
+   lists every kiosk on the deployment. Dashboards.razor is [Authorize] with no role, so any
+   authenticated staff member can see kiosks belonging to other companies and locations.
+   Fixing that properly means location-scoping the whole Client model. *@
+
+<FluentCard Height="100%">
+    @* Laid out with plain elements rather than FluentStack so the kiosk name can ellipsize
+       instead of wrapping a word per line when the widget is sized narrow. *@
+    <div class="kiosk-health-body">
+        <div class="kiosk-health-header">
+            <span class="kiosk-health-title">@(Widget.Title ?? "Kiosk Health")</span>
+            <span class="kiosk-health-count">@(_onlineCount) / @(_totalCount) online</span>
+        </div>
+
+        @if (_displayedClients.Count == 0)
+        {
+            <div class="kiosk-health-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    @(Widget.OnlyShowOffline && _totalCount > 0 ? "All kiosks online" : "No kiosks registered")
+                </FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="kiosk-health-list">
+                @foreach (ClientConnectedWithCapabilitiesDTO client in _displayedClients)
+                {
+                    <div class="kiosk-health-row">
+                        <span class="kiosk-health-indicator">
+                            @if (client.IsCurrentlyConnected)
+                            {
+                                <FluentIcon Value="@(new Icons.Filled.Size20.CheckmarkCircle())" Color="Color.Success" />
+                            }
+                            else
+                            {
+                                <FluentIcon Value="@(new Icons.Filled.Size20.DismissCircle())" Color="Color.Error" />
+                            }
+                        </span>
+
+                        <span class="kiosk-health-text">
+                            <span class="kiosk-health-name" title="@client.Name">@client.Name</span>
+                            <span class="kiosk-health-status">@DescribeStatus(client)</span>
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required KioskHealthWidget Widget { get; set; }
+
+    // Kiosk connectivity lives in an in-memory set on the hub with no change event to
+    // subscribe to, so the roster is polled rather than pushed.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(15);
+
+    private List<ClientConnectedWithCapabilitiesDTO> _displayedClients = new();
+    private int _onlineCount;
+    private int _totalCount;
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
+    private bool _isRefreshing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientsAsync();
+
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await LoadClientsAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
+            }
+        });
+    }
+
+    protected override void OnParametersSet()
+    {
+        // OnlyShowOffline can change while the dashboard is open via the config dialog.
+        ApplyFilter();
+    }
+
+    private async Task LoadClientsAsync()
+    {
+        if (_isRefreshing)
+        {
+            return;
+        }
+
+        _isRefreshing = true;
+
+        try
+        {
+            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await _clientService.GetClientsWithCapabilitiesAsync();
+
+            if (!result.IsSuccess || result.Data == null)
+            {
+                return;
+            }
+
+            _allClients = result.Data
+                .OrderBy(x => x.IsCurrentlyConnected)
+                .ThenBy(x => x.Name)
+                .ToList();
+
+            ApplyFilter();
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private List<ClientConnectedWithCapabilitiesDTO> _allClients = new();
+
+    private void ApplyFilter()
+    {
+        _totalCount = _allClients.Count;
+        _onlineCount = _allClients.Count(x => x.IsCurrentlyConnected);
+
+        _displayedClients = Widget.OnlyShowOffline
+            ? _allClients.Where(x => !x.IsCurrentlyConnected).ToList()
+            : _allClients;
+    }
+
+    // A hard server kill never runs OnDisconnectedAsync, so LastDisconnectDate can be missing
+    // or older than the last connection. Take whichever timestamp is newer and describe it as
+    // "last seen" rather than claiming a precise downtime we cannot know.
+    private static string DescribeStatus(ClientConnectedWithCapabilitiesDTO client)
+    {
+        if (client.IsCurrentlyConnected)
+        {
+            return "online";
+        }
+
+        DateTime? lastSeen = client.LastDisconnectDate;
+
+        if (client.LastLogin is DateTime lastLogin && (lastSeen == null || lastLogin > lastSeen))
+        {
+            lastSeen = lastLogin;
+        }
+
+        if (lastSeen is not DateTime seenAt)
+        {
+            return "never connected";
+        }
+
+        TimeSpan elapsed = DateTime.UtcNow - seenAt;
+
+        if (elapsed < TimeSpan.Zero)
+        {
+            elapsed = TimeSpan.Zero;
+        }
+
+        return $"last seen {elapsed.Humanize(precision: 1, minUnit: Humanizer.Localisation.TimeUnit.Second)} ago";
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
+    }
+}

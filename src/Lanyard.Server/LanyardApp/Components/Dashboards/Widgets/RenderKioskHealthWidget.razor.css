@@ -1,0 +1,81 @@
+.kiosk-health-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+.kiosk-health-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.kiosk-health-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kiosk-health-count {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: var(--colorNeutralForeground3);
+}
+
+.kiosk-health-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+}
+
+.kiosk-health-list {
+    width: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.kiosk-health-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 3px 0;
+}
+
+/* The status icon is a Fluent component root, which scoped CSS cannot target - hence the
+   wrapper span to keep it from being squeezed by the text block beside it. */
+.kiosk-health-indicator {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+}
+
+/* Name over status rather than side by side: at 4 grid columns there is not enough width
+   for both on one line, and truncating the kiosk name is the worst thing to truncate. */
+.kiosk-health-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.kiosk-health-name,
+.kiosk-health-status {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kiosk-health-status {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
