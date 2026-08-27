@@ -123,6 +123,7 @@
       "The Kiosk Health widget can be set to show only offline kiosks, for a problems-only dashboard.",
       "Kiosks now record when they disconnect, so downtime can be shown rather than just a bare online/offline state.",
       "The Clients management page now refreshes on its own, so a kiosk going offline no longer needs a manual page reload to show up."
+      "Logging out now goes straight to the login page instead of briefly showing an error screen on the way."
     ]
   }
 ]
