@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -171,6 +171,22 @@ public class MusicTimelineWidget : DashboardWidget
 
     public Guid? ClientId { get; set; }
     public bool ShowSongTitle { get; set; } = true;
+}
+
+// Deliberately not scoped to a single ClientId like the other client-facing widgets: the
+// point of this one is an at-a-glance roster of every kiosk, sorted offline-first.
+public class KioskHealthWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public KioskHealthWidget()
+    {
+        Type = WidgetType.KioskHealth;
+
+        GridW = 4;
+        GridH = 3;
+    }
+
+    public bool OnlyShowOffline { get; set; }
 }
 
 public class AutomationRuleStatusWidget : DashboardWidget
