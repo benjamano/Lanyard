@@ -1,0 +1,88 @@
+.my-training-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+.my-training-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.my-training-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.my-training-count {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: var(--colorNeutralForeground3);
+}
+
+.my-training-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+}
+
+.my-training-list {
+    width: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.my-training-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 3px 0;
+    cursor: pointer;
+}
+
+.my-training-row:hover {
+    background-color: var(--colorNeutralBackground2);
+}
+
+/* Course name over due date rather than side by side: at 4 grid columns there is not enough
+   width for both plus the status badge on one line, and the course name is the worst thing
+   to truncate. */
+.my-training-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.my-training-name,
+.my-training-due {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.my-training-due {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+/* The badge is a Fluent component root, which scoped CSS cannot target - hence the wrapper
+   span to keep it from being squeezed by the text block beside it. */
+.my-training-status {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+}

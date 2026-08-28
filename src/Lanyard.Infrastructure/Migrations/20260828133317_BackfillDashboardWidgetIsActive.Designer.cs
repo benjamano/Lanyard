@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828133317_BackfillDashboardWidgetIsActive")]
+    partial class BackfillDashboardWidgetIsActive
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1505,9 +1508,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("UseStandardHomePage")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1785,19 +1785,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(7);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MyTrainingWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<bool>("IncludeCompleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MaxItems")
-                        .HasColumnType("integer");
-
-                    b.HasDiscriminator().HasValue(11);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TextAreaWidget", b =>

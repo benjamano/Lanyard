@@ -29,6 +29,11 @@ public class DashboardWidget
     public DashboardWidget()
     {
         Id = Guid.NewGuid();
+
+        // A newly constructed widget is one the user just added, so it starts active. EF assigns
+        // mapped properties after construction, so widgets loaded from the database keep the
+        // stored value.
+        IsActive = true;
     }
 
     public Guid Id { get; set; }
@@ -232,4 +237,23 @@ public class HallOfFameWidget : DashboardWidget
     // Null is venue-wide, matching the other client-scoped widgets. Clients carry no LocationId,
     // so there is no per-location option here.
     public Guid? ClientId { get; set; }
+}
+
+// Per-viewer rather than per-dashboard: the current user is resolved at render time, so a single
+// shared dashboard shows each staff member their own training rather than a fixed person's.
+public class MyTrainingWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public MyTrainingWidget()
+    {
+        Type = WidgetType.MyTraining;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 5;
+    }
+
+    public bool IncludeCompleted { get; set; }
+    public int MaxItems { get; set; }
 }
