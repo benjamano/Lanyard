@@ -283,6 +283,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case KioskHealthWidget existingKioskHealth when widget is KioskHealthWidget incomingKioskHealth:
                     existingKioskHealth.OnlyShowOffline = incomingKioskHealth.OnlyShowOffline;
                     break;
+                case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
+                    existingHallOfFame.Period = incomingHallOfFame.Period;
+                    existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
+                    existingHallOfFame.ShowBestAccuracy = incomingHallOfFame.ShowBestAccuracy;
+                    existingHallOfFame.ShowBestTeam = incomingHallOfFame.ShowBestTeam;
+                    existingHallOfFame.ClientId = incomingHallOfFame.ClientId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -300,6 +307,78 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         catch (Exception ex)
         {
             return Result<DashboardWidget>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<Guid?>> GetDefaultDashboardIdAsync(string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Result<Guid?>.Fail("User id is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Deliberately returns the stored id without validating it. A dashboard that has
+            // since been deactivated still comes back here so the caller can tell that apart
+            // from "never chose one" and explain the fallback to the user.
+            Guid? defaultDashboardId = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == userId)
+                .Select(x => x.DefaultDashboardId)
+                .FirstOrDefaultAsync();
+
+            return Result<Guid?>.Ok(defaultDashboardId);
+        }
+        catch (Exception ex)
+        {
+            return Result<Guid?>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetDefaultDashboardIdAsync(string userId, Guid? dashboardId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Result<bool>.Fail("User id is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (dashboardId is Guid targetDashboardId)
+            {
+                bool dashboardIsUsable = await ctx.Dashboards
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(x => x.Id == targetDashboardId && x.IsActive);
+
+                if (!dashboardIsUsable)
+                {
+                    return Result<bool>.Fail("Dashboard not found.");
+                }
+            }
+
+            UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            user.DefaultDashboardId = dashboardId;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
@@ -352,6 +431,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             KioskHealthWidget kioskHealthWidget => new KioskHealthWidget
             {
                 OnlyShowOffline = kioskHealthWidget.OnlyShowOffline
+            },
+            HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
+            {
+                Period = hallOfFameWidget.Period,
+                ShowTopScore = hallOfFameWidget.ShowTopScore,
+                ShowBestAccuracy = hallOfFameWidget.ShowBestAccuracy,
+                ShowBestTeam = hallOfFameWidget.ShowBestTeam,
+                ClientId = hallOfFameWidget.ClientId
             },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
@@ -431,6 +518,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is KioskHealthWidget targetKioskHealth && source is KioskHealthWidget sourceKioskHealth)
         {
             targetKioskHealth.OnlyShowOffline = sourceKioskHealth.OnlyShowOffline;
+            return;
+        }
+
+        if (target is HallOfFameWidget targetHallOfFame && source is HallOfFameWidget sourceHallOfFame)
+        {
+            targetHallOfFame.Period = sourceHallOfFame.Period;
+            targetHallOfFame.ShowTopScore = sourceHallOfFame.ShowTopScore;
+            targetHallOfFame.ShowBestAccuracy = sourceHallOfFame.ShowBestAccuracy;
+            targetHallOfFame.ShowBestTeam = sourceHallOfFame.ShowBestTeam;
+            targetHallOfFame.ClientId = sourceHallOfFame.ClientId;
         }
     }
 }

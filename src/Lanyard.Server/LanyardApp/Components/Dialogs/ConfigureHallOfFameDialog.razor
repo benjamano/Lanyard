@@ -1,0 +1,132 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.Enum
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Trophy())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Hall of Fame
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentSelect TOption="HallOfFamePeriod"
+                          TValue="string"
+                          Items="@_periods"
+                          OptionText="@(p => DescribePeriod(p))"
+                          OptionValue="@(p => p.ToString())"
+                          Label="Time period"
+                          Value="@_periodValue"
+                          ValueChanged="OnPeriodChanged"
+                          Style="width: 100%;" />
+
+            @* Blank selection is venue-wide rather than "unconfigured" - this widget is useful
+               without picking a kiosk, unlike the live scoreboard. *@
+            <FluentSelect TOption="Client"
+                          TValue="string"
+                          Items="@Clients"
+                          OptionText="@(c => c?.Name ?? string.Empty)"
+                          OptionValue="@(c => c?.Id.ToString())"
+                          Label="Kiosk"
+                          Placeholder="All kiosks"
+                          Value="@_clientValue"
+                          ValueChanged="OnClientChanged"
+                          Style="width: 100%;" />
+
+            <FluentCheckbox @bind-Value="Widget.ShowTopScore" Label="Show top scores" />
+            <FluentCheckbox @bind-Value="Widget.ShowBestAccuracy" Label="Show best accuracy" />
+            <FluentCheckbox @bind-Value="Widget.ShowBestTeam" Label="Show team totals" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required HallOfFameWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Client> Clients { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private static readonly HallOfFamePeriod[] _periods =
+    [
+        HallOfFamePeriod.Today,
+        HallOfFamePeriod.ThisWeek,
+        HallOfFamePeriod.ThisMonth,
+        HallOfFamePeriod.AllTime
+    ];
+
+    private string _periodValue = string.Empty;
+    private string _clientValue = string.Empty;
+
+    // Snapshots so Cancel can revert the live-edited widget.
+    private HallOfFamePeriod _originalPeriod;
+    private Guid? _originalClientId;
+    private bool _originalShowTopScore;
+    private bool _originalShowBestAccuracy;
+    private bool _originalShowBestTeam;
+
+    protected override void OnInitialized()
+    {
+        _originalPeriod = Widget.Period;
+        _originalClientId = Widget.ClientId;
+        _originalShowTopScore = Widget.ShowTopScore;
+        _originalShowBestAccuracy = Widget.ShowBestAccuracy;
+        _originalShowBestTeam = Widget.ShowBestTeam;
+
+        _periodValue = Widget.Period.ToString();
+        _clientValue = Widget.ClientId?.ToString() ?? string.Empty;
+    }
+
+    private void OnPeriodChanged(string? newValue)
+    {
+        Widget.Period = System.Enum.TryParse(newValue, out HallOfFamePeriod period)
+            ? period
+            : HallOfFamePeriod.Today;
+
+        _periodValue = Widget.Period.ToString();
+    }
+
+    private void OnClientChanged(string? newValue)
+    {
+        Widget.ClientId = Guid.TryParse(newValue, out Guid clientId) ? clientId : null;
+        _clientValue = newValue ?? string.Empty;
+    }
+
+    private static string DescribePeriod(HallOfFamePeriod period)
+    {
+        return period switch
+        {
+            HallOfFamePeriod.Today => "Today",
+            HallOfFamePeriod.ThisWeek => "This week",
+            HallOfFamePeriod.ThisMonth => "This month",
+            _ => "All time"
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.Period = _originalPeriod;
+        Widget.ClientId = _originalClientId;
+        Widget.ShowTopScore = _originalShowTopScore;
+        Widget.ShowBestAccuracy = _originalShowBestAccuracy;
+        Widget.ShowBestTeam = _originalShowBestTeam;
+
+        await Dialog.CancelAsync();
+    }
+}

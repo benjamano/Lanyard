@@ -11,5 +11,6 @@ public enum WidgetType
     MusicPlaylistSelector = 6,
     MusicTimeline = 7,
     AutomationRuleStatus = 8,
-    KioskHealth = 9
+    KioskHealth = 9,
+    HallOfFame = 10
 }

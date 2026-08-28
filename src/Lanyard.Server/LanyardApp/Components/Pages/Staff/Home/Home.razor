@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 
 @attribute [Authorize]
 
@@ -6,14 +6,43 @@
 @using Lanyard.App.Components.Home
 @using Lanyard.App.Components.Layout.Staff
 @using Lanyard.App.Components.Training
+@using Lanyard.App.Components.Dashboards
 @using Lanyard.Application.Services.Authentication
 @using Microsoft.AspNetCore.Authorization
 
 @inject ISecurityService _securityService
+@inject IDashboardService _dashboardService
 @inject ILogger<Home> _logger
 
 <PageTitle>Staff Home</PageTitle>
 
+@if (_homeScreenDashboard is not null)
+{
+    <div class="mx-3">
+        @if (_homeScreenWidgets.Count > 0)
+        {
+            <DashboardGrid Widgets="_homeScreenWidgets" PreviewMode="true" />
+        }
+        else
+        {
+            <FluentCard Appearance="CardAppearance.Filled">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">
+                        Your home screen dashboard has no widgets yet
+                    </FluentText>
+                    <FluentText>
+                        "@_homeScreenDashboard.Name" is set as your home screen, but nothing has been added to it.
+                    </FluentText>
+                    <FluentLink Href="/account/manage">
+                        Change your home screen
+                    </FluentLink>
+                </FluentStack>
+            </FluentCard>
+        }
+    </div>
+}
+else
+{
 <div class="mx-3">
     <FluentGrid AdaptiveRendering="true" Spacing="2">
         <FluentGridItem HiddenWhen="@GridItemHidden.SmAndUp" Sm="12" Xs="12">
@@ -79,6 +108,7 @@
             </FluentGrid>
         }
     </div>
+}
 
 @code {
     private string? _currentUserName;
@@ -86,14 +116,68 @@
     private bool _showPreviewContent = false;
     private string? _companyLogoUrl = null;
 
+    private Dashboard? _homeScreenDashboard;
+    private List<DashboardWidget> _homeScreenWidgets = [];
+    private bool _homeScreenDashboardUnavailable = false;
+
     protected override async Task OnInitializedAsync()
     {
         Task<string?> userNameTask = _securityService.GetCurrentUserName();
         Task logoTask = GetCurrentCompanyLogoUrlAsync();
+        Task homeScreenTask = LoadHomeScreenDashboardAsync();
 
-        await Task.WhenAll(userNameTask, logoTask);
+        await Task.WhenAll(userNameTask, logoTask, homeScreenTask);
 
         _currentUserName = userNameTask.Result;
+    }
+
+    // Fired here rather than in OnInitializedAsync so the user sees it exactly once - that method
+    // also runs during prerender, where a toast is discarded.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && _homeScreenDashboardUnavailable)
+        {
+            _toastService.ShowInfo("Your home screen dashboard is no longer available, showing the standard home page.");
+        }
+    }
+
+    private async Task LoadHomeScreenDashboardAsync()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
+        {
+            _logger.LogWarning("Failed to resolve the current user for the home screen dashboard: {Error}", userIdResult.Error);
+            return;
+        }
+
+        Result<Guid?> defaultResult = await _dashboardService.GetDefaultDashboardIdAsync(userIdResult.Data);
+
+        if (!defaultResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", defaultResult.Error);
+            return;
+        }
+
+        if (defaultResult.Data is not Guid dashboardId)
+        {
+            return;
+        }
+
+        Result<Dashboard> dashboardResult = await _dashboardService.GetDashboardAsync(dashboardId);
+
+        // GetDashboardAsync deliberately does not filter on IsActive (unlike GetDashboardsAsync), so
+        // a dashboard soft-deleted after being chosen still loads here and has to be rejected.
+        if (!dashboardResult.IsSuccess || dashboardResult.Data is not { IsActive: true } dashboard)
+        {
+            _logger.LogWarning("Home screen dashboard {DashboardId} is no longer available: {Error}", dashboardId, dashboardResult.Error);
+            _homeScreenDashboardUnavailable = true;
+            return;
+        }
+
+        // Widgets are soft-deleted too, and GetDashboardAsync includes inactive ones.
+        _homeScreenWidgets = dashboard.Widgets.Where(x => x.IsActive).ToList();
+        _homeScreenDashboard = dashboard;
     }
 
     private string GetGreeting()

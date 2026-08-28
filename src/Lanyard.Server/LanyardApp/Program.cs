@@ -93,6 +93,7 @@ builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
@@ -113,10 +114,12 @@ builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 builder.Services.AddSingleton<AutomationEngineService>();
 builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.AddHostedService<IdleTriggerHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 

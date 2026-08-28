@@ -9,9 +9,12 @@
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
-        @foreach (DashboardWidget widget in Widgets)
+        @foreach (DashboardWidget widget in Widgets.OrderBy(w => w.GridY).ThenBy(w => w.GridX))
         {
-            <div class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
+            @* @key is required because the render order is computed from GridY/GridX, which the
+               editor's move buttons change at runtime. Without it Blazor reuses component instances
+               positionally, so two same-type widgets that swap places keep each other's state. *@
+            <div @key="widget.Id" class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
                 <FluentStack Orientation="@Orientation.Vertical" 
                             Height="100%" 
                             Width="100%"
@@ -167,6 +170,20 @@
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderKioskHealthWidget Widget="kioskHealthWidget" />
+                                </div>
+                                break;
+                            case WidgetType.HallOfFame:
+                                HallOfFameWidget? hallOfFameWidget = widget as HallOfFameWidget;
+
+                                if (hallOfFameWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderHallOfFameWidget Widget="hallOfFameWidget" />
                                 </div>
                                 break;
                         }
@@ -350,6 +367,9 @@
             case KioskHealthWidget kioskHealthWidget:
                 await ShowConfigureKioskHealthDialog(kioskHealthWidget);
                 break;
+            case HallOfFameWidget hallOfFameWidget:
+                await ShowConfigureHallOfFameDialog(hallOfFameWidget);
+                break;
         }
     }
 
@@ -450,6 +470,23 @@
         _toastService.ShowError($"Failed to load clients, {result.Error}");
 
         return [];
+    }
+
+    private async Task ShowConfigureHallOfFameDialog(HallOfFameWidget hallOfFameWidget)
+    {
+        IEnumerable<Client> clients = await GetZoneScoreboardClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureHallOfFameDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureHallOfFameDialog.Widget), hallOfFameWidget);
+            options.Parameters.Add(nameof(ConfigureHallOfFameDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
     }
 
     private async Task ShowConfigureKioskHealthDialog(KioskHealthWidget kioskHealthWidget)

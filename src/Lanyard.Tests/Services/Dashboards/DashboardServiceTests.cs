@@ -47,6 +47,16 @@ public class DashboardServiceTests
         return dashboard;
     }
 
+    private static async Task<string> SeedUserAsync(DbContextOptions<ApplicationDbContext> options, string userId = "test-user")
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ctx.Users.Add(new UserProfile { Id = userId, UserName = userId, FirstName = "Test", LastName = "User" });
+        await ctx.SaveChangesAsync();
+
+        return userId;
+    }
+
     [TestMethod]
     public async Task DashboardService_SaveDashboard_CreatesNewWidgets()
     {
@@ -610,5 +620,244 @@ public class DashboardServiceTests
         await using ApplicationDbContext ctx = new(options);
         KioskHealthWidget dbWidget = await ctx.DashboardWidgets.OfType<KioskHealthWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.IsTrue(dbWidget.OnlyShowOffline);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewHallOfFameWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        dashboard.Widgets =
+        [
+            new HallOfFameWidget
+            {
+                Id = Guid.Empty,
+                Period = HallOfFamePeriod.ThisWeek,
+                ShowTopScore = true,
+                ShowBestAccuracy = false,
+                ShowBestTeam = false,
+                ClientId = clientId,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(HallOfFamePeriod.ThisWeek, dbWidget.Period);
+        Assert.IsTrue(dbWidget.ShowTopScore);
+        Assert.IsFalse(dbWidget.ShowBestAccuracy);
+        Assert.IsFalse(dbWidget.ShowBestTeam);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingHallOfFameWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        HallOfFameWidget hallOfFameWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            Period = HallOfFamePeriod.Today,
+            ShowTopScore = true,
+            ShowBestAccuracy = true,
+            ShowBestTeam = true,
+            ClientId = null,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [hallOfFameWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        Guid clientId = Guid.NewGuid();
+
+        hallOfFameWidget.Period = HallOfFamePeriod.AllTime;
+        hallOfFameWidget.ShowBestAccuracy = false;
+        hallOfFameWidget.ClientId = clientId;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.Id == hallOfFameWidget.Id);
+        Assert.AreEqual(HallOfFamePeriod.AllTime, dbWidget.Period);
+        Assert.IsFalse(dbWidget.ShowBestAccuracy);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesHallOfFameConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        HallOfFameWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            Period = HallOfFamePeriod.Today,
+            ShowBestTeam = true,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        HallOfFameWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            Period = HallOfFamePeriod.ThisMonth,
+            ShowBestTeam = false,
+            ClientId = clientId,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(HallOfFamePeriod.ThisMonth, dbWidget.Period);
+        Assert.IsFalse(dbWidget.ShowBestTeam);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_PersistsChoice()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        Result<bool> setResult = await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+
+        Assert.IsTrue(setResult.Success, setResult.Error);
+
+        Result<Guid?> getResult = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(dashboard.Id, getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetDefaultDashboardId_ReturnsNullWhenNeverSet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        string userId = await SeedUserAsync(options);
+
+        Result<Guid?> result = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_ClearsChoiceWhenNull()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+
+        Result<bool> clearResult = await service.SetDefaultDashboardIdAsync(userId, null);
+
+        Assert.IsTrue(clearResult.Success, clearResult.Error);
+
+        Result<Guid?> getResult = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.IsNull(getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_FailsForUnknownDashboard()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        string userId = await SeedUserAsync(options);
+
+        Result<bool> result = await service.SetDefaultDashboardIdAsync(userId, Guid.NewGuid());
+
+        Assert.IsFalse(result.Success);
+
+        Result<Guid?> getResult = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsNull(getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_FailsForDeletedDashboard()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.DeleteDashboardAsync(dashboard.Id);
+
+        Result<bool> result = await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_FailsForBlankUserId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Result<bool> result = await service.SetDefaultDashboardIdAsync("  ", dashboard.Id);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetDefaultDashboardId_StillReturnsIdAfterDashboardDeleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+        await service.DeleteDashboardAsync(dashboard.Id);
+
+        // The service deliberately does not clear or validate the stored id - callers need to be
+        // able to tell "was set, but the dashboard is gone" apart from "never set" so they can
+        // explain the fallback rather than silently showing the standard home page.
+        Result<Guid?> getResult = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(dashboard.Id, getResult.Data);
+
+        Result<Dashboard> dashboardResult = await service.GetDashboardAsync(dashboard.Id);
+
+        Assert.IsTrue(dashboardResult.Success, dashboardResult.Error);
+        Assert.IsFalse(dashboardResult.Data!.IsActive);
     }
 }

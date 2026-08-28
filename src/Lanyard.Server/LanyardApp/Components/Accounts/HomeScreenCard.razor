@@ -1,0 +1,128 @@
+@inject IDashboardService DashboardService
+
+<FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" VerticalGap="8" Width="100%">
+    <FluentText>
+        Choose a dashboard to show when you open Lanyard. It replaces the standard home page and its widgets stay live, so
+        you can use them without leaving this screen.
+    </FluentText>
+
+    @if (_isLoading)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        <FluentSelect TOption="string"
+                      TValue="string"
+                      Label="Home Screen"
+                      Value="@_selectedValue"
+                      ValueChanged="OnSelectionChanged"
+                      Disabled="@(!_dashboards.Any())"
+                      Style="width: 61%;">
+            <FluentOption TValue="string" Value="@NoDashboardValue">Use the standard home page</FluentOption>
+            @foreach (Dashboard dashboard in _dashboards)
+            {
+                <FluentOption TValue="string" Value="@dashboard.Id.ToString()">@dashboard.Name</FluentOption>
+            }
+        </FluentSelect>
+
+        @if (!_dashboards.Any())
+        {
+            <FluentText Color="Color.Disabled">There are no dashboards to choose from yet.</FluentText>
+        }
+    }
+</FluentStack>
+
+@code {
+    private const string NoDashboardValue = "";
+
+    private IEnumerable<Dashboard> _dashboards = [];
+    private string _selectedValue = NoDashboardValue;
+    private string? _userId;
+    private bool _isLoading = true;
+    private bool _loadFailed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
+        {
+            _toastService.ShowError($"Failed to load your home screen setting, {userIdResult.Error}");
+            _loadFailed = true;
+            _isLoading = false;
+            return;
+        }
+
+        _userId = userIdResult.Data;
+
+        Result<IEnumerable<Dashboard>> dashboardsResult = await DashboardService.GetDashboardsAsync();
+
+        if (dashboardsResult.IsSuccess && dashboardsResult.Data is not null)
+        {
+            _dashboards = dashboardsResult.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load dashboards, {dashboardsResult.Error}");
+            _loadFailed = true;
+        }
+
+        Result<Guid?> defaultResult = await DashboardService.GetDefaultDashboardIdAsync(_userId);
+
+        if (!defaultResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load your home screen setting, {defaultResult.Error}");
+            _loadFailed = true;
+            _isLoading = false;
+            return;
+        }
+
+        // A dashboard that has since been deleted is stored but no longer selectable, so fall back
+        // to showing "Use the standard home page" - which is what the home page itself does too.
+        _selectedValue = defaultResult.Data is Guid dashboardId && _dashboards.Any(x => x.Id == dashboardId)
+            ? dashboardId.ToString()
+            : NoDashboardValue;
+
+        _isLoading = false;
+    }
+
+    private void OnSelectionChanged(string? newValue)
+    {
+        _selectedValue = newValue ?? NoDashboardValue;
+    }
+
+    public async Task HandleSave()
+    {
+        if (_userId is null)
+        {
+            return;
+        }
+
+        // The selection falls back to "Use the standard home page" whenever loading failed, so
+        // saving on top of a failed load would silently wipe a setting the user never touched.
+        if (_loadFailed)
+        {
+            _toastService.ShowError("Your home screen setting could not be loaded, so it was not saved. Reload the page and try again.");
+            return;
+        }
+
+        Guid? dashboardId = Guid.TryParse(_selectedValue, out Guid parsedId) ? parsedId : null;
+
+        Result<bool> result = await DashboardService.SetDefaultDashboardIdAsync(_userId, dashboardId);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Home Screen Saved!");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to save your home screen, {result.Error}");
+        }
+    }
+}
