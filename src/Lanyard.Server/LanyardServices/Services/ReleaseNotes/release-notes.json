@@ -137,5 +137,19 @@
       "Training emails now greet you by first name instead of your username.",
       "Training emails and certificates now take their logo and brand colour from your own company, so everyone at a company gets consistent branding regardless of who assigned the course."
     ]
+  },
+  {
+    "version": "1.3.12",
+    "releaseDate": "2026-08-28",
+    "summary": "Game results are now saved, with a Hall of Fame leaderboard widget and idle-triggered automation rules.",
+    "details": [
+      "Finished laser games are now recorded, so scores survive a server restart instead of being lost the moment the next game starts.",
+      "Added a Hall of Fame dashboard widget showing top scores, best accuracy and team totals over Today, This Week, This Month or All Time.",
+      "The Hall of Fame widget can be pointed at a single kiosk or left venue-wide, and each section can be turned on or off.",
+      "Fixed player accuracy and team not updating during a game - both were frozen at whatever the first score packet of the game reported, so accuracy read far lower than it should have on the live scoreboard.",
+      "Automation rules can now be triggered by a kiosk sitting idle for a set number of minutes, not just by a game starting or ending.",
+      "Added a \"Stop Projection Program\" automation action that stops what is playing on a display and closes the window, so a screen can be cleared when a game starts.",
+      "Leaderboard periods reset at local midnight, so a screen running late into the evening rolls over at the right time."
+    ]
   }
 ]

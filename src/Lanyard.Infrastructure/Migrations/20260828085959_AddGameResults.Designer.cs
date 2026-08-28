@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828085959_AddGameResults")]
+    partial class AddGameResults
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -160,9 +163,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("IdleThresholdMinutes")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -180,9 +180,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("TriggerEvent")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TriggerType")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -1721,29 +1718,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(1);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.HallOfFameWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<Guid?>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("HallOfFameWidget_ClientId");
-
-                    b.Property<int>("Period")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ShowBestAccuracy")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowBestTeam")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowTopScore")
-                        .HasColumnType("boolean");
-
-                    b.HasDiscriminator().HasValue(10);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.KioskHealthWidget", b =>

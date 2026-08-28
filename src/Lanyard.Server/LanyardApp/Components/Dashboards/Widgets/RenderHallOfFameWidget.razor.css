@@ -1,0 +1,94 @@
+.hall-of-fame-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+}
+
+.hall-of-fame-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.hall-of-fame-title {
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hall-of-fame-period {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: var(--colorNeutralForeground3);
+}
+
+.hall-of-fame-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+}
+
+.hall-of-fame-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.hall-of-fame-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.hall-of-fame-section-title {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-bottom: 2px;
+}
+
+.hall-of-fame-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 2px 0;
+}
+
+/* The team indicator is a Fluent component root, which scoped CSS cannot target - hence the
+   wrapper span, which also keeps the rank column aligned between sections. */
+.hall-of-fame-rank {
+    flex: 0 0 1.25rem;
+    display: flex;
+    align-items: center;
+    color: var(--colorNeutralForeground3);
+    font-variant-numeric: tabular-nums;
+}
+
+.hall-of-fame-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Tabular figures so scores line up on the right rather than jittering between refreshes. */
+.hall-of-fame-value {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-weight: var(--fontWeightSemibold);
+    font-variant-numeric: tabular-nums;
+}
