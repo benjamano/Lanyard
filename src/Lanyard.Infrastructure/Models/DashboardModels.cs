@@ -29,6 +29,11 @@ public class DashboardWidget
     public DashboardWidget()
     {
         Id = Guid.NewGuid();
+
+        // A newly constructed widget is one the user just added, so it starts active. EF assigns
+        // mapped properties after construction, so widgets loaded from the database keep the
+        // stored value.
+        IsActive = true;
     }
 
     public Guid Id { get; set; }

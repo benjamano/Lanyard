@@ -166,8 +166,9 @@ else
 
         Result<Dashboard> dashboardResult = await _dashboardService.GetDashboardAsync(dashboardId);
 
-        // GetDashboardAsync deliberately does not filter on IsActive (unlike GetDashboardsAsync), so
-        // a dashboard soft-deleted after being chosen still loads here and has to be rejected.
+        // GetDashboardAsync deliberately does not filter the dashboard row on IsActive (unlike
+        // GetDashboardsAsync), so a dashboard soft-deleted after being chosen still loads here and
+        // has to be rejected.
         if (!dashboardResult.IsSuccess || dashboardResult.Data is not { IsActive: true } dashboard)
         {
             _logger.LogWarning("Home screen dashboard {DashboardId} is no longer available: {Error}", dashboardId, dashboardResult.Error);
@@ -175,7 +176,7 @@ else
             return;
         }
 
-        // Widgets are soft-deleted too, and GetDashboardAsync includes inactive ones.
+        // GetDashboardAsync already excludes soft-deleted widgets; the filter is kept as a guard.
         _homeScreenWidgets = dashboard.Widgets.Where(x => x.IsActive).ToList();
         _homeScreenDashboard = dashboard;
     }
