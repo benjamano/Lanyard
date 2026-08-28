@@ -169,7 +169,8 @@
       "Added a \"My Training\" dashboard widget listing your own outstanding courses with their due date and status, overdue ones first.",
       "The My Training widget shows each person their own training, so one shared dashboard works for the whole team.",
       "Clicking a course in the My Training widget takes you straight to it.",
-      "The My Training widget can be set to include completed courses, and to cap how many courses it lists."
+      "The My Training widget can be set to include completed courses, and to cap how many courses it lists.",
+      "Courses in the My Training widget are now separated by a divider line with the course name emphasised, so a list of several courses no longer reads as one block of text."
     ]
   }
 ]
