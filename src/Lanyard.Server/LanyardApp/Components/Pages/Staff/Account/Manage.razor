@@ -29,6 +29,13 @@
 
         <FluentCard Width="100%">
             <div class="account-manage-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Home Screen</FluentText>
+                <HomeScreenCard @ref="homeScreenCard" />
+            </div>
+        </FluentCard>
+
+        <FluentCard Width="100%">
+            <div class="account-manage-section">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Security</FluentText>
                 <FluentButton Appearance="ButtonAppearance.Outline"
                             IconStart="@(new Icons.Regular.Size20.Key())"
@@ -58,6 +65,7 @@
 @code{
     private YourDetailsCard? yourDetailsCard;
     private ContactDetailsCard? contactDetailsCard;
+    private HomeScreenCard? homeScreenCard;
 
     private async Task SaveDetails()
     {
@@ -69,6 +77,11 @@
         if (contactDetailsCard is not null)
         {
             await contactDetailsCard.HandleSave();
+        }
+
+        if (homeScreenCard is not null)
+        {
+            await homeScreenCard.HandleSave();
         }
     }
 

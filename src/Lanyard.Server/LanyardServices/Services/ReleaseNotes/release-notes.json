@@ -151,5 +151,18 @@
       "Added a \"Stop Projection Program\" automation action that stops what is playing on a display and closes the window, so a screen can be cleared when a game starts.",
       "Leaderboard periods reset at local midnight, so a screen running late into the evening rolls over at the right time."
     ]
+  },
+  {
+    "version": "1.3.13",
+    "releaseDate": "2026-08-28",
+    "summary": "Pick a dashboard as your home screen, and dashboards now work properly on phones.",
+    "details": [
+      "You can now choose any dashboard as your home screen, so it shows instead of the standard home page when you open Lanyard.",
+      "Set it from the new Home Screen section on the Account Management page, or straight from the home icon next to any dashboard on the Dashboards page.",
+      "Dashboard widgets stay fully interactive on the home screen - buttons, playlist selectors and music controls all work without opening the dashboard.",
+      "Clicking the home icon on the dashboard that is already your home screen clears it, putting the standard home page back.",
+      "If a dashboard set as someone's home screen is later deleted, they are shown the standard home page again with a note explaining why, rather than a broken or empty screen.",
+      "Dashboards now stack into a single readable column on phone-sized screens instead of squeezing every widget into twelve narrow columns."
+    ]
   }
 ]
