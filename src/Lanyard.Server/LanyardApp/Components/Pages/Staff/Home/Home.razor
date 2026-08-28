@@ -120,7 +120,7 @@ else
 
     private Dashboard? _homeScreenDashboard;
     private List<DashboardWidget> _homeScreenWidgets = [];
-    private bool _homeScreenDashboardUnavailable = false;
+    private bool _personalDashboardUnavailable = false;
     private bool _homeScreenIsOrganisationDefault = false;
 
     protected override async Task OnInitializedAsync()
@@ -138,10 +138,10 @@ else
     // also runs during prerender, where a toast is discarded.
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender && _homeScreenDashboardUnavailable)
+        if (firstRender && _personalDashboardUnavailable)
         {
             _toastService.ShowInfo(_homeScreenIsOrganisationDefault
-                ? "The dashboard set as everyone's home screen is no longer available, showing the standard home page."
+                ? "Your home screen dashboard is no longer available, showing the dashboard set for everyone instead."
                 : "Your home screen dashboard is no longer available, showing the standard home page.");
         }
     }
@@ -166,27 +166,28 @@ else
             return;
         }
 
+        // Set when the user had picked a dashboard that has since been deleted. The selection has
+        // already fallen through to the organisation default (or to nothing) - this only decides
+        // whether to explain why they are not seeing what they chose.
+        _personalDashboardUnavailable = selectionResult.Data.PersonalDashboardUnavailable;
+        _homeScreenIsOrganisationDefault = selectionResult.Data.IsOrganisationDefault;
+
         if (selectionResult.Data.DashboardId is not Guid dashboardId)
         {
             return;
         }
 
-        _homeScreenIsOrganisationDefault = selectionResult.Data.IsOrganisationDefault;
-
         Result<Dashboard> dashboardResult = await _dashboardService.GetDashboardAsync(dashboardId);
 
-        // GetDashboardAsync deliberately does not filter on IsActive (unlike GetDashboardsAsync), so
-        // a dashboard soft-deleted after being chosen still loads here and has to be rejected.
-        if (!dashboardResult.IsSuccess || dashboardResult.Data is not { IsActive: true } dashboard)
+        if (!dashboardResult.IsSuccess || dashboardResult.Data is null)
         {
-            _logger.LogWarning("Home screen dashboard {DashboardId} is no longer available (organisation default: {IsOrganisationDefault}): {Error}", dashboardId, _homeScreenIsOrganisationDefault, dashboardResult.Error);
-            _homeScreenDashboardUnavailable = true;
+            _logger.LogWarning("Failed to load home screen dashboard {DashboardId}: {Error}", dashboardId, dashboardResult.Error);
             return;
         }
 
         // Widgets are soft-deleted too, and GetDashboardAsync includes inactive ones.
-        _homeScreenWidgets = dashboard.Widgets.Where(x => x.IsActive).ToList();
-        _homeScreenDashboard = dashboard;
+        _homeScreenWidgets = dashboardResult.Data.Widgets.Where(x => x.IsActive).ToList();
+        _homeScreenDashboard = dashboardResult.Data;
     }
 
     private string GetGreeting()

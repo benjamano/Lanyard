@@ -56,6 +56,12 @@
 
     private IEnumerable<Dashboard> _dashboards = [];
     private string _selectedValue = StandardHomePageValue;
+
+    // "I have not chosen anything" and "I want the standard home page" are different stored states
+    // that both display as the standard-home-page option, so saving without touching the dropdown
+    // would turn the first into the second and silently opt the user out of any organisation
+    // default set later. Remembering what was loaded is what makes that save a no-op.
+    private string _loadedValue = StandardHomePageValue;
     private string? _userId;
     private string? _organisationDefaultName;
     private bool _isLoading = true;
@@ -119,6 +125,7 @@
         }
 
         _selectedValue = ResolveSelectedValue(selectionResult.Data);
+        _loadedValue = _selectedValue;
 
         _isLoading = false;
     }
@@ -127,12 +134,13 @@
     {
         if (selection.IsOrganisationDefault)
         {
-            // The option only exists while the organisation's dashboard is still there.
+            // The service only reports an organisation default that still exists, so the option is
+            // normally there; the guard just avoids selecting an option that was never rendered.
             return _organisationDefaultName is null ? StandardHomePageValue : FollowOrganisationValue;
         }
 
-        // A dashboard the user chose that has since been deleted is stored but no longer
-        // selectable, so fall back to the standard home page - what the home page itself shows.
+        // Null here means the standard home page, whether that was chosen outright or is where a
+        // deleted dashboard and no organisation default left the user.
         return selection.DashboardId is Guid dashboardId && _dashboards.Any(x => x.Id == dashboardId)
             ? dashboardId.ToString()
             : StandardHomePageValue;
@@ -162,6 +170,7 @@
 
         if (result.IsSuccess)
         {
+            _loadedValue = _selectedValue;
             _toastService.ShowSuccess("Home Screen Saved!");
         }
         else
@@ -172,6 +181,11 @@
 
     private async Task<Result<bool>> SaveSelectionAsync()
     {
+        if (_selectedValue == _loadedValue)
+        {
+            return Result<bool>.Ok(true);
+        }
+
         if (_selectedValue == StandardHomePageValue)
         {
             // Also clears any dashboard of the user's own, so the flag cannot be shadowed by a

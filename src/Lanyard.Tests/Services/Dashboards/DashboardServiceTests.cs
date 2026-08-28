@@ -1082,7 +1082,85 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
-    public async Task DashboardService_GetHomeScreenDashboard_StillReturnsOrganisationIdAfterDashboardDeleted()
+    public async Task DashboardService_DeleteDashboard_ClearsItAsTheOrganisationDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+        await service.DeleteDashboardAsync(dashboard.Id);
+
+        // A stale organisation default cannot be cleared from the UI - the dashboards list only
+        // renders active dashboards, so there is no row left to click - while everyone inheriting
+        // it keeps being sent to the standard home page. Deleting has to clear it.
+        Result<Guid?> getResult = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.IsNull(getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_DeleteDashboard_LeavesADifferentOrganisationDefaultAlone()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard organisationDashboard = await SeedDashboardAsync(options, "Everyone");
+        Dashboard otherDashboard = await SeedDashboardAsync(options, "Other");
+
+        await service.SetOrganisationDefaultDashboardIdAsync(organisationDashboard.Id);
+        await service.DeleteDashboardAsync(otherDashboard.Id);
+
+        Result<Guid?> getResult = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(organisationDashboard.Id, getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_FallsThroughToOrganisationDefaultWhenOwnDashboardDeleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard organisationDashboard = await SeedDashboardAsync(options, "Everyone");
+        Dashboard personalDashboard = await SeedDashboardAsync(options, "Mine");
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(organisationDashboard.Id);
+        await service.SetDefaultDashboardIdAsync(userId, personalDashboard.Id);
+        await service.DeleteDashboardAsync(personalDashboard.Id);
+
+        // A choice pointing at a deleted dashboard is no longer a choice, so it must not shadow
+        // the organisation default and drop the user all the way to the standard home page.
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(organisationDashboard.Id, result.Data!.DashboardId);
+        Assert.IsTrue(result.Data.IsOrganisationDefault);
+        Assert.IsTrue(result.Data.PersonalDashboardUnavailable);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_ReportsNothingWhenOwnDashboardDeletedAndNoOrganisationDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard personalDashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetDefaultDashboardIdAsync(userId, personalDashboard.Id);
+        await service.DeleteDashboardAsync(personalDashboard.Id);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data!.DashboardId);
+        Assert.IsFalse(result.Data.IsOrganisationDefault);
+        Assert.IsTrue(result.Data.PersonalDashboardUnavailable);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_IgnoresAnOrganisationDefaultDeletedOutsideTheApp()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         DashboardService service = GetService(options);
@@ -1090,15 +1168,20 @@ public class DashboardServiceTests
         string userId = await SeedUserAsync(options);
 
         await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
-        await service.DeleteDashboardAsync(dashboard.Id);
 
-        // Same contract as the per-user id: the stored value is returned unvalidated so the home
-        // page can tell "nobody set one" apart from "the one an admin set has been deleted" and
-        // explain the fallback instead of silently showing the standard home page.
+        // Deactivated directly rather than through DeleteDashboardAsync, which would have cleared
+        // the setting - this is the state a row edited outside the app leaves behind.
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Dashboard tracked = await ctx.Dashboards.FirstAsync(x => x.Id == dashboard.Id);
+            tracked.IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
         Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
 
         Assert.IsTrue(result.Success, result.Error);
-        Assert.AreEqual(dashboard.Id, result.Data!.DashboardId);
-        Assert.IsTrue(result.Data.IsOrganisationDefault);
+        Assert.IsNull(result.Data!.DashboardId);
+        Assert.IsFalse(result.Data.IsOrganisationDefault);
     }
 }

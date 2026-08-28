@@ -8,8 +8,10 @@ namespace Lanyard.Application.Services;
 public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) : IDashboardService
 {
     // Organisation-wide rather than per-user, so it lives in the shared AppSettings key/value
-    // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. One row
-    // per key is also what stops two dashboards ever being the default at the same time.
+    // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. Writes go
+    // through a read-then-upsert on this key, which keeps a single default without a second table.
+    // AppSettings has no unique index on Key, so that is a convention this service holds to rather
+    // than something the schema enforces - the same footing "AutomationEngine.Enabled" is on.
     private const string OrganisationDefaultDashboardSettingKey = "Dashboard.OrganisationDefaultDashboardId";
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -80,6 +82,18 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             foreach (DashboardWidget widget in dashboard.Widgets)
             {
                 widget.IsActive = false;
+            }
+
+            // Unlike a per-user choice, a stale organisation default is unrecoverable from the UI:
+            // the dashboards list only renders active dashboards, so there would be no row left to
+            // click to clear it, while every inheriting user kept being bounced to the standard
+            // home page. This is the only place that state can be reached from.
+            AppSetting? organisationDefault = await ctx.AppSettings
+                .FirstOrDefaultAsync(x => x.Key == OrganisationDefaultDashboardSettingKey);
+
+            if (organisationDefault?.Value == dashboardId.ToString())
+            {
+                organisationDefault.Value = string.Empty;
             }
 
             await ctx.SaveChangesAsync();
@@ -531,12 +545,22 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection());
             }
 
+            bool personalDashboardUnavailable = false;
+
             if (user.DefaultDashboardId is Guid ownDashboardId)
             {
-                return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection
+                if (await IsDashboardUsableAsync(ctx, ownDashboardId))
                 {
-                    DashboardId = ownDashboardId
-                });
+                    return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection
+                    {
+                        DashboardId = ownDashboardId
+                    });
+                }
+
+                // A choice pointing at a deleted dashboard is no longer a choice, so it falls
+                // through to the organisation default rather than skipping straight past it to
+                // the standard home page.
+                personalDashboardUnavailable = true;
             }
 
             Result<Guid?> organisationDefault = await GetOrganisationDefaultDashboardIdAsync();
@@ -546,16 +570,31 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<HomeScreenDashboardSelection>.Fail(organisationDefault.Error ?? "Failed to read the organisation home screen.");
             }
 
+            // Deleting a dashboard clears it as the organisation default, so a stale id here means
+            // the row was changed outside the app. Checked anyway rather than trusted, since the
+            // cost is one indexed lookup and the alternative is an empty home screen.
+            bool organisationDashboardIsUsable = organisationDefault.Data is Guid organisationDashboardId
+                && await IsDashboardUsableAsync(ctx, organisationDashboardId);
+
             return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection
             {
-                DashboardId = organisationDefault.Data,
-                IsOrganisationDefault = organisationDefault.Data is not null
+                DashboardId = organisationDashboardIsUsable ? organisationDefault.Data : null,
+                IsOrganisationDefault = organisationDashboardIsUsable,
+                PersonalDashboardUnavailable = personalDashboardUnavailable
             });
         }
         catch (Exception ex)
         {
             return Result<HomeScreenDashboardSelection>.Fail(ex.Message);
         }
+    }
+
+    private static Task<bool> IsDashboardUsableAsync(ApplicationDbContext ctx, Guid dashboardId)
+    {
+        return ctx.Dashboards
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(x => x.Id == dashboardId && x.IsActive);
     }
 
     private static DashboardWidget CreateWidgetCopy(DashboardWidget widget, Guid dashboardId)
