@@ -101,7 +101,12 @@ public class GameStateService : IGameStateService
         PlayerScoreDTO? existingScore = CurrentPlayerScores.Find(x => x.GunId == playerScore.GunId);
         if (existingScore != null)
         {
+            // Accuracy and Team have to be copied across too, not just Score. Every score packet
+            // carries a fresh accuracy figure, so only assigning Score froze accuracy at whatever
+            // the gun's first packet of the game reported - near-zero, a few shots in.
             existingScore.Score = playerScore.Score;
+            existingScore.Accuracy = playerScore.Accuracy;
+            existingScore.Team = playerScore.Team;
         }
         else
         {

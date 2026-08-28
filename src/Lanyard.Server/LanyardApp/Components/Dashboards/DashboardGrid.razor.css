@@ -11,6 +11,24 @@
     min-height: 0;
 }
 
+/* A dashboard can be a user's home screen, so this is the first thing they see on a phone.
+   Twelve fixed columns would render a 2-wide widget at a sixth of the screen, so collapse to a
+   single stacked column instead.
+
+   The !important is load-bearing: GetWidgetStyle writes grid-column/grid-row as an inline style,
+   which otherwise beats anything in this file. The grid renders widgets ordered by GridY then
+   GridX so the stack reads in the same order as the desktop layout. */
+@media (max-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-grid-item {
+        grid-column: 1 / -1 !important;
+        grid-row: auto !important;
+    }
+}
+
 .dashboard-widget-host {
     height: 100%;
     width: 100%;

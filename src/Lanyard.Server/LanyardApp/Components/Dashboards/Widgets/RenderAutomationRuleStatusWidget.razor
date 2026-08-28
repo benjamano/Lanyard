@@ -22,7 +22,8 @@
                 </FluentBadge>
 
                 <FluentButton Appearance="@(_isEnabled ? ButtonAppearance.Outline : ButtonAppearance.Primary)"
-                              Disabled="@(!AllowTrigger || _isExecuting)"
+                              Disabled="@(!AllowTrigger || !_canManageRules || _isExecuting)"
+                              Title="@(_canManageRules ? null : "Only Admins can enable or disable automation rules")"
                               OnClick="ToggleEnabledAsync">
                     @(_isEnabled ? "Disable" : "Enable")
                 </FluentButton>
@@ -59,8 +60,18 @@
     private bool? _lastRunSuccess;
     private bool _isExecuting;
 
+    // Enabling/disabling a rule is Admin-only at /automation. This widget can be rendered on any
+    // dashboard - including a non-Admin's home screen - so the role has to be checked here too.
+    // Only enforced for signed-in users: /kiosk is deliberately AllowAnonymous and renders this
+    // same grid, and those displays are trusted physically rather than by role.
+    private bool _canManageRules;
+
     protected override async Task OnInitializedAsync()
     {
+        // Set before the early return below, so an unconfigured widget still resolves the role.
+        _canManageRules = !await _securityService.IsUserLoggedIn()
+            || await _securityService.IsCurrentUserInRoleAsync("Admin");
+
         _engineService.OnRuleEnabledChanged += HandleRuleEnabledChanged;
         _engineService.OnRuleExecuted += HandleRuleExecuted;
 
@@ -113,6 +124,12 @@
     {
         if (!AllowTrigger || _isExecuting || Widget.AutomationRuleId is not Guid ruleId)
         {
+            return;
+        }
+
+        if (!_canManageRules)
+        {
+            _toastService.ShowError("You do not have permission to enable or disable automation rules.");
             return;
         }
 

@@ -19,7 +19,7 @@ namespace Lanyard.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -160,6 +160,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("IdleThresholdMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -177,6 +180,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("TriggerEvent")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TriggerType")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -1040,6 +1046,61 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("Folders");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.GameResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("PlayedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayedAtUtc");
+
+                    b.HasIndex("ClientId", "PlayedAtUtc");
+
+                    b.ToTable("GameResults");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.GameResultPlayerScore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Accuracy")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("GameResultId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("GunId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlayerName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Team")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameResultId");
+
+                    b.ToTable("GameResultPlayerScores");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.Property<int>("Id")
@@ -1390,6 +1451,9 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("DefaultDashboardId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1660,6 +1724,29 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(1);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.HallOfFameWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("HallOfFameWidget_ClientId");
+
+                    b.Property<int>("Period")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShowBestAccuracy")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowBestTeam")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowTopScore")
+                        .HasColumnType("boolean");
+
+                    b.HasDiscriminator().HasValue(10);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.KioskHealthWidget", b =>
@@ -2065,6 +2152,28 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ParentFolder");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.GameResult", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.GameResultPlayerScore", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.GameResult", "GameResult")
+                        .WithMany("PlayerScores")
+                        .HasForeignKey("GameResultId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GameResult");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
@@ -2310,6 +2419,11 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Files");
 
                     b.Navigation("SubFolders");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.GameResult", b =>
+                {
+                    b.Navigation("PlayerScores");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>

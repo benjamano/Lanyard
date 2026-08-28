@@ -2,6 +2,7 @@
 
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
@@ -72,6 +73,13 @@ public class AutomationRuleService(
     {
         try
         {
+            string? validationError = ValidateRule(rule);
+
+            if (validationError != null)
+            {
+                return Result<AutomationRule>.Fail(validationError);
+            }
+
             rule.CreateDate = DateTime.UtcNow;
             rule.IsActive = true;
             rule.IsEnabled = true;
@@ -91,6 +99,13 @@ public class AutomationRuleService(
     {
         try
         {
+            string? validationError = ValidateRule(rule);
+
+            if (validationError != null)
+            {
+                return Result<AutomationRule>.Fail(validationError);
+            }
+
             rule.LastUpdateDate = DateTime.UtcNow;
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
             ctx.AutomationRules.Update(rule);
@@ -147,5 +162,27 @@ public class AutomationRuleService(
         {
             return Result<AutomationRule>.Fail(ex.Message);
         }
+    }
+
+    // An idle rule with no threshold can never fire, and nothing downstream would report that -
+    // ProcessIdleRulesAsync simply skips it - so reject it at the point of saving instead.
+    private static string? ValidateRule(AutomationRule rule)
+    {
+        if (rule.TriggerType != AutomationTriggerType.ClientIdle)
+        {
+            return null;
+        }
+
+        if (!rule.IdleThresholdMinutes.HasValue)
+        {
+            return "An idle rule needs an idle threshold in minutes.";
+        }
+
+        if (rule.IdleThresholdMinutes.Value <= 0)
+        {
+            return "An idle rule's threshold must be greater than zero minutes.";
+        }
+
+        return null;
     }
 }
