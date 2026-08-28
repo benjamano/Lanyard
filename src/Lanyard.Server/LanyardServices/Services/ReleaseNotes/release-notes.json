@@ -155,14 +155,7 @@
       "Dashboard widgets stay fully interactive on the home screen - buttons, playlist selectors and music controls all work without opening the dashboard.",
       "Clicking the home icon on the dashboard that is already your home screen clears it, putting the standard home page back.",
       "If a dashboard set as someone's home screen is later deleted, they are shown the standard home page again with a note explaining why, rather than a broken or empty screen.",
-      "Dashboards now stack into a single readable column on phone-sized screens instead of squeezing every widget into twelve narrow columns."
-    ]
-  },
-  {
-    "version": "1.3.14",
-    "releaseDate": "2026-08-28",
-    "summary": "Fixed long lists being cut off with no way to see the rest.",
-    "details": [
+      "Dashboards now stack into a single readable column on phone-sized screens instead of squeezing every widget into twelve narrow columns.",
       "Fixed the Users page only ever showing the first 10 users, with no page controls to reach the others - it now shows 25 per page with working first/previous/next/last buttons and a total count.",
       "Searching the Users page now jumps back to the first page of results instead of leaving you on an empty page.",
       "Fixed the same problem on the Projection Programs and Projection Templates pages, where anything past the 10th program or template was hidden."
