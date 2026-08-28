@@ -170,6 +170,7 @@
       "The My Training widget shows each person their own training, so one shared dashboard works for the whole team.",
       "Clicking a course in the My Training widget takes you straight to it.",
       "The My Training widget can be set to include completed courses, and to cap how many courses it lists.",
+      "Courses in the My Training widget are now separated by a divider line with the course name emphasised, so a list of several courses no longer reads as one block of text.",
       "The Users page table can now be sorted by Username, Name, Email Address or Status by clicking a column heading.",
       "The Users page now shows 15 users per page instead of 25.",
       "Editing, deleting or inviting a user no longer sends you back to the first page of the user list.",
