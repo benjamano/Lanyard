@@ -7,6 +7,13 @@ namespace Lanyard.Application.Services;
 
 public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) : IDashboardService
 {
+    // Organisation-wide rather than per-user, so it lives in the shared AppSettings key/value
+    // table alongside "AutomationEngine.Enabled" instead of needing a column of its own. Writes go
+    // through a read-then-upsert on this key, which keeps a single default without a second table.
+    // AppSettings has no unique index on Key, so that is a convention this service holds to rather
+    // than something the schema enforces - the same footing "AutomationEngine.Enabled" is on.
+    private const string OrganisationDefaultDashboardSettingKey = "Dashboard.OrganisationDefaultDashboardId";
+
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
     public async Task<Result<IEnumerable<Dashboard>>> GetDashboardsAsync()
@@ -75,6 +82,18 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             foreach (DashboardWidget widget in dashboard.Widgets)
             {
                 widget.IsActive = false;
+            }
+
+            // Unlike a per-user choice, a stale organisation default is unrecoverable from the UI:
+            // the dashboards list only renders active dashboards, so there would be no row left to
+            // click to clear it, while every inheriting user kept being bounced to the standard
+            // home page. This is the only place that state can be reached from.
+            AppSetting? organisationDefault = await ctx.AppSettings
+                .FirstOrDefaultAsync(x => x.Key == OrganisationDefaultDashboardSettingKey);
+
+            if (organisationDefault?.Value == dashboardId.ToString())
+            {
+                organisationDefault.Value = string.Empty;
             }
 
             await ctx.SaveChangesAsync();
@@ -381,6 +400,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
 
             user.DefaultDashboardId = dashboardId;
 
+            // Picking a dashboard implicitly withdraws an earlier "always give me the standard
+            // home page" choice - otherwise the flag would keep overriding the new selection.
+            if (dashboardId is not null)
+            {
+                user.UseStandardHomePage = false;
+            }
+
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
@@ -389,6 +415,195 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             return Result<bool>.Fail(ex.Message);
         }
+    }
+
+    public async Task<Result<bool>> SetUseStandardHomePageAsync(string userId, bool useStandardHomePage)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Result<bool>.Fail("User id is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            user.UseStandardHomePage = useStandardHomePage;
+
+            // Asking for the standard home page and having a dashboard of your own are mutually
+            // exclusive; a stale id left behind here would come back the moment the flag cleared.
+            if (useStandardHomePage)
+            {
+                user.DefaultDashboardId = null;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<Guid?>> GetOrganisationDefaultDashboardIdAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            string? storedValue = await ctx.AppSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Key == OrganisationDefaultDashboardSettingKey)
+                .Select(x => x.Value)
+                .FirstOrDefaultAsync();
+
+            // Clearing the default blanks the value rather than deleting the row, so a missing
+            // row and an empty one both have to read as "no organisation default".
+            return Result<Guid?>.Ok(Guid.TryParse(storedValue, out Guid dashboardId) ? dashboardId : null);
+        }
+        catch (Exception ex)
+        {
+            return Result<Guid?>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetOrganisationDefaultDashboardIdAsync(Guid? dashboardId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (dashboardId is Guid targetDashboardId)
+            {
+                bool dashboardIsUsable = await ctx.Dashboards
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(x => x.Id == targetDashboardId && x.IsActive);
+
+                if (!dashboardIsUsable)
+                {
+                    return Result<bool>.Fail("Dashboard not found.");
+                }
+            }
+
+            AppSetting? setting = await ctx.AppSettings
+                .FirstOrDefaultAsync(x => x.Key == OrganisationDefaultDashboardSettingKey);
+
+            string value = dashboardId?.ToString() ?? string.Empty;
+
+            if (setting is null)
+            {
+                ctx.AppSettings.Add(new AppSetting
+                {
+                    Id = Guid.NewGuid(),
+                    Key = OrganisationDefaultDashboardSettingKey,
+                    Value = value,
+                    CreateDate = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                setting.Value = value;
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<HomeScreenDashboardSelection>> GetHomeScreenDashboardAsync(string userId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Result<HomeScreenDashboardSelection>.Fail("User id is required.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<HomeScreenDashboardSelection>.Fail("User not found.");
+            }
+
+            // An explicit "give me the standard home page" beats an organisation default. Without
+            // this the admin's choice would be impossible for an individual to opt out of.
+            if (user.UseStandardHomePage)
+            {
+                return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection());
+            }
+
+            bool personalDashboardUnavailable = false;
+
+            if (user.DefaultDashboardId is Guid ownDashboardId)
+            {
+                if (await IsDashboardUsableAsync(ctx, ownDashboardId))
+                {
+                    return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection
+                    {
+                        DashboardId = ownDashboardId
+                    });
+                }
+
+                // A choice pointing at a deleted dashboard is no longer a choice, so it falls
+                // through to the organisation default rather than skipping straight past it to
+                // the standard home page.
+                personalDashboardUnavailable = true;
+            }
+
+            Result<Guid?> organisationDefault = await GetOrganisationDefaultDashboardIdAsync();
+
+            if (!organisationDefault.IsSuccess)
+            {
+                return Result<HomeScreenDashboardSelection>.Fail(organisationDefault.Error ?? "Failed to read the organisation home screen.");
+            }
+
+            // Deleting a dashboard clears it as the organisation default, so a stale id here means
+            // the row was changed outside the app. Checked anyway rather than trusted, since the
+            // cost is one indexed lookup and the alternative is an empty home screen.
+            bool organisationDashboardIsUsable = organisationDefault.Data is Guid organisationDashboardId
+                && await IsDashboardUsableAsync(ctx, organisationDashboardId);
+
+            return Result<HomeScreenDashboardSelection>.Ok(new HomeScreenDashboardSelection
+            {
+                DashboardId = organisationDashboardIsUsable ? organisationDefault.Data : null,
+                IsOrganisationDefault = organisationDashboardIsUsable,
+                PersonalDashboardUnavailable = personalDashboardUnavailable
+            });
+        }
+        catch (Exception ex)
+        {
+            return Result<HomeScreenDashboardSelection>.Fail(ex.Message);
+        }
+    }
+
+    private static Task<bool> IsDashboardUsableAsync(ApplicationDbContext ctx, Guid dashboardId)
+    {
+        return ctx.Dashboards
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(x => x.Id == dashboardId && x.IsActive);
     }
 
     private static DashboardWidget CreateWidgetCopy(DashboardWidget widget, Guid dashboardId)

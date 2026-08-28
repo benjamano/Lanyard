@@ -31,7 +31,9 @@
                         Your home screen dashboard has no widgets yet
                     </FluentText>
                     <FluentText>
-                        "@_homeScreenDashboard.Name" is set as your home screen, but nothing has been added to it.
+                        "@_homeScreenDashboard.Name" is set as
+                        @(_homeScreenIsOrganisationDefault ? "everyone's home screen" : "your home screen"),
+                        but nothing has been added to it.
                     </FluentText>
                     <FluentLink Href="/account/manage">
                         Change your home screen
@@ -118,7 +120,8 @@ else
 
     private Dashboard? _homeScreenDashboard;
     private List<DashboardWidget> _homeScreenWidgets = [];
-    private bool _homeScreenDashboardUnavailable = false;
+    private bool _personalDashboardUnavailable = false;
+    private bool _homeScreenIsOrganisationDefault = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,9 +138,11 @@ else
     // also runs during prerender, where a toast is discarded.
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender && _homeScreenDashboardUnavailable)
+        if (firstRender && _personalDashboardUnavailable)
         {
-            _toastService.ShowInfo("Your home screen dashboard is no longer available, showing the standard home page.");
+            _toastService.ShowInfo(_homeScreenIsOrganisationDefault
+                ? "Your home screen dashboard is no longer available, showing the dashboard set for everyone instead."
+                : "Your home screen dashboard is no longer available, showing the standard home page.");
         }
     }
 
@@ -151,28 +156,35 @@ else
             return;
         }
 
-        Result<Guid?> defaultResult = await _dashboardService.GetDefaultDashboardIdAsync(userIdResult.Data);
+        // Resolves the user's own choice, then the organisation-wide default an Admin or Manager
+        // set, then nothing - all in the service, so the account page and this one cannot drift.
+        Result<HomeScreenDashboardSelection> selectionResult = await _dashboardService.GetHomeScreenDashboardAsync(userIdResult.Data);
 
-        if (!defaultResult.IsSuccess)
+        if (!selectionResult.IsSuccess || selectionResult.Data is null)
         {
-            _logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", defaultResult.Error);
+            _logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", selectionResult.Error);
             return;
         }
 
-        if (defaultResult.Data is not Guid dashboardId)
+        // Set when the user had picked a dashboard that has since been deleted. The selection has
+        // already fallen through to the organisation default (or to nothing) - this only decides
+        // whether to explain why they are not seeing what they chose.
+        _personalDashboardUnavailable = selectionResult.Data.PersonalDashboardUnavailable;
+        _homeScreenIsOrganisationDefault = selectionResult.Data.IsOrganisationDefault;
+
+        if (selectionResult.Data.DashboardId is not Guid dashboardId)
         {
             return;
         }
 
         Result<Dashboard> dashboardResult = await _dashboardService.GetDashboardAsync(dashboardId);
 
+        // GetHomeScreenDashboardAsync has already rejected an inactive dashboard, but
         // GetDashboardAsync deliberately does not filter the dashboard row on IsActive (unlike
-        // GetDashboardsAsync), so a dashboard soft-deleted after being chosen still loads here and
-        // has to be rejected.
+        // GetDashboardsAsync), so the check is repeated here rather than assumed.
         if (!dashboardResult.IsSuccess || dashboardResult.Data is not { IsActive: true } dashboard)
         {
             _logger.LogWarning("Home screen dashboard {DashboardId} is no longer available: {Error}", dashboardId, dashboardResult.Error);
-            _homeScreenDashboardUnavailable = true;
             return;
         }
 

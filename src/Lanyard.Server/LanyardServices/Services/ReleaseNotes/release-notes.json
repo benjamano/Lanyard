@@ -181,5 +181,18 @@
       "The Users page now shows 15 users per page instead of 25.",
       "Editing, deleting or inviting a user no longer sends you back to the first page of the user list."
     ]
+  },
+  {
+    "version": "1.3.18",
+    "releaseDate": "2026-08-28",
+    "summary": "Admins and managers can now set one dashboard as everyone's home screen.",
+    "details": [
+      "Admins and managers can set a dashboard as the home screen for everyone, from the new \"Everyone's Home Screen\" column on the Dashboards page.",
+      "Staff who have not picked a home screen of their own now see that dashboard when they open Lanyard, instead of the standard home page.",
+      "Setting or clearing everyone's home screen asks for confirmation first, since it changes what the whole team sees.",
+      "Anyone who has chosen their own home screen dashboard keeps it - a personal choice always wins over the organisation-wide one.",
+      "Added a \"Follow the organisation default\" option to the Home Screen section on the Account Management page, alongside \"Use the standard home page\" for anyone who would rather opt out entirely.",
+      "If the dashboard set as everyone's home screen is later deleted, staff see the standard home page again with a note explaining why, rather than an empty screen."
+    ]
   }
 ]
