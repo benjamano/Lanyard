@@ -158,7 +158,7 @@
       "Dashboards now stack into a single readable column on phone-sized screens instead of squeezing every widget into twelve narrow columns.",
       "Fixed the Users page only ever showing the first 10 users, with no page controls to reach the others - it now shows 25 per page with working first/previous/next/last buttons and a total count.",
       "Searching the Users page now jumps back to the first page of results instead of leaving you on an empty page.",
-      "Fixed the same problem on the Projection Programs and Projection Templates pages, where anything past the 10th program or template was hidden.",
+      "Fixed the same problem on the Projection Programs and Projection Templates pages, where anything past the 10th program or template was hidden."
     ]
   }
 ]
