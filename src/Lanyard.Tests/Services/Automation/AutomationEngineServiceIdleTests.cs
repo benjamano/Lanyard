@@ -62,14 +62,15 @@ public class AutomationEngineServiceIdleTests
         DbContextOptions<ApplicationDbContext> options,
         Guid triggerClientId,
         int? idleThresholdMinutes,
-        AutomationTriggerType triggerType = AutomationTriggerType.ClientIdle)
+        AutomationTriggerType triggerType = AutomationTriggerType.ClientIdle,
+        string name = "Idle rule")
     {
         await using ApplicationDbContext ctx = new(options);
 
         ctx.AutomationRules.Add(new AutomationRule
         {
             Id = Guid.NewGuid(),
-            Name = "Idle rule",
+            Name = name,
             TriggerClientId = triggerClientId,
             TriggerType = triggerType,
             TriggerEvent = GameStatus.NotStarted,
@@ -306,5 +307,123 @@ public class AutomationEngineServiceIdleTests
         Assert.AreEqual(nameof(AutomationTriggerType.ClientIdle), execution.TriggerEvent);
         Assert.AreEqual(clientId, execution.TriggerClientId);
         Assert.IsTrue(execution.OverallSuccess);
+    }
+
+    [TestMethod]
+    public async Task ProcessIdleRules_FiresEveryIdleRuleTargetingTheSameClient()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+
+        // Two rules, same kiosk - e.g. show a dashboard on one display and dim another.
+        await SeedIdleRuleAsync(options, clientId, 30, name: "First idle rule");
+        await SeedIdleRuleAsync(options, clientId, 30, name: "Second idle rule");
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        engine.EnqueueTransition(clientId, GameStatus.NotStarted);
+
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow.AddMinutes(31), CancellationToken.None);
+
+        Assert.AreEqual(2, executor.ExecutedActionIds.Count,
+            "Idle bookkeeping keyed by client would let the first rule starve the second.");
+    }
+
+    [TestMethod]
+    public async Task ProcessIdleRules_DoesNotFireWhileAGameIsInProgress()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+
+        // Threshold shorter than the game being played.
+        await SeedIdleRuleAsync(options, clientId, 10);
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        engine.EnqueueTransition(clientId, GameStatus.InGame);
+
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow.AddMinutes(15), CancellationToken.None);
+
+        Assert.AreEqual(0, executor.ExecutedActionIds.Count,
+            "A game in progress is not idle, however long the game runs.");
+    }
+
+    [TestMethod]
+    public async Task ProcessIdleRules_FiresOnceTheGameEndsAndTheThresholdElapses()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+        await SeedIdleRuleAsync(options, clientId, 10);
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        engine.EnqueueTransition(clientId, GameStatus.InGame);
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow.AddMinutes(15), CancellationToken.None);
+
+        engine.EnqueueTransition(clientId, GameStatus.NotStarted);
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow.AddMinutes(11), CancellationToken.None);
+
+        Assert.AreEqual(1, executor.ExecutedActionIds.Count);
+    }
+
+    [TestMethod]
+    public async Task ProcessIdleRules_RetriesAfterAFailedAttemptButNotOnEveryTick()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+        await SeedIdleRuleAsync(options, clientId, 30);
+
+        // Stands in for a kiosk that was offline when its idle screen was due.
+        RecordingActionExecutor executor = new(_ => (false, "Client not connected"));
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        engine.EnqueueTransition(clientId, GameStatus.NotStarted);
+
+        DateTime start = DateTime.UtcNow;
+
+        await engine.ProcessIdleRulesAsync(start.AddMinutes(31), CancellationToken.None);
+        Assert.AreEqual(1, executor.ExecutedActionIds.Count);
+
+        // Still inside the cooldown window - a retry here would write an execution row per tick.
+        await engine.ProcessIdleRulesAsync(start.AddMinutes(32), CancellationToken.None);
+        Assert.AreEqual(1, executor.ExecutedActionIds.Count);
+
+        // A full threshold later, it is eligible again.
+        await engine.ProcessIdleRulesAsync(start.AddMinutes(62), CancellationToken.None);
+        Assert.AreEqual(2, executor.ExecutedActionIds.Count);
+    }
+
+    [TestMethod]
+    public async Task ProcessIdleRules_StopsRetryingOnceAnAttemptSucceeds()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+        await SeedIdleRuleAsync(options, clientId, 30);
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        engine.EnqueueTransition(clientId, GameStatus.NotStarted);
+
+        DateTime start = DateTime.UtcNow;
+
+        await engine.ProcessIdleRulesAsync(start.AddMinutes(31), CancellationToken.None);
+        await engine.ProcessIdleRulesAsync(start.AddMinutes(200), CancellationToken.None);
+
+        Assert.AreEqual(1, executor.ExecutedActionIds.Count,
+            "A successful fire ends the stretch; only a new transition should re-arm it.");
     }
 }

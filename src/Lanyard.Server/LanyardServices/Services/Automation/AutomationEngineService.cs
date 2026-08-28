@@ -25,11 +25,21 @@ public class AutomationEngineService(
 
     private readonly ConcurrentDictionary<Guid, GameStatus> _lastKnownStatus = new();
 
-    // When each client last changed status, and whether its current idle stretch has already
-    // fired. Both are written in EnqueueTransition alongside _lastKnownStatus so they can never
-    // drift out of step with it.
+    // When each client last changed status. Written in EnqueueTransition alongside
+    // _lastKnownStatus so the two can never drift out of step.
     private readonly ConcurrentDictionary<Guid, DateTime> _lastTransitionUtc = new();
-    private readonly ConcurrentDictionary<Guid, bool> _idleFiredForCurrentStretch = new();
+
+    // Idle bookkeeping is keyed by RULE, not by client: two idle rules can target the same kiosk,
+    // and a per-client flag would let the first one fired permanently starve the second.
+    //
+    // A stretch is identified by the instant it began, so "already fired" needs no explicit reset -
+    // the next transition moves _lastTransitionUtc and the stored value simply stops matching.
+    private readonly ConcurrentDictionary<Guid, DateTime> _idleFiredForStretchStart = new();
+
+    // When each idle rule was last attempted, successful or not. Gates retries after a failure
+    // (e.g. the kiosk was offline) to one per threshold window, instead of one per 60s tick
+    // writing an execution-log row each time.
+    private readonly ConcurrentDictionary<Guid, DateTime> _idleLastAttemptUtc = new();
     private volatile bool _isEnabled = false;
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
@@ -65,7 +75,6 @@ public class AutomationEngineService(
         // it would have no timestamp at all and its idle rules could never fire - which is
         // precisely the quiet-zone case those rules exist for.
         _lastTransitionUtc.GetOrAdd(clientId, _ => DateTime.UtcNow);
-        _idleFiredForCurrentStretch.GetOrAdd(clientId, false);
 
         GameStatus previousStatus = _lastKnownStatus.GetOrAdd(clientId, GameStatus.NotStarted);
         if (previousStatus == newStatus)
@@ -73,11 +82,10 @@ public class AutomationEngineService(
             return; // ENG-01: edge-triggered - same status does not re-fire
         }
         _lastKnownStatus[clientId] = newStatus;
-        _lastTransitionUtc[clientId] = DateTime.UtcNow;
 
-        // Any status change starts a fresh idle stretch, so an idle rule that already fired
-        // becomes eligible again.
-        _idleFiredForCurrentStretch[clientId] = false;
+        // Starts a fresh idle stretch. Idle rules key off this instant, so moving it is what
+        // makes an already-fired rule eligible again.
+        _lastTransitionUtc[clientId] = DateTime.UtcNow;
 
         GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus);
         _transitionChannel.Writer.TryWrite(ev);
@@ -217,21 +225,44 @@ public class AutomationEngineService(
                 continue;
             }
 
+            // A game in progress is not idle. _lastTransitionUtc only records the last status
+            // *change*, so without this a threshold shorter than a game would elapse mid-game and
+            // fire - e.g. a 10-minute rule clearing the display 10 minutes into a 20-minute game.
+            if (_lastKnownStatus.GetValueOrDefault(rule.TriggerClientId) == GameStatus.InGame)
+            {
+                continue;
+            }
+
             if (!IsIdleThresholdReached(lastTransitionUtc, nowUtc, rule.IdleThresholdMinutes!.Value))
             {
                 continue;
             }
 
-            if (_idleFiredForCurrentStretch.GetValueOrDefault(rule.TriggerClientId))
+            if (_idleFiredForStretchStart.TryGetValue(rule.Id, out DateTime firedForStretchStart)
+                && firedForStretchStart == lastTransitionUtc)
             {
                 continue;
             }
 
-            _idleFiredForCurrentStretch[rule.TriggerClientId] = true;
+            // After a failed attempt the rule stays eligible so it can retry - a kiosk that was
+            // offline when its idle screen was due should still get it on the next attempt - but
+            // not on every tick.
+            if (_idleLastAttemptUtc.TryGetValue(rule.Id, out DateTime lastAttemptUtc)
+                && !IsIdleThresholdReached(lastAttemptUtc, nowUtc, rule.IdleThresholdMinutes!.Value))
+            {
+                continue;
+            }
+
+            _idleLastAttemptUtc[rule.Id] = nowUtc;
 
             _logger.LogInformation("Client {ClientId} idle for {ThresholdMinutes} minute(s) - firing rule {RuleId}", rule.TriggerClientId, rule.IdleThresholdMinutes, rule.Id);
 
-            await ExecuteRuleAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.ClientIdle), ct);
+            bool succeeded = await ExecuteRuleAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.ClientIdle), ct);
+
+            if (succeeded)
+            {
+                _idleFiredForStretchStart[rule.Id] = lastTransitionUtc;
+            }
         }
     }
 
@@ -249,7 +280,8 @@ public class AutomationEngineService(
         return nowUtc - lastTransitionUtc >= TimeSpan.FromMinutes(thresholdMinutes);
     }
 
-    private async Task ExecuteRuleAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, CancellationToken ct)
+    /// <summary>Returns whether every action in the rule succeeded.</summary>
+    private async Task<bool> ExecuteRuleAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, CancellationToken ct)
     {
         List<AutomationRuleActionExecution> actionExecutions = [];
 
@@ -323,5 +355,7 @@ public class AutomationEngineService(
         {
             _logger.LogError(ex, "Failed to write execution log for rule {RuleId}", rule.Id);
         }
+
+        return execution.OverallSuccess;
     }
 }

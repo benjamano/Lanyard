@@ -12,7 +12,8 @@
     <div class="hall-of-fame-body">
         <div class="hall-of-fame-header">
             <span class="hall-of-fame-title">@(Widget.Title ?? "Hall of Fame")</span>
-            <span class="hall-of-fame-period">@DescribePeriod(Widget.Period)</span>
+            @* _loadedPeriod, not Widget.Period: the header has to describe the rows below it. *@
+            <span class="hall-of-fame-period">@DescribePeriod(_loadedPeriod)</span>
         </div>
 
         @if (_hasError)
@@ -27,7 +28,7 @@
         {
             <div class="hall-of-fame-empty">
                 <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
-                    No games recorded @DescribePeriod(Widget.Period).ToLowerInvariant()
+                    No games recorded @DescribePeriod(_loadedPeriod).ToLowerInvariant()
                 </FluentBadge>
             </div>
         }
@@ -106,6 +107,7 @@
     private PeriodicTimer? _refreshTimer;
     private CancellationTokenSource? _refreshCancellation;
     private bool _isRefreshing;
+    private bool _reloadRequested;
 
     // The config dialog mutates this same Widget instance live, so a changed period or client has
     // to trigger a reload rather than waiting for the next poll.
@@ -114,10 +116,13 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
-
+        // Seed the displayed settings once, so the first paint labels itself correctly instead of
+        // briefly showing the enum's default. Only ever set here - committing these on a later
+        // parameter change is what would let the header get ahead of the rows.
         _loadedPeriod = Widget.Period;
         _loadedClientId = Widget.ClientId;
+
+        await LoadAsync();
 
         _refreshCancellation = new CancellationTokenSource();
         _refreshTimer = new PeriodicTimer(RefreshInterval);
@@ -148,16 +153,17 @@
             return;
         }
 
-        _loadedPeriod = Widget.Period;
-        _loadedClientId = Widget.ClientId;
-
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
+        // A config change landing mid-poll cannot just be dropped: OnParametersSetAsync will not
+        // fire again for it, so without this the widget would sit on the old period's rows until
+        // the next 60s tick. Hand the request to the in-flight load instead.
         if (_isRefreshing)
         {
+            _reloadRequested = true;
             return;
         }
 
@@ -165,22 +171,36 @@
 
         try
         {
-            Result<IReadOnlyList<HallOfFameEntryDTO>> scoresResult =
-                await _gameResultService.GetTopScoresAsync(Widget.Period, TakeCount, Widget.ClientId);
+            do
+            {
+                _reloadRequested = false;
 
-            Result<IReadOnlyList<HallOfFameEntryDTO>> accuracyResult =
-                await _gameResultService.GetTopAccuracyAsync(Widget.Period, TakeCount, Widget.ClientId);
+                // Snapshot what is being loaded, so the settings recorded at the end are the ones
+                // these rows were actually fetched with.
+                HallOfFamePeriod period = Widget.Period;
+                Guid? clientId = Widget.ClientId;
 
-            Result<IReadOnlyList<HallOfFameTeamTotalDTO>> teamResult =
-                await _gameResultService.GetTopTeamTotalsAsync(Widget.Period, Widget.ClientId);
+                Result<IReadOnlyList<HallOfFameEntryDTO>> scoresResult =
+                    await _gameResultService.GetTopScoresAsync(period, TakeCount, clientId);
 
-            _hasError = !scoresResult.IsSuccess || !accuracyResult.IsSuccess || !teamResult.IsSuccess;
+                Result<IReadOnlyList<HallOfFameEntryDTO>> accuracyResult =
+                    await _gameResultService.GetTopAccuracyAsync(period, TakeCount, clientId);
 
-            _topScores = scoresResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
-            _topAccuracy = accuracyResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
-            _teamTotals = teamResult.Data?.ToList() ?? new List<HallOfFameTeamTotalDTO>();
+                Result<IReadOnlyList<HallOfFameTeamTotalDTO>> teamResult =
+                    await _gameResultService.GetTopTeamTotalsAsync(period, clientId);
 
-            _hasAnyResults = _topScores.Count > 0 || _topAccuracy.Count > 0 || _teamTotals.Count > 0;
+                _hasError = !scoresResult.IsSuccess || !accuracyResult.IsSuccess || !teamResult.IsSuccess;
+
+                _topScores = scoresResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
+                _topAccuracy = accuracyResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
+                _teamTotals = teamResult.Data?.ToList() ?? new List<HallOfFameTeamTotalDTO>();
+
+                _hasAnyResults = _topScores.Count > 0 || _topAccuracy.Count > 0 || _teamTotals.Count > 0;
+
+                _loadedPeriod = period;
+                _loadedClientId = clientId;
+            }
+            while (_reloadRequested);
         }
         finally
         {
