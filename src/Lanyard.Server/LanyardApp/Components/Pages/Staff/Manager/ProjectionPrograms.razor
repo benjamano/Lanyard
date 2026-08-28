@@ -25,7 +25,7 @@
                 }
                 else
                 {
-                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="new PaginationState { ItemsPerPage = 10 }" GridTemplateColumns="auto 1fr auto">
+                    <FluentDataGrid Class="h-auto" Items="projectionPrograms.AsQueryable()" ShowHover="true" Pagination="@pagination" GridTemplateColumns="auto 1fr auto">
                         <ChildContent>
                             <SelectColumn SelectAll="true" OnSelect="@(x => UpdateSelectedScreen(x.Item))" Property="@(x => x == selectedProjectionProgram)" TGridItem="ProjectionProgram" SelectMode="DataGridSelectMode.Single" SelectFromEntireRow="true"></SelectColumn>
                             <PropertyColumn Property="x => x.Name" Title="Name"></PropertyColumn>
@@ -37,6 +37,8 @@
                             No Projection Programs Exist!
                         </EmptyContent>
                     </FluentDataGrid>
+
+                    <FluentPaginator State="@pagination" />
                 }
                 <FluentButton Class="float-end mt-2" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.FormNew()" OnClick="HandleCreateNewProjectionProgram" Disabled="@isLoading">New</FluentButton>
             </div>
@@ -58,6 +60,7 @@
 
 @code {
     private List<ProjectionProgram> projectionPrograms = new();
+    private PaginationState pagination = new() { ItemsPerPage = 10 };
     private ProjectionProgram? selectedProjectionProgram;
     private bool isLoading;
     private bool isSaving;
