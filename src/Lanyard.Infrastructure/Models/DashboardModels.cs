@@ -238,3 +238,22 @@ public class HallOfFameWidget : DashboardWidget
     // so there is no per-location option here.
     public Guid? ClientId { get; set; }
 }
+
+// Per-viewer rather than per-dashboard: the current user is resolved at render time, so a single
+// shared dashboard shows each staff member their own training rather than a fixed person's.
+public class MyTrainingWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public MyTrainingWidget()
+    {
+        Type = WidgetType.MyTraining;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 5;
+    }
+
+    public bool IncludeCompleted { get; set; }
+    public int MaxItems { get; set; }
+}

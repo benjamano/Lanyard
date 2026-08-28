@@ -186,6 +186,20 @@
                                     <RenderHallOfFameWidget Widget="hallOfFameWidget" />
                                 </div>
                                 break;
+                            case WidgetType.MyTraining:
+                                MyTrainingWidget? myTrainingWidget = widget as MyTrainingWidget;
+
+                                if (myTrainingWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderMyTrainingWidget Widget="myTrainingWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
                         }
                         @if (!PreviewMode)
                         {
@@ -370,6 +384,9 @@
             case HallOfFameWidget hallOfFameWidget:
                 await ShowConfigureHallOfFameDialog(hallOfFameWidget);
                 break;
+            case MyTrainingWidget myTrainingWidget:
+                await ShowConfigureMyTrainingDialog(myTrainingWidget);
+                break;
         }
     }
 
@@ -495,6 +512,20 @@
         {
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureKioskHealthDialog.Widget), kioskHealthWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureMyTrainingDialog(MyTrainingWidget myTrainingWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureMyTrainingDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureMyTrainingDialog.Widget), myTrainingWidget);
         });
 
         if (!dialogResult.Cancelled)

@@ -965,4 +965,105 @@ public class DashboardServiceTests
         Assert.IsTrue(dashboardResult.Success, dashboardResult.Error);
         Assert.IsFalse(dashboardResult.Data!.IsActive);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewMyTrainingWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Widgets =
+        [
+            new MyTrainingWidget
+            {
+                Id = Guid.Empty,
+                IncludeCompleted = true,
+                MaxItems = 9,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MyTrainingWidget dbWidget = await ctx.DashboardWidgets.OfType<MyTrainingWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.IsTrue(dbWidget.IncludeCompleted);
+        Assert.AreEqual(9, dbWidget.MaxItems);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingMyTrainingWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MyTrainingWidget myTrainingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            IncludeCompleted = false,
+            MaxItems = 5,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [myTrainingWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        myTrainingWidget.IncludeCompleted = true;
+        myTrainingWidget.MaxItems = 12;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MyTrainingWidget dbWidget = await ctx.DashboardWidgets.OfType<MyTrainingWidget>().SingleAsync(x => x.Id == myTrainingWidget.Id);
+        Assert.IsTrue(dbWidget.IncludeCompleted);
+        Assert.AreEqual(12, dbWidget.MaxItems);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesMyTrainingConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MyTrainingWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            IncludeCompleted = false,
+            MaxItems = 5,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        MyTrainingWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            IncludeCompleted = true,
+            MaxItems = 3,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MyTrainingWidget dbWidget = await ctx.DashboardWidgets.OfType<MyTrainingWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.IsTrue(dbWidget.IncludeCompleted);
+        Assert.AreEqual(3, dbWidget.MaxItems);
+    }
 }
