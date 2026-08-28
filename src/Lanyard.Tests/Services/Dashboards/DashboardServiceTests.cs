@@ -634,6 +634,34 @@ public class DashboardServiceTests
         Assert.IsFalse(dbWidget.ShowSongTitle);
     }
 
+    // Guards CreateWidgetCopy: a widget type missing from that switch throws
+    // "Unsupported widget type." and fails the whole dashboard save, not just its own widget.
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewGreetingWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Widgets =
+        [
+            new GreetingWidget
+            {
+                Id = Guid.Empty,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        GreetingWidget dbWidget = await ctx.DashboardWidgets.OfType<GreetingWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(WidgetType.Greeting, dbWidget.Type);
+        Assert.IsTrue(dbWidget.IsActive);
+    }
+
     [TestMethod]
     public async Task DashboardService_SaveDashboard_PersistsNewKioskHealthWidgetConfiguration()
     {

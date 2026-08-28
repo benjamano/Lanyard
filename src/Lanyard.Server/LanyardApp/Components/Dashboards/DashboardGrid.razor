@@ -186,6 +186,12 @@
                                     <RenderHallOfFameWidget Widget="hallOfFameWidget" />
                                 </div>
                                 break;
+                            case WidgetType.Greeting:
+                                @* Nothing to configure, so no right-click config dialog here. *@
+                                <div class="dashboard-widget-host">
+                                    <GreetingCard />
+                                </div>
+                                break;
                         }
                         @if (!PreviewMode)
                         {

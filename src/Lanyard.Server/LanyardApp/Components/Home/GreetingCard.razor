@@ -1,0 +1,33 @@
+@* Shared by the standard home page and the Greeting dashboard widget so both stay identical. *@
+
+<FluentCard Appearance="CardAppearance.Filled" Height="100%">
+    <FluentStack Orientation="Orientation.Vertical" Height="100%">
+        <FluentText Size="TextSize.Size800" Class="my-auto">
+            @GetGreeting() <b>@_currentUserName!</b>
+        </FluentText>
+        @ChildContent
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private string? _currentUserName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentUserName = await _securityService.GetCurrentUserName();
+    }
+
+    private static string GetGreeting()
+    {
+        int hour = DateTime.Now.Hour;
+        if (hour < 12)
+            return "Good morning";
+        else if (hour < 18)
+            return "Good afternoon";
+        else
+            return "Good evening";
+    }
+}

@@ -445,6 +445,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ShowBestTeam = hallOfFameWidget.ShowBestTeam,
                 ClientId = hallOfFameWidget.ClientId
             },
+            // No configurable properties - the greeting is derived from the clock and the
+            // signed-in user - but the case is still required, or the switch below throws and
+            // the whole dashboard save fails.
+            GreetingWidget => new GreetingWidget(),
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 

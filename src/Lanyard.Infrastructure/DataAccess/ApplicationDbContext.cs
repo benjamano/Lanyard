@@ -118,7 +118,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline)
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
                 .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
-                .HasValue<HallOfFameWidget>(WidgetType.HallOfFame);
+                .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
+                .HasValue<GreetingWidget>(WidgetType.Greeting);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
