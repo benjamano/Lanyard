@@ -40,6 +40,7 @@
     private string _selectedValue = NoDashboardValue;
     private string? _userId;
     private bool _isLoading = true;
+    private bool _loadFailed = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,6 +54,7 @@
         if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
         {
             _toastService.ShowError($"Failed to load your home screen setting, {userIdResult.Error}");
+            _loadFailed = true;
             _isLoading = false;
             return;
         }
@@ -68,6 +70,7 @@
         else
         {
             _toastService.ShowError($"Failed to load dashboards, {dashboardsResult.Error}");
+            _loadFailed = true;
         }
 
         Result<Guid?> defaultResult = await DashboardService.GetDefaultDashboardIdAsync(_userId);
@@ -75,6 +78,7 @@
         if (!defaultResult.IsSuccess)
         {
             _toastService.ShowError($"Failed to load your home screen setting, {defaultResult.Error}");
+            _loadFailed = true;
             _isLoading = false;
             return;
         }
@@ -97,6 +101,14 @@
     {
         if (_userId is null)
         {
+            return;
+        }
+
+        // The selection falls back to "Use the standard home page" whenever loading failed, so
+        // saving on top of a failed load would silently wipe a setting the user never touched.
+        if (_loadFailed)
+        {
+            _toastService.ShowError("Your home screen setting could not be loaded, so it was not saved. Reload the page and try again.");
             return;
         }
 

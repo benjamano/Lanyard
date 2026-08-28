@@ -11,7 +11,10 @@
     <div class="dashboard-grid">
         @foreach (DashboardWidget widget in Widgets.OrderBy(w => w.GridY).ThenBy(w => w.GridX))
         {
-            <div class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
+            @* @key is required because the render order is computed from GridY/GridX, which the
+               editor's move buttons change at runtime. Without it Blazor reuses component instances
+               positionally, so two same-type widgets that swap places keep each other's state. *@
+            <div @key="widget.Id" class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
                 <FluentStack Orientation="@Orientation.Vertical" 
                             Height="100%" 
                             Width="100%"

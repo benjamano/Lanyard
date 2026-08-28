@@ -5,7 +5,8 @@
 <div style="width: 100%; height: 100%;">
     <FluentButton Appearance="@Widget.Appearance"
                     Style="width: 100%; height: 100%;"
-                    Disabled="@_isExecuting"
+                    Disabled="@(_isExecuting || !CanRunConfiguredAction)"
+                    Title="@(CanRunConfiguredAction ? null : "Only Admins and Managers can trigger projection programs")"
                     @onclick="HandleClick">
         @Widget.Label
     </FluentButton>
@@ -19,6 +20,23 @@
     public bool AllowTrigger { get; set; } = true;
 
     private bool _isExecuting;
+
+    // Triggering a projection program is Admin/Manager-only at /manage/projectioncontrol. A button
+    // widget can sit on any dashboard - including a non-Admin's home screen - so the role is
+    // checked here rather than relying on the page the widget happens to be rendered on.
+    // Only enforced for signed-in users: /kiosk is deliberately AllowAnonymous and renders this
+    // same grid, and those displays are trusted physically rather than by role.
+    private bool _canTriggerProjection;
+
+    private bool CanRunConfiguredAction =>
+        Widget.ActionType != ButtonActionType.TriggerProjectionProgram || _canTriggerProjection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canTriggerProjection = !await _securityService.IsUserLoggedIn()
+            || await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("Manager");
+    }
 
     private async Task HandleClick()
     {
@@ -49,6 +67,13 @@
 
     private async Task TriggerProjectionProgramAsync()
     {
+        if (!_canTriggerProjection)
+        {
+            _toastService.ShowError("You do not have permission to trigger projection programs.");
+
+            return;
+        }
+
         if (Widget.ClientId is not Guid clientId || Widget.ProjectionProgramId is not Guid projectionProgramId)
         {
             _toastService.ShowWarning("This button is not configured with a client and projection program.");

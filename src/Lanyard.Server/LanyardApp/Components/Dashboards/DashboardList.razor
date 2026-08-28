@@ -1,4 +1,5 @@
 @inject IDashboardService DashboardService
+@inject ILogger<DashboardList> Logger
 
 <FluentStack Width="20%">
     <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
@@ -58,6 +59,8 @@
 
         if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
         {
+            Logger.LogWarning("Failed to resolve the current user for the home screen column: {Error}", userIdResult.Error);
+            _toastService.ShowError($"Failed to load your home screen setting, {userIdResult.Error}");
             return;
         }
 
@@ -65,16 +68,21 @@
 
         Result<Guid?> defaultResult = await DashboardService.GetDefaultDashboardIdAsync(_userId);
 
-        if (defaultResult.IsSuccess)
+        if (!defaultResult.IsSuccess)
         {
-            _defaultDashboardId = defaultResult.Data;
+            Logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", defaultResult.Error);
+            _toastService.ShowError($"Failed to load your home screen setting, {defaultResult.Error}");
+            return;
         }
+
+        _defaultDashboardId = defaultResult.Data;
     }
 
     private async Task ToggleHomeScreen(Dashboard dashboard)
     {
         if (_userId is null)
         {
+            _toastService.ShowError("Your home screen setting could not be loaded. Reload the page and try again.");
             return;
         }
 
