@@ -1,4 +1,4 @@
-@inject IDashboardService DashboardService
+﻿@inject IDashboardService DashboardService
 
 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Start" VerticalGap="8" Width="100%">
     <FluentText>
@@ -19,12 +19,26 @@
                       ValueChanged="OnSelectionChanged"
                       Disabled="@(!_dashboards.Any())"
                       Style="width: 61%;">
-            <FluentOption TValue="string" Value="@NoDashboardValue">Use the standard home page</FluentOption>
+            @if (_organisationDefaultName is not null)
+            {
+                <FluentOption TValue="string" Value="@FollowOrganisationValue">
+                    Follow the organisation default (@_organisationDefaultName)
+                </FluentOption>
+            }
+            <FluentOption TValue="string" Value="@StandardHomePageValue">Use the standard home page</FluentOption>
             @foreach (Dashboard dashboard in _dashboards)
             {
                 <FluentOption TValue="string" Value="@dashboard.Id.ToString()">@dashboard.Name</FluentOption>
             }
         </FluentSelect>
+
+        @if (_organisationDefaultName is not null)
+        {
+            <FluentText Color="Color.Disabled">
+                An admin has set "@_organisationDefaultName" as everyone's home screen. Anything you choose here applies
+                to you only.
+            </FluentText>
+        }
 
         @if (!_dashboards.Any())
         {
@@ -34,11 +48,16 @@
 </FluentStack>
 
 @code {
-    private const string NoDashboardValue = "";
+    // Three distinct choices, only two of which are a dashboard id, so the select is driven by
+    // strings rather than a Guid?: "follow whatever an admin set" and "always give me the standard
+    // home page" are different intentions that both resolve to no dashboard of the user's own.
+    private const string StandardHomePageValue = "standard";
+    private const string FollowOrganisationValue = "organisation";
 
     private IEnumerable<Dashboard> _dashboards = [];
-    private string _selectedValue = NoDashboardValue;
+    private string _selectedValue = StandardHomePageValue;
     private string? _userId;
+    private string? _organisationDefaultName;
     private bool _isLoading = true;
     private bool _loadFailed = false;
 
@@ -73,28 +92,55 @@
             _loadFailed = true;
         }
 
-        Result<Guid?> defaultResult = await DashboardService.GetDefaultDashboardIdAsync(_userId);
+        Result<Guid?> organisationResult = await DashboardService.GetOrganisationDefaultDashboardIdAsync();
 
-        if (!defaultResult.IsSuccess)
+        if (!organisationResult.IsSuccess)
         {
-            _toastService.ShowError($"Failed to load your home screen setting, {defaultResult.Error}");
+            _toastService.ShowError($"Failed to load the organisation home screen, {organisationResult.Error}");
             _loadFailed = true;
             _isLoading = false;
             return;
         }
 
-        // A dashboard that has since been deleted is stored but no longer selectable, so fall back
-        // to showing "Use the standard home page" - which is what the home page itself does too.
-        _selectedValue = defaultResult.Data is Guid dashboardId && _dashboards.Any(x => x.Id == dashboardId)
-            ? dashboardId.ToString()
-            : NoDashboardValue;
+        // Left null when an admin set a dashboard that has since been deleted, which hides the
+        // "follow the organisation default" option rather than offering a dead choice.
+        _organisationDefaultName = organisationResult.Data is Guid organisationDashboardId
+            ? _dashboards.FirstOrDefault(x => x.Id == organisationDashboardId)?.Name
+            : null;
+
+        Result<HomeScreenDashboardSelection> selectionResult = await DashboardService.GetHomeScreenDashboardAsync(_userId);
+
+        if (!selectionResult.IsSuccess || selectionResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load your home screen setting, {selectionResult.Error}");
+            _loadFailed = true;
+            _isLoading = false;
+            return;
+        }
+
+        _selectedValue = ResolveSelectedValue(selectionResult.Data);
 
         _isLoading = false;
     }
 
+    private string ResolveSelectedValue(HomeScreenDashboardSelection selection)
+    {
+        if (selection.IsOrganisationDefault)
+        {
+            // The option only exists while the organisation's dashboard is still there.
+            return _organisationDefaultName is null ? StandardHomePageValue : FollowOrganisationValue;
+        }
+
+        // A dashboard the user chose that has since been deleted is stored but no longer
+        // selectable, so fall back to the standard home page - what the home page itself shows.
+        return selection.DashboardId is Guid dashboardId && _dashboards.Any(x => x.Id == dashboardId)
+            ? dashboardId.ToString()
+            : StandardHomePageValue;
+    }
+
     private void OnSelectionChanged(string? newValue)
     {
-        _selectedValue = newValue ?? NoDashboardValue;
+        _selectedValue = newValue ?? StandardHomePageValue;
     }
 
     public async Task HandleSave()
@@ -112,9 +158,7 @@
             return;
         }
 
-        Guid? dashboardId = Guid.TryParse(_selectedValue, out Guid parsedId) ? parsedId : null;
-
-        Result<bool> result = await DashboardService.SetDefaultDashboardIdAsync(_userId, dashboardId);
+        Result<bool> result = await SaveSelectionAsync();
 
         if (result.IsSuccess)
         {
@@ -124,5 +168,32 @@
         {
             _toastService.ShowError($"Failed to save your home screen, {result.Error}");
         }
+    }
+
+    private async Task<Result<bool>> SaveSelectionAsync()
+    {
+        if (_selectedValue == StandardHomePageValue)
+        {
+            // Also clears any dashboard of the user's own, so the flag cannot be shadowed by a
+            // stale id.
+            return await DashboardService.SetUseStandardHomePageAsync(_userId!, true);
+        }
+
+        if (_selectedValue == FollowOrganisationValue)
+        {
+            // "No choice of my own" is the absence of both settings, so both have to be cleared.
+            Result<bool> clearOwnResult = await DashboardService.SetDefaultDashboardIdAsync(_userId!, null);
+
+            if (!clearOwnResult.IsSuccess)
+            {
+                return clearOwnResult;
+            }
+
+            return await DashboardService.SetUseStandardHomePageAsync(_userId!, false);
+        }
+
+        Guid? dashboardId = Guid.TryParse(_selectedValue, out Guid parsedId) ? parsedId : null;
+
+        return await DashboardService.SetDefaultDashboardIdAsync(_userId!, dashboardId);
     }
 }

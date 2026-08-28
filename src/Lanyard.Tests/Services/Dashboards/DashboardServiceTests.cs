@@ -860,4 +860,245 @@ public class DashboardServiceTests
         Assert.IsTrue(dashboardResult.Success, dashboardResult.Error);
         Assert.IsFalse(dashboardResult.Data!.IsActive);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SetOrganisationDefaultDashboardId_PersistsChoice()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Result<bool> setResult = await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+
+        Assert.IsTrue(setResult.Success, setResult.Error);
+
+        Result<Guid?> getResult = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(dashboard.Id, getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetOrganisationDefaultDashboardId_ReturnsNullWhenNeverSet()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+
+        Result<Guid?> result = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetOrganisationDefaultDashboardId_ClearsChoiceWhenNull()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+
+        Result<bool> clearResult = await service.SetOrganisationDefaultDashboardIdAsync(null);
+
+        Assert.IsTrue(clearResult.Success, clearResult.Error);
+
+        Result<Guid?> getResult = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.IsNull(getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetOrganisationDefaultDashboardId_ReplacesPreviousChoice()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard first = await SeedDashboardAsync(options, "First");
+        Dashboard second = await SeedDashboardAsync(options, "Second");
+
+        await service.SetOrganisationDefaultDashboardIdAsync(first.Id);
+        await service.SetOrganisationDefaultDashboardIdAsync(second.Id);
+
+        // A single AppSettings row is what stops two dashboards ever being the default at once.
+        Result<Guid?> getResult = await service.GetOrganisationDefaultDashboardIdAsync();
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.AreEqual(second.Id, getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetOrganisationDefaultDashboardId_FailsForDeletedDashboard()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        await service.DeleteDashboardAsync(dashboard.Id);
+
+        Result<bool> result = await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Dashboard not found.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_FallsBackToOrganisationDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(dashboard.Id, result.Data!.DashboardId);
+        Assert.IsTrue(result.Data.IsOrganisationDefault);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_PrefersUsersOwnChoice()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard organisationDashboard = await SeedDashboardAsync(options, "Everyone");
+        Dashboard personalDashboard = await SeedDashboardAsync(options, "Mine");
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(organisationDashboard.Id);
+        await service.SetDefaultDashboardIdAsync(userId, personalDashboard.Id);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(personalDashboard.Id, result.Data!.DashboardId);
+        Assert.IsFalse(result.Data.IsOrganisationDefault);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_StandardHomePageBeatsOrganisationDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+
+        Result<bool> setResult = await service.SetUseStandardHomePageAsync(userId, true);
+
+        Assert.IsTrue(setResult.Success, setResult.Error);
+
+        // Without this the organisation default would be impossible for an individual to opt out of.
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data!.DashboardId);
+        Assert.IsFalse(result.Data.IsOrganisationDefault);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_ReturnsNothingWhenNoDefaultsExist()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        string userId = await SeedUserAsync(options);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(result.Data!.DashboardId);
+        Assert.IsFalse(result.Data.IsOrganisationDefault);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetUseStandardHomePage_ClearsPersonalDashboard()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+        await service.SetUseStandardHomePageAsync(userId, true);
+
+        // A stale id left behind here would come back the moment the flag was cleared.
+        Result<Guid?> getResult = await service.GetDefaultDashboardIdAsync(userId);
+
+        Assert.IsTrue(getResult.Success, getResult.Error);
+        Assert.IsNull(getResult.Data);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SetDefaultDashboardId_ClearsStandardHomePageChoice()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetUseStandardHomePageAsync(userId, true);
+        await service.SetDefaultDashboardIdAsync(userId, dashboard.Id);
+
+        // Otherwise the flag would keep overriding the dashboard the user just picked.
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(dashboard.Id, result.Data!.DashboardId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_ReturnsToOrganisationDefaultAfterClearingStandardHomePage()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+        await service.SetUseStandardHomePageAsync(userId, true);
+        await service.SetUseStandardHomePageAsync(userId, false);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(dashboard.Id, result.Data!.DashboardId);
+        Assert.IsTrue(result.Data.IsOrganisationDefault);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_FailsForBlankUserId()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync("  ");
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("User id is required.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_GetHomeScreenDashboard_StillReturnsOrganisationIdAfterDashboardDeleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+        string userId = await SeedUserAsync(options);
+
+        await service.SetOrganisationDefaultDashboardIdAsync(dashboard.Id);
+        await service.DeleteDashboardAsync(dashboard.Id);
+
+        // Same contract as the per-user id: the stored value is returned unvalidated so the home
+        // page can tell "nobody set one" apart from "the one an admin set has been deleted" and
+        // explain the fallback instead of silently showing the standard home page.
+        Result<HomeScreenDashboardSelection> result = await service.GetHomeScreenDashboardAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(dashboard.Id, result.Data!.DashboardId);
+        Assert.IsTrue(result.Data.IsOrganisationDefault);
+    }
 }
