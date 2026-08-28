@@ -137,5 +137,16 @@
       "Training emails now greet you by first name instead of your username.",
       "Training emails and certificates now take their logo and brand colour from your own company, so everyone at a company gets consistent branding regardless of who assigned the course."
     ]
+  },
+  {
+    "version": "1.3.12",
+    "releaseDate": "2026-08-28",
+    "summary": "The user management table can now be sorted by any column, and its pages can be navigated.",
+    "details": [
+      "The Users page table can now be sorted by Username, Name, Email Address or Status by clicking a column heading.",
+      "The Users page now shows 15 users per page instead of 10.",
+      "Added page navigation controls to the Users page - previously only the first page of users was reachable.",
+      "Searching the Users page now returns you to the first page of results."
+    ]
   }
 ]
