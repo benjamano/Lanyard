@@ -14,8 +14,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260828182751_AddGreetingWidgetType")]
-    partial class AddGreetingWidgetType
+    [Migration("20260828145228_AddUseStandardHomePageToUserProfile")]
+    partial class AddUseStandardHomePageToUserProfile
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1508,6 +1508,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("UseStandardHomePage")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1727,13 +1730,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(1);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.GreetingWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.HasDiscriminator().HasValue(11);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.HallOfFameWidget", b =>

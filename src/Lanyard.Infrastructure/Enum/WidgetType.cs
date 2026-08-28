@@ -13,5 +13,6 @@ public enum WidgetType
     AutomationRuleStatus = 8,
     KioskHealth = 9,
     HallOfFame = 10,
-    Greeting = 11
+    MyTraining = 11,
+    Greeting = 12
 }

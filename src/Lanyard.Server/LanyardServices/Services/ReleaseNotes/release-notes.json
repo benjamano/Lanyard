@@ -162,7 +162,28 @@
     ]
   },
   {
-    "version": "1.3.16",
+    "version": "1.3.13",
+    "releaseDate": "2026-08-28",
+    "summary": "Added a My Training dashboard widget, Added a way for admins and managers to set a home screen for everyone.",
+    "details": [
+      "Added a \"My Training\" dashboard widget listing your own outstanding courses with their due date and status, overdue ones first.",
+      "The My Training widget shows each person their own training, so one shared dashboard works for the whole team.",
+      "Clicking a course in the My Training widget takes you straight to it.",
+      "The My Training widget can be set to include completed courses, and to cap how many courses it lists.",
+      "Courses in the My Training widget are now separated by a divider line with the course name emphasised, so a list of several courses no longer reads as one block of text.",
+      "The Users page table can now be sorted by Username, Name, Email Address or Status by clicking a column heading.",
+      "The Users page now shows 15 users per page instead of 25.",
+      "Editing, deleting or inviting a user no longer sends you back to the first page of the user list.",
+      "Admins and managers can set a dashboard as the home screen for everyone, from the new \"Everyone's Home Screen\" column on the Dashboards page.",
+      "Staff who have not picked a home screen of their own now see that dashboard when they open Lanyard, instead of the standard home page.",
+      "Setting or clearing everyone's home screen asks for confirmation first, since it changes what the whole team sees.",
+      "Anyone who has chosen their own home screen dashboard keeps it - a personal choice always wins over the organisation-wide one.",
+      "Added a \"Follow the organisation default\" option to the Home Screen section on the Account Management page, alongside \"Use the standard home page\" for anyone who would rather opt out entirely.",
+      "If the dashboard set as everyone's home screen is later deleted, staff see the standard home page again with a note explaining why, rather than an empty screen."
+    ]
+  },
+  {
+    "version": "1.3.14",
     "releaseDate": "2026-08-28",
     "summary": "Added a Greeting dashboard widget.",
     "details": [
