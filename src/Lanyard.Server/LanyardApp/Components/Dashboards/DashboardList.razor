@@ -1,3 +1,5 @@
+﻿@using Lanyard.App.Components.Dialogs
+
 @inject IDashboardService DashboardService
 @inject ILogger<DashboardList> Logger
 
@@ -31,13 +33,36 @@
                the editor mid-save. *@
             <div @onclick:stopPropagation="true">
                 <FluentButton Appearance="@ButtonAppearance.Subtle"
-                              Title="@(isHomeScreen ? "This is your home screen - click to use the standard home page again" : "Set as my home screen")"
+                              Title="@GetPersonalHomeScreenTitle(isHomeScreen)"
                               IconStart="@(isHomeScreen ? new Icons.Filled.Size20.Home() : (Icon)new Icons.Regular.Size20.Home())"
                               OnClick="@(() => ToggleHomeScreen(context))" />
             </div>
         </TemplateColumn>
+        @if (_canSetOrganisationDefault)
+        {
+            <TemplateColumn Title="Everyone's Home Screen" Align="DataGridCellAlignment.Center">
+                @{
+                    bool isOrganisationHomeScreen = context.Id == _organisationDefaultDashboardId;
+                }
+                <div @onclick:stopPropagation="true">
+                    <FluentButton Appearance="@ButtonAppearance.Subtle"
+                                  Title="@(isOrganisationHomeScreen ? "This is everyone's home screen - click to clear it" : "Set as everyone's home screen")"
+                                  IconStart="@(isOrganisationHomeScreen ? new Icons.Filled.Size20.People() : (Icon)new Icons.Regular.Size20.People())"
+                                  OnClick="@(() => ToggleOrganisationHomeScreen(context))" />
+                </div>
+            </TemplateColumn>
+        }
     </ChildContent>
 </FluentDataGrid>
+
+@if (_canSetOrganisationDefault && !IsLoading)
+{
+    <FluentText Color="Color.Disabled" Class="mt-2">
+        @(_organisationDefaultDashboardName is null
+            ? "No dashboard is set as everyone's home screen, so everyone sees the standard home page unless they pick their own."
+            : $"\"{_organisationDefaultDashboardName}\" is everyone's home screen. Anyone who has picked their own dashboard, or chosen the standard home page, keeps that instead.")
+    </FluentText>
+}
 
 @code {
     public IEnumerable<Dashboard> Dashboards { get; set; } = [];
@@ -47,10 +72,91 @@
     private Guid? _defaultDashboardId;
     private string? _userId;
 
+    private Guid? _organisationDefaultDashboardId;
+    private bool _canSetOrganisationDefault;
+
+    // Null when nothing is set, or when the dashboard an admin picked has since been deleted -
+    // both cases mean nobody is currently inheriting an organisation home screen.
+    private string? _organisationDefaultDashboardName =>
+        Dashboards.FirstOrDefault(x => x.Id == _organisationDefaultDashboardId)?.Name;
+
     protected override async Task OnInitializedAsync()
     {
         await GetDashboards();
         await GetDefaultDashboard();
+        await GetOrganisationDefaultDashboard();
+    }
+
+    private async Task GetOrganisationDefaultDashboard()
+    {
+        // Blazor Server runs this on the server, so it is a real authorization check rather than a
+        // cosmetic one - the same shape the nav menu uses to decide what to show. Only the control
+        // is gated; the id itself is loaded for everyone so the personal toggle can say what
+        // clearing a personal choice will actually fall back to.
+        _canSetOrganisationDefault = await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("Manager");
+
+        Result<Guid?> organisationResult = await DashboardService.GetOrganisationDefaultDashboardIdAsync();
+
+        if (!organisationResult.IsSuccess)
+        {
+            Logger.LogWarning("Failed to load the organisation home screen dashboard: {Error}", organisationResult.Error);
+            _toastService.ShowError($"Failed to load the organisation home screen, {organisationResult.Error}");
+            return;
+        }
+
+        _organisationDefaultDashboardId = organisationResult.Data;
+    }
+
+    private async Task ToggleOrganisationHomeScreen(Dashboard dashboard)
+    {
+        if (!_canSetOrganisationDefault)
+        {
+            return;
+        }
+
+        // Clicking the dashboard that is already everyone's home screen clears it, mirroring how
+        // the personal home screen column works.
+        Guid? newOrganisationDefaultId = dashboard.Id == _organisationDefaultDashboardId ? null : dashboard.Id;
+
+        if (!await ConfirmOrganisationHomeScreenChangeAsync(dashboard, newOrganisationDefaultId))
+        {
+            return;
+        }
+
+        Result<bool> result = await DashboardService.SetOrganisationDefaultDashboardIdAsync(newOrganisationDefaultId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to set everyone's home screen, {result.Error}");
+            return;
+        }
+
+        _organisationDefaultDashboardId = newOrganisationDefaultId;
+
+        _toastService.ShowSuccess(newOrganisationDefaultId is null
+            ? "Cleared everyone's home screen."
+            : $"\"{dashboard.Name}\" is now everyone's home screen.");
+    }
+
+    // This one change affects every user who has not picked their own home screen, so it asks
+    // first - unlike the personal toggle, which only affects the person clicking it.
+    private async Task<bool> ConfirmOrganisationHomeScreenChangeAsync(Dashboard dashboard, Guid? newOrganisationDefaultId)
+    {
+        string message = newOrganisationDefaultId is null
+            ? $"Stop showing \"{dashboard.Name}\" as everyone's home screen? Anyone inheriting it will see the standard home page again."
+            : $"Show \"{dashboard.Name}\" as the home screen for everyone who has not chosen their own?";
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Everyone's Home Screen";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), message);
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), newOrganisationDefaultId is null ? "Clear" : "Set");
+        });
+
+        return !result.Cancelled && result.Value is true;
     }
 
     private async Task GetDefaultDashboard()
@@ -78,6 +184,20 @@
         _defaultDashboardId = defaultResult.Data;
     }
 
+    // Says what clearing will actually do, which depends on whether an admin has set an
+    // organisation home screen for this user to fall back to.
+    private string GetPersonalHomeScreenTitle(bool isHomeScreen)
+    {
+        if (!isHomeScreen)
+        {
+            return "Set as my home screen";
+        }
+
+        return _organisationDefaultDashboardName is null
+            ? "This is your home screen - click to go back to the standard home page"
+            : $"This is your home screen - click to go back to \"{_organisationDefaultDashboardName}\", the organisation default";
+    }
+
     private async Task ToggleHomeScreen(Dashboard dashboard)
     {
         if (_userId is null)
@@ -100,9 +220,17 @@
 
         _defaultDashboardId = newDefaultId;
 
-        _toastService.ShowSuccess(newDefaultId is null
+        if (newDefaultId is not null)
+        {
+            _toastService.ShowSuccess($"\"{dashboard.Name}\" is now your home screen.");
+            return;
+        }
+
+        // Clearing a personal choice no longer always means the standard home page - an
+        // organisation home screen, if one is set, is what takes over.
+        _toastService.ShowSuccess(_organisationDefaultDashboardName is null
             ? "Your home screen is back to the standard home page."
-            : $"\"{dashboard.Name}\" is now your home screen.");
+            : $"Your home screen is back to \"{_organisationDefaultDashboardName}\", the organisation default.");
     }
 
     private async Task GetDashboards()
