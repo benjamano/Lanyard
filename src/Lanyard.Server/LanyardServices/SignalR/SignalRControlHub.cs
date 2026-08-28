@@ -29,6 +29,7 @@ public class SignalRControlHub(
     IDmxClientService dmxClientService,
     IClientZoneScoreboardService clientZoneScoreboardService,
     IVideoStreamTokenService videoStreamTokenService,
+    IGameResultService gameResultService,
     IClientSecretValidator clientSecretValidator) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
@@ -42,6 +43,7 @@ public class SignalRControlHub(
     private readonly IDmxClientService _dmxClientService = dmxClientService;
     private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
     private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;
+    private readonly IGameResultService _gameResultService = gameResultService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -288,8 +290,27 @@ public class SignalRControlHub(
 
         Guid clientId = getResult.Data;
 
+        // Read the previous status before overwriting it, so the InGame -> NotStarted edge can be
+        // detected here. This has to be strictly edge-triggered: the kiosk goes on republishing
+        // the finished game's scores for the whole idle period (GameStateService only clears them
+        // on the next game start), so recording on any NotStarted heartbeat would write the same
+        // game over and over.
+        _laserGameStatusStore.TryGetStatus(clientId, out LaserGameStatusDTO? previousStatus);
+
+        bool gameJustEnded = previousStatus?.Status == GameStatus.InGame && status.Status == GameStatus.NotStarted;
+
         _laserGameStatusStore.UpdateStatus(clientId, status);
         _automationEngineService.EnqueueTransition(clientId, status.Status);
+
+        if (gameJustEnded)
+        {
+            Result<bool> recordResult = await _gameResultService.RecordCompletedGameAsync(clientId, status);
+
+            if (!recordResult.IsSuccess)
+            {
+                _logger.LogWarning("Failed to record completed game for client {ClientId}: {Error}", clientId, recordResult.Error);
+            }
+        }
     }
 
     public async Task Load(Guid songId)

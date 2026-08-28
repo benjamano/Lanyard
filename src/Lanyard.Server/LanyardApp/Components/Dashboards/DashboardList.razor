@@ -1,4 +1,5 @@
 @inject IDashboardService DashboardService
+@inject ILogger<DashboardList> Logger
 
 <FluentStack Width="20%">
     <FluentCard Appearance="@CardAppearance.Filled" Width="auto">
@@ -21,6 +22,20 @@
     <ChildContent>
         <PropertyColumn Property="x=> x.Name" Title="Name"/>
         <PropertyColumn Property="x=> x.LastUpdateDate" Title="Updated Date"/>
+        <TemplateColumn Title="Home Screen" Align="DataGridCellAlignment.Center">
+            @{
+                bool isHomeScreen = context.Id == _defaultDashboardId;
+            }
+            @* The wrapping div is what carries stopPropagation - the directive only works on HTML
+               elements, and without it the click bubbles to the grid's OnRowClick and navigates to
+               the editor mid-save. *@
+            <div @onclick:stopPropagation="true">
+                <FluentButton Appearance="@ButtonAppearance.Subtle"
+                              Title="@(isHomeScreen ? "This is your home screen - click to use the standard home page again" : "Set as my home screen")"
+                              IconStart="@(isHomeScreen ? new Icons.Filled.Size20.Home() : (Icon)new Icons.Regular.Size20.Home())"
+                              OnClick="@(() => ToggleHomeScreen(context))" />
+            </div>
+        </TemplateColumn>
     </ChildContent>
 </FluentDataGrid>
 
@@ -29,9 +44,65 @@
 
     public bool IsLoading { get; set; } = true;
 
+    private Guid? _defaultDashboardId;
+    private string? _userId;
+
     protected override async Task OnInitializedAsync()
     {
         await GetDashboards();
+        await GetDefaultDashboard();
+    }
+
+    private async Task GetDefaultDashboard()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
+        {
+            Logger.LogWarning("Failed to resolve the current user for the home screen column: {Error}", userIdResult.Error);
+            _toastService.ShowError($"Failed to load your home screen setting, {userIdResult.Error}");
+            return;
+        }
+
+        _userId = userIdResult.Data;
+
+        Result<Guid?> defaultResult = await DashboardService.GetDefaultDashboardIdAsync(_userId);
+
+        if (!defaultResult.IsSuccess)
+        {
+            Logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", defaultResult.Error);
+            _toastService.ShowError($"Failed to load your home screen setting, {defaultResult.Error}");
+            return;
+        }
+
+        _defaultDashboardId = defaultResult.Data;
+    }
+
+    private async Task ToggleHomeScreen(Dashboard dashboard)
+    {
+        if (_userId is null)
+        {
+            _toastService.ShowError("Your home screen setting could not be loaded. Reload the page and try again.");
+            return;
+        }
+
+        // Clicking the dashboard that is already the home screen clears it - otherwise this list
+        // could set a home screen but never unset one.
+        Guid? newDefaultId = dashboard.Id == _defaultDashboardId ? null : dashboard.Id;
+
+        Result<bool> result = await DashboardService.SetDefaultDashboardIdAsync(_userId, newDefaultId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to set your home screen, {result.Error}");
+            return;
+        }
+
+        _defaultDashboardId = newDefaultId;
+
+        _toastService.ShowSuccess(newDefaultId is null
+            ? "Your home screen is back to the standard home page."
+            : $"\"{dashboard.Name}\" is now your home screen.");
     }
 
     private async Task GetDashboards()

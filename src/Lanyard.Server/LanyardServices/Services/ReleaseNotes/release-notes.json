@@ -137,5 +137,28 @@
       "Training emails now greet you by first name instead of your username.",
       "Training emails and certificates now take their logo and brand colour from your own company, so everyone at a company gets consistent branding regardless of who assigned the course."
     ]
+  },
+  {
+    "version": "1.3.12",
+    "releaseDate": "2026-08-28",
+    "summary": "Set a Dashboard as your Home Screen, Game results are now saved, with a Hall of Fame leaderboard widget and idle-triggered automation rules.",
+    "details": [
+      "Finished laser games are now recorded, so scores survive a server restart instead of being lost the moment the next game starts.",
+      "Added a Hall of Fame dashboard widget showing top scores, best accuracy and team totals over Today, This Week, This Month or All Time.",
+      "The Hall of Fame widget can be pointed at a single kiosk or left venue-wide, and each section can be turned on or off.",
+      "Fixed player accuracy and team not updating during a game - both were frozen at whatever the first score packet of the game reported, so accuracy read far lower than it should have on the live scoreboard.",
+      "Automation rules can now be triggered by a kiosk sitting idle for a set number of minutes, not just by a game starting or ending.",
+      "Added a \"Stop Projection Program\" automation action that stops what is playing on a display and closes the window, so a screen can be cleared when a game starts.",
+      "Leaderboard periods reset at local midnight, so a screen running late into the evening rolls over at the right time.",
+      "You can now choose any dashboard as your home screen, so it shows instead of the standard home page when you open Lanyard.",
+      "Set it from the new Home Screen section on the Account Management page, or straight from the home icon next to any dashboard on the Dashboards page.",
+      "Dashboard widgets stay fully interactive on the home screen - buttons, playlist selectors and music controls all work without opening the dashboard.",
+      "Clicking the home icon on the dashboard that is already your home screen clears it, putting the standard home page back.",
+      "If a dashboard set as someone's home screen is later deleted, they are shown the standard home page again with a note explaining why, rather than a broken or empty screen.",
+      "Dashboards now stack into a single readable column on phone-sized screens instead of squeezing every widget into twelve narrow columns.",
+      "Fixed the Users page only ever showing the first 10 users, with no page controls to reach the others - it now shows 25 per page with working first/previous/next/last buttons and a total count.",
+      "Searching the Users page now jumps back to the first page of results instead of leaving you on an empty page.",
+      "Fixed the same problem on the Projection Programs and Projection Templates pages, where anything past the 10th program or template was hidden."
+    ]
   }
 ]

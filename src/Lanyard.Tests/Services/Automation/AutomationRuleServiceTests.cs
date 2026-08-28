@@ -3,6 +3,7 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
@@ -383,5 +384,100 @@ public class AutomationRuleServiceTests
             1,
             executor.ExecutedActionIds,
             "A deleted rule must stop firing on the next transition, without a restart.");
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnIdleRuleWithNoThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.ClientIdle;
+        rule.IdleThresholdMinutes = null;
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess, "An idle rule with no threshold can never fire.");
+        Assert.AreEqual("An idle rule needs an idle threshold in minutes.", result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(0, await ctx.AutomationRules.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnIdleRuleWithANonPositiveThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.ClientIdle;
+        rule.IdleThresholdMinutes = 0;
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("An idle rule's threshold must be greater than zero minutes.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_AcceptsAnIdleRuleWithAThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.ClientIdle;
+        rule.IdleThresholdMinutes = 30;
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+
+        Assert.AreEqual(AutomationTriggerType.ClientIdle, saved.TriggerType);
+        Assert.AreEqual(30, saved.IdleThresholdMinutes);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_LeavesTransitionRulesUnaffectedByIdleValidation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        // A transition rule has no threshold and must stay valid without one.
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+
+        Assert.AreEqual(AutomationTriggerType.GameStatusTransition, saved.TriggerType);
+        Assert.IsNull(saved.IdleThresholdMinutes);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_RejectsAnIdleRuleWithNoThreshold()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        Result<AutomationRule> createResult = await service.CreateRuleAsync(rule);
+        Assert.IsTrue(createResult.IsSuccess, createResult.Error);
+
+        rule.TriggerType = AutomationTriggerType.ClientIdle;
+        rule.IdleThresholdMinutes = null;
+
+        Result<AutomationRule> updateResult = await service.UpdateRuleAsync(rule);
+
+        Assert.IsFalse(updateResult.IsSuccess);
+        Assert.AreEqual("An idle rule needs an idle threshold in minutes.", updateResult.Error);
     }
 }

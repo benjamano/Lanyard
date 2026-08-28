@@ -10,6 +10,12 @@ namespace Lanyard.Infrastructure.Models
 
         public string? PreferredCulture { get; set; }
 
+        // Deliberately not an EF relationship. Dashboards are soft-deleted (IsActive = false)
+        // rather than removed, so a real FK buys nothing here, and an id pointing at a
+        // deactivated dashboard is an expected state the home page falls back from - not a
+        // referential-integrity error.
+        public Guid? DefaultDashboardId { get; set; }
+
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 
