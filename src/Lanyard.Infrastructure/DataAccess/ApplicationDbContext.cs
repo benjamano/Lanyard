@@ -72,6 +72,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CourseQuizAttemptAnswer> CourseQuizAttemptAnswers { get; set; }
         public DbSet<CourseSectionProgress> CourseSectionProgresses { get; set; }
         public DbSet<UserErasureRecord> UserErasureRecords { get; set; }
+        public DbSet<GameResult> GameResults { get; set; }
+        public DbSet<GameResultPlayerScore> GameResultPlayerScores { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -115,7 +117,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<MusicPlaylistSelectorWidget>(WidgetType.MusicPlaylistSelector)
                 .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline)
                 .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
-                .HasValue<KioskHealthWidget>(WidgetType.KioskHealth);
+                .HasValue<KioskHealthWidget>(WidgetType.KioskHealth)
+                .HasValue<HallOfFameWidget>(WidgetType.HallOfFame);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -138,6 +141,10 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<MusicTimelineWidget>()
                 .Property(x => x.ClientId)
                 .HasColumnName("MusicTimelineWidget_ClientId");
+
+            modelBuilder.Entity<HallOfFameWidget>()
+                .Property(x => x.ClientId)
+                .HasColumnName("HallOfFameWidget_ClientId");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
@@ -179,6 +186,16 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<UserErasureRecord>()
                 .HasIndex(x => x.ErasedAtUtc);
+
+            // The Hall of Fame always queries a time window, either venue-wide or for one kiosk.
+            // Both indexes exist because those are the two shapes GameResultService issues; the
+            // automation execution log next door is the cautionary example of a time-queried
+            // append-only table with no index on its timestamp.
+            modelBuilder.Entity<GameResult>()
+                .HasIndex(x => x.PlayedAtUtc);
+
+            modelBuilder.Entity<GameResult>()
+                .HasIndex(x => new { x.ClientId, x.PlayedAtUtc });
         }
     }
 }

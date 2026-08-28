@@ -169,6 +169,20 @@
                                     <RenderKioskHealthWidget Widget="kioskHealthWidget" />
                                 </div>
                                 break;
+                            case WidgetType.HallOfFame:
+                                HallOfFameWidget? hallOfFameWidget = widget as HallOfFameWidget;
+
+                                if (hallOfFameWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderHallOfFameWidget Widget="hallOfFameWidget" />
+                                </div>
+                                break;
                         }
                         @if (!PreviewMode)
                         {
@@ -350,6 +364,9 @@
             case KioskHealthWidget kioskHealthWidget:
                 await ShowConfigureKioskHealthDialog(kioskHealthWidget);
                 break;
+            case HallOfFameWidget hallOfFameWidget:
+                await ShowConfigureHallOfFameDialog(hallOfFameWidget);
+                break;
         }
     }
 
@@ -450,6 +467,23 @@
         _toastService.ShowError($"Failed to load clients, {result.Error}");
 
         return [];
+    }
+
+    private async Task ShowConfigureHallOfFameDialog(HallOfFameWidget hallOfFameWidget)
+    {
+        IEnumerable<Client> clients = await GetZoneScoreboardClientsAsync();
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureHallOfFameDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureHallOfFameDialog.Widget), hallOfFameWidget);
+            options.Parameters.Add(nameof(ConfigureHallOfFameDialog.Clients), clients);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
     }
 
     private async Task ShowConfigureKioskHealthDialog(KioskHealthWidget kioskHealthWidget)
