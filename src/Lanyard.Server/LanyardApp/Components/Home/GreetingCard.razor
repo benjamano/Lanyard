@@ -1,9 +1,20 @@
 @* Shared by the standard home page and the Greeting dashboard widget so both stay identical. *@
 
+@implements IDisposable
+
 <FluentCard Appearance="CardAppearance.Filled" Height="100%">
     <FluentStack Orientation="Orientation.Vertical" Height="100%">
         <FluentText Size="TextSize.Size800" Class="my-auto">
-            @GetGreeting() <b>@_currentUserName!</b>
+            @if (string.IsNullOrWhiteSpace(_currentUserName))
+            {
+                @($"{_greeting}!")
+            }
+            else
+            {
+                @* Both on one line - Razor strips the separating whitespace if the <b> moves
+                   to its own line, running the greeting straight into the name. *@
+                @_greeting <b>@_currentUserName!</b>
+            }
         </FluentText>
         @ChildContent
     </FluentStack>
@@ -13,11 +24,52 @@
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
+    // The greeting changes twice a day, so poll for the boundary rather than ticking a clock the
+    // way DigitalClock has to. Without this a kiosk left running for days keeps whichever
+    // greeting was current when the page was first rendered.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+
+    // Null on the anonymous kiosk page, where a dashboard carrying this widget renders with no
+    // signed-in user. The card drops the name rather than showing a dangling "Good morning !".
     private string? _currentUserName;
+
+    private string _greeting = GetGreeting();
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
 
     protected override async Task OnInitializedAsync()
     {
         _currentUserName = await _securityService.GetCurrentUserName();
+
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    string currentGreeting = GetGreeting();
+
+                    if (currentGreeting == _greeting)
+                    {
+                        continue;
+                    }
+
+                    _greeting = currentGreeting;
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
+            }
+        });
     }
 
     private static string GetGreeting()
@@ -29,5 +81,12 @@
             return "Good afternoon";
         else
             return "Good evening";
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
     }
 }

@@ -167,7 +167,8 @@
     "summary": "Added a Greeting dashboard widget.",
     "details": [
       "Added a Greeting dashboard widget showing the same \"Good morning / afternoon / evening\" card as the standard home page, with your name.",
-      "The greeting switches to morning, afternoon or evening automatically as the day goes on."
+      "The greeting switches to morning, afternoon or evening automatically as the day goes on, so a dashboard left open overnight no longer stays on the wrong greeting.",
+      "On a kiosk display, where nobody is signed in, the widget shows just the greeting without a name."
     ]
   }
 ]
