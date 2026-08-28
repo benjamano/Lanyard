@@ -38,7 +38,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
 
             Dashboard? dashboard = await ctx.Dashboards
                 .AsNoTracking()
-                .Include(x => x.Widgets)
+                .Include(x => x.Widgets.Where(w => w.IsActive))
                 .FirstOrDefaultAsync(x => x.Id == dashboardId);
 
             if (dashboard is null)
@@ -184,6 +184,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
 
                 UpdateCommonMutableWidgetProperties(existingWidget, incomingWidget);
                 UpdateTypeSpecificWidgetProperties(existingWidget, incomingWidget);
+
+                // Being in the incoming list is what makes a widget active - the caller never sets
+                // the flag, and the loop below is what deactivates anything left out.
+                existingWidget.IsActive = true;
             }
 
             HashSet<Guid> incomingWidgetIds = incomingWidgets.Select(x => x.Id).ToHashSet();
@@ -231,12 +235,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 return Result<DashboardWidget>.Fail("Widget not found.");
             }
 
+            // IsActive is deliberately not copied - this saves a widget's configuration, and only
+            // SaveDashboardAsync/DeleteDashboardAsync own the soft-delete flag.
             existingWidget.Title = widget.Title?.Trim();
             existingWidget.GridX = widget.GridX;
             existingWidget.GridY = widget.GridY;
             existingWidget.GridW = widget.GridW;
             existingWidget.GridH = widget.GridH;
-            existingWidget.IsActive = widget.IsActive;
 
             if (existingWidget.GetType() != widget.GetType())
             {
@@ -447,6 +452,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         copy.Type = widget.Type;
         UpdateCommonMutableWidgetProperties(copy, widget);
         copy.DashboardId = dashboardId;
+        copy.IsActive = true;
 
         return copy;
     }
@@ -458,7 +464,6 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         target.GridY = source.GridY;
         target.GridW = source.GridW;
         target.GridH = source.GridH;
-        target.IsActive = source.IsActive;
     }
 
     private static void UpdateTypeSpecificWidgetProperties(DashboardWidget target, DashboardWidget source)
