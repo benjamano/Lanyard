@@ -295,6 +295,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingHallOfFame.ShowBestTeam = incomingHallOfFame.ShowBestTeam;
                     existingHallOfFame.ClientId = incomingHallOfFame.ClientId;
                     break;
+                case MyTrainingWidget existingMyTraining when widget is MyTrainingWidget incomingMyTraining:
+                    existingMyTraining.IncludeCompleted = incomingMyTraining.IncludeCompleted;
+                    existingMyTraining.MaxItems = incomingMyTraining.MaxItems;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -445,6 +449,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ShowBestTeam = hallOfFameWidget.ShowBestTeam,
                 ClientId = hallOfFameWidget.ClientId
             },
+            MyTrainingWidget myTrainingWidget => new MyTrainingWidget
+            {
+                IncludeCompleted = myTrainingWidget.IncludeCompleted,
+                MaxItems = myTrainingWidget.MaxItems
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -533,6 +542,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetHallOfFame.ShowBestAccuracy = sourceHallOfFame.ShowBestAccuracy;
             targetHallOfFame.ShowBestTeam = sourceHallOfFame.ShowBestTeam;
             targetHallOfFame.ClientId = sourceHallOfFame.ClientId;
+            return;
+        }
+
+        if (target is MyTrainingWidget targetMyTraining && source is MyTrainingWidget sourceMyTraining)
+        {
+            targetMyTraining.IncludeCompleted = sourceMyTraining.IncludeCompleted;
+            targetMyTraining.MaxItems = sourceMyTraining.MaxItems;
         }
     }
 }
