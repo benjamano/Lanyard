@@ -26,16 +26,18 @@
     </FluentStack>
 
     <FluentDataGrid Pagination="@pagination"
-                    Items="@filteredUsers.OrderBy(x => x.GetName()).AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr"
+                    Items="@filteredUsers.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr"
                     Style="width: 100%;">
         <EmptyContent>
             No Users Found
         </EmptyContent>
         <ChildContent>
-            <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" />
-            <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" />
-            <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" />
-            <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status" />
+            <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" Sortable="true" />
+            <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" Sortable="true"
+                            IsDefaultSortColumn="true" />
+            <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" Sortable="true" />
+            <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status"
+                            Sortable="true" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
@@ -65,7 +67,10 @@
     private IEnumerable<UserProfile> users = Enumerable.Empty<UserProfile>();
     private IEnumerable<UserProfile> filteredUsers = Enumerable.Empty<UserProfile>();
     private string? searchValue = string.Empty;
-    private PaginationState pagination = new() { ItemsPerPage = 25 };
+
+    // Held as a field rather than constructed inline in the markup - the search box re-renders the
+    // grid on every keystroke, and a new PaginationState each render resets the page the user is on.
+    private readonly PaginationState pagination = new() { ItemsPerPage = 15 };
 
     protected async override Task OnInitializedAsync()
     {
@@ -75,48 +80,42 @@
     private async Task GetUsers()
     {
         users = await _securityService.GetActiveUsersAsync();
-        filteredUsers = users;
 
-        await HandleSearchInput();
+        ApplyFilter();
     }
 
+    // Bound to the search box. A new search changes how many pages there are, so whatever page the
+    // user was on no longer means anything - go back to the first. GetUsers() deliberately does not
+    // do this: refreshing after an edit or a delete should leave the user where they were.
     private async Task HandleSearchInput()
+    {
+        ApplyFilter();
+
+        await pagination.SetCurrentPageIndexAsync(0);
+    }
+
+    private void ApplyFilter()
     {
         if (string.IsNullOrWhiteSpace(searchValue))
         {
-            users = await _securityService.GetActiveUsersAsync();
-            filteredUsers = users;
-
             searchValue = string.Empty;
-
-            await pagination.SetCurrentPageIndexAsync(0);
-
-            StateHasChanged();
+            filteredUsers = users;
         }
         else
         {
-            string searchTerm = searchValue.ToLower();
+            string term = searchValue.Trim().ToLower();
 
-            if (searchTerm.Length > 0)
-            {
-                string term = searchTerm?.Trim().ToLower() ?? string.Empty;
-
-                List<UserProfile> temp = users
-                    .Where(u =>
-                        string.Join(" ",
-                            u.GetName(),
-                            u.Email
-                        ).ToLower().Contains(term)
-                    )
-                    .ToList();
-
-                filteredUsers = temp;
-
-                await pagination.SetCurrentPageIndexAsync(0);
-
-                StateHasChanged();
-            }
+            filteredUsers = users
+                .Where(u =>
+                    string.Join(" ",
+                        u.GetName(),
+                        u.Email
+                    ).ToLower().Contains(term)
+                )
+                .ToList();
         }
+
+        StateHasChanged();
     }
 
     private async Task OpenRegisterUserDialog()

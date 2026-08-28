@@ -175,6 +175,16 @@
   {
     "version": "1.3.17",
     "releaseDate": "2026-08-28",
+    "summary": "The user management table can now be sorted by any column.",
+    "details": [
+      "The Users page table can now be sorted by Username, Name, Email Address or Status by clicking a column heading.",
+      "The Users page now shows 15 users per page instead of 25.",
+      "Editing, deleting or inviting a user no longer sends you back to the first page of the user list."
+    ]
+  },
+  {
+    "version": "1.3.18",
+    "releaseDate": "2026-08-28",
     "summary": "Admins and managers can now set one dashboard as everyone's home screen.",
     "details": [
       "Admins and managers can set a dashboard as the home screen for everyone, from the new \"Everyone's Home Screen\" column on the Dashboards page.",
