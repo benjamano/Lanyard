@@ -13,6 +13,9 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +45,79 @@ jobs:
         run: dotnet build LanyardApp.CI.slnf -c Release --no-restore
 
       - name: Test
-        run: dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj -c Release --no-build
+        run: dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj -c Release --no-build --collect:"XPlat Code Coverage" --settings src/Lanyard.Tests/coverlet.runsettings --results-directory "${{ github.workspace }}/TestResults"
+
+      - name: Generate coverage report
+        if: always()
+        shell: pwsh
+        run: |
+          $reports = Get-ChildItem -Path "${{ github.workspace }}/TestResults" -Filter 'coverage.cobertura.xml' -Recurse -ErrorAction SilentlyContinue
+          if (-not $reports) {
+            Write-Host "::warning::No coverage files were produced; skipping the coverage report."
+            exit 0
+          }
+
+          dotnet tool install dotnet-reportgenerator-globaltool --version 5.5.11 --tool-path "${{ github.workspace }}/.tools"
+          $reportGenerator = if ($IsWindows) { "${{ github.workspace }}/.tools/reportgenerator.exe" } else { "${{ github.workspace }}/.tools/reportgenerator" }
+
+          & $reportGenerator `
+            -reports:"${{ github.workspace }}/TestResults/**/coverage.cobertura.xml" `
+            -targetdir:"${{ github.workspace }}/coverage-report" `
+            -reporttypes:"MarkdownSummaryGithub;HtmlInline;TextSummary"
+
+          $textSummary = "${{ github.workspace }}/coverage-report/Summary.txt"
+          if (Test-Path $textSummary) { Get-Content $textSummary | Write-Host }
+
+          $markdown = "${{ github.workspace }}/coverage-report/SummaryGithub.md"
+          if (Test-Path $markdown) {
+            "## Code coverage" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content $markdown | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage-report-${{ github.run_id }}
+          path: coverage-report
+          if-no-files-found: ignore
+
+      - name: Comment coverage summary on PR
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- lanyard-code-coverage -->';
+            const summaryPath = `${process.env.GITHUB_WORKSPACE}/coverage-report/SummaryGithub.md`;
+
+            let body;
+            if (fs.existsSync(summaryPath)) {
+              let summary = fs.readFileSync(summaryPath, 'utf8');
+              const limit = 60000;
+              if (summary.length > limit) {
+                summary = summary.slice(0, limit) +
+                  '\n\n_…truncated. Download the `code-coverage-report` artifact for the full report._';
+              }
+              body = `${marker}\n## Code coverage\n\n${summary}\n\n` +
+                '_Informational only — there is no coverage threshold, so this never fails the build._';
+            } else {
+              body = `${marker}\n## Code coverage\n\n` +
+                'No coverage report was produced for this run — the build or test step most likely failed before coverage could be collected.';
+            }
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
 
   docker-build:
     runs-on: ubuntu-latest
