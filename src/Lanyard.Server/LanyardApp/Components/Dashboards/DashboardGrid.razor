@@ -9,7 +9,7 @@
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
-        @foreach (DashboardWidget widget in Widgets)
+        @foreach (DashboardWidget widget in Widgets.OrderBy(w => w.GridY).ThenBy(w => w.GridX))
         {
             <div class="dashboard-grid-item" id="@($"widget-{widget.Id}")" style="@GetWidgetStyle(widget)">
                 <FluentStack Orientation="@Orientation.Vertical" 
