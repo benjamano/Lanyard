@@ -202,3 +202,34 @@ public class AutomationRuleStatusWidget : DashboardWidget
 
     public Guid? AutomationRuleId { get; set; }
 }
+
+// Leaderboard of the best results recorded by GameResultService over a rolling period. Unlike the
+// live scoreboard widget next door, this reads persisted history rather than the in-memory store,
+// so it survives a restart and can look further back than the current game.
+public class HallOfFameWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public HallOfFameWidget()
+    {
+        Type = WidgetType.HallOfFame;
+
+        GridW = 4;
+        GridH = 3;
+
+        Period = HallOfFamePeriod.Today;
+
+        ShowTopScore = true;
+        ShowBestAccuracy = true;
+        ShowBestTeam = true;
+    }
+
+    public HallOfFamePeriod Period { get; set; } = HallOfFamePeriod.Today;
+
+    public bool ShowTopScore { get; set; } = true;
+    public bool ShowBestAccuracy { get; set; } = true;
+    public bool ShowBestTeam { get; set; } = true;
+
+    // Null is venue-wide, matching the other client-scoped widgets. Clients carry no LocationId,
+    // so there is no per-location option here.
+    public Guid? ClientId { get; set; }
+}

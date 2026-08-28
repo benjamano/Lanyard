@@ -283,6 +283,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case KioskHealthWidget existingKioskHealth when widget is KioskHealthWidget incomingKioskHealth:
                     existingKioskHealth.OnlyShowOffline = incomingKioskHealth.OnlyShowOffline;
                     break;
+                case HallOfFameWidget existingHallOfFame when widget is HallOfFameWidget incomingHallOfFame:
+                    existingHallOfFame.Period = incomingHallOfFame.Period;
+                    existingHallOfFame.ShowTopScore = incomingHallOfFame.ShowTopScore;
+                    existingHallOfFame.ShowBestAccuracy = incomingHallOfFame.ShowBestAccuracy;
+                    existingHallOfFame.ShowBestTeam = incomingHallOfFame.ShowBestTeam;
+                    existingHallOfFame.ClientId = incomingHallOfFame.ClientId;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -425,6 +432,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 OnlyShowOffline = kioskHealthWidget.OnlyShowOffline
             },
+            HallOfFameWidget hallOfFameWidget => new HallOfFameWidget
+            {
+                Period = hallOfFameWidget.Period,
+                ShowTopScore = hallOfFameWidget.ShowTopScore,
+                ShowBestAccuracy = hallOfFameWidget.ShowBestAccuracy,
+                ShowBestTeam = hallOfFameWidget.ShowBestTeam,
+                ClientId = hallOfFameWidget.ClientId
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -503,6 +518,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is KioskHealthWidget targetKioskHealth && source is KioskHealthWidget sourceKioskHealth)
         {
             targetKioskHealth.OnlyShowOffline = sourceKioskHealth.OnlyShowOffline;
+            return;
+        }
+
+        if (target is HallOfFameWidget targetHallOfFame && source is HallOfFameWidget sourceHallOfFame)
+        {
+            targetHallOfFame.Period = sourceHallOfFame.Period;
+            targetHallOfFame.ShowTopScore = sourceHallOfFame.ShowTopScore;
+            targetHallOfFame.ShowBestAccuracy = sourceHallOfFame.ShowBestAccuracy;
+            targetHallOfFame.ShowBestTeam = sourceHallOfFame.ShowBestTeam;
+            targetHallOfFame.ClientId = sourceHallOfFame.ClientId;
         }
     }
 }

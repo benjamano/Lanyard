@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Shared.Enum;
 
 namespace Lanyard.Infrastructure.Models;
@@ -11,7 +12,14 @@ public class AutomationRule
     public Guid TriggerClientId { get; set; }
     public Client? TriggerClient { get; set; }
 
+    public AutomationTriggerType TriggerType { get; set; } = AutomationTriggerType.GameStatusTransition;
+
+    // Only meaningful when TriggerType is GameStatusTransition; ignored for ClientIdle rules.
     public GameStatus TriggerEvent { get; set; }
+
+    // Required when TriggerType is ClientIdle, null otherwise. AutomationRuleService rejects a
+    // ClientIdle rule without one rather than letting a rule that can never fire be saved.
+    public int? IdleThresholdMinutes { get; set; }
 
     public bool IsActive { get; set; }
     public bool IsEnabled { get; set; } = true;

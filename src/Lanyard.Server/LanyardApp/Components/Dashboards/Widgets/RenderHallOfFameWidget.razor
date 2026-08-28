@@ -1,0 +1,233 @@
+@using Lanyard.Infrastructure.Enum
+@using Lanyard.Shared.Enum
+@implements IDisposable
+
+@inject IGameResultService _gameResultService
+
+@* Known limitation: the hardware identifies players by gun, not by person - nothing in the
+   packet pipeline populates a player name - so entries read "Gun 4" rather than a person's
+   name. GameResultPlayerScore.PlayerName exists for when that changes. *@
+
+<FluentCard Height="100%">
+    <div class="hall-of-fame-body">
+        <div class="hall-of-fame-header">
+            <span class="hall-of-fame-title">@(Widget.Title ?? "Hall of Fame")</span>
+            @* _loadedPeriod, not Widget.Period: the header has to describe the rows below it. *@
+            <span class="hall-of-fame-period">@DescribePeriod(_loadedPeriod)</span>
+        </div>
+
+        @if (_hasError)
+        {
+            <div class="hall-of-fame-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Couldn't load results
+                </FluentBadge>
+            </div>
+        }
+        else if (!_hasAnyResults)
+        {
+            <div class="hall-of-fame-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    No games recorded @DescribePeriod(_loadedPeriod).ToLowerInvariant()
+                </FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="hall-of-fame-sections">
+                @if (Widget.ShowTopScore && _topScores.Count > 0)
+                {
+                    <div class="hall-of-fame-section">
+                        <span class="hall-of-fame-section-title">Top scores</span>
+                        @foreach ((HallOfFameEntryDTO entry, int index) in _topScores.Select((x, i) => (x, i)))
+                        {
+                            <div class="hall-of-fame-row">
+                                <span class="hall-of-fame-rank">@(index + 1)</span>
+                                <span class="hall-of-fame-name">@DescribePlayer(entry)</span>
+                                <span class="hall-of-fame-value">@entry.Score.ToString("N0")</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (Widget.ShowBestAccuracy && _topAccuracy.Count > 0)
+                {
+                    <div class="hall-of-fame-section">
+                        <span class="hall-of-fame-section-title">Best accuracy</span>
+                        @foreach ((HallOfFameEntryDTO entry, int index) in _topAccuracy.Select((x, i) => (x, i)))
+                        {
+                            <div class="hall-of-fame-row">
+                                <span class="hall-of-fame-rank">@(index + 1)</span>
+                                <span class="hall-of-fame-name">@DescribePlayer(entry)</span>
+                                <span class="hall-of-fame-value">@entry.Accuracy%</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (Widget.ShowBestTeam && _teamTotals.Count > 0)
+                {
+                    <div class="hall-of-fame-section">
+                        <span class="hall-of-fame-section-title">Team totals</span>
+                        @foreach (HallOfFameTeamTotalDTO total in _teamTotals)
+                        {
+                            <div class="hall-of-fame-row">
+                                <span class="hall-of-fame-rank">
+                                    <FluentIcon Value="@(new Icons.Filled.Size16.Circle())"
+                                                Color="@(total.Team == Team.Red ? Color.Error : Color.Success)" />
+                                </span>
+                                <span class="hall-of-fame-name">@total.Team</span>
+                                <span class="hall-of-fame-value">@total.TotalScore.ToString("N0")</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required HallOfFameWidget Widget { get; set; }
+
+    // Leaderboard rows only change when a game finishes, so this polls on a slow interval rather
+    // than subscribing to the live status store the way the scoreboard widget does.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
+
+    private const int TakeCount = 3;
+
+    private List<HallOfFameEntryDTO> _topScores = new();
+    private List<HallOfFameEntryDTO> _topAccuracy = new();
+    private List<HallOfFameTeamTotalDTO> _teamTotals = new();
+
+    private bool _hasError;
+    private bool _hasAnyResults;
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
+    private bool _isRefreshing;
+    private bool _reloadRequested;
+
+    // The config dialog mutates this same Widget instance live, so a changed period or client has
+    // to trigger a reload rather than waiting for the next poll.
+    private HallOfFamePeriod _loadedPeriod;
+    private Guid? _loadedClientId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Seed the displayed settings once, so the first paint labels itself correctly instead of
+        // briefly showing the enum's default. Only ever set here - committing these on a later
+        // parameter change is what would let the header get ahead of the rows.
+        _loadedPeriod = Widget.Period;
+        _loadedClientId = Widget.ClientId;
+
+        await LoadAsync();
+
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await LoadAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
+            }
+        });
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPeriod == Widget.Period && _loadedClientId == Widget.ClientId)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        // A config change landing mid-poll cannot just be dropped: OnParametersSetAsync will not
+        // fire again for it, so without this the widget would sit on the old period's rows until
+        // the next 60s tick. Hand the request to the in-flight load instead.
+        if (_isRefreshing)
+        {
+            _reloadRequested = true;
+            return;
+        }
+
+        _isRefreshing = true;
+
+        try
+        {
+            do
+            {
+                _reloadRequested = false;
+
+                // Snapshot what is being loaded, so the settings recorded at the end are the ones
+                // these rows were actually fetched with.
+                HallOfFamePeriod period = Widget.Period;
+                Guid? clientId = Widget.ClientId;
+
+                Result<IReadOnlyList<HallOfFameEntryDTO>> scoresResult =
+                    await _gameResultService.GetTopScoresAsync(period, TakeCount, clientId);
+
+                Result<IReadOnlyList<HallOfFameEntryDTO>> accuracyResult =
+                    await _gameResultService.GetTopAccuracyAsync(period, TakeCount, clientId);
+
+                Result<IReadOnlyList<HallOfFameTeamTotalDTO>> teamResult =
+                    await _gameResultService.GetTopTeamTotalsAsync(period, clientId);
+
+                _hasError = !scoresResult.IsSuccess || !accuracyResult.IsSuccess || !teamResult.IsSuccess;
+
+                _topScores = scoresResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
+                _topAccuracy = accuracyResult.Data?.ToList() ?? new List<HallOfFameEntryDTO>();
+                _teamTotals = teamResult.Data?.ToList() ?? new List<HallOfFameTeamTotalDTO>();
+
+                _hasAnyResults = _topScores.Count > 0 || _topAccuracy.Count > 0 || _teamTotals.Count > 0;
+
+                _loadedPeriod = period;
+                _loadedClientId = clientId;
+            }
+            while (_reloadRequested);
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private static string DescribePlayer(HallOfFameEntryDTO entry)
+    {
+        return string.IsNullOrWhiteSpace(entry.PlayerName) ? $"Gun {entry.GunId}" : entry.PlayerName;
+    }
+
+    private static string DescribePeriod(HallOfFamePeriod period)
+    {
+        return period switch
+        {
+            HallOfFamePeriod.Today => "Today",
+            HallOfFamePeriod.ThisWeek => "This week",
+            HallOfFamePeriod.ThisMonth => "This month",
+            _ => "All time"
+        };
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
+    }
+}

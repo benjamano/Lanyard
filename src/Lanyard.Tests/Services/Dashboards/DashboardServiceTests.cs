@@ -623,6 +623,126 @@ public class DashboardServiceTests
     }
 
     [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewHallOfFameWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        dashboard.Widgets =
+        [
+            new HallOfFameWidget
+            {
+                Id = Guid.Empty,
+                Period = HallOfFamePeriod.ThisWeek,
+                ShowTopScore = true,
+                ShowBestAccuracy = false,
+                ShowBestTeam = false,
+                ClientId = clientId,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(HallOfFamePeriod.ThisWeek, dbWidget.Period);
+        Assert.IsTrue(dbWidget.ShowTopScore);
+        Assert.IsFalse(dbWidget.ShowBestAccuracy);
+        Assert.IsFalse(dbWidget.ShowBestTeam);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingHallOfFameWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        HallOfFameWidget hallOfFameWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            Period = HallOfFamePeriod.Today,
+            ShowTopScore = true,
+            ShowBestAccuracy = true,
+            ShowBestTeam = true,
+            ClientId = null,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [hallOfFameWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        Guid clientId = Guid.NewGuid();
+
+        hallOfFameWidget.Period = HallOfFamePeriod.AllTime;
+        hallOfFameWidget.ShowBestAccuracy = false;
+        hallOfFameWidget.ClientId = clientId;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.Id == hallOfFameWidget.Id);
+        Assert.AreEqual(HallOfFamePeriod.AllTime, dbWidget.Period);
+        Assert.IsFalse(dbWidget.ShowBestAccuracy);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesHallOfFameConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        HallOfFameWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            Period = HallOfFamePeriod.Today,
+            ShowBestTeam = true,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        HallOfFameWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            Period = HallOfFamePeriod.ThisMonth,
+            ShowBestTeam = false,
+            ClientId = clientId,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        HallOfFameWidget dbWidget = await ctx.DashboardWidgets.OfType<HallOfFameWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(HallOfFamePeriod.ThisMonth, dbWidget.Period);
+        Assert.IsFalse(dbWidget.ShowBestTeam);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+    }
+
+    [TestMethod]
     public async Task DashboardService_SetDefaultDashboardId_PersistsChoice()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

@@ -427,3 +427,8 @@ docs/ARCHITECTURE-BRIEF.md
 docs/DATA-INVENTORY.md
 .claude/worktrees/
 docs/
+
+# Code coverage output (CI: dotnet test --collect + ReportGenerator)
+TestResults/
+coverage-report/
+.tools/
