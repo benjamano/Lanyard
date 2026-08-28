@@ -25,6 +25,16 @@ public class ProjectionProgramController(IProjectionProgramsService projectionPr
             await _projectionProgramsService.StartProjectingAsync(programs);
         });
 
+        // The server's projection program runner owns the step loop, so it - not this process -
+        // is what knows a triggered program has finished. Closing the window here completes the
+        // TriggerTemporaryProjectionProgramAsync await, which reports back and restores ambient.
+        connection.On<int>("CloseTemporaryProjectionWindow", async (displayIndex) =>
+        {
+            _logger.LogInformation("Received command to close the temporary projection window on display {DisplayIndex}", displayIndex);
+
+            await _projectionProgramsService.CloseWindowForDisplayAsync(displayIndex);
+        });
+
         connection.On<Guid, int?>("TriggerProjectionProgram", (projectionProgramId, displayIndex) =>
         {
             _logger.LogInformation("Received command to trigger projection program {ProgramId} on display {DisplayIndex}", projectionProgramId, displayIndex);

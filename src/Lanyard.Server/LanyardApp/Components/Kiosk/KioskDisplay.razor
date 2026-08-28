@@ -2,7 +2,7 @@
 @using Lanyard.App.Components.Kiosk.Templates
 @using Lanyard.App.Components.Pages.Staff.Dashboards
 
-@inject INotificationService _toastService
+@inject IProjectionProgramRunnerService _programRunner
 @inject ILogger<KioskDisplay> _logger
 
 @if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.TemplateNames.ShowText)
@@ -30,6 +30,9 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
     public Guid ClientId { get; set; }
 
     [Parameter]
+    public int DisplayIndex { get; set; }
+
+    [Parameter]
     public string? ViewerToken { get; set; }
 
     [Parameter]
@@ -38,68 +41,123 @@ else if (CurrentProjectionStep?.Template?.Name == KioskTemplateConstants.Templat
     [Parameter]
     public int RepeatCount { get; set; } = 0;
 
+    [Parameter]
+    public bool IsTemporaryTrigger { get; set; }
+
+    [Parameter]
+    public EventCallback<ProjectionProgramStep?> OnCurrentStepChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnPauseChanged { get; set; }
+
     public ProjectionProgramStep CurrentProjectionStep { get; set; } = new();
 
-    private CancellationTokenSource? _cts;
-    private Task? _processingTask;
-    private readonly HashSet<Guid> _loggedUnsupportedTemplateStepIds = [];
+    // This component no longer owns the step loop - IProjectionProgramRunnerService does, as a
+    // singleton the rest of the app can see and control. The runner and this circuit live in the
+    // same process, so the subscription below is a plain in-process event, not another SignalR hop.
+    private Guid? _runId;
+    private IReadOnlyList<ProjectionProgramStep> _steps = [];
 
-    public void StartProcessing()
+    protected override void OnInitialized()
     {
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        _processingTask = ProcessStepsAsync(_cts.Token);
+        _programRunner.OnProgramStepAdvanced += HandleStepAdvanced;
+        _programRunner.OnProgramPauseChanged += HandlePauseChanged;
     }
 
-    private async Task ProcessStepsAsync(CancellationToken cancellationToken)
+    public async Task StartProcessingAsync()
     {
-        bool runLoop = true;
-        int runCount = 0;
+        Result<Guid> startResult = await _programRunner.StartAsync(
+            ClientId, DisplayIndex, projectionProgram.Id, RepeatInfinitely, RepeatCount, IsTemporaryTrigger);
 
-        while (runLoop && !cancellationToken.IsCancellationRequested)
+        if (!startResult.IsSuccess)
         {
-            foreach (ProjectionProgramStep step in projectionProgram.ProjectionProgramSteps)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+            _logger.LogWarning("Failed to start projection program {ProgramId} for client {ClientId} display {DisplayIndex}: {Error}", projectionProgram.Id, ClientId, DisplayIndex, startResult.Error);
 
-                if (step.Template == null)
-                {
-                    _toastService.ShowError("A step without a template was found, skipping...");
-                    continue;
-                }
+            _toastService.ShowError($"Failed to start projection program: {startResult.Error}");
 
-                if (!string.Equals(step.Template.Name, KioskTemplateConstants.TemplateNames.Delay, StringComparison.Ordinal))
-                {
-                    CurrentProjectionStep = step;
-
-                    StateHasChanged();
-                }
-
-                try
-                {
-                    await Task.Delay(step.HoldForMilliseconds == 0 ? 5000 : step.HoldForMilliseconds, cancellationToken);
-                }
-                catch (TaskCanceledException)
-                {
-                    return;
-                }
-            }
-
-            if (!RepeatInfinitely && runCount == RepeatCount)
-            {
-                runLoop = false;
-            }
-
-            runCount++;
+            return;
         }
-    } 
-    
+
+        _runId = startResult.Data;
+
+        // The runner raises its first step-advanced event from a background task that can beat
+        // StartAsync's return, so paint from the run's current state rather than relying on
+        // having been subscribed in time to catch it.
+        ProjectionRunState? state = _programRunner.GetRunningState(ClientId, DisplayIndex);
+
+        if (state is not null)
+        {
+            _steps = state.Steps;
+
+            await ApplyStepAsync(state.CurrentStepIndex);
+        }
+    }
+
+    private void HandleStepAdvanced(Guid clientId, int displayIndex, int stepIndex)
+    {
+        if (clientId != ClientId || displayIndex != DisplayIndex)
+        {
+            return;
+        }
+
+        _ = ApplyStepAsync(stepIndex);
+    }
+
+    private void HandlePauseChanged(Guid clientId, int displayIndex, bool isPaused)
+    {
+        if (clientId != ClientId || displayIndex != DisplayIndex)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+
+            await OnPauseChanged.InvokeAsync(isPaused);
+        });
+    }
+
+    private async Task ApplyStepAsync(int stepIndex)
+    {
+        if (_steps.Count == 0)
+        {
+            _steps = _programRunner.GetRunningState(ClientId, DisplayIndex)?.Steps ?? [];
+        }
+
+        if (stepIndex < 0 || stepIndex >= _steps.Count)
+        {
+            return;
+        }
+
+        ProjectionProgramStep step = _steps[stepIndex];
+
+        // A Delay step holds, it doesn't render - whatever the previous step put on screen stays.
+        if (string.Equals(step.Template?.Name, KioskTemplateConstants.TemplateNames.Delay, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CurrentProjectionStep = step;
+
+        await InvokeAsync(async () =>
+        {
+            StateHasChanged();
+
+            await OnCurrentStepChanged.InvokeAsync(step);
+        });
+    }
+
     public void Dispose()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        _programRunner.OnProgramStepAdvanced -= HandleStepAdvanced;
+        _programRunner.OnProgramPauseChanged -= HandlePauseChanged;
+
+        // Passing the run id makes this a no-op if a newer kiosk circuit has already taken over
+        // this display - on a page reload the replacing circuit can start before this one disposes.
+        if (_runId is not null)
+        {
+            _programRunner.Stop(ClientId, DisplayIndex, _runId);
+        }
     }
 }

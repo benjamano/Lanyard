@@ -24,8 +24,8 @@ public class ReleaseNotesServiceTests
     {
         Result<IEnumerable<ReleaseNote>> result = await _releaseNotesService.GetReleaseNotesAsync();
 
-        Assert.IsTrue(result.Success);
-        Assert.IsNotNull(result.Data);
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNotNull(result.Data, result.Error);
         Assert.IsTrue(result.Data.Any());
     }
 
@@ -33,6 +33,8 @@ public class ReleaseNotesServiceTests
     public async Task GetReleaseNotesAsync_WhenCalledThenReturnsNewestReleaseFirst()
     {
         Result<IEnumerable<ReleaseNote>> result = await _releaseNotesService.GetReleaseNotesAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
 
         List<ReleaseNote> releaseNotes = result.Data!.ToList();
 
@@ -47,6 +49,8 @@ public class ReleaseNotesServiceTests
     public async Task GetReleaseNotesAsync_WhenCalledThenEachReleaseHasVersionAndSummary()
     {
         Result<IEnumerable<ReleaseNote>> result = await _releaseNotesService.GetReleaseNotesAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
 
         foreach (ReleaseNote releaseNote in result.Data!)
         {

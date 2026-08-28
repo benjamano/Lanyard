@@ -1,99 +1,85 @@
-/* ql-editor (added directly on this element in the .razor markup) is what makes Quill's own
-   CSS (loaded via the quill.snow.css CDN link in App.razor) apply here - without it, saved
-   list formatting (which Quill renders via a data-list attribute + CSS counters, not plain
-   <ul>/<ol> markers) shows as plain unstyled text instead of bullets/numbers. This element's
-   own padding/sizing rules still win over ql-editor's (Blazor's scope attribute gives this
-   selector higher specificity than the plain external .ql-editor class). */
-.text-area-widget-display {
-    width: 100%;
-    height: 100%;
-    padding: 8px;
-    overflow: auto;
-    box-sizing: border-box;
-}
-
-/* Content saved from the editor (e.g. pasted from Word) can carry its source's own inline
-   color on individual spans - inline styles beat any stylesheet rule regardless of selector
-   specificity, so a plain color rule here would silently lose to a pasted-in black/near-black
-   color, leaving that text unreadable in the kiosk's dark theme. !important on a rule that
-   also matches every descendant is the only way to force the theme color to win. Same fix as
-   CourseEditor.razor.css uses for the same underlying cause. */
-.text-area-widget-display,
-.text-area-widget-display * {
-    color: var(--colorNeutralForeground1) !important;
-}
-
 .text-area-widget-editor-host {
     display: flex;
     flex-direction: column;
-    gap: 8px;
     width: 100%;
     height: 100%;
-    padding: 8px;
     box-sizing: border-box;
 }
 
 /* BlazoredTextEditor's Quill instance doesn't get this file's scope attribute (same Fluent v5
-   component-root quirk documented elsewhere) -- ::deep is required. */
-::deep .text-area-widget-editor-host .quill-container,
-::deep .text-area-widget-editor-host .ql-container {
+   component-root quirk documented elsewhere) -- ::deep is required. Note the scoped ancestor
+   goes BEFORE ::deep (".text-area-widget-editor-host ::deep .foo"), not after - writing ::deep
+   first makes the compiler look for a *separate* scoped ancestor above this div, which doesn't
+   exist, so the rule silently never matches (confirmed via element.matches() while fixing the
+   icon/border issues below - every rule in this file had this bug). */
+.text-area-widget-editor-host ::deep .quill-container,
+.text-area-widget-editor-host ::deep .ql-container {
     flex: 1;
     overflow: auto;
 }
 
-/* Same pasted-inline-color problem as .text-area-widget-display below, but for the live
-   editing view - without this, typing over pasted (e.g. from Word) text can be unreadable
-   black-on-dark while editing. */
-::deep .text-area-widget-editor-host .ql-editor,
-::deep .text-area-widget-editor-host .ql-editor * {
+/* Same pasted-inline-color problem as below, but for the live editing view - without this,
+   typing over pasted (e.g. from Word) text can be unreadable black-on-dark while editing. */
+.text-area-widget-editor-host ::deep .ql-editor,
+.text-area-widget-editor-host ::deep .ql-editor * {
     color: var(--colorNeutralForeground1) !important;
 }
 
-/* Quill's snow theme hardcodes a light toolbar/container (white background, #ccc borders)
-   with no awareness of this app's theme - without these overrides the toolbar and editor
-   border box read as a stray light-grey rectangle against the dark kiosk theme. Same fix as
-   CourseEditor.razor.css uses for its own Quill instance. */
-::deep .text-area-widget-editor-host .ql-toolbar.ql-snow {
-    border-color: var(--colorNeutralStroke1);
+/* Quill's snow theme hardcodes a light toolbar/container (white background, #ccc borders) with
+   no awareness of this app's theme. The outer FluentCard (Outline appearance) already supplies
+   a single border around the whole widget, so the toolbar/container's own borders are dropped
+   here rather than overridden - two nested borders (and the gap between them) read as a stray
+   rectangle-in-a-rectangle, and a flat colored strip, against the dark kiosk theme. */
+.text-area-widget-editor-host ::deep .ql-toolbar.ql-snow {
+    border: none;
     background-color: var(--colorNeutralBackground3);
-    border-top-left-radius: var(--borderRadiusMedium);
-    border-top-right-radius: var(--borderRadiusMedium);
 }
 
-::deep .text-area-widget-editor-host .ql-container.ql-snow {
-    border-color: var(--colorNeutralStroke1);
+.text-area-widget-editor-host ::deep .ql-container.ql-snow {
+    border: none;
     background-color: var(--colorNeutralBackground1);
-    border-bottom-left-radius: var(--borderRadiusMedium);
-    border-bottom-right-radius: var(--borderRadiusMedium);
 }
 
-::deep .text-area-widget-editor-host .ql-editor.ql-blank::before {
+.text-area-widget-editor-host ::deep .ql-editor.ql-blank::before {
     color: var(--colorNeutralForeground3);
     font-style: normal;
 }
 
-::deep .text-area-widget-editor-host .ql-snow .ql-stroke {
-    stroke: var(--colorNeutralForeground2);
+/* Quill's icon-based toolbar buttons (lists) are SVG strokes/fills; the format buttons
+   (bold/italic/underline) render as plain text glyphs instead - both need covering, or one set
+   is left at Quill's hardcoded near-black default and reads unreadable against the dark editor
+   background. */
+.text-area-widget-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground1);
 }
 
-::deep .text-area-widget-editor-host .ql-snow .ql-fill {
-    fill: var(--colorNeutralForeground2);
+.text-area-widget-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground1);
 }
 
-::deep .text-area-widget-editor-host .ql-snow.ql-toolbar button:hover .ql-stroke,
-::deep .text-area-widget-editor-host .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+.text-area-widget-editor-host ::deep .ql-snow.ql-toolbar button {
+    color: var(--colorNeutralForeground1);
+}
+
+.text-area-widget-editor-host ::deep .ql-snow.ql-toolbar button:hover,
+.text-area-widget-editor-host ::deep .ql-snow .ql-toolbar button.ql-active {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.text-area-widget-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.text-area-widget-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
     stroke: var(--colorCompoundBrandStroke);
 }
 
-::deep .text-area-widget-editor-host .ql-snow.ql-toolbar button:hover .ql-fill,
-::deep .text-area-widget-editor-host .ql-snow .ql-toolbar button.ql-active .ql-fill {
+.text-area-widget-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.text-area-widget-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
     fill: var(--colorCompoundBrandStroke);
 }
 
 /* A plain, Quill-unrecognized class (not "ql-divider") so Quill's toolbar module never attaches
    its own handler to this button - only our own @onclick fires. Sized/colored to sit visually
    alongside Quill's own ~28px-wide icon buttons, matching CourseEditor's ql-image-insert. */
-::deep .text-area-widget-editor-host .ql-divider-insert {
+.text-area-widget-editor-host ::deep .ql-divider-insert {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -103,18 +89,16 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    color: var(--colorNeutralForeground2);
+    color: var(--colorNeutralForeground1);
 }
 
-::deep .text-area-widget-editor-host .ql-divider-insert:hover {
+.text-area-widget-editor-host ::deep .ql-divider-insert:hover {
     color: var(--colorCompoundBrandStroke);
 }
 
-/* The inserted <hr> renders both inside the live Quill editor and (via MarkupString, which
-   Blazor can't scope) in the kiosk display - style both explicitly rather than relying on the
-   browser's default hr, which is barely visible against a dark theme. */
-::deep .text-area-widget-editor-host hr,
-::deep .text-area-widget-display hr {
+/* Inserted dividers render as a plain <hr> inside the Quill editor - style it explicitly rather
+   than relying on the browser's default hr, which is barely visible against a dark theme. */
+.text-area-widget-editor-host ::deep hr {
     border: none;
     border-top: 1px solid var(--colorNeutralStroke2);
     margin: 12px 0;

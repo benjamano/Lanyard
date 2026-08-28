@@ -56,31 +56,35 @@ public static class StartupControls
 
     private static async Task<bool> CountdownWithInterruptAsync()
     {
-        int countdown = 5;
+        const int totalSeconds = 5;
 
         Console.WriteLine("Press any key to interrupt startup and access controls.");
 
-        while (countdown > 0)
+        DateTime start = DateTime.UtcNow;
+        int lastPrinted = -1;
+
+        while (true)
         {
-            Console.WriteLine($"Starting in {countdown} seconds...");
-            await Task.Delay(1000);
-            countdown--;
-
-            if (!Console.IsInputRedirected)
+            int remaining = totalSeconds - (int)(DateTime.UtcNow - start).TotalSeconds;
+            if (remaining <= 0)
             {
-                DateTime deadline = DateTime.UtcNow.AddSeconds(3);
-                while (DateTime.UtcNow < deadline)
-                {
-                    if (Console.KeyAvailable)
-                    {
-                        Console.ReadKey(intercept: true);
-                        Console.WriteLine("Startup interrupted. Accessing controls...");
-                        return true;
-                    }
-
-                    await Task.Delay(50);
-                }
+                break;
             }
+
+            if (remaining != lastPrinted)
+            {
+                Console.WriteLine($"Starting in {remaining} seconds...");
+                lastPrinted = remaining;
+            }
+
+            if (!Console.IsInputRedirected && Console.KeyAvailable)
+            {
+                Console.ReadKey(intercept: true);
+                Console.WriteLine("Startup interrupted. Accessing controls...");
+                return true;
+            }
+
+            await Task.Delay(50);
         }
 
         return false;

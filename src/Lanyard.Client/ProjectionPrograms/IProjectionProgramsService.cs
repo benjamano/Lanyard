@@ -9,4 +9,5 @@ public interface IProjectionProgramsService
 {
     Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms);
     Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted);
+    Task CloseWindowForDisplayAsync(int displayIndex);
 }

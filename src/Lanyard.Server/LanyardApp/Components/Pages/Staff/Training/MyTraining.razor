@@ -43,7 +43,17 @@
                 </TemplateColumn>
             </ChildContent>
             <RowDetails>
-                <AssignmentGroupDetails Assignments="@context.Assignments" />
+                <AssignmentGroupDetails Assignments="@context.Assignments">
+                    <ActionsTemplate Context="assignment">
+                        @if (assignment.CompletedDate is not null)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size20.ArrowDownload())" IconOnly="true"
+                                          Tooltip="Download certificate" Title="Download certificate"
+                                          OnClick="@(() => DownloadCertificate(assignment.Id))" />
+                        }
+                    </ActionsTemplate>
+                </AssignmentGroupDetails>
             </RowDetails>
         </FluentDataGrid>
     }
@@ -91,6 +101,13 @@
     private void OpenAssignment(Guid assignmentId)
     {
         _navigationManager.NavigateTo($"/training/{assignmentId}");
+    }
+
+    private void DownloadCertificate(Guid assignmentId)
+    {
+        // forceLoad so the browser treats the PDF response as a download rather than
+        // routing it through Blazor, matching how the file manager triggers downloads.
+        _navigationManager.NavigateTo($"api/training/assignments/{assignmentId}/certificate", forceLoad: true);
     }
 
 }

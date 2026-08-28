@@ -18,23 +18,39 @@
 @inject IPlaylistService _playlistService
 @inject IJSRuntime JS
 
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Music</PageTitle>
 
 <div class="music-page">
     <div class="music-content">
-        <div class="music-panes">
-            <div class="music-pane music-playlists-pane">
-                <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"
-                           InitialPlaylistId="initialPlaylistId"></Playlists>
-            </div>
+        @if (isNarrowViewport)
+        {
+            <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Small" Class="music-mobile-tabs">
+                <FluentTab Header="Playlists" IconStart="@(new Icons.Regular.Size16.MusicNote2())">
+                    <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"
+                               InitialPlaylistId="initialPlaylistId"></Playlists>
+                </FluentTab>
+                <FluentTab Header="Songs" IconStart="@(new Icons.Regular.Size16.Speaker2())">
+                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying">
+                    </SongList>
+                </FluentTab>
+            </FluentTabs>
+        }
+        else
+        {
+            <div class="music-panes">
+                <div class="music-pane music-playlists-pane">
+                    <Playlists OnSongsSelected="HandleSongsSelected" SelectedClientId="selectedClientId"
+                               InitialPlaylistId="initialPlaylistId"></Playlists>
+                </div>
 
-            <div class="w-100 music-songs-pane">
-                <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying">
-                </SongList>
+                <div class="w-100 music-songs-pane">
+                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying">
+                    </SongList>
+                </div>
             </div>
-        </div>
+        }
     </div>
 
     <FluentCard class="music-bottom-controls" Appearance="CardAppearance.Filled" Margin="@Margin.Top3">
@@ -65,6 +81,7 @@
                                 <FluentSlider Disabled="@(selectedClientId == null)" Min="0" Max="100"
                                               ImmediateDelay="20" TValue="int" Value="currentVolume"
                                               ValueChanged="(volume) => HandleVolumeChange(volume)"
+                                              @onpointerdown="OnVolumeAdjustStart" @onpointerup="OnVolumeAdjustEnd"
                                               Orientation="Orientation.Horizontal" />
                             </FluentStack>
                         </FluentStack>
@@ -134,7 +151,7 @@
                 </FluentStack>
 
                 <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
-                             VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Width="600px">
+                             VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8" Class="music-seek-stack">
                     <div @onclick="() => showTimeLeftInsteadOfElapsed = !showTimeLeftInsteadOfElapsed" role="button">
                         @if (showTimeLeftInsteadOfElapsed)
                         {
@@ -184,8 +201,12 @@
     private Timer? songTimeTimer;
     private bool showTimeLeftInsteadOfElapsed = false;
     private bool isUserSeeking = false;
+    private bool isUserAdjustingVolume = false;
 
     private Guid? initialPlaylistId;
+
+    private bool isNarrowViewport;
+    private DotNetObjectReference<Music>? _viewportRef;
 
     private string selectedClientIdString
     {
@@ -247,6 +268,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _viewportRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 600);
+        }
+
         if (!firstRender || firstRenderCompleted)
         {
             return;
@@ -269,6 +296,13 @@
         {
             await ClearPersistedSelectedClientIdAsync();
         }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isNarrow)
+    {
+        isNarrowViewport = isNarrow;
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandlePlaybackStateChanged(Guid clientId, PlaybackState state)
@@ -539,7 +573,43 @@
 
         currentVolume = newVolume;
 
-        await _player.SetVolume(selectedClientId.Value, newVolume);
+        // FluentSlider raises ValueChanged continuously while dragging (see the identical
+        // comment on OnSongTimeChanged below). Track the value for display, but defer the
+        // SignalR/DB round-trip until the user releases the thumb so a drag doesn't queue up
+        // dozens of calls on the circuit's single-threaded event queue.
+        if (isUserAdjustingVolume)
+        {
+            return;
+        }
+
+        await CommitVolumeAsync();
+    }
+
+    private void OnVolumeAdjustStart()
+    {
+        isUserAdjustingVolume = true;
+    }
+
+    private async Task OnVolumeAdjustEnd()
+    {
+        if (!isUserAdjustingVolume)
+        {
+            return;
+        }
+
+        isUserAdjustingVolume = false;
+
+        await CommitVolumeAsync();
+    }
+
+    private async Task CommitVolumeAsync()
+    {
+        if (selectedClientId == null)
+        {
+            return;
+        }
+
+        await _player.SetVolume(selectedClientId.Value, currentVolume);
     }
 
     private async Task ToggleMuteVolume()
@@ -632,11 +702,20 @@
         await _player.Seek(selectedClientId.Value, currentSongTime);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _player.OnPlaybackStatusChanged -= HandlePlaybackStateChanged;
         _player.OnShuffleStateChanged -= HandleShuffleStateChanged;
 
         stopSongTimeTimer();
+
+        try
+        {
+            await JS.InvokeVoidAsync("viewportWatcher.dispose");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
+        _viewportRef?.Dispose();
     }
 }

@@ -21,7 +21,7 @@ namespace Lanyard.Tests.Services.Files;
 public class FileServiceTests
 {
     private Mock<IDbContextFactory<ApplicationDbContext>> _dbFactoryMock = null!;
-    private Mock<ISecurityService> _securityServiceMock = null!;
+    private Mock<ICurrentUserAccessor> _currentUserAccessorMock = null!;
     private Mock<ISongAnalysisQueue> _analysisQueueMock = null!;
     private Mock<IWebHostEnvironment> _environmentMock = null!;
     private FileService _fileService = null!;
@@ -31,7 +31,7 @@ public class FileServiceTests
     public void Setup()
     {
         _dbFactoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
-        _securityServiceMock = new Mock<ISecurityService>();
+        _currentUserAccessorMock = new Mock<ICurrentUserAccessor>();
         _analysisQueueMock = new Mock<ISongAnalysisQueue>();
         _environmentMock = new Mock<IWebHostEnvironment>();
         _environmentMock.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
@@ -41,7 +41,7 @@ public class FileServiceTests
         _dbContext = new ApplicationDbContext(options);
         _dbFactoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(_dbContext);
-        _fileService = new FileService(_dbFactoryMock.Object, _securityServiceMock.Object, _analysisQueueMock.Object, _environmentMock.Object);
+        _fileService = new FileService(_dbFactoryMock.Object, _currentUserAccessorMock.Object, _analysisQueueMock.Object, _environmentMock.Object);
     }
 
     [TestMethod]
@@ -55,7 +55,7 @@ public class FileServiceTests
         fileMock.Setup(f => f.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .Returns((Stream s, CancellationToken ct) => content.CopyToAsync(s, ct));
 
-        _securityServiceMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
+        _currentUserAccessorMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
 
         var result = await _fileService.UploadFileAsync(fileMock.Object, null, CancellationToken.None);
 
@@ -152,7 +152,7 @@ public class FileServiceTests
     [TestMethod]
     public async Task CreateFolderAsync_WhenUserIsResolvedThenFolderIsCreatedWithThatUser()
     {
-        _securityServiceMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
+        _currentUserAccessorMock.Setup(s => s.GetCurrentUserIdAsync()).ReturnsAsync(Result<string>.Ok("user1"));
 
         var result = await _fileService.CreateFolderAsync("New Folder", null, CancellationToken.None);
 

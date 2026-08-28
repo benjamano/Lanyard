@@ -40,7 +40,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildRecurrenceReminderHtml(user.UserName ?? user.Email, courseName, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildRecurrenceReminderHtml(user.GetGreetingName(), courseName, trainingUrl, logoUrl, accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Time to retake: {courseName}", html);
     }
@@ -64,7 +64,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildTrainingAssignedHtml(user.UserName ?? user.Email, courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildTrainingAssignedHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"New training assigned: {courseName}", html);
     }
@@ -76,14 +76,39 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildTrainingDueSoonHtml(user.UserName ?? user.Email, courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildTrainingDueSoonHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Training due soon: {courseName}", html);
     }
 
+    public async Task<Result<bool>> SendCourseCompletionCertificateEmailAsync(UserProfile user, string courseName, byte[] certificatePdf, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a certificate to.");
+        }
+
+        string html = BuildCourseCompletionCertificateHtml(user.GetGreetingName(), courseName, logoUrl, accentColorHex);
+
+        EmailAttachment attachment = new(BuildCertificateFileName(courseName), certificatePdf);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Certificate: {courseName}", html, [attachment]);
+    }
+
+    // Resend takes the filename verbatim into the Content-Disposition header, so anything
+    // that would need quoting or escaping there is stripped rather than passed through.
+    private static string BuildCertificateFileName(string courseName)
+    {
+        string safeCourseName = new string(courseName.Where(c => char.IsLetterOrDigit(c) || c == ' ' || c == '-' || c == '_').ToArray()).Trim();
+
+        return string.IsNullOrWhiteSpace(safeCourseName) ? "Certificate.pdf" : $"{safeCourseName} Certificate.pdf";
+    }
+
     // Single decision point for the Resend HTTP call - the config check, request shape,
     // auth header, and error handling used to be copy-pasted into each Send*Async method above.
-    private async Task<Result<bool>> SendResendEmailAsync(string userId, string toEmail, string subject, string html)
+    private async Task<Result<bool>> SendResendEmailAsync(
+        string userId, string toEmail, string subject, string html,
+        IReadOnlyList<EmailAttachment>? attachments = null)
     {
         try
         {
@@ -94,15 +119,34 @@ public class EmailService : IEmailService
                 return Result<bool>.Fail("Email is not configured (missing Resend API key or From address).");
             }
 
-            HttpRequestMessage request = new(HttpMethod.Post, "emails")
-            {
-                Content = JsonContent.Create(new
+            string from = $"{config.FromName} <{config.FromAddress}>";
+
+            // Two shapes rather than one object with a null property: Resend rejects a null
+            // "attachments" key, and keeping the no-attachment branch byte-identical to what
+            // the five pre-existing callers have always sent means adding this can't change
+            // their behaviour at all.
+            object payload = attachments is null || attachments.Count == 0
+                ? new
                 {
-                    from = $"{config.FromName} <{config.FromAddress}>",
+                    from,
                     to = new[] { toEmail },
                     subject,
                     html
-                })
+                }
+                : new
+                {
+                    from,
+                    to = new[] { toEmail },
+                    subject,
+                    html,
+                    attachments = attachments
+                        .Select(x => new { filename = x.FileName, content = Convert.ToBase64String(x.Content) })
+                        .ToArray()
+                };
+
+            HttpRequestMessage request = new(HttpMethod.Post, "emails")
+            {
+                Content = JsonContent.Create(payload)
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ResendApiKey);
 
@@ -136,7 +180,7 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildRecurrenceReminderHtml(string username, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
+    private static string BuildRecurrenceReminderHtml(string greetingName, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
         string logoHtml = logoUrl is not null
             ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
@@ -146,7 +190,7 @@ public class EmailService : IEmailService
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
           <h2>Lanyard</h2>
-          <p>Hi {WebUtility.HtmlEncode(username)},</p>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>It's time to retake the training course <strong>{WebUtility.HtmlEncode(courseName)}</strong>. Your previous
              completion has expired and needs to be renewed.</p>
           <p>
@@ -158,7 +202,7 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildTrainingAssignedHtml(string username, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    private static string BuildTrainingAssignedHtml(string greetingName, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
     {
         string logoHtml = logoUrl is not null
             ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
@@ -172,7 +216,7 @@ public class EmailService : IEmailService
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
           <h2>Lanyard</h2>
-          <p>Hi {WebUtility.HtmlEncode(username)},</p>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>You've been assigned a new training course: <strong>{WebUtility.HtmlEncode(courseName)}</strong>.</p>
           {dueDateHtml}
           <p>
@@ -184,7 +228,7 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildTrainingDueSoonHtml(string username, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
+    private static string BuildTrainingDueSoonHtml(string greetingName, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
     {
         string logoHtml = logoUrl is not null
             ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
@@ -194,13 +238,34 @@ public class EmailService : IEmailService
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
           <h2>Lanyard</h2>
-          <p>Hi {WebUtility.HtmlEncode(username)},</p>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>Your training course <strong>{WebUtility.HtmlEncode(courseName)}</strong> is due soon, by
              <strong>{dueDate.Date:d MMMM yyyy}</strong>.</p>
           <p>
             <a href="{trainingUrl}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
               Continue Training
             </a>
+          </p>
+        </div>
+        """;
+    }
+
+    private static string BuildCourseCompletionCertificateHtml(string greetingName, string courseName, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>Congratulations - you've passed <strong>{WebUtility.HtmlEncode(courseName)}</strong>.</p>
+          <p>Your certificate of completion is attached to this email as a PDF. You can also
+             download it again at any time from the My Training page.</p>
+          <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
+            No further action is needed.
           </p>
         </div>
         """;

@@ -134,6 +134,7 @@ else
             options.Width = "min(420px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(CourseCompletedDialog.CourseName), assignment!.Course!.Name);
+            options.Parameters.Add(nameof(CourseCompletedDialog.AssignmentId), AssignmentId);
         });
     }
 }

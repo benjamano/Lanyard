@@ -22,7 +22,7 @@ namespace Lanyard.Application.Services;
 public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
-    private readonly ISecurityService _securityService;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
     private readonly bool _isDevelopment;
@@ -32,13 +32,13 @@ public class FileService : IFileService
 
     public FileService(
         IDbContextFactory<ApplicationDbContext> dbFactory,
-        ISecurityService securityService,
+        ICurrentUserAccessor currentUserAccessor,
         ISongAnalysisQueue analysisQueue,
         IWebHostEnvironment environment)
     {
         _dbFactory = dbFactory;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
-        _securityService = securityService;
+        _currentUserAccessor = currentUserAccessor;
         _analysisQueue = analysisQueue;
         _isDevelopment = environment.IsDevelopment();
 
@@ -126,7 +126,7 @@ public class FileService : IFileService
 
     public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, CancellationToken cancellationToken)
     {
-        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
+        Result<string> getResult = await _currentUserAccessor.GetCurrentUserIdAsync();
 
         if (!getResult.IsSuccess || getResult.Data is null)
         {
@@ -361,7 +361,7 @@ public class FileService : IFileService
 
     public async Task<Result<Folder>> CreateFolderAsync(string name, Guid? parentFolderId, CancellationToken cancellationToken)
     {
-        Result<string> getResult = await _securityService.GetCurrentUserIdAsync();
+        Result<string> getResult = await _currentUserAccessor.GetCurrentUserIdAsync();
 
         if (!getResult.IsSuccess || getResult.Data is null)
         {

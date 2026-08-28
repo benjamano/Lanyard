@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -114,7 +114,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<TextAreaWidget>(WidgetType.TextArea)
                 .HasValue<MusicPlaylistSelectorWidget>(WidgetType.MusicPlaylistSelector)
                 .HasValue<MusicTimelineWidget>(WidgetType.MusicTimeline)
-                .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus);
+                .HasValue<AutomationRuleStatusWidget>(WidgetType.AutomationRuleStatus)
+                .HasValue<KioskHealthWidget>(WidgetType.KioskHealth);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.

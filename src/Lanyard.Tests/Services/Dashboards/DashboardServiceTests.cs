@@ -1,4 +1,4 @@
-using Lanyard.Application.Services;
+﻿using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
@@ -517,5 +517,98 @@ public class DashboardServiceTests
         MusicTimelineWidget dbWidget = await ctx.DashboardWidgets.OfType<MusicTimelineWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.IsFalse(dbWidget.ShowSongTitle);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewKioskHealthWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        dashboard.Widgets =
+        [
+            new KioskHealthWidget
+            {
+                Id = Guid.Empty,
+                OnlyShowOffline = true,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        KioskHealthWidget dbWidget = await ctx.DashboardWidgets.OfType<KioskHealthWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.IsTrue(dbWidget.OnlyShowOffline);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingKioskHealthWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        KioskHealthWidget kioskHealthWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            OnlyShowOffline = false,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [kioskHealthWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        kioskHealthWidget.OnlyShowOffline = true;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        KioskHealthWidget dbWidget = await ctx.DashboardWidgets.OfType<KioskHealthWidget>().SingleAsync(x => x.Id == kioskHealthWidget.Id);
+        Assert.IsTrue(dbWidget.OnlyShowOffline);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesKioskHealthConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        KioskHealthWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            OnlyShowOffline = false,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        KioskHealthWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            OnlyShowOffline = true,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        KioskHealthWidget dbWidget = await ctx.DashboardWidgets.OfType<KioskHealthWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.IsTrue(dbWidget.OnlyShowOffline);
     }
 }

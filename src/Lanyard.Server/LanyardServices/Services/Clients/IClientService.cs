@@ -28,6 +28,7 @@ public interface IClientService
     Result<IEnumerable<ClientProjectionSettingsDTO>> ConvertIntoClientProjectionSettingsDTO(IEnumerable<ClientProjectionSettings> settings);
     Task<Result<bool>> SendUpdatedProjectionProgramInfoToClientsAsync(Guid projectionProgramId);
     Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null);
+    Task<Result<bool>> CloseTemporaryProjectionWindowOnClientAsync(Guid clientId, int displayIndex);
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);
     Task<Result<bool>> SetClientAvailableVideoDevicesAsync(Guid clientId, IEnumerable<ClientAvailableVideoDeviceDTO> devices);
     Task<Result<IEnumerable<ClientAvailableVideoDevice>>> GetClientAvailableVideoDevicesAsync(Guid clientId);
