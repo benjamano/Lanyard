@@ -32,7 +32,7 @@
                         <FluentDataGrid ShowHover="true"
                                         Items="@templates.AsQueryable()"
                                         GridTemplateColumns="auto 1fr"
-                                        Pagination="new PaginationState { ItemsPerPage = 10 }"
+                                        Pagination="@pagination"
                                         Class="w-100">
                             <ChildContent>
                                 <SelectColumn SelectAll="true"
@@ -47,6 +47,8 @@
                                 No templates found.
                             </EmptyContent>
                         </FluentDataGrid>
+
+                        <FluentPaginator State="@pagination" />
                     </div>
                 }
             </FluentStack>
@@ -207,6 +209,7 @@
     private ProjectionProgramStepTemplateParameter newParameter = CreateEmptyParameter();
     private bool isLoading;
     private bool isSaving;
+    private PaginationState pagination = new() { ItemsPerPage = 10 };
 
     protected override async Task OnInitializedAsync()
     {
