@@ -73,7 +73,12 @@
                     </AssignmentGroupDetails>
                 </RowDetails>
                 <EmptyContent>
-                    This person has no training assigned.
+                    @* The picker lists location members, but rows are filtered on each
+                       assignment's own LocationId - a person can be in your location while all
+                       their training belongs to another, so don't claim they have none at all. *@
+                    @(currentScope?.IsAdmin == true
+                        ? "This person has no training assigned."
+                        : "This person has no training assigned at your location.")
                 </EmptyContent>
             </FluentDataGrid>
         }
@@ -104,20 +109,37 @@
         if (scope is null)
         {
             users = [];
-            selectedUserId = string.Empty;
-            assignments = [];
-            RebuildGroupedAssignments();
+            ClearSelection();
             return;
         }
 
+        users = await LoadSelectablePeopleAsync(scope);
+
+        // The selected person may not survive a reload - the scope can have changed, or this may
+        // be a retry after a failure that emptied the grid but left them selected. Either drop
+        // them or re-fetch their record; leaving it is what produces an empty grid with no error.
+        if (!string.IsNullOrEmpty(selectedUserId))
+        {
+            if (users.Any(u => u.Id == selectedUserId))
+            {
+                await LoadAssignmentsAsync();
+            }
+            else
+            {
+                ClearSelection();
+            }
+        }
+    }
+
+    private async Task<IEnumerable<UserProfile>> LoadSelectablePeopleAsync(LocationScope scope)
+    {
         // GetActiveUsersAsync rather than GetAllUsersAsync so the GDPR deleted-user placeholder
         // row never appears as a selectable person.
         IEnumerable<UserProfile> allUsers = await _securityService.GetActiveUsersAsync();
 
         if (scope.IsAdmin)
         {
-            users = allUsers;
-            return;
+            return allUsers;
         }
 
         Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
@@ -125,12 +147,18 @@
         if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
         {
             _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
-            users = [];
-            return;
+            return [];
         }
 
         HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
-        users = allUsers.Where(u => locationUserIds.Contains(u.Id));
+        return allUsers.Where(u => locationUserIds.Contains(u.Id));
+    }
+
+    private void ClearSelection()
+    {
+        selectedUserId = string.Empty;
+        assignments = [];
+        RebuildGroupedAssignments();
     }
 
     private async Task<LocationScope?> ResolveScopeAsync()

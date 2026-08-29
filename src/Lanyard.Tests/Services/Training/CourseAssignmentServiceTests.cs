@@ -337,6 +337,35 @@ public class CourseAssignmentServiceTests
     }
 
     [TestMethod]
+    public async Task GetAssignmentsForUserAsync_WithLocationScope_ExcludesUnlocatedAssignments()
+    {
+        // An assignment carries no LocationId when it came from an unlocated course - the admin
+        // path stamps it from Course.LocationId (AssignCourseAsync), which is nullable. Hiding
+        // those from a location-scoped manager is deliberate and matches every other scoped read
+        // in this service: IsCourseInScope already makes an unlocated course unreachable for a
+        // non-admin, so surfacing its assignments only here would be the inconsistency.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+
+        Course unlocatedCourse = await SeedCourseAsync(options, name: "Company-wide Induction");
+        UserProfile user = await SeedUserAsync(options, "ipswich-user");
+        await SeedAssignmentAsync(options, unlocatedCourse.Id, user.Id, locationId: null);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, ipswich.Name);
+
+        Result<List<CourseAssignment>> scoped = await service.GetAssignmentsForUserAsync(user.Id, ipswichScope);
+        Result<List<CourseAssignment>> unscoped = await service.GetAssignmentsForUserAsync(user.Id);
+
+        Assert.IsTrue(scoped.Success, scoped.Error);
+        Assert.IsEmpty(scoped.Data!);
+
+        // The same row is still the user's own training, so their My Training page must show it.
+        Assert.IsTrue(unscoped.Success, unscoped.Error);
+        Assert.HasCount(1, unscoped.Data!);
+    }
+
+    [TestMethod]
     public async Task GetAssignmentAsync_FailsWhenRequestingUserIsNotOwner()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
