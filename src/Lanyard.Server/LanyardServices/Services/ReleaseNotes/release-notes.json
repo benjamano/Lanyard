@@ -181,19 +181,11 @@
       "Added a \"Follow the organisation default\" option to the Home Screen section on the Account Management page, alongside \"Use the standard home page\" for anyone who would rather opt out entirely.",
       "If the dashboard set as everyone's home screen is later deleted, staff see the standard home page again with a note explaining why, rather than an empty screen.",
       "Added a Greeting dashboard widget showing the same \"Good morning / afternoon / evening\" card as the standard home page, with your name.",
-      "Added the name of your current location to the footer, so it is clear at a glance which site you are signed in to. This shows on desktop, where the footer bar is visible."
-    ]
-  },
-  {
-    "version": "1.3.16",
-    "releaseDate": "2026-08-29",
-    "summary": "The Training Dashboard's By Person tab now only shows people from your own location.",
-    "details": [
+      "Added the name of your current location to the footer, so it is clear at a glance which site you are signed in to. This shows on desktop, where the footer bar is visible.",
       "Fixed the \"By Person\" tab on the Training Dashboard listing every person in the system, so a manager could open the training record of someone at a different location.",
       "The person picker now lists only people at your location, matching the By Course, Timing and Analytics tabs and the bulk assign dialog.",
       "If someone belongs to more than one location, their record now shows only the training assigned at your location.",
-      "Administrators still see everyone across every location.",
-      "The deleted-user placeholder no longer appears as a selectable person in the picker.",
-      "Viewing your own training under My Training is unchanged - it still shows everything assigned to you, whichever location it came from."    ]
+      "The deleted-user placeholder no longer appears as a selectable person in the picker."
+    ]
   }
 ]
