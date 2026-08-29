@@ -4,6 +4,21 @@
 @inject ICourseAssignmentService _courseAssignmentService
 
 <div class="by-person-tab">
+    @if (scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so this tab can't be
+                loaded. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadUsersAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else
+    {
     <div class="person-picker-host">
         <FluentSelect TOption="UserProfile" TValue="string" Items="@users.OrderBy(x => x.GetName())"
                       OptionText="@(i => i?.GetName() ?? string.Empty)" OptionValue="@(i => i?.Id)"
@@ -58,10 +73,16 @@
                     </AssignmentGroupDetails>
                 </RowDetails>
                 <EmptyContent>
-                    This person has no training assigned.
+                    @* The picker lists location members, but rows are filtered on each
+                       assignment's own LocationId - a person can be in your location while all
+                       their training belongs to another, so don't claim they have none at all. *@
+                    @(currentScope?.IsAdmin == true
+                        ? "This person has no training assigned."
+                        : "This person has no training assigned at your location.")
                 </EmptyContent>
             </FluentDataGrid>
         }
+    }
     }
 </div>
 
@@ -71,15 +92,91 @@
     private List<TrainingAssignmentGroup> groupedAssignments = [];
     private string selectedUserId = string.Empty;
     private bool isLoading;
+    private bool scopeFailed;
+    private LocationScope? currentScope;
 
     private void RebuildGroupedAssignments()
     {
         groupedAssignments = TrainingAssignmentGroup.BuildGroups(assignments, a => a.CourseId, g => g.First().Course?.Name ?? "Unknown Course");
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadUsersAsync();
+
+    private async Task LoadUsersAsync()
     {
-        users = await _securityService.GetAllUsersAsync();
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            users = [];
+            ClearSelection();
+            return;
+        }
+
+        users = await LoadSelectablePeopleAsync(scope);
+
+        // The selected person may not survive a reload - the scope can have changed, or this may
+        // be a retry after a failure that emptied the grid but left them selected. Either drop
+        // them or re-fetch their record; leaving it is what produces an empty grid with no error.
+        if (!string.IsNullOrEmpty(selectedUserId))
+        {
+            if (users.Any(u => u.Id == selectedUserId))
+            {
+                await LoadAssignmentsAsync();
+            }
+            else
+            {
+                ClearSelection();
+            }
+        }
+    }
+
+    private async Task<IEnumerable<UserProfile>> LoadSelectablePeopleAsync(LocationScope scope)
+    {
+        // GetActiveUsersAsync rather than GetAllUsersAsync so the GDPR deleted-user placeholder
+        // row never appears as a selectable person.
+        IEnumerable<UserProfile> allUsers = await _securityService.GetActiveUsersAsync();
+
+        if (scope.IsAdmin)
+        {
+            return allUsers;
+        }
+
+        Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+
+        if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
+            return [];
+        }
+
+        HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
+        return allUsers.Where(u => locationUserIds.Contains(u.Id));
+    }
+
+    private void ClearSelection()
+    {
+        selectedUserId = string.Empty;
+        assignments = [];
+        RebuildGroupedAssignments();
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+            // The toast auto-dismisses. Without this flag the tab renders an empty person picker
+            // with nothing left on screen explaining why.
+            scopeFailed = true;
+            return null;
+        }
+
+        scopeFailed = false;
+        currentScope = scopeResult.Data;
+        return currentScope;
     }
 
     private async Task LoadAssignmentsAsync()
@@ -93,7 +190,20 @@
 
         isLoading = true;
 
-        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(selectedUserId);
+        // Re-resolved per load rather than reusing currentScope: CurrentLocationContextService is
+        // request-scoped and reads the claim fresh, so a scope that has since changed must not be
+        // served from a field cached when the tab first rendered.
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (scope is null)
+        {
+            assignments = [];
+            RebuildGroupedAssignments();
+            isLoading = false;
+            return;
+        }
+
+        Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(selectedUserId, scope);
 
         if (!result.IsSuccess || result.Data is null)
         {

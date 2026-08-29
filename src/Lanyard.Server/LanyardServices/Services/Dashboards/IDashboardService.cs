@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.Models;
+﻿using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 
 namespace Lanyard.Application.Services;
@@ -25,4 +25,31 @@ public interface IDashboardService
     /// the standard home page.
     /// </summary>
     Task<Result<bool>> SetDefaultDashboardIdAsync(string userId, Guid? dashboardId);
+
+    /// <summary>
+    /// Records that a user wants the standard home page, ignoring any organisation-wide default.
+    /// Passing false clears that choice, putting them back on the organisation default (or their
+    /// own dashboard, if they have one).
+    /// </summary>
+    Task<Result<bool>> SetUseStandardHomePageAsync(string userId, bool useStandardHomePage);
+
+    /// <summary>
+    /// Returns the dashboard an Admin or Manager has set as everyone's home screen, or null if
+    /// nobody has set one. Like <see cref="GetDefaultDashboardIdAsync"/>, the stored id comes back
+    /// without being checked against the dashboard still existing.
+    /// </summary>
+    Task<Result<Guid?>> GetOrganisationDefaultDashboardIdAsync();
+
+    /// <summary>
+    /// Sets the dashboard shown as the home screen for every user who has not chosen their own.
+    /// Passing null clears it, returning everyone to the standard home page.
+    /// </summary>
+    Task<Result<bool>> SetOrganisationDefaultDashboardIdAsync(Guid? dashboardId);
+
+    /// <summary>
+    /// Works out which dashboard a user should actually see on the home page: their own choice
+    /// first, then the organisation-wide default, then nothing. A user who has explicitly asked
+    /// for the standard home page always resolves to null.
+    /// </summary>
+    Task<Result<HomeScreenDashboardSelection>> GetHomeScreenDashboardAsync(string userId);
 }

@@ -1,0 +1,167 @@
+﻿@using Lanyard.Application.Services.Training
+@using Lanyard.Infrastructure.Enum
+
+@inject ICourseAssignmentService _courseAssignmentService
+
+@* Per-viewer, not per-dashboard: the assignment list belongs to whoever is looking at the
+   dashboard, so two people opening the same dashboard see different rows. Dashboards can also be
+   rendered on a kiosk projection step (RenderDashboardTemplate), where there is no signed-in
+   staff user at all - hence the explicit "not signed in" state rather than an empty list. *@
+
+<FluentCard Height="100%">
+    <div class="my-training-body">
+        <div class="my-training-header">
+            <span class="my-training-title">@(Widget.Title ?? "My Training")</span>
+            @if (!_isLoading && !_loadFailed && _currentUserId is not null)
+            {
+                <span class="my-training-count">@_outstandingCount outstanding</span>
+            }
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="my-training-empty">
+                <FluentSpinner />
+            </div>
+        }
+        else if (_loadFailed)
+        {
+            <div class="my-training-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">
+                    Couldn't load your training
+                </FluentBadge>
+            </div>
+        }
+        else if (_currentUserId is null)
+        {
+            <div class="my-training-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Sign in to see your training
+                </FluentBadge>
+            </div>
+        }
+        else if (_displayedAssignments.Count == 0)
+        {
+            <div class="my-training-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    @(_allAssignments.Count == 0 ? "No training assigned" : "You're all caught up")
+                </FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="my-training-list">
+                @foreach (CourseAssignment assignment in _displayedAssignments)
+                {
+                    <div class="my-training-row" @onclick="@(() => OpenAssignment(assignment.Id))">
+                        <span class="my-training-text">
+                            <span class="my-training-name" title="@assignment.Course?.Name">@assignment.Course?.Name</span>
+                            <span class="my-training-due">@DescribeDueDate(assignment)</span>
+                        </span>
+
+                        <span class="my-training-status">
+                            <FluentBadge Content="@assignment.GetStatusLabel()" Color="@assignment.GetStatusColor()"
+                                         Appearance="@BadgeAppearance.Filled" />
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required MyTrainingWidget Widget { get; set; }
+
+    // False while the dashboard is in edit-layout mode, so dragging a widget around does not
+    // navigate away mid-edit.
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private List<CourseAssignment> _allAssignments = [];
+    private List<CourseAssignment> _displayedAssignments = [];
+
+    private string? _currentUserId;
+    private int _outstandingCount;
+    private bool _isLoading = true;
+    private bool _loadFailed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (currentUserResult.IsSuccess && currentUserResult.Data is not null)
+        {
+            _currentUserId = currentUserResult.Data;
+
+            Result<List<CourseAssignment>> result = await _courseAssignmentService.GetAssignmentsForUserAsync(_currentUserId);
+
+            if (result.IsSuccess && result.Data is not null)
+            {
+                _allAssignments = result.Data;
+            }
+            else
+            {
+                // Distinct from the empty state on purpose: telling someone with overdue training
+                // that they have none is worse than admitting the load failed.
+                _loadFailed = true;
+            }
+        }
+
+        ApplyFilter();
+
+        _isLoading = false;
+    }
+
+    // IncludeCompleted and MaxItems can both change while the dashboard is open via the config
+    // dialog, and neither affects which rows were fetched - so re-filter rather than re-query.
+    protected override void OnParametersSet()
+    {
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _outstandingCount = _allAssignments.Count(x => x.GetStatus() != CourseAssignmentStatus.Completed);
+
+        IEnumerable<CourseAssignment> assignments = Widget.IncludeCompleted
+            ? _allAssignments
+            : _allAssignments.Where(x => x.GetStatus() != CourseAssignmentStatus.Completed);
+
+        _displayedAssignments = assignments
+            // Outstanding always outranks completed. Without this, a completed course with a long
+            // past due date sorts ahead of everything still owed and can fill MaxItems on its own,
+            // hiding every outstanding course while the header still reports them.
+            .OrderBy(x => x.GetStatus() == CourseAssignmentStatus.Completed)
+            // Then overdue first, then whatever is due soonest; undated assignments sort last
+            // rather than ahead of everything, which DateTime.MinValue would do.
+            .ThenByDescending(x => x.GetStatus() == CourseAssignmentStatus.Overdue)
+            .ThenBy(x => x.DueDate ?? DateTime.MaxValue)
+            .ThenBy(x => x.Course?.Name)
+            .Take(Math.Max(1, Widget.MaxItems))
+            .ToList();
+    }
+
+    private static string DescribeDueDate(CourseAssignment assignment)
+    {
+        if (assignment.CompletedDate is DateTime completedDate)
+        {
+            return $"completed {completedDate.ToString("d MMM yyyy")}";
+        }
+
+        return assignment.DueDate is DateTime dueDate
+            ? $"due {dueDate.ToString("d MMM yyyy")}"
+            : "no due date";
+    }
+
+    private void OpenAssignment(Guid assignmentId)
+    {
+        if (!AllowTrigger)
+        {
+            return;
+        }
+
+        _navigationManager.NavigateTo($"/training/{assignmentId}");
+    }
+}
