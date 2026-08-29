@@ -238,3 +238,36 @@ public class HallOfFameWidget : DashboardWidget
     // so there is no per-location option here.
     public Guid? ClientId { get; set; }
 }
+
+// Per-viewer rather than per-dashboard: the current user is resolved at render time, so a single
+// shared dashboard shows each staff member their own training rather than a fixed person's.
+public class MyTrainingWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public MyTrainingWidget()
+    {
+        Type = WidgetType.MyTraining;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 5;
+    }
+
+    public bool IncludeCompleted { get; set; }
+    public int MaxItems { get; set; }
+}
+
+// Mirrors the greeting card on the standard home page - a time-of-day greeting plus the signed-in
+// user's name. Both render the shared GreetingCard component, so there is nothing to configure.
+public class GreetingWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public GreetingWidget()
+    {
+        Type = WidgetType.Greeting;
+
+        GridW = 4;
+        GridH = 1;
+    }
+}

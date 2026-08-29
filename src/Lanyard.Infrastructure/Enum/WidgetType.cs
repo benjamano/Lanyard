@@ -12,5 +12,7 @@ public enum WidgetType
     MusicTimeline = 7,
     AutomationRuleStatus = 8,
     KioskHealth = 9,
-    HallOfFame = 10
+    HallOfFame = 10,
+    MyTraining = 11,
+    Greeting = 12
 }
