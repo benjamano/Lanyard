@@ -69,7 +69,11 @@
             return;
         }
 
-        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope);
+        // allLocations: true is required here, not just preserved. SecurityService auto-assigns
+        // on user creation from an unscoped admin scope, so a rule on another location's course
+        // still fires for every new user - an Admin scoped to one location has to be able to see
+        // and switch that rule off, or it would keep running with no way to reach it.
+        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope, allLocations: true);
 
         if (!result.IsSuccess || result.Data is null)
         {

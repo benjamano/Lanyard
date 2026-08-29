@@ -6,7 +6,12 @@ namespace Lanyard.Application.Services.Training;
 
 public interface ICourseService
 {
-    Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope);
+    // allLocations only means anything for an Admin: it lifts the location filter so they can
+    // review every location's courses at once. Everyone else is always filtered to their own
+    // location (plus courses shared from a sibling location), whatever is passed here.
+    // Deliberately has no default - it decides whether an Admin sees one location or all of them,
+    // and a default silently changed every existing caller when this parameter was introduced.
+    Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope, bool allLocations);
     Task<Result<Course>> GetCourseAsync(Guid courseId, LocationScope scope);
     Task<Result<Course>> SaveCourseAsync(Course course, LocationScope scope);
     Task<Result<bool>> DeleteCourseAsync(Guid courseId, LocationScope scope);

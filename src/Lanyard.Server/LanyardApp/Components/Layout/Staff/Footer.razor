@@ -1,6 +1,9 @@
 @using Lanyard.Shared.DTO;
 
+@implements IDisposable
+
 @inject AppInfo AppInfo
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <FluentGrid AdaptiveRendering="true" Spacing="0">
     <FluentGridItem HiddenWhen="GridItemHidden.SmAndDown" Xs="12">
@@ -10,6 +13,11 @@
                              HorizontalAlignment="HorizontalAlignment.SpaceBetween">
                     @* <span class="mb-0">© @DateTime.UtcNow.Year The Lanyard Development Team</span> *@
                     <span class="mb-0">© @DateTime.UtcNow.Year Benjamin Mercer</span>
+
+                    @if (!string.IsNullOrWhiteSpace(_locationName))
+                    {
+                        <span class="mb-0">@_locationName</span>
+                    }
 
                     <FluentStack Width="auto" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
                         <span>v@(AppInfo.Version)</span>
@@ -28,3 +36,76 @@
         </Authorized>
     </AuthorizeView>
 </FluentGrid>
+
+@code {
+    private string? _locationName;
+    private int _loadSequence;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    // The event fires off the renderer's synchronisation context, so the reload has to be
+    // marshalled back onto it - same pattern as MainLayout's branding refresh.
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(LoadLocationNameAsync);
+    }
+
+    // Deliberately not OnInitializedAsync: GetScopeAsync reads the auth state and hits the
+    // database, neither of which behaves during prerendering.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await LoadLocationNameAsync();
+    }
+
+    private async Task LoadLocationNameAsync()
+    {
+        int load = ++_loadSequence;
+
+        string? name = null;
+
+        try
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            // A failed scope means nobody is signed in (or their claim is stale), so the name
+            // is cleared rather than kept - leaving the previous location on screen after a
+            // sign-out would be worse than showing nothing.
+            if (scopeResult.Success)
+            {
+                name = scopeResult.Data?.LocationDisplayName;
+            }
+        }
+        catch
+        {
+            // GetScopeAsync already turns expected failures into Result.Fail, so reaching here
+            // means the scoped context itself is gone (component torn down mid-flight). Nothing
+            // worth logging, and nothing to show.
+        }
+
+        // First render and the auth-state event can be in flight at once; without this the
+        // slower of the two wins and can restore a name the newer load already cleared.
+        if (load != _loadSequence || name == _locationName)
+        {
+            return;
+        }
+
+        _locationName = name;
+
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+}

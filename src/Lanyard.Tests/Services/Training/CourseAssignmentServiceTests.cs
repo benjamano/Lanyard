@@ -166,7 +166,8 @@ public class CourseAssignmentServiceTests
     private static async Task<CourseAssignment> SeedAssignmentAsync(
         DbContextOptions<ApplicationDbContext> options, Guid courseId, string userId,
         DateTime? startedDate = null, DateTime? completedDate = null,
-        DateTime? dueDate = null, DateTime? dueSoonReminderSentDate = null, bool isActive = true)
+        DateTime? dueDate = null, DateTime? dueSoonReminderSentDate = null, bool isActive = true,
+        int? locationId = null)
     {
         await using ApplicationDbContext ctx = new(options);
 
@@ -180,7 +181,8 @@ public class CourseAssignmentServiceTests
             CompletedDate = completedDate,
             DueDate = dueDate,
             DueSoonReminderSentDate = dueSoonReminderSentDate,
-            IsActive = isActive
+            IsActive = isActive,
+            LocationId = locationId
         };
 
         ctx.CourseAssignments.Add(assignment);
@@ -270,6 +272,97 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(1, result.Data!);
         Assert.AreEqual(userA.Id, result.Data![0].UserId);
+    }
+
+    // The three tests below cover the manager-facing "By Person" training tab, which passes a
+    // LocationScope so one location's manager cannot read another location's training records.
+    // The null-scope case guards the opposite path - MyTraining/OutstandingTrainingCard call this
+    // for the signed-in user's own record, where every location's assignments must still show.
+    private static async Task<(string userId, Location ipswich, Location wisbech)> SeedUserWithAssignmentsInTwoLocationsAsync(
+        DbContextOptions<ApplicationDbContext> options)
+    {
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        Course ipswichCourse = await SeedCourseAsync(options, locationId: ipswich.Id, name: "Ipswich Induction");
+        Course wisbechCourse = await SeedCourseAsync(options, locationId: wisbech.Id, name: "Wisbech Induction");
+
+        UserProfile user = await SeedUserAsync(options, "multi-location-user");
+
+        await SeedAssignmentAsync(options, ipswichCourse.Id, user.Id, locationId: ipswich.Id);
+        await SeedAssignmentAsync(options, wisbechCourse.Id, user.Id, locationId: wisbech.Id);
+
+        return (user.Id, ipswich, wisbech);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForUserAsync_WithoutScope_ReturnsEveryLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (string userId, _, _) = await SeedUserWithAssignmentsInTwoLocationsAsync(options);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForUserAsync(userId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForUserAsync_WithLocationScope_ExcludesOtherLocations()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (string userId, _, Location wisbech) = await SeedUserWithAssignmentsInTwoLocationsAsync(options);
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, wisbech.Name);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForUserAsync(userId, wisbechScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(wisbech.Id, result.Data![0].LocationId);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForUserAsync_WithAdminScope_ReturnsEveryLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (string userId, _, _) = await SeedUserWithAssignmentsInTwoLocationsAsync(options);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsForUserAsync(userId, AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsForUserAsync_WithLocationScope_ExcludesUnlocatedAssignments()
+    {
+        // An assignment carries no LocationId when it came from an unlocated course - the admin
+        // path stamps it from Course.LocationId (AssignCourseAsync), which is nullable. Hiding
+        // those from a location-scoped manager is deliberate and matches every other scoped read
+        // in this service: IsCourseInScope already makes an unlocated course unreachable for a
+        // non-admin, so surfacing its assignments only here would be the inconsistency.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        (Location ipswich, _) = await SeedTwoLocationsAsync(options);
+
+        Course unlocatedCourse = await SeedCourseAsync(options, name: "Company-wide Induction");
+        UserProfile user = await SeedUserAsync(options, "ipswich-user");
+        await SeedAssignmentAsync(options, unlocatedCourse.Id, user.Id, locationId: null);
+
+        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, ipswich.Name);
+
+        Result<List<CourseAssignment>> scoped = await service.GetAssignmentsForUserAsync(user.Id, ipswichScope);
+        Result<List<CourseAssignment>> unscoped = await service.GetAssignmentsForUserAsync(user.Id);
+
+        Assert.IsTrue(scoped.Success, scoped.Error);
+        Assert.IsEmpty(scoped.Data!);
+
+        // The same row is still the user's own training, so their My Training page must show it.
+        Assert.IsTrue(unscoped.Success, unscoped.Error);
+        Assert.HasCount(1, unscoped.Data!);
     }
 
     [TestMethod]
