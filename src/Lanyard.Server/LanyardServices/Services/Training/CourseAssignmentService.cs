@@ -111,16 +111,25 @@ public class CourseAssignmentService(
         }
     }
 
-    public async Task<Result<List<CourseAssignment>>> GetAssignmentsForUserAsync(string userId)
+    public async Task<Result<List<CourseAssignment>>> GetAssignmentsForUserAsync(string userId, LocationScope? scope = null)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
+            // A null scope means "this user looking at their own training", where assignments from
+            // every location they belong to should show. A non-null scope means a manager is
+            // viewing someone else's record, and must not reach outside their own location.
+            // Hoisted into locals because LocationScope is a record - EF cannot translate its
+            // compiler-generated == operator inside an expression tree.
+            bool unrestricted = scope is null || scope.IsAdmin;
+            int? scopeLocationId = scope?.LocationId;
+
             List<CourseAssignment> assignments = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.UserId == userId && x.IsActive && (x.Course!.IsActive || x.CompletedDate != null))
+                .Where(x => x.UserId == userId && x.IsActive && (x.Course!.IsActive || x.CompletedDate != null)
+                    && (unrestricted || x.LocationId == scopeLocationId))
                 .Include(x => x.Course)
                 .Include(x => x.Attempts)
                 .OrderBy(x => x.AssignedDate)
