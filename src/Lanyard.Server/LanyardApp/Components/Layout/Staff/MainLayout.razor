@@ -40,7 +40,10 @@
                                          Title="@($"You are signed in to {_locationDisplayName}")">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Location())" Color="Color.Custom"
                                             CustomColor="white" />
-                                <FluentText Size="TextSize.Size200" Style="color:white;">@_locationDisplayName</FluentText>
+                                @* Names are "Company Location", so they get long. Capped and ellipsised
+                                   rather than allowed to push the theme toggle off a phone header. *@
+                                <FluentText Size="TextSize.Size200"
+                                            Style="color:white; max-width:34vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@_locationDisplayName</FluentText>
                             </FluentStack>
                         </Authorized>
                     </AuthorizeView>

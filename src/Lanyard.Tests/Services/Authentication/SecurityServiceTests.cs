@@ -132,7 +132,7 @@ namespace Lanyard.Tests.Services.Authentication
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
 
             Mock<ICourseService> courseServiceMock = new();
-            courseServiceMock.Setup(c => c.GetCoursesAsync(It.IsAny<LocationScope>())).ReturnsAsync(Result<List<Course>>.Ok([]));
+            courseServiceMock.Setup(c => c.GetCoursesAsync(It.IsAny<LocationScope>(), It.IsAny<bool>())).ReturnsAsync(Result<List<Course>>.Ok([]));
 
             Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
 

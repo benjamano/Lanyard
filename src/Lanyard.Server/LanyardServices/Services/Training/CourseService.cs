@@ -10,7 +10,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    public async Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope, bool allLocations = false)
+    public async Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope, bool allLocations)
     {
         try
         {
@@ -20,6 +20,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Location)
+                    .ThenInclude(x => x!.Company)
                 .Where(x => x.IsActive);
 
             // An Admin used to be exempt from this filter unconditionally, which meant the location

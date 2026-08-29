@@ -123,6 +123,7 @@
     private bool isLoading;
     private bool scopeFailed;
     private bool allLocations;
+    private int loadSequence;
     private LocationScope? currentScope;
 
     // Mirrors the service's write rule: Admins write anything; everyone else only writes
@@ -157,9 +158,19 @@
 
     private async Task LoadCoursesAsync()
     {
+        // Flipping the switch twice in quick succession starts a second load before the first has
+        // returned; without this token the slower one could win and leave the rows disagreeing with
+        // the switch and banner. Only the most recent load is allowed to publish its result.
+        int sequence = ++loadSequence;
+
         isLoading = true;
 
         LocationScope? scope = await ResolveScopeAsync();
+
+        if (sequence != loadSequence)
+        {
+            return;
+        }
 
         if (scope is null)
         {
@@ -169,6 +180,11 @@
         }
 
         Result<List<Course>> result = await _courseService.GetCoursesAsync(scope, allLocations);
+
+        if (sequence != loadSequence)
+        {
+            return;
+        }
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -196,7 +212,11 @@
         {
             Id = Guid.Empty,
             Name = "New Course",
-            PassMarkPercent = 80
+            PassMarkPercent = 80,
+            // SaveCourseAsync honours the supplied LocationId for an Admin and ignores it for
+            // everyone else. Without this an Admin's new course was created with no location at
+            // all, so it immediately failed the location filter and disappeared from this list.
+            LocationId = scope.LocationId
         }, scope);
 
         if (!result.IsSuccess || result.Data is null)

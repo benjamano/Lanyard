@@ -57,9 +57,11 @@ public class CurrentLocationContextService(
                 return Result<LocationScope>.Fail("Your selected location is no longer available. Please log in again.");
             }
 
-            // IsAdmin stays true here even though a location is attached: every scope.IsAdmin
-            // check elsewhere (course/training access) short-circuits before looking at
-            // LocationId, so this only ever adds branding info, never narrows an admin's access.
+            // IsAdmin stays true here even though a location is attached. Permission checks still
+            // short-circuit on IsAdmin before looking at LocationId, so an admin can still read and
+            // write any location's data. An admin's LocationId is no longer branding-only though:
+            // CourseService.GetCoursesAsync uses it to decide which location's courses to list
+            // unless allLocations is set, so treat it as a real value when adding scoped reads.
             return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName()));
         }
         catch (Exception ex)

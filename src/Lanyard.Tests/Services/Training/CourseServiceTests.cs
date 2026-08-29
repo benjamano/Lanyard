@@ -80,7 +80,7 @@ public class CourseServiceTests
         }
 
         LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
-        Result<List<Course>> result = await service.GetCoursesAsync(ipswichScope);
+        Result<List<Course>> result = await service.GetCoursesAsync(ipswichScope, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);
@@ -101,10 +101,34 @@ public class CourseServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
+    public async Task CourseService_AdminCreatedCourse_LandsInScopeLocationAndStaysVisible()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        // What the Courses page sends for "New Course": an Admin signed in to Wisbech.
+        LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<Course> created = await service.SaveCourseAsync(
+            new Course { Id = Guid.Empty, Name = "New Course", PassMarkPercent = 80, LocationId = adminAtWisbech.LocationId },
+            adminAtWisbech);
+
+        Assert.IsTrue(created.Success, created.Error);
+        Assert.AreEqual(wisbech.Id, created.Data!.LocationId);
+
+        // The regression this guards: with no LocationId the course failed the location filter and
+        // vanished from the very list the Admin created it on.
+        Result<List<Course>> listed = await service.GetCoursesAsync(adminAtWisbech, allLocations: false);
+
+        Assert.IsTrue(listed.Success, listed.Error);
+        CollectionAssert.Contains(listed.Data!.Select(x => x.Name).ToList(), "New Course");
     }
 
     [TestMethod]
@@ -122,7 +146,7 @@ public class CourseServiceTests
         }
 
         LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
-        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech);
+        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(1, result.Data!);
@@ -145,7 +169,7 @@ public class CourseServiceTests
         }
 
         LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
-        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech);
+        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         CollectionAssert.AreEquivalent(new[] { "COSHH Shared", "Wisbech Only" }, result.Data!.Select(x => x.Name).ToList());
@@ -212,7 +236,7 @@ public class CourseServiceTests
 
         // AdminScope carries no LocationId, so there is nothing to narrow to - falling back to
         // filtering would leave such an admin with an empty list.
-        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);
@@ -316,7 +340,7 @@ public class CourseServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope, allLocations: false);
 
         Assert.IsTrue(result.Success, result.Error);
         Assert.HasCount(2, result.Data!);

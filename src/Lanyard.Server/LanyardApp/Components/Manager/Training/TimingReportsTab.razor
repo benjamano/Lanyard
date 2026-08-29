@@ -92,7 +92,11 @@
             return;
         }
 
-        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope);
+        // allLocations: true keeps this tab exactly as it was before the Courses page gained a
+        // location filter. Narrowing it is a separate change - the data behind this tab still
+        // comes from services that are unfiltered for an Admin, so scoping only the course list
+        // here would show a narrowed picker over company-wide figures.
+        Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(scope, allLocations: true);
 
         if (!coursesResult.IsSuccess || coursesResult.Data is null)
         {
