@@ -8,7 +8,12 @@ namespace Lanyard.Application.Services.Training;
 public interface ICourseAssignmentService
 {
     Task<Result<CourseAssignment>> AssignCourseAsync(Guid courseId, string userId, string assignedByUserId, DateTime? dueDate, LocationScope scope, bool sendAssignedEmail = true);
-    Task<Result<List<CourseAssignment>>> GetAssignmentsForUserAsync(string userId);
+    /// <summary>
+    /// Retrieves a user's assignments. Pass <paramref name="scope"/> when a manager is viewing
+    /// someone else's record, so only that manager's location is returned; leave it null for the
+    /// signed-in user viewing their own training, where every location's assignments should show.
+    /// </summary>
+    Task<Result<List<CourseAssignment>>> GetAssignmentsForUserAsync(string userId, LocationScope? scope = null);
     Task<Result<CourseAssignment>> GetAssignmentAsync(Guid assignmentId, string requestingUserId);
     Task<Result<CourseAssignment>> StartAssignmentAsync(Guid assignmentId, string requestingUserId);
     Task<Result<QuizGradeResult>> SubmitQuizAttemptAsync(Guid assignmentId, string requestingUserId, Dictionary<Guid, Guid> answers);
