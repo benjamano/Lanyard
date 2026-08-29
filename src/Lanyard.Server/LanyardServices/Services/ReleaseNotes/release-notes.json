@@ -185,14 +185,7 @@
       "Fixed the \"By Person\" tab on the Training Dashboard listing every person in the system, so a manager could open the training record of someone at a different location.",
       "The person picker now lists only people at your location, matching the By Course, Timing and Analytics tabs and the bulk assign dialog.",
       "If someone belongs to more than one location, their record now shows only the training assigned at your location.",
-      "The deleted-user placeholder no longer appears as a selectable person in the picker."
-    ]
-  },
-  {
-    "version": "1.3.14",
-    "releaseDate": "2026-08-29",
-    "summary": "The location you pick at login now decides which training courses you see.",
-    "details": [
+      "The deleted-user placeholder no longer appears as a selectable person in the picker.",
       "Fixed the Training Courses page ignoring the location an Admin picked at login - it listed every course from every location, so signing in to one venue looked identical to signing in to another.",
       "Admins now see only the courses belonging to the location they signed in to, plus any shared with it, the same view a Manager gets.",
       "Added a \"Show all locations\" switch on the Training Courses page so an Admin can still review every location's courses in one list, with a banner making it clear when that is on.",
