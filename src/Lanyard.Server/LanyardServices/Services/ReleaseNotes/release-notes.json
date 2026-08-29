@@ -163,7 +163,7 @@
   },
   {
     "version": "1.3.13",
-    "releaseDate": "2026-08-28",
+    "releaseDate": "2026-08-29",
     "summary": "Added a My Training dashboard widget, Added a way for admins and managers to set a home screen for everyone.",
     "details": [
       "Added a \"My Training\" dashboard widget listing your own outstanding courses with their due date and status, overdue ones first.",
@@ -180,7 +180,8 @@
       "Anyone who has chosen their own home screen dashboard keeps it - a personal choice always wins over the organisation-wide one.",
       "Added a \"Follow the organisation default\" option to the Home Screen section on the Account Management page, alongside \"Use the standard home page\" for anyone who would rather opt out entirely.",
       "If the dashboard set as everyone's home screen is later deleted, staff see the standard home page again with a note explaining why, rather than an empty screen.",
-      "Added a Greeting dashboard widget showing the same \"Good morning / afternoon / evening\" card as the standard home page, with your name."
+      "Added a Greeting dashboard widget showing the same \"Good morning / afternoon / evening\" card as the standard home page, with your name.",
+      "Added the name of your current location to the footer, so it is clear at a glance which site you are signed in to. This shows on desktop, where the footer bar is visible."
     ]
   },
   {
