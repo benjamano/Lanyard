@@ -166,7 +166,7 @@
     "releaseDate": "2026-08-29",
     "summary": "The footer now shows which location you are logged into.",
     "details": [
-      "Added the name of your current location to the footer, so it is clear at a glance which site you are signed in to."
+      "Added the name of your current location to the footer, so it is clear at a glance which site you are signed in to. This shows on desktop, where the footer bar is visible."
     ]
   }
 ]

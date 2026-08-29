@@ -39,6 +39,7 @@
 
 @code {
     private string? _locationName;
+    private int _loadSequence;
 
     protected override void OnInitialized()
     {
@@ -68,22 +69,32 @@
 
     private async Task LoadLocationNameAsync()
     {
+        int load = ++_loadSequence;
+
         string? name = null;
 
         try
         {
             Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
-            // A failed scope just means nobody is logged in yet (or their claim is stale) -
-            // the footer stays as it was rather than showing an error.
+            // A failed scope means nobody is signed in (or their claim is stale), so the name
+            // is cleared rather than kept - leaving the previous location on screen after a
+            // sign-out would be worse than showing nothing.
             if (scopeResult.Success)
             {
                 name = scopeResult.Data?.LocationDisplayName;
             }
         }
-        catch { }
+        catch
+        {
+            // GetScopeAsync already turns expected failures into Result.Fail, so reaching here
+            // means the scoped context itself is gone (component torn down mid-flight). Nothing
+            // worth logging, and nothing to show.
+        }
 
-        if (name == _locationName)
+        // First render and the auth-state event can be in flight at once; without this the
+        // slower of the two wins and can restore a name the newer load already cleared.
+        if (load != _loadSequence || name == _locationName)
         {
             return;
         }
