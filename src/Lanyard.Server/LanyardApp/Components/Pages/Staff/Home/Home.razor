@@ -54,19 +54,14 @@ else
             @* <FluentDivider /> *@
         </FluentGridItem>
         <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
-            <FluentCard Appearance="CardAppearance.Filled" Height="100%">
-                <FluentStack Orientation="Orientation.Vertical" Height="100%">
-                    <FluentText Size="TextSize.Size800" Class="my-auto">
-                        @GetGreeting() <b>@_currentUserName!</b>
-                    </FluentText>
-                    @if (_showPreviewContent)
-                    {
-                        <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in
-                            use</FluentText>
-                        }
-                    </FluentStack>
-                </FluentCard>
-            </FluentGridItem>
+            <GreetingCard>
+                @if (_showPreviewContent)
+                {
+                    <FluentText Weight="TextWeight.Semibold" Color="Color.Info" Class="mt-2">Preview Mode, Dummy data in
+                        use</FluentText>
+                }
+            </GreetingCard>
+        </FluentGridItem>
             <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
                 @if (_showPreviewContent)
                 {
@@ -113,8 +108,6 @@ else
 }
 
 @code {
-    private string? _currentUserName;
-
     private bool _showPreviewContent = false;
     private string? _companyLogoUrl = null;
 
@@ -125,13 +118,10 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        Task<string?> userNameTask = _securityService.GetCurrentUserName();
         Task logoTask = GetCurrentCompanyLogoUrlAsync();
         Task homeScreenTask = LoadHomeScreenDashboardAsync();
 
-        await Task.WhenAll(userNameTask, logoTask, homeScreenTask);
-
-        _currentUserName = userNameTask.Result;
+        await Task.WhenAll(logoTask, homeScreenTask);
     }
 
     // Fired here rather than in OnInitializedAsync so the user sees it exactly once - that method
@@ -191,17 +181,6 @@ else
         // GetDashboardAsync already excludes soft-deleted widgets; the filter is kept as a guard.
         _homeScreenWidgets = dashboard.Widgets.Where(x => x.IsActive).ToList();
         _homeScreenDashboard = dashboard;
-    }
-
-    private string GetGreeting()
-    {
-        int hour = DateTime.Now.Hour;
-        if (hour < 12)
-            return "Good morning";
-        else if (hour < 18)
-            return "Good afternoon";
-        else
-            return "Good evening";
     }
 
     private async Task GetCurrentCompanyLogoUrlAsync()

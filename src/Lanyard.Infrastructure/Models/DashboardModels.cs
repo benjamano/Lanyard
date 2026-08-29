@@ -257,3 +257,17 @@ public class MyTrainingWidget : DashboardWidget
     public bool IncludeCompleted { get; set; }
     public int MaxItems { get; set; }
 }
+
+// Mirrors the greeting card on the standard home page - a time-of-day greeting plus the signed-in
+// user's name. Both render the shared GreetingCard component, so there is nothing to configure.
+public class GreetingWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public GreetingWidget()
+    {
+        Type = WidgetType.Greeting;
+
+        GridW = 4;
+        GridH = 1;
+    }
+}
