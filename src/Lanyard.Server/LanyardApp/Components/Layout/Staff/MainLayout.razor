@@ -29,22 +29,22 @@
             <FluentSpacer />
 
             <FluentStack Width="auto" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
-                @* Which location you signed in to decides what the Training pages show you, so it
-                   needs to be visible somewhere - without this there was no way to tell, and a
-                   correctly-scoped list looked identical to a broken one. *@
+                @* Footer.razor already shows the signed-in location, but its grid item is
+                   HiddenWhen="SmAndDown", so on a phone nothing tells you which location you are in -
+                   which is exactly where a wrongly-scoped Training list is hardest to diagnose. This
+                   fills that gap only, and hides itself once the footer takes over (see the
+                   .header-location media query in MainLayout.razor.css). *@
                 @if (_locationDisplayName is not null)
                 {
                     <AuthorizeView>
                         <Authorized>
-                            <FluentStack Width="auto" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="4"
-                                         Title="@($"You are signed in to {_locationDisplayName}")">
+                            <div class="header-location" title="@($"You are signed in to {_locationDisplayName}")">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.Location())" Color="Color.Custom"
                                             CustomColor="white" />
-                                @* Names are "Company Location", so they get long. Capped and ellipsised
-                                   rather than allowed to push the theme toggle off a phone header. *@
-                                <FluentText Size="TextSize.Size200"
-                                            Style="color:white; max-width:34vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@_locationDisplayName</FluentText>
-                            </FluentStack>
+                                @* Names are "Company Location", so they get long - capped and ellipsised
+                                   rather than allowed to push the theme toggle off the header. *@
+                                <span class="header-location-name">@_locationDisplayName</span>
+                            </div>
                         </Authorized>
                     </AuthorizeView>
                 }

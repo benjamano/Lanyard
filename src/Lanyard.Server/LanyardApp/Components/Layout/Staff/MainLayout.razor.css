@@ -26,3 +26,27 @@ html, body {
 .nav-brand:hover span {
     text-decoration: none;
 }
+/* The signed-in location. Footer.razor shows this too, but its grid item is HiddenWhen="SmAndDown",
+   so this covers only the widths where the footer isn't there and steps aside above them. */
+.header-location {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: white;
+    min-width: 0;
+}
+
+.header-location-name {
+    font-size: var(--fontSizeBase200, 0.75rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40vw;
+}
+
+/* Matches FluentGrid's Sm/Md boundary, which is where the footer becomes visible. */
+@media (min-width: 960px) {
+    .header-location {
+        display: none;
+    }
+}
