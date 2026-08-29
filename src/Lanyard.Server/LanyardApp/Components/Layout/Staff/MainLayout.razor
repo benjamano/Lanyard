@@ -28,7 +28,27 @@
 
             <FluentSpacer />
 
-            <FluentStack Width="auto">
+            <FluentStack Width="auto" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                @* Footer.razor already shows the signed-in location, but its grid item is
+                   HiddenWhen="SmAndDown", so on a phone nothing tells you which location you are in -
+                   which is exactly where a wrongly-scoped Training list is hardest to diagnose. This
+                   fills that gap only, and hides itself once the footer takes over (see the
+                   .header-location media query in MainLayout.razor.css). *@
+                @if (_locationDisplayName is not null)
+                {
+                    <AuthorizeView>
+                        <Authorized>
+                            <div class="header-location" title="@($"You are signed in to {_locationDisplayName}")">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Location())" Color="Color.Custom"
+                                            CustomColor="white" />
+                                @* Names are "Company Location", so they get long - capped and ellipsised
+                                   rather than allowed to push the theme toggle off the header. *@
+                                <span class="header-location-name">@_locationDisplayName</span>
+                            </div>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+
                 <ThemeSelector />
             </FluentStack>
         </FluentStack>
@@ -93,6 +113,7 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+    private string? _locationDisplayName;
 
     // The login page's background image should bleed to the viewport edges - the standard
     // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
@@ -132,10 +153,13 @@
 
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
+        _locationDisplayName = null;
 
         try
         {
             Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            _locationDisplayName = scopeResult.Success ? scopeResult.Data?.LocationDisplayName : null;
 
             if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
             {

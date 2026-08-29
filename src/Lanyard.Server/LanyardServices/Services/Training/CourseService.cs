@@ -10,7 +10,7 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    public async Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope)
+    public async Task<Result<List<Course>>> GetCoursesAsync(LocationScope scope, bool allLocations)
     {
         try
         {
@@ -20,9 +20,17 @@ public class CourseService(IDbContextFactory<ApplicationDbContext> factory) : IC
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Location)
+                    .ThenInclude(x => x!.Company)
                 .Where(x => x.IsActive);
 
-            if (!scope.IsAdmin)
+            // An Admin used to be exempt from this filter unconditionally, which meant the location
+            // they picked at login had no effect on what they saw here - every course in every
+            // location came back, indistinguishable from their own. Now the filter applies to them
+            // too, and lifting it is an explicit choice (the "Show all locations" switch).
+            // An Admin with no location claim has nothing to filter by, so they still see everything.
+            bool applyLocationFilter = !scope.IsAdmin || (!allLocations && scope.LocationId is not null);
+
+            if (applyLocationFilter)
             {
                 query = query.Where(x =>
                     x.LocationId == scope.LocationId ||

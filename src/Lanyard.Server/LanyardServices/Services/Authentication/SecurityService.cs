@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Lanyard.Infrastructure.DataAccess;
@@ -211,7 +211,7 @@ public class SecurityService : ISecurityService
             {
                 // Unscoped: auto-assignment on user creation applies across all locations,
                 // matching pre-Task-3 behaviour where GetCoursesAsync() saw every course.
-                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(new LocationScope(true, null, null, null));
+                Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(new LocationScope(true, null, null, null), allLocations: true);
 
                 if (coursesResult.IsSuccess && coursesResult.Data is not null)
                 {
