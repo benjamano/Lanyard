@@ -16,6 +16,11 @@ namespace Lanyard.Infrastructure.Models
         // referential-integrity error.
         public Guid? DefaultDashboardId { get; set; }
 
+        // Distinguishes "I have deliberately chosen the standard home page" from "I have not
+        // chosen anything", which a null DefaultDashboardId on its own cannot express. Without
+        // it, an organisation-wide default dashboard would be inescapable.
+        public bool UseStandardHomePage { get; set; }
+
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 
