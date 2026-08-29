@@ -28,7 +28,24 @@
 
             <FluentSpacer />
 
-            <FluentStack Width="auto">
+            <FluentStack Width="auto" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                @* Which location you signed in to decides what the Training pages show you, so it
+                   needs to be visible somewhere - without this there was no way to tell, and a
+                   correctly-scoped list looked identical to a broken one. *@
+                @if (_locationDisplayName is not null)
+                {
+                    <AuthorizeView>
+                        <Authorized>
+                            <FluentStack Width="auto" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="4"
+                                         Title="@($"You are signed in to {_locationDisplayName}")">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.Location())" Color="Color.Custom"
+                                            CustomColor="white" />
+                                <FluentText Size="TextSize.Size200" Style="color:white;">@_locationDisplayName</FluentText>
+                            </FluentStack>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+
                 <ThemeSelector />
             </FluentStack>
         </FluentStack>
@@ -93,6 +110,7 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+    private string? _locationDisplayName;
 
     // The login page's background image should bleed to the viewport edges - the standard
     // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
@@ -132,10 +150,13 @@
 
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
+        _locationDisplayName = null;
 
         try
         {
             Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            _locationDisplayName = scopeResult.Success ? scopeResult.Data?.LocationDisplayName : null;
 
             if (scopeResult.Success && scopeResult.Data is { CompanyId: int companyId })
             {

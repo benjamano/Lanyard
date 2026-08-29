@@ -1,4 +1,4 @@
-﻿@page "/manage/training/courses"
+@page "/manage/training/courses"
 @attribute [Authorize(Roles = "Admin,Manager")]
 
 @using Microsoft.AspNetCore.Authorization
@@ -14,7 +14,21 @@
 <FluentCard Height="auto">
     <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Courses</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" Class="ms-auto"
+
+        @* Admins are the only role that can read across locations, so the switch is theirs alone.
+           It defaults to off: the list should reflect the location you actually signed in to. *@
+        @if (currentScope?.IsAdmin == true)
+        {
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal"
+                         Width="auto" Class="ms-auto">
+                <FluentSwitch @bind-Value="allLocations" @bind-Value:after="LoadCoursesAsync">
+                    Show all locations
+                </FluentSwitch>
+            </FluentStack>
+        }
+
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                      Class="@(currentScope?.IsAdmin == true ? null : "ms-auto")"
                       Disabled="@scopeFailed" OnClick="CreateCourseAsync">
             New Course
         </FluentButton>
@@ -46,30 +60,61 @@
     }
     else
     {
-        <FluentDataGrid ShowHover="true" Items="@courses.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr" Class="w-100"
-                        RowSize="@DataGridRowSize.Medium">
-            <ChildContent>
-                <PropertyColumn Property="x => x.Name" Title="Course" Sortable="true" />
-                <PropertyColumn Property="x => x.PassMarkPercent" Title="Pass Mark %" />
-                <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
-                <TemplateColumn Title="">
-                    @* A course shared from another location is readable but not writable, so it
-                       opens as a read-only view and Delete is off - the service would reject it. *@
-                    <FluentButton Appearance="ButtonAppearance.Outline"
-                                  IconStart="@(CanWrite(context)
-                                               ? new Icons.Regular.Size20.Edit()
-                                               : (Icon)new Icons.Regular.Size20.Eye())"
-                                  OnClick="@(() => EditCourse(context.Id))">@(CanWrite(context) ? "Edit" : "View")
-                    </FluentButton>
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                  Disabled="@(!CanWrite(context))"
-                                  OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
-                </TemplateColumn>
-            </ChildContent>
-            <EmptyContent>
-                No courses yet - click "New Course" to build one.
-            </EmptyContent>
-        </FluentDataGrid>
+        @if (allLocations && currentScope?.IsAdmin == true)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" Class="my-2">
+                Showing courses from every location, not just
+                @(currentScope.LocationDisplayName ?? "the location you signed in to").
+            </FluentMessageBar>
+        }
+
+        @* Five columns don't fit a phone, and the Edit/Delete buttons were already being clipped at
+           four - so the grid keeps a workable minimum width and the page scrolls it sideways
+           instead of squeezing columns until their contents are unreachable. *@
+        <div class="courses-grid-scroll" style="overflow-x: auto;">
+            @* The action column is fixed rather than fractional: the Edit and Delete buttons are 96px
+               each, and as a fraction it shrank below that and clipped Delete once Location was added. *@
+            <FluentDataGrid ShowHover="true" Items="@courses.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 240px"
+                            Class="w-100" Style="min-width: 860px;" RowSize="@DataGridRowSize.Medium">
+                <ChildContent>
+                    <PropertyColumn Property="x => x.Name" Title="Course" Sortable="true" />
+                    <PropertyColumn Property="x => x.PassMarkPercent" Title="Pass Mark %" />
+                    <PropertyColumn Property="@(x => x.AutoAssignOnUserCreation ? "Yes" : "No")" Title="Auto-assign" />
+                    @* "Unassigned" is a real state: a course created before locations existed, or by an
+                       Admin who never picked one, has a null LocationId and no location can see it. *@
+                    <PropertyColumn Property="@(x => x.Location == null ? "Unassigned" : x.Location.GetDisplayName())"
+                                    Title="Location" />
+                    <TemplateColumn Title="">
+                        @* A course shared from another location is readable but not writable, so it
+                           opens as a read-only view and Delete is off - the service would reject it. *@
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(CanWrite(context)
+                                                   ? new Icons.Regular.Size20.Edit()
+                                                   : (Icon)new Icons.Regular.Size20.Eye())"
+                                      OnClick="@(() => EditCourse(context.Id))">@(CanWrite(context) ? "Edit" : "View")
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                      Disabled="@(!CanWrite(context))"
+                                      OnClick="@(() => DeleteCourseAsync(context.Id, context.Name))">Delete</FluentButton>
+                    </TemplateColumn>
+                </ChildContent>
+                <EmptyContent>
+                    @* "Nothing here" and "nothing here for this location" are different problems, and
+                       courses with no location set at all only ever appear with the switch on. *@
+                    @if (currentScope?.IsAdmin == true && !allLocations)
+                    {
+                        <span>
+                            No courses for @(currentScope.LocationDisplayName ?? "this location") - turn on
+                            "Show all locations" to see courses owned elsewhere, or click "New Course" to build one.
+                        </span>
+                    }
+                    else
+                    {
+                        <span>No courses yet - click "New Course" to build one.</span>
+                    }
+                </EmptyContent>
+            </FluentDataGrid>
+        </div>
     }
 </FluentCard>
 
@@ -77,6 +122,7 @@
     private List<Course> courses = [];
     private bool isLoading;
     private bool scopeFailed;
+    private bool allLocations;
     private LocationScope? currentScope;
 
     // Mirrors the service's write rule: Admins write anything; everyone else only writes
@@ -122,7 +168,7 @@
             return;
         }
 
-        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope);
+        Result<List<Course>> result = await _courseService.GetCoursesAsync(scope, allLocations);
 
         if (!result.IsSuccess || result.Data is null)
         {

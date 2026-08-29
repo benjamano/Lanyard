@@ -108,6 +108,117 @@ public class CourseServiceTests
     }
 
     [TestMethod]
+    public async Task CourseService_GetCourses_AdminScopedToLocation_ExcludesOtherLocationsByDefault()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual("Wisbech Only", result.Data![0].Name);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_AdminScopedToLocation_StillSeesCoursesSharedBySibling()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "COSHH Shared", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id, IsShared = true });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech);
+
+        Assert.IsTrue(result.Success, result.Error);
+        CollectionAssert.AreEquivalent(new[] { "COSHH Shared", "Wisbech Only" }, result.Data!.Select(x => x.Name).ToList());
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_AdminScopedToLocation_AllLocationsLiftsTheFilter()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            // No LocationId at all - only ever visible when the filter is off.
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Unassigned", PassMarkPercent = 80, IsActive = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope adminAtWisbech = new(true, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<List<Course>> result = await service.GetCoursesAsync(adminAtWisbech, allLocations: true);
+
+        Assert.IsTrue(result.Success, result.Error);
+        CollectionAssert.AreEquivalent(new[] { "Ipswich Only", "Unassigned", "Wisbech Only" }, result.Data!.Select(x => x.Name).ToList());
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_NonAdminCannotLiftTheFilterWithAllLocations()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        LocationScope wisbechScope = new(false, wisbech.Id, wisbech.CompanyId, "Play2Day Wisbech");
+        Result<List<Course>> result = await service.GetCoursesAsync(wisbechScope, allLocations: true);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual("Wisbech Only", result.Data![0].Name);
+    }
+
+    [TestMethod]
+    public async Task CourseService_GetCourses_AdminWithNoLocationClaim_StillSeesEveryLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseService service = GetService(options);
+        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Ipswich Only", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id });
+            ctx.Courses.Add(new Course { Id = Guid.NewGuid(), Name = "Wisbech Only", PassMarkPercent = 80, IsActive = true, LocationId = wisbech.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        // AdminScope carries no LocationId, so there is nothing to narrow to - falling back to
+        // filtering would leave such an admin with an empty list.
+        Result<List<Course>> result = await service.GetCoursesAsync(AdminScope);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(2, result.Data!);
+    }
+
+    [TestMethod]
     public async Task CourseService_SaveCourse_NonAdminCreate_ForcesScopeLocationIgnoringClientValue()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
