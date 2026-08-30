@@ -437,6 +437,49 @@ public class SecurityService : ISecurityService
         }
     }
 
+    public async Task<Result<bool>> UnlockUserAsync(string userId)
+    {
+        try
+        {
+            if (!await IsCurrentUserAdminOrManagerAsync())
+            {
+                return Result<bool>.Fail("You must be an administrator or manager to perform this action!");
+            }
+
+            UserProfile? user = await _userManager.FindByIdAsync(userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found!");
+            }
+
+            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+            }
+
+            // Clearing LockoutEnd alone leaves AccessFailedCount non-zero, so the next single
+            // failed attempt would re-trigger MaxFailedAccessAttempts immediately - reset both.
+            IdentityResult result = await _userManager.SetLockoutEndDateAsync(user, null);
+
+            if (!result.Succeeded)
+            {
+                string errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return Result<bool>.Fail($"Failed to unlock user: {errors}");
+            }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
+
+            _logger.LogInformation("User {UserId} was unlocked by an administrator", user.Id);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
     {
         try
