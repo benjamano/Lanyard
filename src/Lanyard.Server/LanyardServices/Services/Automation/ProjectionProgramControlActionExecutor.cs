@@ -105,24 +105,19 @@ public class ProjectionProgramControlActionExecutor(
                     }
                     break;
                 case Stop:
-                    result = _runnerService.Stop(parameters.TargetClientId, displayIndex);
+                    // Matches StopProjectionProgramActionExecutor: Stop's own result is deliberately
+                    // not surfaced - it succeeds even when nothing is running, so the close is always
+                    // attempted regardless. Stop alone raises OnProgramStopped, not
+                    // OnProgramCompletedNaturally, which is the only event the window-close listener
+                    // watches - so skipping the close would leave the last frame frozen on the screen.
+                    _runnerService.Stop(parameters.TargetClientId, displayIndex);
 
-                    // Both halves matter here, same as StopProjectionProgramActionExecutor: Stop
-                    // alone raises OnProgramStopped, not OnProgramCompletedNaturally, which is the
-                    // only event the window-close listener watches - so stopping without closing
-                    // would leave the last frame frozen on the screen.
-                    if (result.IsSuccess)
+                    await using (AsyncServiceScope closeScope = _scopeFactory.CreateAsyncScope())
                     {
-                        await using AsyncServiceScope closeScope = _scopeFactory.CreateAsyncScope();
                         IClientService clientService = closeScope.ServiceProvider.GetRequiredService<IClientService>();
 
-                        Result<bool> closeResult = await clientService.CloseTemporaryProjectionWindowOnClientAsync(
+                        result = await clientService.CloseTemporaryProjectionWindowOnClientAsync(
                             parameters.TargetClientId, displayIndex);
-
-                        if (!closeResult.IsSuccess)
-                        {
-                            return (false, closeResult.Error ?? "Failed to close the projection window");
-                        }
                     }
                     break;
                 case Pause:

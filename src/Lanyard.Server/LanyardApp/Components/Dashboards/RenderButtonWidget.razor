@@ -188,19 +188,14 @@
         }
 
         int displayIndex = Widget.DisplayIndex ?? 0;
-        Result<bool> stopResult = ProgramRunner.Stop(clientId, displayIndex);
 
-        if (!stopResult.IsSuccess)
-        {
-            _toastService.ShowError(stopResult.Error ?? "Failed to stop the projection program.");
+        // Matches StopProjectionProgramActionExecutor: Stop's own result is deliberately not
+        // surfaced - it succeeds even when nothing is running, so the close is always attempted
+        // regardless. Stop alone raises OnProgramStopped, not OnProgramCompletedNaturally, which
+        // is the only event the window-close listener watches - so skipping the close would
+        // leave the last frame frozen on the screen.
+        ProgramRunner.Stop(clientId, displayIndex);
 
-            return;
-        }
-
-        // Both halves matter, same as StopProjectionProgramActionExecutor: Stop alone raises
-        // OnProgramStopped, not OnProgramCompletedNaturally, which is the only event the
-        // window-close listener watches - so stopping without closing leaves the last frame
-        // frozen on the screen.
         Result<bool> closeResult = await ClientService.CloseTemporaryProjectionWindowOnClientAsync(clientId, displayIndex);
 
         if (closeResult.IsSuccess)

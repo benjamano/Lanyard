@@ -323,7 +323,7 @@ public class ProjectionProgramControlActionExecutorTests
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_Stop_ShouldNotCloseWindow_WhenStoppingTheRunFails()
+    public async Task ExecuteAsync_Stop_ShouldStillCloseWindow_WhenStoppingTheRunFails()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Client client = await SeedClientAsync(options);
@@ -332,6 +332,8 @@ public class ProjectionProgramControlActionExecutorTests
         runnerMock.Setup(r => r.Stop(client.Id, 0, null)).Returns(Result<bool>.Fail("boom"));
 
         Mock<IClientService> clientServiceMock = new();
+        clientServiceMock.Setup(c => c.CloseTemporaryProjectionWindowOnClientAsync(client.Id, 0))
+            .ReturnsAsync(Result<bool>.Ok(true));
 
         ProjectionProgramControlActionExecutor executor = GetExecutor(
             options, runnerMock.Object, isClientConnected: true, clientService: clientServiceMock.Object);
@@ -340,9 +342,11 @@ public class ProjectionProgramControlActionExecutorTests
 
         (bool success, string? error) = await executor.ExecuteAsync(GetAction(parametersJson), Guid.NewGuid());
 
-        Assert.IsFalse(success);
-        Assert.AreEqual("boom", error);
-        clientServiceMock.Verify(c => c.CloseTemporaryProjectionWindowOnClientAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
+        // Matches StopProjectionProgramActionExecutor: Stop's own result is never surfaced (it
+        // succeeds even when nothing is running), so the close always runs regardless and is what
+        // determines the outcome here.
+        Assert.IsTrue(success, error);
+        clientServiceMock.Verify(c => c.CloseTemporaryProjectionWindowOnClientAsync(client.Id, 0), Times.Once);
     }
 
     [TestMethod]
