@@ -81,7 +81,7 @@ namespace Lanyard.App.Controllers
                     return Redirect(BuildLoginErrorRedirect("Account temporarily locked due to repeated failed attempts. Try again later.", company));
 
                 case SignInOutcomeKind.RequiresTwoFactor:
-                    return Redirect($"/login/verify-2fa{BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId)}");
+                    return Redirect($"/login/verify-2fa{BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company)}");
 
                 case SignInOutcomeKind.LocationError:
                     return Redirect(BuildLoginErrorRedirect(attempt.Error!, company));
@@ -110,7 +110,8 @@ namespace Lanyard.App.Controllers
             [FromForm] string? rememberMachine = null,
             [FromForm] bool rememberMe = false,
             [FromForm] string? returnUrl = null,
-            [FromForm] int? locationId = null)
+            [FromForm] int? locationId = null,
+            [FromForm] int? company = null)
         {
             // FluentCheckbox posts as a native HTML checkbox: present with browser-default value "on"
             // when checked, and absent entirely when unchecked - not a "true"/"false" bool the model
@@ -121,7 +122,7 @@ namespace Lanyard.App.Controllers
 
             if (user is null)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Your session expired. Please log in again.")}");
+                return Redirect(BuildLoginErrorRedirect("Your session expired. Please log in again.", company));
             }
 
             bool isValid = provider == "RecoveryCode"
@@ -136,7 +137,7 @@ namespace Lanyard.App.Controllers
                     ? "Account temporarily locked due to repeated failed attempts. Try again later."
                     : "Invalid or expired code.";
 
-                string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId);
+                string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company);
                 return Redirect($"/login/verify-2fa{query}&error={Uri.EscapeDataString(message)}");
             }
 
@@ -148,7 +149,7 @@ namespace Lanyard.App.Controllers
             if (!locationOk)
             {
                 await _signInManager.SignOutAsync();
-                return Redirect($"/login?error={Uri.EscapeDataString(locationError!)}");
+                return Redirect(BuildLoginErrorRedirect(locationError!, company));
             }
 
             if (rememberMachineChecked)
@@ -173,19 +174,20 @@ namespace Lanyard.App.Controllers
         public async Task<IActionResult> ResendTwoFactorCodeForm(
             [FromForm] bool rememberMe = false,
             [FromForm] string? returnUrl = null,
-            [FromForm] int? locationId = null)
+            [FromForm] int? locationId = null,
+            [FromForm] int? company = null)
         {
             UserProfile? user = await _signInManager.GetTwoFactorAuthenticationUserAsync();
 
             if (user is null)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Your session expired. Please log in again.")}");
+                return Redirect(BuildLoginErrorRedirect("Your session expired. Please log in again.", company));
             }
 
             string code = await _userManager.GenerateTwoFactorTokenAsync(user, TokenOptions.DefaultEmailProvider);
             Result<bool> sendResult = await _emailService.SendTwoFactorCodeEmailAsync(user, code);
 
-            string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId);
+            string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company);
 
             if (!sendResult.IsSuccess)
             {
@@ -338,7 +340,7 @@ namespace Lanyard.App.Controllers
             return new SignInAttemptResult(SignInOutcomeKind.Success, user, Claims: extraClaims);
         }
 
-        private static string BuildTwoFactorRedirectQuery(bool rememberMe, string? returnUrl, int? locationId)
+        private static string BuildTwoFactorRedirectQuery(bool rememberMe, string? returnUrl, int? locationId, int? companyId)
         {
             List<string> parts = [$"rememberMe={(rememberMe ? "true" : "false")}"];
 
@@ -350,6 +352,11 @@ namespace Lanyard.App.Controllers
             if (locationId.HasValue)
             {
                 parts.Add($"locationId={locationId.Value}");
+            }
+
+            if (companyId.HasValue)
+            {
+                parts.Add($"company={companyId.Value}");
             }
 
             return "?" + string.Join("&", parts);
