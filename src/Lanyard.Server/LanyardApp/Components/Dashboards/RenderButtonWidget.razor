@@ -1,12 +1,14 @@
 @using Lanyard.Infrastructure.Enum
 
 @inject IProjectionProgramService ProjectionProgramService
+@inject IProjectionProgramRunnerService ProgramRunner
+@inject IClientService ClientService
 
 <div style="width: 100%; height: 100%;">
     <FluentButton Appearance="@Widget.Appearance"
                     Style="width: 100%; height: 100%;"
                     Disabled="@(_isExecuting || !CanRunConfiguredAction)"
-                    Title="@(CanRunConfiguredAction ? null : "Only Admins and Managers can trigger projection programs")"
+                    Title="@(CanRunConfiguredAction ? null : "Only Admins and Managers can control projection programs")"
                     @onclick="HandleClick">
         @Widget.Label
     </FluentButton>
@@ -21,15 +23,26 @@
 
     private bool _isExecuting;
 
-    // Triggering a projection program is Admin/Manager-only at /manage/projectioncontrol. A button
-    // widget can sit on any dashboard - including a non-Admin's home screen - so the role is
-    // checked here rather than relying on the page the widget happens to be rendered on.
+    // Controlling a projection program is Admin/Manager-only at /manage/projectioncontrol. A
+    // button widget can sit on any dashboard - including a non-Admin's home screen - so the role
+    // is checked here rather than relying on the page the widget happens to be rendered on.
     // Only enforced for signed-in users: /kiosk is deliberately AllowAnonymous and renders this
     // same grid, and those displays are trusted physically rather than by role.
     private bool _canTriggerProjection;
 
+    private static readonly HashSet<ButtonActionType> ProjectionControlActionTypes =
+    [
+        ButtonActionType.TriggerProjectionProgram,
+        ButtonActionType.PauseProjectionProgram,
+        ButtonActionType.ResumeProjectionProgram,
+        ButtonActionType.SkipProjectionProgramStep,
+        ButtonActionType.StopProjectionProgram
+    ];
+
     private bool CanRunConfiguredAction =>
-        Widget.ActionType != ButtonActionType.TriggerProjectionProgram || _canTriggerProjection;
+        Widget.ActionType is not ButtonActionType actionType
+        || !ProjectionControlActionTypes.Contains(actionType)
+        || _canTriggerProjection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,6 +66,18 @@
             {
                 case ButtonActionType.TriggerProjectionProgram:
                     await TriggerProjectionProgramAsync();
+                    break;
+                case ButtonActionType.PauseProjectionProgram:
+                    PauseOrResumeProjectionProgram(pause: true);
+                    break;
+                case ButtonActionType.ResumeProjectionProgram:
+                    PauseOrResumeProjectionProgram(pause: false);
+                    break;
+                case ButtonActionType.SkipProjectionProgramStep:
+                    SkipProjectionProgramStep();
+                    break;
+                case ButtonActionType.StopProjectionProgram:
+                    await StopProjectionProgramAsync();
                     break;
                 default:
                     _toastService.ShowWarning("This button has no action configured.");
@@ -90,6 +115,110 @@
         else
         {
             _toastService.ShowError($"Failed to trigger projection program, {result.Error}");
+        }
+    }
+
+    private void PauseOrResumeProjectionProgram(bool pause)
+    {
+        if (!_canTriggerProjection)
+        {
+            _toastService.ShowError("You do not have permission to control projection programs.");
+
+            return;
+        }
+
+        if (Widget.ClientId is not Guid clientId)
+        {
+            _toastService.ShowWarning("This button is not configured with a client.");
+
+            return;
+        }
+
+        int displayIndex = Widget.DisplayIndex ?? 0;
+        Result<bool> result = pause
+            ? ProgramRunner.Pause(clientId, displayIndex)
+            : ProgramRunner.Resume(clientId, displayIndex);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(pause ? "Paused projection program." : "Resumed projection program.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to change the projection program's pause state.");
+        }
+    }
+
+    private void SkipProjectionProgramStep()
+    {
+        if (!_canTriggerProjection)
+        {
+            _toastService.ShowError("You do not have permission to control projection programs.");
+
+            return;
+        }
+
+        if (Widget.ClientId is not Guid clientId)
+        {
+            _toastService.ShowWarning("This button is not configured with a client.");
+
+            return;
+        }
+
+        int displayIndex = Widget.DisplayIndex ?? 0;
+        Result<bool> result = Widget.SkipToPreviousStep
+            ? ProgramRunner.SkipToPreviousStep(clientId, displayIndex)
+            : ProgramRunner.SkipToNextStep(clientId, displayIndex);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(Widget.SkipToPreviousStep ? "Skipped to the previous step." : "Skipped to the next step.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to skip the projection program step.");
+        }
+    }
+
+    private async Task StopProjectionProgramAsync()
+    {
+        if (!_canTriggerProjection)
+        {
+            _toastService.ShowError("You do not have permission to control projection programs.");
+
+            return;
+        }
+
+        if (Widget.ClientId is not Guid clientId)
+        {
+            _toastService.ShowWarning("This button is not configured with a client.");
+
+            return;
+        }
+
+        int displayIndex = Widget.DisplayIndex ?? 0;
+        Result<bool> stopResult = ProgramRunner.Stop(clientId, displayIndex);
+
+        if (!stopResult.IsSuccess)
+        {
+            _toastService.ShowError(stopResult.Error ?? "Failed to stop the projection program.");
+
+            return;
+        }
+
+        // Both halves matter, same as StopProjectionProgramActionExecutor: Stop alone raises
+        // OnProgramStopped, not OnProgramCompletedNaturally, which is the only event the
+        // window-close listener watches - so stopping without closing leaves the last frame
+        // frozen on the screen.
+        Result<bool> closeResult = await ClientService.CloseTemporaryProjectionWindowOnClientAsync(clientId, displayIndex);
+
+        if (closeResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Stopped projection program.");
+        }
+        else
+        {
+            _toastService.ShowError(closeResult.Error ?? "Failed to close the projection window.");
         }
     }
 }

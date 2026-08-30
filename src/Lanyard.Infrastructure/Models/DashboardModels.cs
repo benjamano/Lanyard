@@ -145,6 +145,10 @@ public class ButtonWidget : DashboardWidget
 
     // Which monitor the projection opens on; null uses the client's default display.
     public int? DisplayIndex { get; set; }
+
+    // Only meaningful for ActionType == SkipProjectionProgramStep. False (the default) skips
+    // forward, matching the runner's SkipToNextStep being the more common transport action.
+    public bool SkipToPreviousStep { get; set; }
 }
 
 public class MusicPlaylistSelectorWidget : DashboardWidget

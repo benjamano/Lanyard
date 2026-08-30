@@ -293,6 +293,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingButton.ClientId = incomingButton.ClientId;
                     existingButton.ProjectionProgramId = incomingButton.ProjectionProgramId;
                     existingButton.DisplayIndex = incomingButton.DisplayIndex;
+                    existingButton.SkipToPreviousStep = incomingButton.SkipToPreviousStep;
                     break;
                 case MusicPlaylistSelectorWidget existingPlaylistSelector when widget is MusicPlaylistSelectorWidget incomingPlaylistSelector:
                     existingPlaylistSelector.ClientId = incomingPlaylistSelector.ClientId;
@@ -642,7 +643,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ActionType = buttonWidget.ActionType,
                 ClientId = buttonWidget.ClientId,
                 ProjectionProgramId = buttonWidget.ProjectionProgramId,
-                DisplayIndex = buttonWidget.DisplayIndex
+                DisplayIndex = buttonWidget.DisplayIndex,
+                SkipToPreviousStep = buttonWidget.SkipToPreviousStep
             },
             MusicPlaylistSelectorWidget playlistSelectorWidget => new MusicPlaylistSelectorWidget
             {
@@ -740,6 +742,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetButton.ClientId = sourceButton.ClientId;
             targetButton.ProjectionProgramId = sourceButton.ProjectionProgramId;
             targetButton.DisplayIndex = sourceButton.DisplayIndex;
+            targetButton.SkipToPreviousStep = sourceButton.SkipToPreviousStep;
         }
 
         if (target is MusicPlaylistSelectorWidget targetPlaylistSelector && source is MusicPlaylistSelectorWidget sourcePlaylistSelector)
