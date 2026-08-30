@@ -10,6 +10,13 @@
 {
     <AuthPageShell Title="Please select your company">
         <ChildContent>
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error">
+                    @ErrorMessage
+                </FluentMessageBar>
+            }
+
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="10"
                          HorizontalAlignment="HorizontalAlignment.Stretch" Class="company-picker">
                 @if (!companyOptions.Any())
@@ -68,6 +75,7 @@ else
 
                 <form method="post" class="col-12" action="/api/auth/login-form">
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+                    <input type="hidden" name="company" value="@CompanyId" />
 
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
                                  HorizontalAlignment="HorizontalAlignment.Center">

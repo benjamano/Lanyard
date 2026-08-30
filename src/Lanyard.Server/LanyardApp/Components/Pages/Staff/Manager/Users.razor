@@ -36,8 +36,8 @@
             <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" Sortable="true"
                             IsDefaultSortColumn="true" />
             <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" Sortable="true" />
-            <PropertyColumn Property="@(r => r.PasswordSetDate == null ? "Invite Pending" : "Active")" Title="Status"
-                            Sortable="true" />
+            <PropertyColumn Property="@(r => IsLockedOut(r) ? "Locked" : r.PasswordSetDate == null ? "Invite Pending" : "Active")"
+                            Title="Status" Sortable="true" />
             <TemplateColumn Title="Actions">
                 <div class="d-flex align-items-center">
                     <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
@@ -49,6 +49,11 @@
                     <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
                                 OnClick="@(() => SendSetPasswordLink(context))"
                                 title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
+                    @if (IsLockedOut(context))
+                    {
+                        <FluentIcon Icon="Icons.Regular.Size20.LockOpen" Color="Color.Warning"
+                                    OnClick="@(() => UnlockUser(context))" title="Unlock Account" />
+                    }
                     <AuthorizeView Roles="Admin" Context="authContext">
                         <Authorized>
                             <FluentIcon Icon="Icons.Regular.Size20.PersonDelete" Color="Color.Error"
@@ -212,6 +217,28 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ChangePasswordDialog.Content), user);
         });
+    }
+
+    // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
+    // an account with lockout disabled can still carry a stale LockoutEnd from before it was
+    // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
+    private static bool IsLockedOut(UserProfile user) =>
+        user.LockoutEnabled && user.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
+
+    private async Task UnlockUser(UserProfile user)
+    {
+        Result<bool> result = await _securityService.UnlockUserAsync(user.Id);
+
+        if (result.IsSuccess)
+        {
+            ToastService.ShowSuccess($"{user.GetName()}'s account has been unlocked.");
+        }
+        else
+        {
+            ToastService.ShowError(result.Error ?? "Failed to unlock account.");
+        }
+
+        await GetUsers();
     }
 
     private async Task SendSetPasswordLink(UserProfile user)

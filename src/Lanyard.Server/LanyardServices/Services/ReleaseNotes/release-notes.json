@@ -193,5 +193,16 @@
       "A course created by an admin is now filed under the location they are signed in to, instead of having no location and disappearing from the list it was created on.",
       "The current location now also shows in the header on phone-sized screens, where the footer that normally shows it is hidden."
     ]
+  },
+  {
+    "version": "1.3.14",
+    "releaseDate": "2026-08-30",
+    "summary": "Admins and managers can now unlock a locked-out user account.",
+    "details": [
+      "Fixed a bug where a login error - such as a locked account, invalid credentials, or a location access error - was not shown, and instead sent the user back to the company selection screen with no explanation.",
+      "Login errors are now shown on the login screen where they belong.",
+      "Added an unlock icon on the Users page for any account temporarily locked out from too many failed sign-in attempts, so staff no longer have to wait out the lockout timer.",
+      "The Users page Status column now shows \"Locked\" for an account currently locked out."
+    ]
   }
 ]
