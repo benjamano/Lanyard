@@ -193,5 +193,15 @@
       "A course created by an admin is now filed under the location they are signed in to, instead of having no location and disappearing from the list it was created on.",
       "The current location now also shows in the header on phone-sized screens, where the footer that normally shows it is hidden."
     ]
+  },
+  {
+    "version": "1.3.14",
+    "releaseDate": "2026-08-30",
+    "summary": "Added a Scheduled trigger type to Automation rules.",
+    "details": [
+      "Added a \"Scheduled\" trigger type to Automation rules, so a rule can run at a chosen time of day instead of only in response to a game status change or a client going idle.",
+      "A scheduled rule can be set to run every day, or only on specific days of the week.",
+      "The Automation rules list now shows a readable description of each rule's trigger, e.g. \"Daily at 09:00\" or \"Mon, Wed, Fri at 18:30\", instead of a raw game status value that didn't apply to idle or scheduled rules."
+    ]
   }
 ]

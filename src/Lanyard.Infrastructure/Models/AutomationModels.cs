@@ -21,6 +21,16 @@ public class AutomationRule
     // ClientIdle rule without one rather than letting a rule that can never fire be saved.
     public int? IdleThresholdMinutes { get; set; }
 
+    // Required when TriggerType is Scheduled, null otherwise. Server-local wall-clock time -
+    // matches HallOfFamePeriodExtensions/Client.AutoRestartTimeOfDay, since there is no venue
+    // timezone concept in this app and local is the basis staff actually experience.
+    public TimeOnly? ScheduledTimeOfDay { get; set; }
+
+    // Meaningful only when TriggerType is Scheduled. CSV of System.DayOfWeek integer values
+    // (e.g. "1,2,3,4,5"); null or empty means every day. See AutomationScheduleDays for the
+    // shared parse/serialize/match logic.
+    public string? ScheduledDaysOfWeek { get; set; }
+
     public bool IsActive { get; set; }
     public bool IsEnabled { get; set; } = true;
 

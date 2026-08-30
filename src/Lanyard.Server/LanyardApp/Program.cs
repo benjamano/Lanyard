@@ -120,6 +120,7 @@ builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
+builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 

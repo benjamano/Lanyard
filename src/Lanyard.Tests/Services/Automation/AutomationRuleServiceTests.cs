@@ -480,4 +480,122 @@ public class AutomationRuleServiceTests
         Assert.IsFalse(updateResult.IsSuccess);
         Assert.AreEqual("An idle rule needs an idle threshold in minutes.", updateResult.Error);
     }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAScheduledRuleWithNoTimeOfDay()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.Scheduled;
+        rule.ScheduledTimeOfDay = null;
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess, "A scheduled rule with no time of day can never fire.");
+        Assert.AreEqual("A scheduled rule needs a time of day.", result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(0, await ctx.AutomationRules.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAScheduledRuleWithMalformedDaysOfWeek()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.Scheduled;
+        rule.ScheduledTimeOfDay = new TimeOnly(9, 0);
+        rule.ScheduledDaysOfWeek = "Monday";
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("A scheduled rule's days of week are not valid.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_AcceptsAScheduledRuleWithATimeAndNoDays()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.Scheduled;
+        rule.ScheduledTimeOfDay = new TimeOnly(9, 0);
+        rule.ScheduledDaysOfWeek = null;
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+
+        Assert.AreEqual(AutomationTriggerType.Scheduled, saved.TriggerType);
+        Assert.AreEqual(new TimeOnly(9, 0), saved.ScheduledTimeOfDay);
+        Assert.IsNull(saved.ScheduledDaysOfWeek);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_AcceptsAScheduledRuleWithSpecificDays()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        rule.TriggerType = AutomationTriggerType.Scheduled;
+        rule.ScheduledTimeOfDay = new TimeOnly(9, 0);
+        rule.ScheduledDaysOfWeek = "1,2,3,4,5";
+
+        Result<AutomationRule> result = await service.CreateRuleAsync(rule);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AutomationRule saved = await ctx.AutomationRules.SingleAsync();
+
+        Assert.AreEqual("1,2,3,4,5", saved.ScheduledDaysOfWeek);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_RejectsAScheduledRuleWithNoTimeOfDay()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        Result<AutomationRule> createResult = await service.CreateRuleAsync(rule);
+        Assert.IsTrue(createResult.IsSuccess, createResult.Error);
+
+        rule.TriggerType = AutomationTriggerType.Scheduled;
+        rule.ScheduledTimeOfDay = null;
+
+        Result<AutomationRule> updateResult = await service.UpdateRuleAsync(rule);
+
+        Assert.IsFalse(updateResult.IsSuccess);
+        Assert.AreEqual("A scheduled rule needs a time of day.", updateResult.Error);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_LeavesIdleAndTransitionRulesUnaffectedByScheduleValidation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule idleRule = BuildRule(Guid.NewGuid(), name: "Idle rule");
+        idleRule.TriggerType = AutomationTriggerType.ClientIdle;
+        idleRule.IdleThresholdMinutes = 30;
+
+        AutomationRule transitionRule = BuildRule(Guid.NewGuid(), name: "Transition rule");
+
+        Result<AutomationRule> idleResult = await service.CreateRuleAsync(idleRule);
+        Result<AutomationRule> transitionResult = await service.CreateRuleAsync(transitionRule);
+
+        Assert.IsTrue(idleResult.IsSuccess, idleResult.Error);
+        Assert.IsTrue(transitionResult.IsSuccess, transitionResult.Error);
+    }
 }

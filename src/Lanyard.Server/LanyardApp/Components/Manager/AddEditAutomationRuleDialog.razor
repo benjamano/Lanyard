@@ -35,7 +35,7 @@
                                  Appearance="TextInputAppearance.Outline"
                                  Style="width: 100%;" />
 
-                <FluentSelect Label="Trigger Client"
+                <FluentSelect Label="@(_triggerTypeString == AutomationTriggerType.Scheduled.ToString() ? "Associated Client" : "Trigger Client")"
                               TOption="ClientConnectedDTO"
                               TValue="string"
                               Items="@_clients"
@@ -44,6 +44,13 @@
                               @bind-Value="_triggerClientIdString"
                               Style="width: 100%;" />
 
+                @if (_triggerTypeString == AutomationTriggerType.Scheduled.ToString())
+                {
+                    <FluentText Typo="Typography.Body" Color="Color.Default">
+                        A scheduled rule isn't triggered by this client - it's only recorded as a label on the execution log.
+                    </FluentText>
+                }
+
                 <FluentSelect Label="Trigger Type"
                               TOption="string"
                               TValue="string"
@@ -51,6 +58,7 @@
                               Style="width: 100%;">
                     <FluentOption Value="@AutomationTriggerType.GameStatusTransition.ToString()">Game Status Change</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.ClientIdle.ToString()">Client Idle</FluentOption>
+                    <FluentOption Value="@AutomationTriggerType.Scheduled.ToString()">Scheduled</FluentOption>
                 </FluentSelect>
 
                 @if (_triggerTypeString == AutomationTriggerType.ClientIdle.ToString())
@@ -63,6 +71,25 @@
                                        Value="@_idleThresholdMinutes"
                                        ValueChanged="@((int? minutes) => _idleThresholdMinutes = minutes)"
                                        Style="width: 100%;" />
+                }
+                else if (_triggerTypeString == AutomationTriggerType.Scheduled.ToString())
+                {
+                    @* Trigger Event and idle threshold are both meaningless for a scheduled rule. *@
+                    <FluentTimePicker @bind-Value="_scheduledTimeOfDay"
+                                      RenderStyle="DatePickerRenderStyle.Native"
+                                      Label="At time (server local)"
+                                      Style="width: 100%;" />
+
+                    <FluentText Typo="Typography.Body" Color="Color.Default">Days of week (leave all unticked to run every day)</FluentText>
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
+                        @foreach (DayOfWeek day in _allDaysOfWeek)
+                        {
+                            DayOfWeek capturedDay = day;
+                            <FluentCheckbox Value="@_scheduledDays.Contains(capturedDay)"
+                                            ValueChanged="@((bool ticked) => OnScheduledDayToggled(capturedDay, ticked))"
+                                            Label="@(capturedDay.ToString()[..3])" />
+                        }
+                    </FluentStack>
                 }
                 else
                 {
@@ -317,13 +344,31 @@
     private string _triggerEventString = GameStatus.InGame.ToString();
     private string _triggerTypeString = AutomationTriggerType.GameStatusTransition.ToString();
 
-    // Mirrors AutomationRuleService.ValidateRule so a rule that the service would reject cannot
-    // be carried through to the actions step in the first place.
+    // Delegates to the same validation CreateRuleAsync/UpdateRuleAsync will apply, so a rule the
+    // service would reject cannot be carried through to the actions step in the first place.
     private bool IsTriggerConfigured =>
-        _triggerTypeString != AutomationTriggerType.ClientIdle.ToString()
-        || (_idleThresholdMinutes.HasValue && _idleThresholdMinutes.Value > 0);
+        AutomationRuleService.ValidateTrigger(
+            Enum.Parse<AutomationTriggerType>(_triggerTypeString),
+            _idleThresholdMinutes,
+            _scheduledTimeOfDay,
+            AutomationScheduleDays.Serialize(_scheduledDays)) is null;
 
     private int? _idleThresholdMinutes = 30;
+    private static readonly List<DayOfWeek> _allDaysOfWeek = [DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday];
+    private TimeOnly _scheduledTimeOfDay = new(9, 0);
+    private HashSet<DayOfWeek> _scheduledDays = [];
+
+    private void OnScheduledDayToggled(DayOfWeek day, bool ticked)
+    {
+        if (ticked)
+        {
+            _scheduledDays.Add(day);
+        }
+        else
+        {
+            _scheduledDays.Remove(day);
+        }
+    }
     private List<ActionRow> _actionRows = [];
     private IEnumerable<ClientConnectedDTO> _clients = [];
     private bool _isSaving = false;
@@ -343,6 +388,11 @@
             _triggerEventString = Content.TriggerEvent.ToString();
             _triggerTypeString = Content.TriggerType.ToString();
             _idleThresholdMinutes = Content.IdleThresholdMinutes ?? 30;
+            _scheduledTimeOfDay = Content.ScheduledTimeOfDay ?? new TimeOnly(9, 0);
+            AutomationScheduleDays.TryParse(Content.ScheduledDaysOfWeek, out List<DayOfWeek> parsedDays);
+            _scheduledDays = Content.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(Content.ScheduledDaysOfWeek)
+                ? [.. parsedDays]
+                : [];
 
             foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
             {
@@ -603,6 +653,8 @@
         GameStatus triggerEvent = Enum.Parse<GameStatus>(_triggerEventString);
         AutomationTriggerType triggerType = Enum.Parse<AutomationTriggerType>(_triggerTypeString);
         int? idleThresholdMinutes = triggerType == AutomationTriggerType.ClientIdle ? _idleThresholdMinutes : null;
+        TimeOnly? scheduledTimeOfDay = triggerType == AutomationTriggerType.Scheduled ? _scheduledTimeOfDay : null;
+        string? scheduledDaysOfWeek = triggerType == AutomationTriggerType.Scheduled ? AutomationScheduleDays.Serialize(_scheduledDays) : null;
 
         List<AutomationRuleAction> newActions = [];
         for (int i = 0; i < _actionRows.Count; i++)
@@ -691,6 +743,8 @@
                 TriggerType = triggerType,
                 TriggerEvent = triggerEvent,
                 IdleThresholdMinutes = idleThresholdMinutes,
+                ScheduledTimeOfDay = scheduledTimeOfDay,
+                ScheduledDaysOfWeek = scheduledDaysOfWeek,
                 IsActive = true,
                 CreateDate = Content.CreateDate,
                 Actions = newActions
@@ -711,6 +765,8 @@
                 TriggerType = triggerType,
                 TriggerEvent = triggerEvent,
                 IdleThresholdMinutes = idleThresholdMinutes,
+                ScheduledTimeOfDay = scheduledTimeOfDay,
+                ScheduledDaysOfWeek = scheduledDaysOfWeek,
                 Actions = newActions
             };
             saveResult = await _ruleService.CreateRuleAsync(newRule);
