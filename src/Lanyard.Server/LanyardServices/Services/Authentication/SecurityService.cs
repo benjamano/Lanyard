@@ -468,9 +468,15 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail($"Failed to unlock user: {errors}");
             }
 
-            await _userManager.ResetAccessFailedCountAsync(user);
+            IdentityResult resetResult = await _userManager.ResetAccessFailedCountAsync(user);
 
-            _logger.LogInformation("User {UserId} was unlocked by an administrator", user.Id);
+            if (!resetResult.Succeeded)
+            {
+                string errors = string.Join(", ", resetResult.Errors.Select(e => e.Description));
+                return Result<bool>.Fail($"Failed to unlock user: {errors}");
+            }
+
+            _logger.LogInformation("User {UserId} was unlocked by {UnlockedByUserId}", user.Id, (await GetCurrentUserIdAsync()).Data);
 
             return Result<bool>.Ok(true);
         }
