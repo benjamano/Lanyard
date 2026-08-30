@@ -1,0 +1,153 @@
+@implements IDisposable
+@using Lanyard.Infrastructure.DTO
+
+@inject IProjectionProgramRunnerService ProgramRunner
+
+<FluentCard Height="100%">
+    @if (Widget.ClientId is not Guid clientId)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge">Please select a Client to observe</FluentBadge>
+        </FluentStack>
+    }
+    else if (_run == null)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Height="100%">
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Size="@BadgeSize.ExtraLarge" Color="@BadgeColor.Subtle">Nothing is currently playing</FluentBadge>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="@Orientation.Vertical" VerticalGap="8" Height="100%" Width="100%">
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="8"
+                         VerticalAlignment="@VerticalAlignment.Center" Width="auto">
+                <FluentText Size="@TextSize.Size500">@_run.ProgramName</FluentText>
+
+                <FluentBadge Appearance="@BadgeAppearance.Filled">
+                    @(_run.IsPaused ? "Paused" : "Playing")
+                </FluentBadge>
+            </FluentStack>
+
+            <FluentText Size="@TextSize.Size300">
+                Step @(_run.CurrentStepIndex + 1) of @_run.Steps.Count: @StepName(_run)
+            </FluentText>
+
+            <FluentProgressBar Min="0" Max="100" Value="@Progress(_run)" Width="100%" />
+
+            @if (Widget.ShowControls)
+            {
+                <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="4"
+                             HorizontalAlignment="@HorizontalAlignment.Center" Width="100%">
+                    <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowPrevious())"
+                                  Appearance="@ButtonAppearance.Transparent"
+                                  Tooltip="Previous step"
+                                  OnClick="@(() => Handle(ProgramRunner.SkipToPreviousStep(clientId, DisplayIndex)))" />
+
+                    <FluentButton IconStart="@(_run.IsPaused ? new Icons.Regular.Size20.Play() : new Icons.Regular.Size20.Pause())"
+                                  Appearance="@ButtonAppearance.Primary"
+                                  Tooltip="@(_run.IsPaused ? "Resume" : "Pause")"
+                                  OnClick="@(() => Handle(_run.IsPaused
+                                                ? ProgramRunner.Resume(clientId, DisplayIndex)
+                                                : ProgramRunner.Pause(clientId, DisplayIndex)))" />
+
+                    <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowNext())"
+                                  Appearance="@ButtonAppearance.Transparent"
+                                  Tooltip="Next step"
+                                  OnClick="@(() => Handle(ProgramRunner.SkipToNextStep(clientId, DisplayIndex)))" />
+
+                    <FluentButton IconStart="@(new Icons.Filled.Size20.Stop())"
+                                  Appearance="@ButtonAppearance.Transparent"
+                                  Tooltip="Stop"
+                                  OnClick="@(() => Handle(ProgramRunner.Stop(clientId, DisplayIndex)))" />
+                </FluentStack>
+            }
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required ProjectionStatusWidget Widget { get; set; }
+
+    private ProjectionRunState? _run;
+
+    // Null means "client default", which the runner always keys as display 0 - matching
+    // StopProjectionProgramActionExecutor and Kiosk.razor's ResolvedDisplayIndex.
+    private int DisplayIndex => Widget.DisplayIndex ?? 0;
+
+    protected override void OnInitialized()
+    {
+        // The runner is a singleton in this same process, so these are plain in-process
+        // subscriptions - no SignalR hop is involved in keeping this widget live.
+        ProgramRunner.OnProgramStarted += HandleProgramChanged;
+        ProgramRunner.OnProgramStopped += HandleProgramChanged;
+        ProgramRunner.OnProgramStepAdvanced += HandleStepAdvanced;
+        ProgramRunner.OnProgramPauseChanged += HandlePauseChanged;
+
+        Reload();
+    }
+
+    protected override void OnParametersSet() => Reload();
+
+    private void HandleProgramChanged(Guid clientId, int displayIndex, Guid programId) => ReloadIfWatched(clientId, displayIndex);
+
+    private void HandleStepAdvanced(Guid clientId, int displayIndex, int stepIndex) => ReloadIfWatched(clientId, displayIndex);
+
+    private void HandlePauseChanged(Guid clientId, int displayIndex, bool isPaused) => ReloadIfWatched(clientId, displayIndex);
+
+    private void ReloadIfWatched(Guid clientId, int displayIndex)
+    {
+        if (Widget.ClientId != clientId || DisplayIndex != displayIndex)
+        {
+            return;
+        }
+
+        Reload();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Every event re-reads the runner's snapshot rather than patching a local copy, so the
+    // widget can't drift out of sync with playback if an event is raised while it re-renders.
+    private void Reload()
+    {
+        _run = Widget.ClientId is Guid clientId
+            ? ProgramRunner.GetRunningState(clientId, DisplayIndex)
+            : null;
+    }
+
+    private void Handle(Result<bool> result)
+    {
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The projection program command failed.");
+
+            return;
+        }
+
+        Reload();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string StepName(ProjectionRunState run)
+    {
+        if (run.CurrentStepIndex < 0 || run.CurrentStepIndex >= run.Steps.Count)
+        {
+            return "Unknown";
+        }
+
+        return run.Steps[run.CurrentStepIndex].Template?.Name ?? "Unknown";
+    }
+
+    private static int Progress(ProjectionRunState run) =>
+        run.Steps.Count == 0 ? 0 : (int)Math.Round((run.CurrentStepIndex + 1) / (double)run.Steps.Count * 100);
+
+    public void Dispose()
+    {
+        ProgramRunner.OnProgramStarted -= HandleProgramChanged;
+        ProgramRunner.OnProgramStopped -= HandleProgramChanged;
+        ProgramRunner.OnProgramStepAdvanced -= HandleStepAdvanced;
+        ProgramRunner.OnProgramPauseChanged -= HandlePauseChanged;
+    }
+}

@@ -318,6 +318,11 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingMyTraining.IncludeCompleted = incomingMyTraining.IncludeCompleted;
                     existingMyTraining.MaxItems = incomingMyTraining.MaxItems;
                     break;
+                case ProjectionStatusWidget existingProjectionStatus when widget is ProjectionStatusWidget incomingProjectionStatus:
+                    existingProjectionStatus.ClientId = incomingProjectionStatus.ClientId;
+                    existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
+                    existingProjectionStatus.ShowControls = incomingProjectionStatus.ShowControls;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -673,6 +678,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             // signed-in user - but the case is still required, or the switch below throws and
             // the whole dashboard save fails.
             GreetingWidget => new GreetingWidget(),
+            ProjectionStatusWidget projectionStatusWidget => new ProjectionStatusWidget
+            {
+                ClientId = projectionStatusWidget.ClientId,
+                DisplayIndex = projectionStatusWidget.DisplayIndex,
+                ShowControls = projectionStatusWidget.ShowControls
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -768,6 +779,13 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetMyTraining.IncludeCompleted = sourceMyTraining.IncludeCompleted;
             targetMyTraining.MaxItems = sourceMyTraining.MaxItems;
+        }
+
+        if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)
+        {
+            targetProjectionStatus.ClientId = sourceProjectionStatus.ClientId;
+            targetProjectionStatus.DisplayIndex = sourceProjectionStatus.DisplayIndex;
+            targetProjectionStatus.ShowControls = sourceProjectionStatus.ShowControls;
         }
     }
 }

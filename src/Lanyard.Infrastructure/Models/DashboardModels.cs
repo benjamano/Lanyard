@@ -271,3 +271,28 @@ public class GreetingWidget : DashboardWidget
         GridH = 1;
     }
 }
+
+// A live "now playing" view of ProjectionProgramRunnerService for one client/display, reusing the
+// same progress-bar/step-label markup and runner events as the manager's Live Projection Control
+// panel. ShowControls off gives a read-only view suitable for a public kiosk dashboard; on, it adds
+// the same pause/skip/stop transport buttons that panel has.
+public class ProjectionStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ProjectionStatusWidget()
+    {
+        Type = WidgetType.ProjectionStatus;
+
+        GridW = 4;
+        GridH = 2;
+
+        ShowControls = false;
+    }
+
+    public Guid? ClientId { get; set; }
+
+    // Which monitor to watch; null uses the client's default display, matching ButtonWidget.
+    public int? DisplayIndex { get; set; }
+
+    public bool ShowControls { get; set; }
+}
