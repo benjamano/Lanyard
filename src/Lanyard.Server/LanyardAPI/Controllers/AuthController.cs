@@ -71,20 +71,20 @@ namespace Lanyard.App.Controllers
 
         [HttpPost("login-form")]
         [Consumes("application/x-www-form-urlencoded")]
-        public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null)
+        public async Task<IActionResult> LoginForm([FromForm] string username, [FromForm] string password, [FromForm] bool rememberMe = false, [FromForm] string? returnUrl = null, [FromForm] int? locationId = null, [FromForm] int? company = null)
         {
             SignInAttemptResult attempt = await AttemptPasswordSignInAsync(username, password, rememberMe, locationId);
 
             switch (attempt.Kind)
             {
                 case SignInOutcomeKind.LockedOut:
-                    return Redirect($"/login?error={Uri.EscapeDataString("Account temporarily locked due to repeated failed attempts. Try again later.")}");
+                    return Redirect(BuildLoginErrorRedirect("Account temporarily locked due to repeated failed attempts. Try again later.", company));
 
                 case SignInOutcomeKind.RequiresTwoFactor:
-                    return Redirect($"/login/verify-2fa{BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId)}");
+                    return Redirect($"/login/verify-2fa{BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company)}");
 
                 case SignInOutcomeKind.LocationError:
-                    return Redirect($"/login?error={Uri.EscapeDataString(attempt.Error!)}");
+                    return Redirect(BuildLoginErrorRedirect(attempt.Error!, company));
 
                 case SignInOutcomeKind.Success:
                     await _signInManager.SignInWithClaimsAsync(attempt.User!, rememberMe, attempt.Claims!);
@@ -97,7 +97,7 @@ namespace Lanyard.App.Controllers
                     return Redirect("/");
 
                 default:
-                    return Redirect($"/login?error={Uri.EscapeDataString("Invalid username or password")}");
+                    return Redirect(BuildLoginErrorRedirect("Invalid username or password", company));
             }
         }
 
@@ -110,7 +110,8 @@ namespace Lanyard.App.Controllers
             [FromForm] string? rememberMachine = null,
             [FromForm] bool rememberMe = false,
             [FromForm] string? returnUrl = null,
-            [FromForm] int? locationId = null)
+            [FromForm] int? locationId = null,
+            [FromForm] int? company = null)
         {
             // FluentCheckbox posts as a native HTML checkbox: present with browser-default value "on"
             // when checked, and absent entirely when unchecked - not a "true"/"false" bool the model
@@ -121,7 +122,7 @@ namespace Lanyard.App.Controllers
 
             if (user is null)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Your session expired. Please log in again.")}");
+                return Redirect(BuildLoginErrorRedirect("Your session expired. Please log in again.", company));
             }
 
             bool isValid = provider == "RecoveryCode"
@@ -136,7 +137,7 @@ namespace Lanyard.App.Controllers
                     ? "Account temporarily locked due to repeated failed attempts. Try again later."
                     : "Invalid or expired code.";
 
-                string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId);
+                string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company);
                 return Redirect($"/login/verify-2fa{query}&error={Uri.EscapeDataString(message)}");
             }
 
@@ -148,7 +149,7 @@ namespace Lanyard.App.Controllers
             if (!locationOk)
             {
                 await _signInManager.SignOutAsync();
-                return Redirect($"/login?error={Uri.EscapeDataString(locationError!)}");
+                return Redirect(BuildLoginErrorRedirect(locationError!, company));
             }
 
             if (rememberMachineChecked)
@@ -173,19 +174,20 @@ namespace Lanyard.App.Controllers
         public async Task<IActionResult> ResendTwoFactorCodeForm(
             [FromForm] bool rememberMe = false,
             [FromForm] string? returnUrl = null,
-            [FromForm] int? locationId = null)
+            [FromForm] int? locationId = null,
+            [FromForm] int? company = null)
         {
             UserProfile? user = await _signInManager.GetTwoFactorAuthenticationUserAsync();
 
             if (user is null)
             {
-                return Redirect($"/login?error={Uri.EscapeDataString("Your session expired. Please log in again.")}");
+                return Redirect(BuildLoginErrorRedirect("Your session expired. Please log in again.", company));
             }
 
             string code = await _userManager.GenerateTwoFactorTokenAsync(user, TokenOptions.DefaultEmailProvider);
             Result<bool> sendResult = await _emailService.SendTwoFactorCodeEmailAsync(user, code);
 
-            string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId);
+            string query = BuildTwoFactorRedirectQuery(rememberMe, returnUrl, locationId, company);
 
             if (!sendResult.IsSuccess)
             {
@@ -338,7 +340,7 @@ namespace Lanyard.App.Controllers
             return new SignInAttemptResult(SignInOutcomeKind.Success, user, Claims: extraClaims);
         }
 
-        private static string BuildTwoFactorRedirectQuery(bool rememberMe, string? returnUrl, int? locationId)
+        private static string BuildTwoFactorRedirectQuery(bool rememberMe, string? returnUrl, int? locationId, int? companyId)
         {
             List<string> parts = [$"rememberMe={(rememberMe ? "true" : "false")}"];
 
@@ -352,7 +354,24 @@ namespace Lanyard.App.Controllers
                 parts.Add($"locationId={locationId.Value}");
             }
 
+            if (companyId.HasValue)
+            {
+                parts.Add($"company={companyId.Value}");
+            }
+
             return "?" + string.Join("&", parts);
+        }
+
+        private static string BuildLoginErrorRedirect(string error, int? companyId)
+        {
+            string query = $"error={Uri.EscapeDataString(error)}";
+
+            if (companyId.HasValue)
+            {
+                query += $"&company={companyId.Value}";
+            }
+
+            return $"/login?{query}";
         }
 
         private async Task<(bool ok, string? error)> ValidateAndBuildLocationClaimsAsync(UserProfile user, int? locationId, List<Claim> claims)
