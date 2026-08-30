@@ -30,18 +30,9 @@
     // same grid, and those displays are trusted physically rather than by role.
     private bool _canTriggerProjection;
 
-    private static readonly HashSet<ButtonActionType> ProjectionControlActionTypes =
-    [
-        ButtonActionType.TriggerProjectionProgram,
-        ButtonActionType.PauseProjectionProgram,
-        ButtonActionType.ResumeProjectionProgram,
-        ButtonActionType.SkipProjectionProgramStep,
-        ButtonActionType.StopProjectionProgram
-    ];
-
     private bool CanRunConfiguredAction =>
         Widget.ActionType is not ButtonActionType actionType
-        || !ProjectionControlActionTypes.Contains(actionType)
+        || !actionType.IsProjectionControlAction()
         || _canTriggerProjection;
 
     protected override async Task OnInitializedAsync()

@@ -34,31 +34,31 @@
 
             <FluentProgressBar Min="0" Max="100" Value="@Progress(_run)" Width="100%" />
 
-            @if (Widget.ShowControls)
+            @if (Widget.ShowControls && _canControlProjection)
             {
                 <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="4"
                              HorizontalAlignment="@HorizontalAlignment.Center" Width="100%">
                     <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowPrevious())"
                                   Appearance="@ButtonAppearance.Transparent"
                                   Tooltip="Previous step"
-                                  OnClick="@(() => Handle(ProgramRunner.SkipToPreviousStep(clientId, DisplayIndex)))" />
+                                  OnClick="@(() => HandleAuthorized(() => ProgramRunner.SkipToPreviousStep(clientId, DisplayIndex)))" />
 
                     <FluentButton IconStart="@(_run.IsPaused ? new Icons.Regular.Size20.Play() : new Icons.Regular.Size20.Pause())"
                                   Appearance="@ButtonAppearance.Primary"
                                   Tooltip="@(_run.IsPaused ? "Resume" : "Pause")"
-                                  OnClick="@(() => Handle(_run.IsPaused
+                                  OnClick="@(() => HandleAuthorized(() => _run.IsPaused
                                                 ? ProgramRunner.Resume(clientId, DisplayIndex)
                                                 : ProgramRunner.Pause(clientId, DisplayIndex)))" />
 
                     <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowNext())"
                                   Appearance="@ButtonAppearance.Transparent"
                                   Tooltip="Next step"
-                                  OnClick="@(() => Handle(ProgramRunner.SkipToNextStep(clientId, DisplayIndex)))" />
+                                  OnClick="@(() => HandleAuthorized(() => ProgramRunner.SkipToNextStep(clientId, DisplayIndex)))" />
 
                     <FluentButton IconStart="@(new Icons.Filled.Size20.Stop())"
                                   Appearance="@ButtonAppearance.Transparent"
                                   Tooltip="Stop"
-                                  OnClick="@(() => Handle(ProgramRunner.Stop(clientId, DisplayIndex)))" />
+                                  OnClick="@(() => HandleAuthorized(() => ProgramRunner.Stop(clientId, DisplayIndex)))" />
                 </FluentStack>
             }
         </FluentStack>
@@ -75,8 +75,19 @@
     // StopProjectionProgramActionExecutor and Kiosk.razor's ResolvedDisplayIndex.
     private int DisplayIndex => Widget.DisplayIndex ?? 0;
 
-    protected override void OnInitialized()
+    // Controlling a projection program is Admin/Manager-only, same rule RenderButtonWidget
+    // enforces for its projection actions - a widget with ShowControls on can sit on any shared
+    // dashboard, so the check has to live here rather than relying on the page it's rendered on.
+    // Only enforced for signed-in users: /kiosk is deliberately AllowAnonymous and renders this
+    // same grid, and those displays are trusted physically rather than by role.
+    private bool _canControlProjection;
+
+    protected override async Task OnInitializedAsync()
     {
+        _canControlProjection = !await _securityService.IsUserLoggedIn()
+            || await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("Manager");
+
         // The runner is a singleton in this same process, so these are plain in-process
         // subscriptions - no SignalR hop is involved in keeping this widget live.
         ProgramRunner.OnProgramStarted += HandleProgramChanged;
@@ -114,6 +125,20 @@
         _run = Widget.ClientId is Guid clientId
             ? ProgramRunner.GetRunningState(clientId, DisplayIndex)
             : null;
+    }
+
+    // The controls are only rendered when _canControlProjection is true, but this re-checks
+    // before every call as defense in depth rather than trusting the markup alone.
+    private void HandleAuthorized(Func<Result<bool>> action)
+    {
+        if (!_canControlProjection)
+        {
+            _toastService.ShowError("You do not have permission to control projection programs.");
+
+            return;
+        }
+
+        Handle(action());
     }
 
     private void Handle(Result<bool> result)

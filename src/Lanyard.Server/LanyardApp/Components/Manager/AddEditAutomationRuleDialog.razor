@@ -582,7 +582,8 @@
             return;
         }
 
-        if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.StopProjectionProgram)
+        if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.StopProjectionProgram
+            or AutomationActionTypes.ProjectionProgramControl)
         {
             await LoadScreensForRowAsync(index);
         }
