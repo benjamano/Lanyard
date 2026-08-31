@@ -42,24 +42,28 @@
         {
             <div class="analytics-grid">
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Top Scores (%)</FluentText>
-                    <RankedBarChart Data="@scoreChartData" ValueSuffix="%" />
+                    <div class="analytics-card">
+                        <FluentText As="TextTag.H5">Top Scores (%)</FluentText>
+                        <RankedBarChart Data="@scoreChartData" ValueSuffix="%" />
+                    </div>
                 </FluentCard>
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Fastest Completions (min)</FluentText>
-                    <RankedBarChart Data="@fastestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Success" />
+                    <div class="analytics-card">
+                        <FluentText As="TextTag.H5">Fastest Completions (min)</FluentText>
+                        <RankedBarChart Data="@fastestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Success" />
+                    </div>
                 </FluentCard>
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Slowest Completions (min)</FluentText>
-                    <RankedBarChart Data="@slowestChartData" ValueSuffix=" min" SeriesColor="@ChartPalette.Warning" />
+                    <div class="analytics-card">
+                        <FluentText As="TextTag.H5">Completion Status</FluentText>
+                        <CategoryDonutChart Data="@statusChartData" />
+                    </div>
                 </FluentCard>
                 <FluentCard Height="100%">
-                    <FluentText As="TextTag.H5">Completion Status</FluentText>
-                    <CategoryDonutChart Data="@statusChartData" />
-                </FluentCard>
-                <FluentCard Height="100%" Padding="@Padding.Bottom7">
-                    <FluentText As="TextTag.H5">Pass / Fail (latest attempt)</FluentText>
-                    <CategoryDonutChart Data="@passFailChartData" SeriesColors="@passFailColors" />
+                    <div class="analytics-card">
+                        <FluentText As="TextTag.H5">Pass / Fail (latest attempt)</FluentText>
+                        <CategoryDonutChart Data="@passFailChartData" SeriesColors="@passFailColors" />
+                    </div>
                 </FluentCard>
             </div>
         }
@@ -75,7 +79,6 @@
     private IEnumerable<UserProfile> users = [];
     private List<ChartCategoryValue> scoreChartData = [];
     private List<ChartCategoryValue> fastestChartData = [];
-    private List<ChartCategoryValue> slowestChartData = [];
     private List<ChartCategoryValue> statusChartData = [];
     private List<ChartCategoryValue> passFailChartData = [];
     private readonly string[] passFailColors = [ChartPalette.Success, ChartPalette.Danger];
@@ -152,7 +155,6 @@
         {
             scoreChartData = [];
             fastestChartData = [];
-            slowestChartData = [];
             statusChartData = [];
             passFailChartData = [];
             isLoading = false;
@@ -161,12 +163,10 @@
 
         Result<List<TraineeScoreRankingRow>> scores = await _analyticsService.GetTopScoringTraineesAsync(selectedCourseId, scope);
         Result<List<TraineeTimingRankingRow>> fastest = await _analyticsService.GetFastestCompletionsAsync(selectedCourseId, scope);
-        Result<List<TraineeTimingRankingRow>> slowest = await _analyticsService.GetSlowestCompletionsAsync(selectedCourseId, scope);
         Result<CourseCompletionSummary> summary = await _analyticsService.GetCourseCompletionSummaryAsync(selectedCourseId, scope);
 
         scoreChartData = MapScores(scores);
         fastestChartData = MapTimings(fastest);
-        slowestChartData = MapTimings(slowest);
         (statusChartData, passFailChartData) = MapSummary(summary);
 
         isLoading = false;
