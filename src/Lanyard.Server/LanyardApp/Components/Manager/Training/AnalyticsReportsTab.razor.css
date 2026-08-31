@@ -1,10 +1,44 @@
+/* Sized against the grid's own width rather than the viewport's - the sidebar,
+   page padding and card padding all sit between the two, so a viewport-width
+   media query would guess at the wrong breakpoint. */
+.analytics-reports-tab {
+    container-type: inline-size;
+}
+
 .course-picker-host {
     max-width: 400px;
 }
 
 .analytics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
     gap: 16px;
     margin-top: 16px;
+}
+
+/* Two columns first fit at 2*420 + the 16px gap. Below that the grid is a single
+   column, where matching every card to the tallest one would only pad the short
+   cards with dead space. */
+@container (min-width: 856px) {
+    .analytics-grid {
+        /* 1fr rows in an auto-height grid all resolve to the tallest row's
+           content height, so every card matches the tallest card without any
+           card being capped. */
+        grid-auto-rows: 1fr;
+    }
+}
+
+.analytics-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* The chart takes whatever height the card gained from the row, so a donut
+   centres in the leftover space instead of hugging its title. ::deep is required:
+   the chart div belongs to the chart component's own CSS scope, so an unscoped
+   child selector here would never match it. */
+.analytics-card ::deep .ranked-bar-chart,
+.analytics-card ::deep .category-donut-chart {
+    flex: 1;
 }

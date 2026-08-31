@@ -44,12 +44,9 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
     }
 
     public Task<Result<List<TraineeTimingRankingRow>>> GetFastestCompletionsAsync(Guid courseId, LocationScope scope, int topN = 10) =>
-        GetTimingRankingAsync(courseId, scope, topN, descending: false);
+        GetTimingRankingAsync(courseId, scope, topN);
 
-    public Task<Result<List<TraineeTimingRankingRow>>> GetSlowestCompletionsAsync(Guid courseId, LocationScope scope, int topN = 10) =>
-        GetTimingRankingAsync(courseId, scope, topN, descending: true);
-
-    private async Task<Result<List<TraineeTimingRankingRow>>> GetTimingRankingAsync(Guid courseId, LocationScope scope, int topN, bool descending)
+    private async Task<Result<List<TraineeTimingRankingRow>>> GetTimingRankingAsync(Guid courseId, LocationScope scope, int topN)
     {
         try
         {
@@ -61,14 +58,12 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
                 .Where(x => x.CourseId == courseId && x.IsActive && x.StartedDate != null && x.CompletedDate != null && (scope.IsAdmin || x.LocationId == scope.LocationId))
                 .ToListAsync();
 
-            IEnumerable<TraineeTimingRankingRow> rows = completed
-                .Select(x => new TraineeTimingRankingRow(x.UserId, (x.CompletedDate!.Value - x.StartedDate!.Value).TotalMinutes, x.CompletedDate.Value));
+            List<TraineeTimingRankingRow> rows = [.. completed
+                .Select(x => new TraineeTimingRankingRow(x.UserId, (x.CompletedDate!.Value - x.StartedDate!.Value).TotalMinutes, x.CompletedDate.Value))
+                .OrderBy(x => x.DurationMinutes)
+                .Take(topN)];
 
-            rows = descending
-                ? rows.OrderByDescending(x => x.DurationMinutes)
-                : rows.OrderBy(x => x.DurationMinutes);
-
-            return Result<List<TraineeTimingRankingRow>>.Ok([.. rows.Take(topN)]);
+            return Result<List<TraineeTimingRankingRow>>.Ok(rows);
         }
         catch (Exception ex)
         {

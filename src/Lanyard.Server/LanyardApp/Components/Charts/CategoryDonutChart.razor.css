@@ -1,3 +1,15 @@
 .category-donut-chart {
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* The card this sits in can be stretched well past the donut's own size. The
+   Fluent chart element carries height:100%, which beats align-items:center and
+   would strand its legend at the very bottom of the card - pin it back to its
+   natural size so it simply centres in the space instead. ::deep is required
+   because the element belongs to the Fluent library, not this component's scope. */
+.category-donut-chart ::deep .fluent-donut-chart {
     height: 280px;
 }
