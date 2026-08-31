@@ -271,3 +271,22 @@ public class GreetingWidget : DashboardWidget
         GridH = 1;
     }
 }
+
+// Surfaces the live Staff Announcements for the viewer's own location. Per-viewer rather than
+// per-dashboard, like MyTrainingWidget: the location comes from whoever is looking, so one shared
+// dashboard shows each site its own notices.
+public class AnnouncementsWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public AnnouncementsWidget()
+    {
+        Type = WidgetType.Announcements;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 3;
+    }
+
+    public int MaxItems { get; set; }
+}

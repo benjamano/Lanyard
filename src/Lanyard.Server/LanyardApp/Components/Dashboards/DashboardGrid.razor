@@ -200,7 +200,21 @@
                                     <RenderMyTrainingWidget Widget="myTrainingWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
-                            case WidgetType.Greeting:
+                            case WidgetType.Announcements:
+                        AnnouncementsWidget? announcementsWidget = widget as AnnouncementsWidget;
+
+                        if (announcementsWidget == null)
+                        {
+                            break;
+                        }
+
+                        <div class="dashboard-widget-host"
+                            @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                            @oncontextmenu:preventDefault="true">
+                            <RenderAnnouncementsWidget Widget="announcementsWidget" AllowTrigger="PreviewMode" />
+                        </div>
+                        break;
+                    case WidgetType.Greeting:
                                 @* Nothing to configure, so no right-click config dialog here. *@
                                 <div class="dashboard-widget-host">
                                     <GreetingCard />
@@ -393,6 +407,9 @@
             case MyTrainingWidget myTrainingWidget:
                 await ShowConfigureMyTrainingDialog(myTrainingWidget);
                 break;
+            case AnnouncementsWidget announcementsWidget:
+                await ShowConfigureAnnouncementsDialog(announcementsWidget);
+                break;
         }
     }
 
@@ -532,6 +549,20 @@
         {
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureMyTrainingDialog.Widget), myTrainingWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureAnnouncementsDialog(AnnouncementsWidget announcementsWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureAnnouncementsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureAnnouncementsDialog.Widget), announcementsWidget);
         });
 
         if (!dialogResult.Cancelled)

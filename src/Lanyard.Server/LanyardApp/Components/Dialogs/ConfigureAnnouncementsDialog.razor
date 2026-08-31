@@ -1,0 +1,56 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Megaphone())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Announcements
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentNumberInput TValue="int" @bind-Value="Widget.MaxItems" Min="1" Max="50"
+                               Label="Maximum announcements to show" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required AnnouncementsWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private int _originalMaxItems;
+
+    protected override void OnInitialized()
+    {
+        _originalMaxItems = Widget.MaxItems;
+    }
+
+    private async Task SaveAsync()
+    {
+        // Min on the input only constrains the stepper buttons - a typed-in 0 or negative would
+        // otherwise persist and render an empty widget.
+        Widget.MaxItems = Math.Clamp(Widget.MaxItems, 1, 50);
+
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.MaxItems = _originalMaxItems;
+
+        await Dialog.CancelAsync();
+    }
+}

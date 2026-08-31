@@ -1,0 +1,166 @@
+@using Lanyard.Application.Services.Announcements
+@using Lanyard.Application.Services.Locations
+
+@inject IAnnouncementService _announcementService
+
+@* Per-viewer, not per-dashboard: the announcements shown are those for the viewer's own location,
+   so the same shared dashboard shows each site its own notices. Dashboards also render on a kiosk
+   projection step (RenderDashboardTemplate) with no signed-in user and therefore no location -
+   hence the explicit "no location" state rather than silently falling back to every site's
+   notices on a wall-mounted screen. *@
+
+<FluentCard Height="100%">
+    <div class="announcements-body">
+        <div class="announcements-header">
+            <span class="announcements-title">@(Widget.Title ?? "Announcements")</span>
+            @if (!_isLoading && !_loadFailed && !_noLocation && _totalCount > _displayed.Count)
+            {
+                <span class="announcements-count">+@(_totalCount - _displayed.Count) more</span>
+            }
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="announcements-empty">
+                <FluentSpinner />
+            </div>
+        }
+        else if (_loadFailed)
+        {
+            @* Deliberately distinct from the empty state: telling staff there are no announcements
+               when there might be an urgent one is worse than admitting the load failed. *@
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">
+                    Couldn't load announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_noLocation)
+        {
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Sign in to see announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_displayed.Count == 0)
+        {
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    No announcements
+                </FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="announcements-list">
+                @foreach (Announcement announcement in _displayed)
+                {
+                    <div class="announcements-row">
+                        <div class="announcements-row-header">
+                            @if (announcement.IsPinned)
+                            {
+                                <span class="announcements-pin" title="Pinned">
+                                    <FluentIcon Value="@(new Icons.Filled.Size16.Pin())" Color="Color.Primary" />
+                                </span>
+                            }
+                            <span class="announcements-name" title="@announcement.Title">@announcement.Title</span>
+                            <span class="announcements-date">@DescribePostedDate(announcement)</span>
+                        </div>
+                        <span class="announcements-text">@announcement.Body</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required AnnouncementsWidget Widget { get; set; }
+
+    // Kept for consistency with the other widgets even though nothing here is clickable yet -
+    // DashboardGrid passes it to every widget it renders.
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    // Fetch beyond MaxItems so raising it in the config dialog re-slices rather than re-queries.
+    private const int FetchLimit = 20;
+
+    private List<Announcement> _all = [];
+    private List<Announcement> _displayed = [];
+
+    private int _totalCount;
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private bool _noLocation;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        // A failed scope on the anonymous kiosk is expected, not an error - treat it the same as
+        // having no location rather than showing a red failure badge on a wall display.
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || scopeResult.Data.LocationId is null)
+        {
+            _noLocation = true;
+            _isLoading = false;
+
+            return;
+        }
+
+        Result<List<Announcement>> result =
+            await _announcementService.GetActiveAnnouncementsAsync(scopeResult.Data, FetchLimit);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _all = result.Data;
+        }
+        else
+        {
+            _loadFailed = true;
+        }
+
+        ApplyFilter();
+
+        _isLoading = false;
+    }
+
+    // MaxItems can change while the dashboard is open via the config dialog, and it does not
+    // affect which rows were fetched - so re-slice rather than re-query.
+    protected override void OnParametersSet()
+    {
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _totalCount = _all.Count;
+
+        _displayed = _all
+            .Take(Math.Clamp(Widget.MaxItems, 1, 50))
+            .ToList();
+    }
+
+    private static string DescribePostedDate(Announcement announcement)
+    {
+        TimeSpan age = DateTime.UtcNow - announcement.CreateDate;
+
+        if (age.TotalMinutes < 60)
+        {
+            return "just now";
+        }
+
+        if (age.TotalHours < 24)
+        {
+            return $"{(int)age.TotalHours}h ago";
+        }
+
+        if (age.TotalDays < 7)
+        {
+            return $"{(int)age.TotalDays}d ago";
+        }
+
+        return announcement.CreateDate.ToLocalTime().ToString("d MMM");
+    }
+}

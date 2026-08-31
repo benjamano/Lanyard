@@ -14,5 +14,6 @@ public enum WidgetType
     KioskHealth = 9,
     HallOfFame = 10,
     MyTraining = 11,
-    Greeting = 12
+    Greeting = 12,
+    Announcements = 13
 }

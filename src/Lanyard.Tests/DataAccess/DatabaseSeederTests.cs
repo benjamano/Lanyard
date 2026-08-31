@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -19,6 +19,10 @@ namespace Lanyard.Tests.DataAccess
     [TestClass]
     public class DatabaseSeederTests
     {
+        // Kept as a named constant rather than a literal so that adding a capability role to
+        // DatabaseSeeder.StandardRoles is a one-line update here, not a hunt through assertions.
+        private const int DatabaseSeederStandardRoleCount = 8;
+
         private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
         {
             return new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -213,7 +217,7 @@ namespace Lanyard.Tests.DataAccess
             int adminRoleAssignmentCount = await context.UserRoles.CountAsync(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId);
 
             Assert.IsTrue(adminExists);
-            Assert.AreEqual(7, roleCount);
+            Assert.AreEqual(DatabaseSeederStandardRoleCount, roleCount);
             Assert.AreEqual(5, adminRoleAssignmentCount);
         }
 
@@ -256,7 +260,7 @@ namespace Lanyard.Tests.DataAccess
             int roleCount = await verifyContext.Roles.CountAsync();
 
             Assert.IsTrue(adminRecreated, "The seed admin should be recreated on the next startup.");
-            Assert.AreEqual(7, roleCount, "Roles must not be duplicated when the admin is recreated.");
+            Assert.AreEqual(DatabaseSeederStandardRoleCount, roleCount, "Roles must not be duplicated when the admin is recreated.");
         }
     }
 }

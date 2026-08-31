@@ -318,6 +318,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingMyTraining.IncludeCompleted = incomingMyTraining.IncludeCompleted;
                     existingMyTraining.MaxItems = incomingMyTraining.MaxItems;
                     break;
+                case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
+                    existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -673,6 +676,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             // signed-in user - but the case is still required, or the switch below throws and
             // the whole dashboard save fails.
             GreetingWidget => new GreetingWidget(),
+            AnnouncementsWidget announcementsWidget => new AnnouncementsWidget
+            {
+                MaxItems = announcementsWidget.MaxItems
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -768,6 +775,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetMyTraining.IncludeCompleted = sourceMyTraining.IncludeCompleted;
             targetMyTraining.MaxItems = sourceMyTraining.MaxItems;
+            return;
+        }
+
+        if (target is AnnouncementsWidget targetAnnouncements && source is AnnouncementsWidget sourceAnnouncements)
+        {
+            targetAnnouncements.MaxItems = sourceAnnouncements.MaxItems;
         }
     }
 }
