@@ -212,7 +212,7 @@
     "details": [
       "Fixed the charts on the Training Dashboard's Analytics tab being cut off - a course with a lot of trainees ran off the bottom of its card and over the card below it.",
       "The Analytics cards now all line up at the same height, and grow as tall as they need to so every trainee in a list is visible.",
-      "Removed the \"Slowest Completions\" chart, which listed the same people as \"Fastest Completions\" just in the opposite order."
+      "Removed the \"Slowest Completions\" chart, which on most courses just repeated \"Fastest Completions\" in the opposite order."
     ]
   }
 ]
