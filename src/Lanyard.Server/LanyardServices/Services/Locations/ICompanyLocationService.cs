@@ -17,6 +17,17 @@ public interface ICompanyLocationService
     Task<Result<Location>> SaveLocationAsync(Location location);
     Task<Result<bool>> DeactivateLocationAsync(int locationId);
 
+    /// <summary>
+    /// Turns QR food ordering on or off for one venue.
+    /// </summary>
+    /// <remarks>
+    /// Its own method rather than a field on <see cref="SaveLocationAsync"/> deliberately. That
+    /// method only ever writes the name, so every existing caller constructs a partial Location;
+    /// were the flag added there, any of those callers would silently switch ordering off for a
+    /// venue as a side effect of renaming it.
+    /// </remarks>
+    Task<Result<bool>> SetLocationOrderingEnabledAsync(int locationId, bool orderingEnabled);
+
     Task<Result<List<Location>>> GetLocationsForUserAsync(string userId);
     Task<Result<List<UserProfile>>> GetUsersInLocationAsync(int locationId);
     Task<Result<bool>> AddUserToLocationAsync(string userId, int locationId);

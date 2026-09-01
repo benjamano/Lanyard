@@ -1,0 +1,64 @@
+.kitchen-admin__hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}
+
+.kitchen-admin__category {
+    border: 1px solid var(--neutral-stroke-rest, #d9d9d9);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.kitchen-admin__category-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.kitchen-admin__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.kitchen-admin__item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kitchen-admin__item-price {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Cards wide enough that a printed QR is scannable straight off the screen while testing,
+   without the row collapsing to one per line on a laptop. */
+.kitchen-admin__tables {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.kitchen-admin__table {
+    border: 1px solid var(--neutral-stroke-rest, #d9d9d9);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.kitchen-admin__qr {
+    width: 100%;
+    max-width: 140px;
+    image-rendering: pixelated;
+}

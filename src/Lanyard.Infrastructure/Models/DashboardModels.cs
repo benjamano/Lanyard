@@ -271,3 +271,29 @@ public class GreetingWidget : DashboardWidget
         GridH = 1;
     }
 }
+
+/// <summary>
+/// Glanceable count of open kitchen orders and how long the oldest has been waiting.
+///
+/// Deliberately not a working queue - that is the kitchen display at /kitchen, which has room
+/// for tickets. This is for a dashboard already showing music and kiosk health, where the useful
+/// question is "is the kitchen keeping up", answered without leaving the page.
+/// </summary>
+public class KitchenOrdersWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public KitchenOrdersWidget()
+    {
+        Type = WidgetType.KitchenOrders;
+
+        GridW = 2;
+        GridH = 1;
+    }
+
+    /// <summary>
+    /// Which venue's kitchen this widget watches. Explicit rather than inferred from the signed-in
+    /// user's location, because these dashboards are shown on kiosk screens that have no user -
+    /// and a screen on the wall in Ipswich must not start showing Wisbech's queue.
+    /// </summary>
+    public int? KitchenLocationId { get; set; }
+}

@@ -39,6 +39,17 @@
                 </FluentNavCategory>
             }
 
+            @* Outside the Management section: kitchen staff working the queue are not managers,
+               and the display needs to be one tap away on a screen in the kitchen. *@
+            @if (_canManageKitchen)
+            {
+                <FluentNavCategory Title="Kitchen" IconRest="@(new Icons.Regular.Size20.Food())"
+                                   IconActive="@(new Icons.Filled.Size20.Food())">
+                    <FluentNavItem Href="/kitchen">Orders</FluentNavItem>
+                    <FluentNavItem Href="/manage/kitchen">Menu &amp; Table Codes</FluentNavItem>
+                </FluentNavCategory>
+            }
+
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
@@ -161,6 +172,7 @@
     private bool _canClockIn;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _canManageKitchen;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
@@ -177,6 +189,7 @@
         _canClockIn = _isAdmin || user.IsInRole("CanClockIn");
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
+        _canManageKitchen = _isAdmin || user.IsInRole("CanManageKitchen");
 
         if (_isAuthenticated)
         {

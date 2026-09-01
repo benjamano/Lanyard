@@ -1,0 +1,471 @@
+@page "/manage/kitchen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, CanManageKitchen")]
+
+@using Lanyard.Application.Services.Kitchen
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Files
+
+@inject IMenuService _menuService
+@inject IQrTableTokenService _tableTokenService
+
+<PageTitle>Kitchen Setup</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%">
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText As="@TextTag.H4">Kitchen Setup</FluentText>
+
+                <FluentSelect TOption="Location"
+                              TValue="string"
+                              Items="@_locations"
+                              OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                              OptionValue="@(l => l?.Id.ToString())"
+                              Label="Venue"
+                              Placeholder="Choose a venue"
+                              Value="@_locationValue"
+                              ValueChanged="OnLocationChangedAsync"
+                              Style="max-width: 360px;" />
+
+                @if (_selectedLocation is not null)
+                {
+                    <FluentSwitch Value="@_selectedLocation.OrderingEnabled"
+                                  ValueChanged="@((bool v) => SetOrderingEnabledAsync(v))"
+                                  Label="Accept QR orders at this venue" />
+                    <FluentText Class="kitchen-admin__hint">
+                        With this off, scanning a table code shows a "please order at the till"
+                        message instead of the menu.
+                    </FluentText>
+                }
+            </FluentStack>
+        </FluentCard>
+
+        @if (_selectedLocation is not null)
+        {
+            <FluentGrid Class="w-100" Spacing="1">
+                <FluentGridItem Xs="12" Md="6">
+                    <FluentCard Height="100%">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText As="@TextTag.H4">Menu</FluentText>
+
+                            <FluentTextInput @bind-Value="_newCategoryName" Label="New section"
+                                             Placeholder="Mains" Class="w-100" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddCategoryAsync"
+                                          IconStart="@(new Icons.Regular.Size20.AddCircle())">
+                                Add section
+                            </FluentButton>
+
+                            @if (_categories.Count == 0)
+                            {
+                                <FluentText Class="kitchen-admin__hint">
+                                    No menu sections yet. Add one to start adding dishes.
+                                </FluentText>
+                            }
+
+                            @foreach (MenuCategory category in _categories)
+                            {
+                                <div class="kitchen-admin__category">
+                                    <div class="kitchen-admin__category-head">
+                                        <FluentText Weight="TextWeight.Semibold">@category.Name</FluentText>
+                                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                      IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                      Title="@($"Remove {category.Name}")"
+                                                      OnClick="@(() => DeactivateCategoryAsync(category))" />
+                                    </div>
+
+                                    @foreach (MenuItem item in _items.Where(i => i.CategoryId == category.Id))
+                                    {
+                                        <div class="kitchen-admin__item">
+                                            <span class="kitchen-admin__item-name">@item.Name</span>
+                                            <span class="kitchen-admin__item-price">@Money(item.PriceCents)</span>
+                                            @if (!item.IsAvailable)
+                                            {
+                                                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Warning">
+                                                    Sold out
+                                                </FluentBadge>
+                                            }
+                                            <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                          IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                          Title="@($"Remove {item.Name}")"
+                                                          OnClick="@(() => DeactivateItemAsync(item))" />
+                                        </div>
+                                    }
+
+                                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                                  IconStart="@(new Icons.Regular.Size20.Add())"
+                                                  OnClick="@(() => StartNewItem(category.Id))">
+                                        Add dish
+                                    </FluentButton>
+                                </div>
+                            }
+                        </FluentStack>
+                    </FluentCard>
+                </FluentGridItem>
+
+                <FluentGridItem Xs="12" Md="6">
+                    <FluentCard Height="100%">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText As="@TextTag.H4">Table codes</FluentText>
+                            <FluentText Class="kitchen-admin__hint">
+                                Print a code for each table. Scanning it opens that table's menu —
+                                the customer never has to type a table number.
+                            </FluentText>
+
+                            <FluentTextInput @bind-Value="_newTableLabel" Label="New table"
+                                             Placeholder="Table 4" Class="w-100" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddTableAsync"
+                                          IconStart="@(new Icons.Regular.Size20.AddCircle())">
+                                Add table
+                            </FluentButton>
+
+                            @if (_tables.Count == 0)
+                            {
+                                <FluentText Class="kitchen-admin__hint">No table codes yet.</FluentText>
+                            }
+
+                            <div class="kitchen-admin__tables">
+                                @foreach (QrTableToken table in _tables)
+                                {
+                                    <div class="kitchen-admin__table">
+                                        <FluentText Weight="TextWeight.Semibold">@table.Label</FluentText>
+
+                                        @if (_qrCodes.TryGetValue(table.Id, out string? dataUri))
+                                        {
+                                            <img class="kitchen-admin__qr" src="@dataUri"
+                                                 alt="@($"QR code for {table.Label}")" />
+                                        }
+                                        else if (_qrErrors.TryGetValue(table.Id, out string? qrError))
+                                        {
+                                            <FluentText Class="kitchen-admin__hint">@qrError</FluentText>
+                                        }
+
+                                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+                                            <FluentButton Appearance="ButtonAppearance.Outline"
+                                                          OnClick="@(() => RotateTableAsync(table))"
+                                                          Title="Issue a new code; the printed one stops working">
+                                                Reissue
+                                            </FluentButton>
+                                            <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                          IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                          Title="@($"Remove {table.Label}")"
+                                                          OnClick="@(() => DeactivateTableAsync(table))" />
+                                        </FluentStack>
+                                    </div>
+                                }
+                            </div>
+                        </FluentStack>
+                    </FluentCard>
+                </FluentGridItem>
+            </FluentGrid>
+        }
+    </FluentStack>
+</div>
+
+@if (_editingItem is not null)
+{
+    <FluentDialog Hidden="false" Modal="true">
+        <FluentDialogBody>
+            <TitleTemplate>
+                <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Add a dish</FluentText>
+            </TitleTemplate>
+            <ChildContent>
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                    <FluentTextInput @bind-Value="_editingItem.Name" Label="Name" Class="w-100" />
+                    <FluentTextInput @bind-Value="_editingItem.Description" Label="Description (optional)" Class="w-100" />
+
+                    @* Price is entered in pounds but stored as integer pence. The conversion
+                       happens once, here, so nothing downstream ever holds a fractional price. *@
+                    <FluentNumberInput @bind-Value="_editingItemPrice" Label="Price (£)" Step="0.10M" Class="w-100" />
+
+                    <FileUploader Id="menu-item-image-uploader" Accept=" image/*"
+                                  MaximumFileSize="@(5 * 1024 * 1024)" MaximumFileCount="1"
+                                  OnFileUploaded="OnItemImageUploaded" Label="Photo (optional)"
+                                  PreviewUrl="@_editingItemImagePreviewUrl" />
+
+                    @if (_itemError is not null)
+                    {
+                        <FluentText Color="Color.Error">@_itemError</FluentText>
+                    }
+                </FluentStack>
+            </ChildContent>
+            <ActionTemplate>
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveItemAsync">Save</FluentButton>
+                <FluentButton OnClick="@(() => _editingItem = null)">Cancel</FluentButton>
+            </ActionTemplate>
+        </FluentDialogBody>
+    </FluentDialog>
+}
+
+@code {
+    private List<Location> _locations = [];
+    private Location? _selectedLocation;
+    private string _locationValue = string.Empty;
+
+    private List<MenuCategory> _categories = [];
+    private List<MenuItem> _items = [];
+    private List<QrTableToken> _tables = [];
+    private readonly Dictionary<int, string> _qrCodes = [];
+    private readonly Dictionary<int, string> _qrErrors = [];
+
+    private string _newCategoryName = string.Empty;
+    private string _newTableLabel = string.Empty;
+
+    private MenuItem? _editingItem;
+    private decimal _editingItemPrice;
+    private string? _editingItemImagePreviewUrl;
+    private string? _itemError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+
+        if (locations.IsSuccess && locations.Data is not null)
+        {
+            _locations = locations.Data;
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load venues, {locations.Error}");
+        }
+    }
+
+    private async Task OnLocationChangedAsync(string? newValue)
+    {
+        _locationValue = newValue ?? string.Empty;
+        _selectedLocation = int.TryParse(newValue, out int id)
+            ? _locations.FirstOrDefault(l => l.Id == id)
+            : null;
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _qrCodes.Clear();
+        _qrErrors.Clear();
+
+        if (_selectedLocation is null)
+        {
+            _categories = [];
+            _items = [];
+            _tables = [];
+
+            return;
+        }
+
+        int locationId = _selectedLocation.Id;
+
+        Result<List<MenuCategory>> categories = await _menuService.GetCategoriesForLocationAsync(locationId, includeInactive: false);
+        Result<List<MenuItem>> items = await _menuService.GetItemsForLocationAsync(locationId, includeInactive: false);
+        Result<List<QrTableToken>> tables = await _tableTokenService.GetForLocationAsync(locationId, includeInactive: false);
+
+        _categories = categories.Data ?? [];
+        _items = items.Data ?? [];
+        _tables = tables.Data ?? [];
+
+        foreach (QrTableToken table in _tables)
+        {
+            Result<string> qr = await _tableTokenService.GetQrCodeDataUriAsync(table.Id);
+
+            if (qr.IsSuccess && qr.Data is not null)
+            {
+                _qrCodes[table.Id] = qr.Data;
+            }
+            else
+            {
+                // Surfaced per table rather than as a toast: the usual cause is the company
+                // having no primary domain set yet, and the fix is elsewhere in the admin UI.
+                _qrErrors[table.Id] = qr.Error ?? "Couldn't generate a code.";
+            }
+        }
+    }
+
+    private async Task SetOrderingEnabledAsync(bool enabled)
+    {
+        if (_selectedLocation is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _companyLocationService
+            .SetLocationOrderingEnabledAsync(_selectedLocation.Id, enabled);
+
+        if (result.IsSuccess)
+        {
+            _selectedLocation.OrderingEnabled = enabled;
+            _toastService.ShowSuccess(enabled ? "QR ordering is on for this venue." : "QR ordering is off for this venue.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update ordering.");
+        }
+    }
+
+    private async Task AddCategoryAsync()
+    {
+        if (_selectedLocation is null || string.IsNullOrWhiteSpace(_newCategoryName))
+        {
+            return;
+        }
+
+        Result<MenuCategory> result = await _menuService.SaveCategoryAsync(new MenuCategory
+        {
+            LocationId = _selectedLocation.Id,
+            Name = _newCategoryName,
+            SortOrder = _categories.Count
+        });
+
+        if (result.IsSuccess)
+        {
+            _newCategoryName = string.Empty;
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't add that section.");
+        }
+    }
+
+    private async Task DeactivateCategoryAsync(MenuCategory category)
+    {
+        Result<bool> result = await _menuService.DeactivateCategoryAsync(category.Id);
+
+        if (result.IsSuccess)
+        {
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove that section.");
+        }
+    }
+
+    private void StartNewItem(int categoryId)
+    {
+        _itemError = null;
+        _editingItemPrice = 0m;
+        _editingItemImagePreviewUrl = null;
+        _editingItem = new MenuItem { CategoryId = categoryId, Name = string.Empty, IsAvailable = true };
+    }
+
+    private void OnItemImageUploaded(FileMetadata file)
+    {
+        if (_editingItem is not null)
+        {
+            _editingItem.ImageFileId = file.Id;
+            _editingItemImagePreviewUrl = $"/api/files/download/{file.Id}";
+        }
+    }
+
+    private async Task SaveItemAsync()
+    {
+        if (_editingItem is null)
+        {
+            return;
+        }
+
+        _itemError = null;
+
+        // Rounded rather than truncated: 4.99 arriving as 4.9899999 must become 499p, not 498p.
+        _editingItem.PriceCents = (int)Math.Round(_editingItemPrice * 100m, MidpointRounding.AwayFromZero);
+        _editingItem.SortOrder = _items.Count(i => i.CategoryId == _editingItem.CategoryId);
+
+        Result<MenuItem> result = await _menuService.SaveItemAsync(_editingItem);
+
+        if (result.IsSuccess)
+        {
+            _editingItem = null;
+            await ReloadAsync();
+        }
+        else
+        {
+            _itemError = result.Error;
+        }
+    }
+
+    private async Task DeactivateItemAsync(MenuItem item)
+    {
+        Result<bool> result = await _menuService.DeactivateItemAsync(item.Id);
+
+        if (result.IsSuccess)
+        {
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove that dish.");
+        }
+    }
+
+    private async Task AddTableAsync()
+    {
+        if (_selectedLocation is null || string.IsNullOrWhiteSpace(_newTableLabel))
+        {
+            return;
+        }
+
+        Result<QrTableToken> result = await _tableTokenService.SaveAsync(new QrTableToken
+        {
+            LocationId = _selectedLocation.Id,
+            Label = _newTableLabel,
+            Token = string.Empty
+        });
+
+        if (result.IsSuccess)
+        {
+            _newTableLabel = string.Empty;
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't add that table.");
+        }
+    }
+
+    private async Task RotateTableAsync(QrTableToken table)
+    {
+        // Confirmed because the consequence is physical: whatever is stuck to that table stops
+        // working the moment this runs, and somebody has to walk round with a new printout.
+        DialogResult confirmation = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Reissue table code";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Reissue the code for '{table.Label}'? The printed code will stop working and must be replaced.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Reissue");
+        });
+
+        if (confirmation.Cancelled || confirmation.Value is not true)
+        {
+            return;
+        }
+
+        Result<QrTableToken> result = await _tableTokenService.RotateTokenAsync(table.Id);
+
+        if (result.IsSuccess)
+        {
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't reissue that code.");
+        }
+    }
+
+    private async Task DeactivateTableAsync(QrTableToken table)
+    {
+        Result<bool> result = await _tableTokenService.DeactivateAsync(table.Id);
+
+        if (result.IsSuccess)
+        {
+            await ReloadAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove that table.");
+        }
+    }
+
+    private static string Money(int cents) => $"£{cents / 100m:0.00}";
+}

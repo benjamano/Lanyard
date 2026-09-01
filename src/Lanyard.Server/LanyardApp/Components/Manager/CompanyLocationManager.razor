@@ -1,7 +1,9 @@
+@using Lanyard.Application.Services.Kitchen
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Files
 
 @inject INotificationService ToastService
+@inject ITenantDirectoryService _tenantDirectoryService
 
 <div class="company-location-manager">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
@@ -23,6 +25,13 @@
                                          Margin="@Margin.Bottom0" />
                         <FluentColorPickerInput @bind-Value="companyThemeColor" Label="Theme color"
                                                 Class="clm-full-width" View="@ColorPickerView.SwatchPalette" Margin="@Margin.Top0" />
+                        <FluentColorPickerInput @bind-Value="companySecondaryColor" Label="Secondary color (optional)"
+                                                Class="clm-full-width" View="@ColorPickerView.SwatchPalette" Margin="@Margin.Top0" />
+                        <FluentTextInput @bind-Value="companySlug" Label="Slug (optional)" Placeholder="play2day"
+                                         Class="clm-full-width" Margin="@Margin.Bottom0" />
+                        <FluentText Class="clm-empty-note">
+                            Used to reach this company's public site before its own domain is pointed at us.
+                        </FluentText>
 
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
@@ -118,6 +127,57 @@
                             }
                         </FluentStack>
                     </FluentCard>
+
+                    <FluentCard Height="auto" Class="clm-domains-card">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            <FluentText Typo="Typography.H6">Public domains for @selectedCompany.Name</FluentText>
+                            <FluentText Class="clm-empty-note">
+                                Hostnames that serve this company's customer-facing site. Add the apex
+                                and www separately — pointing one at us does not point the other.
+                                The primary is used to build printed QR codes.
+                            </FluentText>
+
+                            <FluentTextInput @bind-Value="newDomainHostname" Label="Hostname"
+                                             Placeholder="play2day.co.uk" Class="clm-full-width" />
+                            <FluentCheckbox @bind-Value="newDomainIsPrimary" Label="Make this the primary domain" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddDomain">Add domain</FluentButton>
+
+                            @if (domainsForSelectedCompany.Count == 0)
+                            {
+                                <FluentText Class="clm-empty-note">
+                                    No domains yet. Table QR codes can't be generated until a primary domain is set.
+                                </FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@domainsForSelectedCompany.AsQueryable()"
+                                                GridTemplateColumns="2fr 1fr 1fr"
+                                                Class="clm-full-width" RowSize="@DataGridRowSize.Medium">
+                                    <TemplateColumn Title="Hostname">
+                                        @context.Hostname
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Primary">
+                                        @if (context.IsPrimary)
+                                        {
+                                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">
+                                                Primary
+                                            </FluentBadge>
+                                        }
+                                        else
+                                        {
+                                            <FluentButton OnClick="@(() => MakeDomainPrimary(context))">
+                                                Make primary
+                                            </FluentButton>
+                                        }
+                                    </TemplateColumn>
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconEnd="@(new Icons.Regular.Size20.Delete())"
+                                                      OnClick="@(() => RemoveDomain(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+                    </FluentCard>
                 }
             </FluentGridItem>
         </FluentGrid>
@@ -137,11 +197,17 @@
     // fields, so a save always sends the full state back (see SaveCompanyAsync's update branch).
     private string companyName = string.Empty;
     private string companyThemeColor = string.Empty;
+    private string companySecondaryColor = string.Empty;
+    private string companySlug = string.Empty;
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
     private string? companyBackgroundImagePreviewUrl;
     private string newLocationName = string.Empty;
+
+    private List<CompanyDomain> domainsForSelectedCompany = [];
+    private string newDomainHostname = string.Empty;
+    private bool newDomainIsPrimary;
 
     private void OnLogoUploaded(FileMetadata file)
     {
@@ -202,6 +268,8 @@
             Id = selectedCompany?.Id ?? 0,
             Name = companyName,
             ThemeColorHex = companyThemeColor,
+            SecondaryColorHex = companySecondaryColor,
+            Slug = companySlug,
             LogoFileId = companyLogoFileId,
             BackgroundImageFileId = companyBackgroundImageFileId
         });
@@ -245,6 +313,8 @@
     {
         companyName = string.Empty;
         companyThemeColor = string.Empty;
+        companySecondaryColor = string.Empty;
+        companySlug = string.Empty;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
         companyBackgroundImageFileId = null;
@@ -255,6 +325,8 @@
     {
         companyName = company.Name;
         companyThemeColor = company.ThemeColorHex ?? string.Empty;
+        companySecondaryColor = company.SecondaryColorHex ?? string.Empty;
+        companySlug = company.Slug ?? string.Empty;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
         companyBackgroundImageFileId = company.BackgroundImageFileId;
@@ -268,6 +340,95 @@
         selectedCompany = company;
         PopulateFormFrom(company);
         await LoadLocationsAsync();
+        await LoadDomainsAsync();
+    }
+
+    private async Task LoadDomainsAsync()
+    {
+        if (selectedCompany is null)
+        {
+            domainsForSelectedCompany = [];
+
+            return;
+        }
+
+        Result<List<CompanyDomain>> result = await _tenantDirectoryService.GetDomainsForCompanyAsync(selectedCompany.Id);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            domainsForSelectedCompany = result.Data;
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to load domains: {result.Error}");
+        }
+    }
+
+    private async Task AddDomain()
+    {
+        if (selectedCompany is null || string.IsNullOrWhiteSpace(newDomainHostname))
+        {
+            return;
+        }
+
+        // The first domain a company gets is made primary regardless of the checkbox: a company
+        // with domains but no primary cannot have QR codes generated, and that is a confusing
+        // state to leave someone in by default.
+        bool makePrimary = newDomainIsPrimary || domainsForSelectedCompany.Count == 0;
+
+        Result<CompanyDomain> result = await _tenantDirectoryService.SaveDomainAsync(new CompanyDomain
+        {
+            CompanyId = selectedCompany.Id,
+            Hostname = newDomainHostname,
+            IsPrimary = makePrimary
+        });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add domain: {result.Error}");
+
+            return;
+        }
+
+        newDomainHostname = string.Empty;
+        newDomainIsPrimary = false;
+
+        await LoadDomainsAsync();
+        ToastService.ShowSuccess("Domain added.");
+    }
+
+    private async Task MakeDomainPrimary(CompanyDomain domain)
+    {
+        Result<CompanyDomain> result = await _tenantDirectoryService.SaveDomainAsync(new CompanyDomain
+        {
+            Id = domain.Id,
+            CompanyId = domain.CompanyId,
+            Hostname = domain.Hostname,
+            IsPrimary = true
+        });
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to update domain: {result.Error}");
+
+            return;
+        }
+
+        await LoadDomainsAsync();
+    }
+
+    private async Task RemoveDomain(int domainId)
+    {
+        Result<bool> result = await _tenantDirectoryService.DeactivateDomainAsync(domainId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to remove domain: {result.Error}");
+
+            return;
+        }
+
+        await LoadDomainsAsync();
     }
 
     private async Task LoadLocationsAsync()

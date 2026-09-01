@@ -47,7 +47,33 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Company>.Fail("Theme color must be a hex value like #C8102E.");
             }
 
+            string? normalizedSecondaryColor = string.IsNullOrWhiteSpace(company.SecondaryColorHex)
+                ? null
+                : company.SecondaryColorHex.Trim();
+
+            if (normalizedSecondaryColor is not null && !Regex.IsMatch(normalizedSecondaryColor, "^#[0-9A-Fa-f]{6}$"))
+            {
+                return Result<Company>.Fail("Secondary color must be a hex value like #C8102E.");
+            }
+
+            string? normalizedSlug = string.IsNullOrWhiteSpace(company.Slug) ? null : company.Slug.Trim().ToLowerInvariant();
+
+            // Constrained to what can sit in a URL path segment unescaped, since that is the only
+            // thing a slug is ever used for.
+            if (normalizedSlug is not null && !Regex.IsMatch(normalizedSlug, "^[a-z0-9]+(-[a-z0-9]+)*$"))
+            {
+                return Result<Company>.Fail("Slug may only contain lowercase letters, numbers and hyphens, for example 'play2day'.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (normalizedSlug is not null
+                && await ctx.Companies.AnyAsync(x => x.Slug == normalizedSlug && x.Id != company.Id))
+            {
+                // Checked rather than left to the unique index so the admin gets a sentence
+                // instead of a constraint violation.
+                return Result<Company>.Fail($"The slug '{normalizedSlug}' is already used by another company.");
+            }
 
             Company? existing = company.Id == 0 ? null : await ctx.Companies.FirstOrDefaultAsync(x => x.Id == company.Id);
 
@@ -62,6 +88,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                     CreateDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow,
                     ThemeColorHex = normalizedColor,
+                    SecondaryColorHex = normalizedSecondaryColor,
+                    Slug = normalizedSlug,
                     LogoFileId = company.LogoFileId,
                     BackgroundImageFileId = company.BackgroundImageFileId
                 };
@@ -76,6 +104,8 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 // current branding into its fields before a save, so a null/blank arriving here
                 // means "the admin cleared it", not "the caller omitted it".
                 target.ThemeColorHex = normalizedColor;
+                target.SecondaryColorHex = normalizedSecondaryColor;
+                target.Slug = normalizedSlug;
                 target.LogoFileId = company.LogoFileId;
                 target.BackgroundImageFileId = company.BackgroundImageFileId;
             }
@@ -199,6 +229,32 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         catch (Exception ex)
         {
             return Result<Location>.Fail($"Failed to save location: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetLocationOrderingEnabledAsync(int locationId, bool orderingEnabled)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Location? location = await ctx.Locations.FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (location is null)
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
+
+            location.OrderingEnabled = orderingEnabled;
+            location.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to update ordering for location: {ex.Message}");
         }
     }
 

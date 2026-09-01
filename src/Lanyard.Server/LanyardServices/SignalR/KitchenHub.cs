@@ -1,3 +1,4 @@
+using Lanyard.Application.SignalR.Events;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -80,9 +81,13 @@ public interface IKitchenHubNotifier
     Task NotifyOrderStatusChangedAsync(int locationId, KitchenOrderTicketDto ticket);
 }
 
-public class KitchenHubNotifier(IHubContext<KitchenHub> hubContext, ILogger<KitchenHubNotifier> logger) : IKitchenHubNotifier
+public class KitchenHubNotifier(
+    IHubContext<KitchenHub> hubContext,
+    KitchenOrderEvents orderEvents,
+    ILogger<KitchenHubNotifier> logger) : IKitchenHubNotifier
 {
     private readonly IHubContext<KitchenHub> _hubContext = hubContext;
+    private readonly KitchenOrderEvents _orderEvents = orderEvents;
     private readonly ILogger<KitchenHubNotifier> _logger = logger;
 
     public async Task NotifyOrderReceivedAsync(int locationId, KitchenOrderTicketDto ticket)
@@ -90,7 +95,11 @@ public class KitchenHubNotifier(IHubContext<KitchenHub> hubContext, ILogger<Kitc
         _logger.LogInformation("Dispatching {Event} for order {OrderId} to location {LocationId}",
             KitchenHub.OrderReceivedEvent, ticket.OrderId, locationId);
 
-        // Awaited, not fire-and-forget: a ticket that never reaches the kitchen display is food
+        // Raised for the in-process Blazor kitchen display first, so that display still updates
+        // even if the hub send below fails - it is the one that staff are actually watching.
+        _orderEvents.RaiseOrderReceived(ticket);
+
+        // Awaited, not fire-and-forget: a ticket that never reaches a kitchen display is food
         // that never gets cooked, so a failure here needs to surface rather than be dropped.
         await _hubContext.Clients
             .Group(KitchenHub.GroupNameFor(locationId))
@@ -101,6 +110,8 @@ public class KitchenHubNotifier(IHubContext<KitchenHub> hubContext, ILogger<Kitc
     {
         _logger.LogInformation("Dispatching {Event} for order {OrderId} to location {LocationId} (now {Status})",
             KitchenHub.OrderStatusChangedEvent, ticket.OrderId, locationId, ticket.Status);
+
+        _orderEvents.RaiseOrderStatusChanged(ticket);
 
         await _hubContext.Clients
             .Group(KitchenHub.GroupNameFor(locationId))
