@@ -220,6 +220,34 @@
                                     <RenderKitchenOrdersWidget Widget="kitchenOrdersWidget" />
                                 </div>
                                 break;
+                            case WidgetType.KitchenOrderQueue:
+                                KitchenOrderQueueWidget? kitchenQueueWidget = widget as KitchenOrderQueueWidget;
+
+                                if (kitchenQueueWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderKitchenOrderQueueWidget Widget="kitchenQueueWidget" />
+                                </div>
+                                break;
+                            case WidgetType.KitchenStats:
+                                KitchenStatsWidget? kitchenStatsWidget = widget as KitchenStatsWidget;
+
+                                if (kitchenStatsWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderKitchenStatsWidget Widget="kitchenStatsWidget" />
+                                </div>
+                                break;
                         }
                         @if (!PreviewMode)
                         {
@@ -410,18 +438,38 @@
             case KitchenOrdersWidget kitchenOrdersWidget:
                 await ShowConfigureKitchenOrdersDialog(kitchenOrdersWidget);
                 break;
+            case KitchenOrderQueueWidget kitchenQueueWidget:
+                await ShowConfigureKitchenQueueDialog(kitchenQueueWidget);
+                break;
+            case KitchenStatsWidget kitchenStatsWidget:
+                await ShowConfigureKitchenStatsDialog(kitchenStatsWidget);
+                break;
         }
     }
 
-    private async Task ShowConfigureKitchenOrdersDialog(KitchenOrdersWidget kitchenOrdersWidget)
+    /// <summary>
+    /// Venues the signed-in user may point a kitchen widget at. Shared by all three kitchen
+    /// config dialogs so none of them can quietly widen the scope of the others.
+    /// </summary>
+    private async Task<IEnumerable<Location>?> GetConfigurableKitchenLocationsAsync()
     {
         Result<List<Location>> locationsResult = await VisibleLocations
             .GetForCurrentUserAsync(_companyLocationService, _currentLocationContext);
 
-        if (!locationsResult.IsSuccess || locationsResult.Data is null)
+        if (locationsResult.IsSuccess && locationsResult.Data is not null)
         {
-            _toastService.ShowError($"Failed to load venues, {locationsResult.Error}");
+            return locationsResult.Data;
+        }
 
+        _toastService.ShowError($"Failed to load venues, {locationsResult.Error}");
+
+        return null;
+    }
+
+    private async Task ShowConfigureKitchenOrdersDialog(KitchenOrdersWidget kitchenOrdersWidget)
+    {
+        if (await GetConfigurableKitchenLocationsAsync() is not IEnumerable<Location> locations)
+        {
             return;
         }
 
@@ -429,7 +477,47 @@
         {
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureKitchenOrdersDialog.Widget), kitchenOrdersWidget);
-            options.Parameters.Add(nameof(ConfigureKitchenOrdersDialog.Locations), (IEnumerable<Location>)locationsResult.Data);
+            options.Parameters.Add(nameof(ConfigureKitchenOrdersDialog.Locations), locations);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureKitchenQueueDialog(KitchenOrderQueueWidget kitchenQueueWidget)
+    {
+        if (await GetConfigurableKitchenLocationsAsync() is not IEnumerable<Location> locations)
+        {
+            return;
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureKitchenOrderQueueDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureKitchenOrderQueueDialog.Widget), kitchenQueueWidget);
+            options.Parameters.Add(nameof(ConfigureKitchenOrderQueueDialog.Locations), locations);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureKitchenStatsDialog(KitchenStatsWidget kitchenStatsWidget)
+    {
+        if (await GetConfigurableKitchenLocationsAsync() is not IEnumerable<Location> locations)
+        {
+            return;
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureKitchenStatsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureKitchenStatsDialog.Widget), kitchenStatsWidget);
+            options.Parameters.Add(nameof(ConfigureKitchenStatsDialog.Locations), locations);
         });
 
         if (!dialogResult.Cancelled)

@@ -1,0 +1,84 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Food())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Kitchen Orders queue
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            @* No "all venues" option: a queue mixing two kitchens is not work anybody can act on. *@
+            <FluentSelect TOption="Location"
+                          TValue="string"
+                          Items="@Locations"
+                          OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                          OptionValue="@(l => l?.Id.ToString())"
+                          Label="Venue"
+                          Placeholder="Choose a venue"
+                          Value="@_locationValue"
+                          ValueChanged="OnLocationChanged"
+                          Style="width: 100%;" />
+
+            <FluentNumberInput @bind-Value="Widget.MaxTickets" Label="Tickets to show" Min="1" Max="30"
+                               Style="width: 100%;" />
+
+            <FluentCheckbox @bind-Value="Widget.AllowStatusChanges"
+                            Label="Let staff advance tickets from here" />
+            <FluentText Class="kitchen-queue-config-note">
+                Leave this off for a wall display, so a ticket can't be advanced by anyone walking past.
+            </FluentText>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required KitchenOrderQueueWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Location> Locations { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string _locationValue = string.Empty;
+
+    // Snapshots so Cancel can revert the live-edited widget.
+    private int? _originalLocationId;
+    private int _originalMaxTickets;
+    private bool _originalAllowStatusChanges;
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.KitchenLocationId;
+        _originalMaxTickets = Widget.MaxTickets;
+        _originalAllowStatusChanges = Widget.AllowStatusChanges;
+
+        _locationValue = Widget.KitchenLocationId?.ToString() ?? string.Empty;
+    }
+
+    private void OnLocationChanged(string? newValue)
+    {
+        Widget.KitchenLocationId = int.TryParse(newValue, out int locationId) ? locationId : null;
+        _locationValue = newValue ?? string.Empty;
+    }
+
+    private async Task SaveAsync() => await Dialog.CloseAsync(true);
+
+    private async Task CancelAsync()
+    {
+        Widget.KitchenLocationId = _originalLocationId;
+        Widget.MaxTickets = _originalMaxTickets;
+        Widget.AllowStatusChanges = _originalAllowStatusChanges;
+
+        await Dialog.CancelAsync();
+    }
+}

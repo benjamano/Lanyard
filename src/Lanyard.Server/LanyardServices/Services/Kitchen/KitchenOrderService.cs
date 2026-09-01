@@ -328,6 +328,13 @@ public class KitchenOrderService(
             order.Status = status;
             order.UpdateDate = DateTime.UtcNow;
 
+            // Stamped once. Nudging a ticket back and forth between Preparing and Ready must not
+            // rewrite how long the food actually took.
+            if (status == KitchenOrderStatus.Ready && order.ReadyDate is null)
+            {
+                order.ReadyDate = order.UpdateDate;
+            }
+
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("Order {OrderId} at location {LocationId} moved from {PreviousStatus} to {NewStatus}",
@@ -627,6 +634,82 @@ public class KitchenOrderService(
             return Result<KitchenOrderSummary>.Fail($"Failed to retrieve order summary: {ex.Message}");
         }
     }
+
+    public async Task<Result<KitchenStats>> GetStatsAsync(int locationId, KitchenStatsPeriod period)
+    {
+        try
+        {
+            DateTime since = PeriodStart(period);
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var stats = await ctx.KitchenOrders
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(o => o.LocationId == locationId && o.CreateDate >= since)
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    ServedCount = g.Count(o => o.Status == KitchenOrderStatus.Completed),
+                    CancelledCount = g.Count(o => o.Status == KitchenOrderStatus.Cancelled),
+                    RefundedCount = g.Count(o => o.PaymentStatus == KitchenOrderPaymentStatus.Refunded),
+
+                    // Refunded orders are excluded: that money went back, and a takings figure
+                    // that still counted it would not reconcile with the venue's Stripe balance.
+                    TakingsCents = g
+                        .Where(o => o.PaymentStatus == KitchenOrderPaymentStatus.Paid)
+                        .Sum(o => (int?)o.TotalCents) ?? 0
+                })
+                .FirstOrDefaultAsync();
+
+            // Averaged in memory rather than in SQL. Date arithmetic is the least portable thing
+            // EF translates - the SQL Server helpers do not exist for Npgsql, and the InMemory
+            // provider the tests use translates differently again. This pulls two timestamps per
+            // completed order for one venue over one window, which is small enough not to care.
+            // Projected into an anonymous type, not a ValueTuple: Npgsql cannot read a tuple out
+            // of a row and throws at runtime, while the InMemory provider the tests use accepts
+            // it happily - so this only fails against a real database.
+            var readyTimes = await ctx.KitchenOrders
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(o => o.LocationId == locationId && o.CreateDate >= since && o.ReadyDate != null)
+                .Select(o => new { o.CreateDate, ReadyDate = o.ReadyDate!.Value })
+                .ToListAsync();
+
+            double? averageSecondsToReady = readyTimes.Count == 0
+                ? null
+                : readyTimes.Average(t => (t.ReadyDate - t.CreateDate).TotalSeconds);
+
+            return Result<KitchenStats>.Ok(stats is null
+                ? new KitchenStats(0, 0, 0, 0, averageSecondsToReady)
+                : new KitchenStats(
+                    stats.ServedCount,
+                    stats.CancelledCount,
+                    stats.RefundedCount,
+                    stats.TakingsCents,
+                    averageSecondsToReady));
+        }
+        catch (Exception ex)
+        {
+            return Result<KitchenStats>.Fail($"Failed to retrieve kitchen stats: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Start of the window, in UTC.
+    /// </summary>
+    /// <remarks>
+    /// "Today" means the server's local day, not the UTC day - a service running past midnight
+    /// UTC in British Summer Time would otherwise reset the kitchen's figures mid-evening. This
+    /// assumes the server shares the venue's timezone, which holds for a single-region
+    /// deployment and would need a per-venue timezone if that ever stops being true.
+    /// </remarks>
+    private static DateTime PeriodStart(KitchenStatsPeriod period) => period switch
+    {
+        KitchenStatsPeriod.LastHour => DateTime.UtcNow.AddHours(-1),
+        KitchenStatsPeriod.ThisWeek => DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek).ToUniversalTime(),
+        _ => DateTime.Today.ToUniversalTime()
+    };
 
     public static KitchenOrderTicketDto ToTicket(KitchenOrder order) => new()
     {

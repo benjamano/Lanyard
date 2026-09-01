@@ -1,6 +1,8 @@
 /* Sized for a screen in a kitchen: tickets are cards on a wrapping grid rather than a table,
-   so a glance from a few feet away reads the table number and the items, and every control is
-   big enough to hit with the back of a knuckle. */
+   so a glance from a few feet away reads the table number and the items.
+
+   The ticket cards themselves are styled by KitchenTicketCard, which the dashboard queue widget
+   also uses - that is what keeps the two screens looking the same. */
 
 .kitchen-display {
     padding: 12px;
@@ -30,100 +32,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 12px;
-}
-
-.kitchen-ticket {
-    border: 1px solid var(--neutral-stroke-rest, #d9d9d9);
-    border-left-width: 6px;
-    border-radius: 8px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    background: var(--neutral-layer-1, #fff);
-}
-
-/* Status is carried by the left edge rather than a badge: it survives being read at a distance
-   and does not compete with the table number for attention. */
-.kitchen-ticket--received {
-    border-left-color: #2a78d6;
-}
-
-.kitchen-ticket--preparing {
-    border-left-color: #eda100;
-}
-
-.kitchen-ticket--ready {
-    border-left-color: #167a47;
-}
-
-.kitchen-ticket--late {
-    background: #fff7ed;
-}
-
-.kitchen-ticket__header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.kitchen-ticket__table {
-    font-size: 1.3rem;
-    font-weight: 700;
-}
-
-.kitchen-ticket__age {
-    font-size: 0.85rem;
-    opacity: 0.7;
-    font-variant-numeric: tabular-nums;
-}
-
-.kitchen-ticket--late .kitchen-ticket__age {
-    color: #b3261e;
-    font-weight: 650;
-    opacity: 1;
-}
-
-.kitchen-ticket__lines {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.kitchen-ticket__line {
-    display: flex;
-    gap: 8px;
-    font-size: 1.05rem;
-}
-
-.kitchen-ticket__qty {
-    font-weight: 700;
-    min-width: 30px;
-    font-variant-numeric: tabular-nums;
-}
-
-.kitchen-ticket__note {
-    margin: 0;
-    padding: 8px;
-    border-radius: 6px;
-    background: #fff4e5;
-    color: #7a4a06;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-
-.kitchen-ticket__actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: auto;
-    flex-wrap: wrap;
 }
 
 .kitchen-display__eightysix {

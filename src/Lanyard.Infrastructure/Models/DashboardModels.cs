@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using Lanyard.Infrastructure.Enum;
+using Lanyard.Shared.Enum;
 using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace Lanyard.Infrastructure.Models;
@@ -296,4 +297,59 @@ public class KitchenOrdersWidget : DashboardWidget
     /// and a screen on the wall in Ipswich must not start showing Wisbech's queue.
     /// </summary>
     public int? KitchenLocationId { get; set; }
+}
+
+/// <summary>
+/// The live ticket queue, as the kitchen display shows it, on a dashboard.
+///
+/// Renders through the same KitchenTicketCard component as /kitchen, so a screen showing this
+/// widget and a screen showing the kitchen page cannot drift apart. Read-only by default: a
+/// dashboard is usually a wall display, and a ticket that can be advanced by anyone walking
+/// past is worse than one that cannot.
+/// </summary>
+public class KitchenOrderQueueWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public KitchenOrderQueueWidget()
+    {
+        Type = WidgetType.KitchenOrderQueue;
+
+        GridW = 4;
+        GridH = 3;
+    }
+
+    public int? KitchenLocationId { get; set; }
+
+    /// <summary>
+    /// Cap on tickets rendered. A queue that overflows its tile silently is worse than one that
+    /// shows the oldest few and says how many more there are.
+    /// </summary>
+    public int MaxTickets { get; set; } = 6;
+
+    /// <summary>
+    /// Lets staff advance tickets straight from the dashboard. Off by default - see the class
+    /// remarks about wall displays.
+    /// </summary>
+    public bool AllowStatusChanges { get; set; }
+}
+
+/// <summary>
+/// How the kitchen has performed over a window: served, average time to ready, and takings.
+/// </summary>
+public class KitchenStatsWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public KitchenStatsWidget()
+    {
+        Type = WidgetType.KitchenStats;
+
+        GridW = 3;
+        GridH = 1;
+    }
+
+    public int? KitchenLocationId { get; set; }
+
+    public KitchenStatsPeriod StatsPeriod { get; set; } = KitchenStatsPeriod.Today;
+
+    public bool ShowTakings { get; set; } = true;
 }

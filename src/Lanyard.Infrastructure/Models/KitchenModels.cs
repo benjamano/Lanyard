@@ -123,6 +123,15 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? PaidDate { get; set; }
         public DateTime? RefundedDate { get; set; }
 
+        /// <summary>
+        /// When the kitchen marked this order ready.
+        ///
+        /// Its own column because UpdateDate moves on every status change, so it cannot answer
+        /// "how long did this take to cook" once the order is later completed. Set once, on the
+        /// first transition to Ready, so re-running the transition cannot inflate the timing.
+        /// </summary>
+        public DateTime? ReadyDate { get; set; }
+
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
 

@@ -15,5 +15,7 @@ public enum WidgetType
     HallOfFame = 10,
     MyTraining = 11,
     Greeting = 12,
-    KitchenOrders = 13
+    KitchenOrders = 13,
+    KitchenOrderQueue = 14,
+    KitchenStats = 15
 }

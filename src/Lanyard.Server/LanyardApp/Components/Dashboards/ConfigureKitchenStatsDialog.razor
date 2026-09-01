@@ -1,0 +1,113 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Shared.Enum
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.DataTrending())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Kitchen Stats
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentSelect TOption="Location"
+                          TValue="string"
+                          Items="@Locations"
+                          OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                          OptionValue="@(l => l?.Id.ToString())"
+                          Label="Venue"
+                          Placeholder="Choose a venue"
+                          Value="@_locationValue"
+                          ValueChanged="OnLocationChanged"
+                          Style="width: 100%;" />
+
+            <FluentSelect TOption="KitchenStatsPeriod"
+                          TValue="string"
+                          Items="@_periods"
+                          OptionText="@(p => DescribePeriod(p))"
+                          OptionValue="@(p => p.ToString())"
+                          Label="Period"
+                          Value="@_periodValue"
+                          ValueChanged="OnPeriodChanged"
+                          Style="width: 100%;" />
+
+            @* Takings are the one figure here that is nobody's business on a public-facing
+               screen, so it can be turned off without losing the service numbers. *@
+            <FluentCheckbox @bind-Value="Widget.ShowTakings" Label="Show takings" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required KitchenStatsWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Location> Locations { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private static readonly KitchenStatsPeriod[] _periods =
+    [
+        KitchenStatsPeriod.LastHour,
+        KitchenStatsPeriod.Today,
+        KitchenStatsPeriod.ThisWeek
+    ];
+
+    private string _locationValue = string.Empty;
+    private string _periodValue = string.Empty;
+
+    private int? _originalLocationId;
+    private KitchenStatsPeriod _originalPeriod;
+    private bool _originalShowTakings;
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.KitchenLocationId;
+        _originalPeriod = Widget.StatsPeriod;
+        _originalShowTakings = Widget.ShowTakings;
+
+        _locationValue = Widget.KitchenLocationId?.ToString() ?? string.Empty;
+        _periodValue = Widget.StatsPeriod.ToString();
+    }
+
+    private void OnLocationChanged(string? newValue)
+    {
+        Widget.KitchenLocationId = int.TryParse(newValue, out int locationId) ? locationId : null;
+        _locationValue = newValue ?? string.Empty;
+    }
+
+    private void OnPeriodChanged(string? newValue)
+    {
+        Widget.StatsPeriod = System.Enum.TryParse(newValue, out KitchenStatsPeriod period)
+            ? period
+            : KitchenStatsPeriod.Today;
+
+        _periodValue = Widget.StatsPeriod.ToString();
+    }
+
+    private static string DescribePeriod(KitchenStatsPeriod period) => period switch
+    {
+        KitchenStatsPeriod.LastHour => "Last hour",
+        KitchenStatsPeriod.ThisWeek => "This week",
+        _ => "Today"
+    };
+
+    private async Task SaveAsync() => await Dialog.CloseAsync(true);
+
+    private async Task CancelAsync()
+    {
+        Widget.KitchenLocationId = _originalLocationId;
+        Widget.StatsPeriod = _originalPeriod;
+        Widget.ShowTakings = _originalShowTakings;
+
+        await Dialog.CancelAsync();
+    }
+}

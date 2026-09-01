@@ -513,6 +513,149 @@ public class KitchenOrderServiceTests
         Assert.IsFalse(result.Success);
     }
 
+    [TestMethod]
+    public async Task GetStatsAsync_CountsServedAndTakings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        CreateOrderResultDto first = await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+        CreateOrderResultDto second = await PlaceAndPayAsync(service, fixture, (fixture.ChipsId, 2));
+
+        int firstId = await OrderIdForAsync(options, first.OrderToken);
+        await service.SetOrderStatusAsync(firstId, KitchenOrderStatus.Preparing);
+        await service.SetOrderStatusAsync(firstId, KitchenOrderStatus.Ready);
+        await service.SetOrderStatusAsync(firstId, KitchenOrderStatus.Completed);
+
+        Result<KitchenStats> stats = await service.GetStatsAsync(fixture.LocationId, KitchenStatsPeriod.Today);
+
+        Assert.IsTrue(stats.Success, stats.Error);
+        Assert.AreEqual(1, stats.Data!.ServedCount);
+
+        // Both orders are paid, so takings count both - served and paid are different questions.
+        Assert.AreEqual(850 + (300 * 2), stats.Data.TakingsCents);
+        Assert.AreEqual(0, stats.Data.CancelledCount);
+
+        _ = second;
+    }
+
+    /// <summary>
+    /// No average is not an average of zero. A widget showing "0 min" for a kitchen that has
+    /// served nothing would read as impossibly fast rather than as no data.
+    /// </summary>
+    [TestMethod]
+    public async Task GetStatsAsync_ReturnsNoAverageWhenNothingHasReachedReady()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+
+        Result<KitchenStats> stats = await service.GetStatsAsync(fixture.LocationId, KitchenStatsPeriod.Today);
+
+        Assert.IsTrue(stats.Success, stats.Error);
+        Assert.IsNull(stats.Data!.AverageSecondsToReady);
+    }
+
+    [TestMethod]
+    public async Task GetStatsAsync_MeasuresTimeToReady()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        CreateOrderResultDto placed = await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+        int orderId = await OrderIdForAsync(options, placed.OrderToken);
+
+        // Backdate creation so the measured duration is not sub-second noise.
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            KitchenOrder order = await ctx.KitchenOrders.FirstAsync(o => o.Id == orderId);
+            order.CreateDate = DateTime.UtcNow.AddMinutes(-5);
+            await ctx.SaveChangesAsync();
+        }
+
+        await service.SetOrderStatusAsync(orderId, KitchenOrderStatus.Ready);
+
+        Result<KitchenStats> stats = await service.GetStatsAsync(fixture.LocationId, KitchenStatsPeriod.Today);
+
+        Assert.IsNotNull(stats.Data!.AverageSecondsToReady);
+        Assert.IsTrue(stats.Data.AverageSecondsToReady > 250, $"Expected roughly five minutes, got {stats.Data.AverageSecondsToReady}s.");
+    }
+
+    /// <summary>
+    /// Nudging a ticket between Preparing and Ready must not rewrite how long the food took.
+    /// </summary>
+    [TestMethod]
+    public async Task SetOrderStatusAsync_StampsReadyDateOnlyOnce()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        CreateOrderResultDto placed = await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+        int orderId = await OrderIdForAsync(options, placed.OrderToken);
+
+        await service.SetOrderStatusAsync(orderId, KitchenOrderStatus.Ready);
+
+        DateTime? firstReadyDate;
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            firstReadyDate = (await ctx.KitchenOrders.FirstAsync(o => o.Id == orderId)).ReadyDate;
+        }
+
+        Assert.IsNotNull(firstReadyDate);
+
+        await service.SetOrderStatusAsync(orderId, KitchenOrderStatus.Preparing);
+        await service.SetOrderStatusAsync(orderId, KitchenOrderStatus.Ready);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Assert.AreEqual(firstReadyDate, (await ctx.KitchenOrders.FirstAsync(o => o.Id == orderId)).ReadyDate);
+        }
+    }
+
+    /// <summary>
+    /// Refunded money went back, so a takings figure that still counted it would not reconcile
+    /// with the venue's Stripe balance.
+    /// </summary>
+    [TestMethod]
+    public async Task GetStatsAsync_ExcludesRefundedOrdersFromTakings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        CreateOrderResultDto refunded = await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+        await PlaceAndPayAsync(service, fixture, (fixture.ChipsId, 1));
+
+        await service.CancelOrderAsync(await OrderIdForAsync(options, refunded.OrderToken), refund: true);
+
+        Result<KitchenStats> stats = await service.GetStatsAsync(fixture.LocationId, KitchenStatsPeriod.Today);
+
+        Assert.AreEqual(300, stats.Data!.TakingsCents);
+        Assert.AreEqual(1, stats.Data.RefundedCount);
+        Assert.AreEqual(1, stats.Data.CancelledCount);
+    }
+
+    [TestMethod]
+    public async Task GetStatsAsync_IgnoresOtherVenues()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture play2Day = await SeedVenueAsync(options);
+        Fixture partyman = await SeedVenueAsync(options, companyName: "Partyman");
+        KitchenOrderService service = GetService(options);
+
+        await PlaceAndPayAsync(service, play2Day, (play2Day.BurgerId, 1));
+
+        Result<KitchenStats> stats = await service.GetStatsAsync(partyman.LocationId, KitchenStatsPeriod.Today);
+
+        Assert.AreEqual(0, stats.Data!.TakingsCents);
+        Assert.AreEqual(0, stats.Data.ServedCount);
+    }
+
     private static async Task<int> OrderIdForAsync(DbContextOptions<ApplicationDbContext> options, Guid orderToken)
     {
         await using ApplicationDbContext ctx = new(options);

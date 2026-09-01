@@ -128,7 +128,24 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
-                .HasValue<KitchenOrdersWidget>(WidgetType.KitchenOrders);
+                .HasValue<KitchenOrdersWidget>(WidgetType.KitchenOrders)
+                .HasValue<KitchenOrderQueueWidget>(WidgetType.KitchenOrderQueue)
+                .HasValue<KitchenStatsWidget>(WidgetType.KitchenStats);
+
+            // Three kitchen widgets share a KitchenLocationId in the TPH table; pin the column
+            // names so EF's automatic uniquification cannot rename the existing one out from
+            // under rows that are already stored, exactly as the scoreboard widgets do above.
+            modelBuilder.Entity<KitchenOrdersWidget>()
+                .Property(x => x.KitchenLocationId)
+                .HasColumnName("KitchenLocationId");
+
+            modelBuilder.Entity<KitchenOrderQueueWidget>()
+                .Property(x => x.KitchenLocationId)
+                .HasColumnName("KitchenLocationId");
+
+            modelBuilder.Entity<KitchenStatsWidget>()
+                .Property(x => x.KitchenLocationId)
+                .HasColumnName("KitchenLocationId");
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.

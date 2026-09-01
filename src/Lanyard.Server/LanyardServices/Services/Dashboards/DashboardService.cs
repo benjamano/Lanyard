@@ -321,6 +321,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case KitchenOrdersWidget existingKitchenOrders when widget is KitchenOrdersWidget incomingKitchenOrders:
                     existingKitchenOrders.KitchenLocationId = incomingKitchenOrders.KitchenLocationId;
                     break;
+                case KitchenOrderQueueWidget existingKitchenQueue when widget is KitchenOrderQueueWidget incomingKitchenQueue:
+                    existingKitchenQueue.KitchenLocationId = incomingKitchenQueue.KitchenLocationId;
+                    existingKitchenQueue.MaxTickets = incomingKitchenQueue.MaxTickets;
+                    existingKitchenQueue.AllowStatusChanges = incomingKitchenQueue.AllowStatusChanges;
+                    break;
+                case KitchenStatsWidget existingKitchenStats when widget is KitchenStatsWidget incomingKitchenStats:
+                    existingKitchenStats.KitchenLocationId = incomingKitchenStats.KitchenLocationId;
+                    existingKitchenStats.StatsPeriod = incomingKitchenStats.StatsPeriod;
+                    existingKitchenStats.ShowTakings = incomingKitchenStats.ShowTakings;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -680,6 +690,18 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 KitchenLocationId = kitchenOrdersWidget.KitchenLocationId
             },
+            KitchenOrderQueueWidget kitchenQueueWidget => new KitchenOrderQueueWidget
+            {
+                KitchenLocationId = kitchenQueueWidget.KitchenLocationId,
+                MaxTickets = kitchenQueueWidget.MaxTickets,
+                AllowStatusChanges = kitchenQueueWidget.AllowStatusChanges
+            },
+            KitchenStatsWidget kitchenStatsWidget => new KitchenStatsWidget
+            {
+                KitchenLocationId = kitchenStatsWidget.KitchenLocationId,
+                StatsPeriod = kitchenStatsWidget.StatsPeriod,
+                ShowTakings = kitchenStatsWidget.ShowTakings
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -781,6 +803,22 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is KitchenOrdersWidget targetKitchenOrders && source is KitchenOrdersWidget sourceKitchenOrders)
         {
             targetKitchenOrders.KitchenLocationId = sourceKitchenOrders.KitchenLocationId;
+            return;
+        }
+
+        if (target is KitchenOrderQueueWidget targetKitchenQueue && source is KitchenOrderQueueWidget sourceKitchenQueue)
+        {
+            targetKitchenQueue.KitchenLocationId = sourceKitchenQueue.KitchenLocationId;
+            targetKitchenQueue.MaxTickets = sourceKitchenQueue.MaxTickets;
+            targetKitchenQueue.AllowStatusChanges = sourceKitchenQueue.AllowStatusChanges;
+            return;
+        }
+
+        if (target is KitchenStatsWidget targetKitchenStats && source is KitchenStatsWidget sourceKitchenStats)
+        {
+            targetKitchenStats.KitchenLocationId = sourceKitchenStats.KitchenLocationId;
+            targetKitchenStats.StatsPeriod = sourceKitchenStats.StatsPeriod;
+            targetKitchenStats.ShowTakings = sourceKitchenStats.ShowTakings;
         }
     }
 }

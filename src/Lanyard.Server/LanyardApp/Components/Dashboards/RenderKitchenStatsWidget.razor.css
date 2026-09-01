@@ -1,0 +1,80 @@
+/* Same shape as the kitchen-orders widget so a dashboard carrying both reads as one thing. */
+
+.kitchen-stats {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 8px;
+
+    /* Establishes the container the figures below size themselves against. Without this their
+       cqw units would resolve against the viewport instead of the tile, which is the opposite
+       of what a resizable dashboard widget needs. */
+    container-type: inline-size;
+}
+
+.kitchen-stats__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.kitchen-stats__title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Wider gap than the counts widget next door, because these values are words and currency
+   rather than single digits - at the narrowest useful tile width they otherwise touch. */
+.kitchen-stats__figures {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-around;
+    flex: 1;
+    gap: 14px;
+}
+
+.kitchen-stats__figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+}
+
+/* Scales with the tile rather than a fixed size, so "7 minutes" and "£98.75" still fit
+   side by side when the widget is dragged narrow. */
+.kitchen-stats__number {
+    font-size: clamp(1.1rem, 3.2cqw + 0.6rem, 1.6rem);
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.kitchen-stats__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+
+.kitchen-stats__footnote {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    text-align: center;
+}
+
+.kitchen-stats__empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.kitchen-stats__hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}

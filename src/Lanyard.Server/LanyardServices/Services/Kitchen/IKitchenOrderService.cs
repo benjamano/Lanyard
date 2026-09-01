@@ -51,7 +51,29 @@ public interface IKitchenOrderService
 
     /// <summary>Counts for the glanceable dashboard widget: how many open, and how old the oldest is.</summary>
     Task<Result<KitchenOrderSummary>> GetOpenOrderSummaryAsync(int locationId);
+
+    /// <summary>
+    /// How the kitchen has performed over a window - served, cancelled, how long food took, and
+    /// what it took. Separate from the open-order summary because this reads completed history
+    /// rather than the live queue, and the two are wanted on different screens.
+    /// </summary>
+    Task<Result<KitchenStats>> GetStatsAsync(int locationId, KitchenStatsPeriod period);
 }
 
 /// <summary>Aggregate counts for the dashboard widget.</summary>
 public record KitchenOrderSummary(int OpenOrderCount, int PreparingCount, int ReadyCount, DateTime? OldestOrderCreateDate);
+
+/// <summary>
+/// Kitchen performance over a window.
+/// </summary>
+/// <param name="AverageSecondsToReady">
+/// Received to ready, over orders that actually reached ready in the window. Null when none did -
+/// which is different from zero, and a widget showing "0 min" for a kitchen that has served
+/// nothing would be actively misleading.
+/// </param>
+public record KitchenStats(
+    int ServedCount,
+    int CancelledCount,
+    int RefundedCount,
+    int TakingsCents,
+    double? AverageSecondsToReady);

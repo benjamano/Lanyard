@@ -134,6 +134,25 @@ public class OrderStatusLineDto
 /// Carries the internal order id, unlike everything the customer sees: this only ever travels
 /// to authenticated staff on a role-gated hub.
 /// </summary>
+/// <summary>
+/// Kitchen performance over a window, on the wire.
+///
+/// Exists alongside the service's own KitchenStats record so a custom kitchen client can read
+/// these figures without referencing the server's service assembly.
+/// </summary>
+public class KitchenStatsDto
+{
+    public int LocationId { get; set; }
+    public KitchenStatsPeriod Period { get; set; }
+    public int ServedCount { get; set; }
+    public int CancelledCount { get; set; }
+    public int RefundedCount { get; set; }
+    public int TakingsCents { get; set; }
+
+    /// <summary>Null when nothing reached ready in the window - which is not the same as zero.</summary>
+    public double? AverageSecondsToReady { get; set; }
+}
+
 public class KitchenOrderTicketDto
 {
     public int OrderId { get; set; }

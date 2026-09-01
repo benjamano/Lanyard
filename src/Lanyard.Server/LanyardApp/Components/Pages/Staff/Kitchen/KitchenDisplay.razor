@@ -63,31 +63,10 @@
         <div class="kitchen-display__tickets">
             @foreach (KitchenOrderTicketDto ticket in _orders.OrderBy(o => o.CreateDate))
             {
-                <article class="kitchen-ticket kitchen-ticket--@(ticket.Status.ToString().ToLowerInvariant()) @(IsLate(ticket) ? "kitchen-ticket--late" : "")">
-                    <header class="kitchen-ticket__header">
-                        <span class="kitchen-ticket__table">@ticket.TableLabel</span>
-                        <span class="kitchen-ticket__age">@Age(ticket)</span>
-                    </header>
-
-                    <ul class="kitchen-ticket__lines">
-                        @foreach (OrderStatusLineDto line in ticket.Lines)
-                        {
-                            <li class="kitchen-ticket__line">
-                                <span class="kitchen-ticket__qty">@line.Quantity&times;</span>
-                                <span class="kitchen-ticket__name">@line.Name</span>
-                            </li>
-                        }
-                    </ul>
-
-                    @if (!string.IsNullOrWhiteSpace(ticket.CustomerNote))
-                    {
-                        <p class="kitchen-ticket__note">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.Comment())" />
-                            @ticket.CustomerNote
-                        </p>
-                    }
-
-                    <footer class="kitchen-ticket__actions">
+                @* ShowStatusLabel off: this screen already shows payment state next to its
+                   buttons, and two badges competing for the same corner reads as noise. *@
+                <KitchenTicketCard Ticket="ticket" ShowStatusLabel="false">
+                    <Actions>
                         @if (NextStatus(ticket.Status) is KitchenOrderStatus next)
                         {
                             <FluentButton Appearance="ButtonAppearance.Primary"
@@ -108,8 +87,8 @@
                                       IconStart="@(new Icons.Regular.Size20.Dismiss())"
                                       Title="Cancel this order"
                                       OnClick="@(() => CancelAsync(ticket))" />
-                    </footer>
-                </article>
+                    </Actions>
+                </KitchenTicketCard>
             }
         </div>
 
@@ -142,12 +121,6 @@
     private List<MenuItemDto> _menuItems = [];
     private int? _locationId;
     private string _locationValue = string.Empty;
-
-    /// <summary>
-    /// How long a ticket may sit before it is highlighted. Chosen to be noticeable rather than
-    /// alarming - a busy kitchen with everything flagged red tells staff nothing.
-    /// </summary>
-    private static readonly TimeSpan LateThreshold = TimeSpan.FromMinutes(12);
 
     protected override async Task OnInitializedAsync()
     {
@@ -381,12 +354,6 @@
         KitchenOrderStatus.Completed => "Collected",
         _ => "Next"
     };
-
-    private static bool IsLate(KitchenOrderTicketDto ticket) =>
-        DateTime.UtcNow - ticket.CreateDate > LateThreshold;
-
-    private static string Age(KitchenOrderTicketDto ticket) =>
-        (DateTime.UtcNow - ticket.CreateDate).Humanize(precision: 1);
 
     public void Dispose()
     {
