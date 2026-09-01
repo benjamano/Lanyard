@@ -23,6 +23,11 @@
     <ProjectReference Include="..\Lanyard.Server\LanyardApp\Lanyard.App.csproj" />
     <ProjectReference Include="..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
     <ProjectReference Include="..\Lanyard.Server\LanyardServices\Lanyard.Services.csproj" />
+    <!-- Aliased: both web apps have a top-level Program in the global namespace, so an
+         unaliased reference makes every `typeof(Program)` in the integration fixtures
+         ambiguous. Only LanyardOrderingClientTests needs Reach, and it opts in with
+         `extern alias reach;`. -->
+    <ProjectReference Include="..\Lanyard.Reach\Lanyard.Reach.Web\Lanyard.Reach.Web.csproj" Aliases="reach" />
   </ItemGroup>
 
 </Project>

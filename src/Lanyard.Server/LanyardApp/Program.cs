@@ -82,6 +82,7 @@ builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IQrTableTokenService, QrTableTokenService>();
 builder.Services.AddScoped<IKitchenOrderService, KitchenOrderService>();
 builder.Services.AddSingleton<IOrderPaymentService, StripeOrderPaymentService>();
+builder.Services.AddHostedService<AbandonedOrderSweepHostedService>();
 builder.Services.AddSingleton<KitchenOrderEvents>();
 builder.Services.AddSingleton<IKitchenHubNotifier, KitchenHubNotifier>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();

@@ -11,6 +11,7 @@ public class StripeOrderPaymentService : IOrderPaymentService
     private readonly string? _secretKey;
     private readonly string? _publishableKey;
     private readonly string? _webhookSecret;
+    private readonly string _currency;
 
     /// <summary>
     /// Identifies the order on the Stripe side. Read back off the PaymentIntent so a webhook can
@@ -24,6 +25,9 @@ public class StripeOrderPaymentService : IOrderPaymentService
         _secretKey = configuration["Stripe:SecretKey"];
         _publishableKey = configuration["Stripe:PublishableKey"];
         _webhookSecret = configuration["Stripe:WebhookSecret"];
+        _currency = configuration["Stripe:Currency"] is string c && !string.IsNullOrWhiteSpace(c)
+            ? c.Trim().ToLowerInvariant()
+            : "gbp";
 
         if (IsConfigured)
         {
@@ -66,7 +70,11 @@ public class StripeOrderPaymentService : IOrderPaymentService
             PaymentIntentCreateOptions options = new()
             {
                 Amount = amountCents,
-                Currency = "gbp",
+
+                // Configurable rather than hardcoded, so a deployment outside the UK is a
+                // setting rather than a code change. Defaults to GBP, which is what every
+                // current venue trades in.
+                Currency = _currency,
                 // Wallets and cards, decided by Stripe from what the customer's device supports -
                 // Apple Pay and Google Pay matter a lot for someone ordering one-handed at a table.
                 AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions { Enabled = true },
@@ -76,7 +84,15 @@ public class StripeOrderPaymentService : IOrderPaymentService
 
             // Direct charge on the venue's own account: the money never touches a Lanyard
             // balance, so Lanyard is not holding another company's takings.
-            RequestOptions requestOptions = new() { StripeAccount = stripeAccountId };
+            //
+            // Keyed on the order token, which is generated once before this call: a retry -
+            // whether from a flaky connection or a customer double-tapping - returns the
+            // original PaymentIntent instead of creating a second one for the same order.
+            RequestOptions requestOptions = new()
+            {
+                StripeAccount = stripeAccountId,
+                IdempotencyKey = $"order-{orderToken}"
+            };
 
             PaymentIntent intent = await new PaymentIntentService()
                 .CreateAsync(options, requestOptions, cancellationToken);

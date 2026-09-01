@@ -127,5 +127,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Build Lanyard server image
         run: docker build -f Dockerfile .
+
+      # Reach is a separate image because it is the internet-facing customer site, and until
+      # this existed it had no build gate at all - the Dockerfile only published the server, so
+      # a change that broke Reach's container would not have been caught until deploy time.
+      - name: Build Lanyard.Reach image
+        run: docker build -f Dockerfile.Reach .

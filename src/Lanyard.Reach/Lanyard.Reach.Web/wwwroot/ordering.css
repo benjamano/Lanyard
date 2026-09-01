@@ -531,6 +531,16 @@
     margin: 0 0 8px;
 }
 
+/* Retry action inside a status panel. Constrained rather than full-bleed: the panel is
+   centred text, and a 100%-wide button under it reads as a page footer rather than a choice. */
+.ordering__status-panel__action {
+    width: auto;
+    min-width: 160px;
+    /* Auto side margins rather than relying on the panel's text-align: the primary button is
+       display: flex, so it is a block-level box that text-align cannot centre. */
+    margin: 20px auto 0;
+}
+
 .ordering__status-panel--error {
     border-color: #f2b8b5;
 }

@@ -17,6 +17,22 @@ namespace Lanyard.Reach.Web.Services;
 /// </summary>
 public static class OrderingBffEndpoints
 {
+    /// <summary>
+    /// Maps a failed upstream call to the status the customer's browser should see. Keeping 429
+    /// and 502 distinct from 404 is what stops "we're busy, try again" being shown as "this
+    /// table doesn't exist".
+    /// </summary>
+    private static IResult Translate(OrderingApiOutcome outcome) => outcome switch
+    {
+        OrderingApiOutcome.RateLimited => Results.Json(
+            new { error = "We're a bit busy — give it a few seconds and try again." },
+            statusCode: StatusCodes.Status429TooManyRequests),
+        OrderingApiOutcome.Unavailable => Results.Json(
+            new { error = "We couldn't reach the kitchen just now. Please try again." },
+            statusCode: StatusCodes.Status502BadGateway),
+        _ => Results.NotFound()
+    };
+
     public static void MapOrderingBff(this WebApplication app)
     {
         RouteGroupBuilder group = app.MapGroup("/api/order");
@@ -32,10 +48,13 @@ public static class OrderingBffEndpoints
                 return Results.NotFound();
             }
 
-            TableResolutionDto? table = await client.ResolveTableAsync(
-                tableToken, tenantContext.Tenant.CompanyId, cancellationToken);
+            OrderingApiResult<TableResolutionDto> table = await client.GetAsync<TableResolutionDto>(
+                $"api/ordering/tables/{Uri.EscapeDataString(tableToken)}?companyId={tenantContext.Tenant.CompanyId}",
+                cancellationToken);
 
-            return table is null ? Results.NotFound() : Results.Ok(table);
+            // A throttled or unavailable server must not be reported as a missing table: the
+            // customer would be told their QR code is wrong and go and find a member of staff.
+            return table.IsOk ? Results.Ok(table.Value) : Translate(table.Outcome);
         });
 
         group.MapGet("/table/{tableToken}/menu", async (
@@ -60,9 +79,10 @@ public static class OrderingBffEndpoints
                 return Results.NotFound();
             }
 
-            MenuDto? menu = await client.GetMenuAsync(table.LocationId, companyId, cancellationToken);
+            OrderingApiResult<MenuDto> menu = await client.GetAsync<MenuDto>(
+                $"api/ordering/locations/{table.LocationId}/menu?companyId={companyId}", cancellationToken);
 
-            return menu is null ? Results.NotFound() : Results.Ok(menu);
+            return menu.IsOk ? Results.Ok(menu.Value) : Translate(menu.Outcome);
         });
 
         group.MapPost("/orders", async (
@@ -121,10 +141,13 @@ public static class OrderingBffEndpoints
                 return Results.NotFound();
             }
 
-            OrderStatusDto? status = await client.GetOrderStatusAsync(
-                orderToken, tenantContext.Tenant.CompanyId, cancellationToken);
+            OrderingApiResult<OrderStatusDto> status = await client.GetAsync<OrderStatusDto>(
+                $"api/ordering/orders/{orderToken}/status?companyId={tenantContext.Tenant.CompanyId}",
+                cancellationToken);
 
-            return status is null ? Results.NotFound() : Results.Ok(status);
+            // Especially important on the status poll: a throttled poll reported as 404 would
+            // make the customer's own order look like it had vanished.
+            return status.IsOk ? Results.Ok(status.Value) : Translate(status.Outcome);
         });
 
         // Outside the /api/order group because it is referenced directly from an <img> tag.

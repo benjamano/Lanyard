@@ -235,7 +235,9 @@
       "Added a \"Kitchen\" permission for staff who need the kitchen screens without full management access.",
       "Every dish now carries an allergen declaration covering the 14 named allergens, shown on the customer menu, on the order, and on the kitchen ticket.",
       "A dish stays off the customer menu until someone confirms its allergens - a blank declaration means \"not filled in yet\", never \"contains nothing\". Dishes needing one are flagged in Kitchen > Menu & Table Codes.",
-      "Added ordering terms and a refund policy, published per company from the new Legal details section in Companies & Locations and linked from the checkout screen."
+      "Added ordering terms and a refund policy, published per company from the new Legal details section in Companies & Locations and linked from the checkout screen.",
+      "Orders started but never paid for are now closed off automatically a few hours later, instead of sitting on the books as unpaid.",
+      "If the ordering site gets briefly busy, customers are now told to try again in a moment rather than being told their table code is wrong."
     ]
   }
 ]

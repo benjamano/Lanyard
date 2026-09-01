@@ -60,7 +60,17 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
         CancellationToken cancellationToken = default) =>
         await _httpClient.PostAsJsonAsync($"api/ordering/orders?companyId={companyId}", request, cancellationToken);
 
-    private async Task<T?> GetOrNullAsync<T>(string path, CancellationToken cancellationToken)
+    private async Task<T?> GetOrNullAsync<T>(string path, CancellationToken cancellationToken) =>
+        (await GetAsync<T>(path, cancellationToken)).Value;
+
+    /// <summary>
+    /// Fetches, keeping *why* a fetch failed rather than collapsing everything to null.
+    ///
+    /// The distinction matters to the customer: a genuine 404 means their table code is wrong,
+    /// while a 429 or a 502 means try again shortly. Flattening both into "not found" told
+    /// somebody who was merely going too fast that their QR code was broken.
+    /// </summary>
+    public async Task<OrderingApiResult<T>> GetAsync<T>(string path, CancellationToken cancellationToken)
     {
         try
         {
@@ -68,23 +78,50 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                return default;
+                return new OrderingApiResult<T>(default, OrderingApiOutcome.NotFound);
+            }
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning("Lanyard ordering API rate limited {Path}", path);
+
+                return new OrderingApiResult<T>(default, OrderingApiOutcome.RateLimited);
             }
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Lanyard ordering API returned {StatusCode} for {Path}", (int)response.StatusCode, path);
 
-                return default;
+                return new OrderingApiResult<T>(default, OrderingApiOutcome.Unavailable);
             }
 
-            return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
+            return new OrderingApiResult<T>(
+                await response.Content.ReadFromJsonAsync<T>(cancellationToken), OrderingApiOutcome.Ok);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reach the Lanyard ordering API for {Path}", path);
 
-            return default;
+            return new OrderingApiResult<T>(default, OrderingApiOutcome.Unavailable);
         }
     }
+}
+
+public enum OrderingApiOutcome
+{
+    Ok,
+
+    /// <summary>The thing genuinely does not exist - a wrong or retired table code.</summary>
+    NotFound,
+
+    /// <summary>Throttled. Transient, and must not be reported to the customer as "not found".</summary>
+    RateLimited,
+
+    /// <summary>Anything else - the server erred or could not be reached at all.</summary>
+    Unavailable
+}
+
+public record OrderingApiResult<T>(T? Value, OrderingApiOutcome Outcome)
+{
+    public bool IsOk => Outcome == OrderingApiOutcome.Ok && Value is not null;
 }
