@@ -271,3 +271,27 @@ public class GreetingWidget : DashboardWidget
         GridH = 1;
     }
 }
+
+// Surfaces the live Staff Announcements for the viewer's own location. Per-viewer rather than
+// per-dashboard, like MyTrainingWidget: the location comes from whoever is looking, so one shared
+// dashboard shows each site its own notices.
+public class AnnouncementsWidget : DashboardWidget
+{
+    // Single source of truth for the cap. The config dialog's Max, its save-time clamp, the
+    // widget's fetch size and AnnouncementService's own clamp all have to agree - when the fetch
+    // size alone was lower, a widget configured above it silently rendered a truncated list.
+    public const int MaxSupportedItems = 50;
+
+    [SetsRequiredMembers]
+    public AnnouncementsWidget()
+    {
+        Type = WidgetType.Announcements;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 3;
+    }
+
+    public int MaxItems { get; set; }
+}

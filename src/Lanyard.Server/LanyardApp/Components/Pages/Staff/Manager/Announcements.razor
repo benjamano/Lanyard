@@ -1,0 +1,278 @@
+﻿@page "/manage/announcements"
+@attribute [Authorize(Roles = "Admin, CanPostAnnouncements")]
+
+@using Microsoft.AspNetCore.Authorization
+@using Lanyard.Application.Services.Announcements
+@using Lanyard.Application.Services.Locations
+@using Lanyard.App.Components.Manager
+
+@inject IAnnouncementService _announcementService
+
+<PageTitle>Announcements</PageTitle>
+
+<FluentCard Height="auto">
+    @* Wraps because "New Announcement" is a long label - without this it is pushed off the right
+       edge of a phone and becomes unreachable. *@
+    <FluentStack Orientation="Orientation.Horizontal" Class="w-100" VerticalAlignment="VerticalAlignment.Center"
+                 HorizontalGap="6" VerticalGap="8" Wrap="true">
+        <FluentText As="TextTag.H4" Size="TextSize.Size500">Announcements</FluentText>
+
+        @* Admins are the only role that can read across locations, so the switch is theirs alone.
+           It defaults to off: the list should reflect the location you actually signed in to. *@
+        @if (_currentScope?.IsAdmin == true)
+        {
+            <FluentStack VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal"
+                         Width="auto" Class="ms-auto">
+                <FluentSwitch @bind-Value="_allLocations" @bind-Value:after="LoadAnnouncementsAsync">
+                    Show all locations
+                </FluentSwitch>
+            </FluentStack>
+        }
+
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                      Class="@(_currentScope?.IsAdmin == true ? null : "ms-auto")"
+                      Disabled="@_scopeFailed" OnClick="OpenAddDialogAsync">
+            New Announcement
+        </FluentButton>
+    </FluentStack>
+
+    @if (_scopeFailed)
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px" Class="my-4">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                We couldn't work out which location you're working in, so your announcements can't
+                be listed. This is usually temporary - try again, or sign out and back in.
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="LoadAnnouncementsAsync">
+                Reload
+            </FluentButton>
+        </FluentStack>
+    }
+    else if (_isLoading)
+    {
+        <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else
+    {
+        @if (_allLocations && _currentScope?.IsAdmin == true)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" Class="my-2">
+                Showing announcements from every location, not just
+                @(_currentScope.LocationDisplayName ?? "the location you signed in to").
+            </FluentMessageBar>
+        }
+
+        @* Same reasoning as the Courses grid: five columns don't fit a phone, so the grid keeps a
+           workable minimum width and the page scrolls it sideways rather than clipping buttons. *@
+        <div style="overflow-x: auto;">
+            <FluentDataGrid ShowHover="true" Items="@_announcements.AsQueryable()"
+                            GridTemplateColumns="2fr 1fr 1fr 1fr 240px"
+                            Class="w-100" Style="min-width: 860px;" RowSize="@DataGridRowSize.Medium">
+                <ChildContent>
+                    <TemplateColumn Title="Title" Sortable="false">
+                        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+                            @if (context.IsPinned)
+                            {
+                                <FluentIcon Value="@(new Icons.Filled.Size16.Pin())" Color="Color.Primary" Title="Pinned" />
+                            }
+                            <span>@context.Title</span>
+                        </FluentStack>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(x => x.Location == null ? "Unassigned" : x.Location.GetDisplayName())"
+                                    Title="Location" />
+                    <PropertyColumn Property="@(x => x.CreateDate.ToLocalTime().ToString("d MMM yyyy"))" Title="Posted" />
+                    <TemplateColumn Title="Status">
+                        @if (IsExpired(context))
+                        {
+                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Expired</FluentBadge>
+                        }
+                        else if (context.ExpiryDate is DateTime expiry)
+                        {
+                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">
+                                Until @expiry.ToLocalTime().AddDays(-1).ToString("d MMM")
+                            </FluentBadge>
+                        }
+                        else
+                        {
+                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Live</FluentBadge>
+                        }
+                    </TemplateColumn>
+                    <TemplateColumn Title="">
+                        @* An announcement owned by another location is readable but not writable -
+                           the service rejects the write, so don't offer the buttons. *@
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.Edit())"
+                                      Disabled="@(!CanWrite(context))"
+                                      OnClick="@(() => OpenEditDialogAsync(context))">Edit</FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                      Disabled="@(!CanWrite(context))"
+                                      OnClick="@(() => ConfirmDeleteAsync(context))">Delete</FluentButton>
+                    </TemplateColumn>
+                </ChildContent>
+                <EmptyContent>
+                    @if (_currentScope?.IsAdmin == true && !_allLocations)
+                    {
+                        <span>
+                            No announcements for @(_currentScope.LocationDisplayName ?? "this location") - turn on
+                            "Show all locations" to see ones posted elsewhere, or click "New Announcement" to post one.
+                        </span>
+                    }
+                    else
+                    {
+                        <span>No announcements yet - click "New Announcement" to post one.</span>
+                    }
+                </EmptyContent>
+            </FluentDataGrid>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private List<Announcement> _announcements = [];
+    private LocationScope? _currentScope;
+
+    private bool _isLoading;
+    private bool _scopeFailed;
+    private bool _allLocations;
+    private int _loadSequence;
+
+    // Mirrors the service's write rule: Admins write anything, everyone else only writes
+    // announcements owned by their own location.
+    private bool CanWrite(Announcement announcement) =>
+        _currentScope is not null
+        && (_currentScope.IsAdmin || announcement.LocationId == _currentScope.LocationId);
+
+    private static bool IsExpired(Announcement announcement) =>
+        announcement.ExpiryDate is DateTime expiry && expiry <= DateTime.UtcNow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnnouncementsAsync();
+    }
+
+    private async Task<LocationScope?> ResolveScopeAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess)
+        {
+            _toastService.ShowError(scopeResult.Error!);
+
+            // The toast auto-dismisses. Without this flag the list would render as permanently
+            // empty, indistinguishable from genuinely having no announcements.
+            _scopeFailed = true;
+
+            return null;
+        }
+
+        _scopeFailed = false;
+        _currentScope = scopeResult.Data;
+
+        return _currentScope;
+    }
+
+    private async Task LoadAnnouncementsAsync()
+    {
+        // Flipping the switch twice in quick succession starts a second load before the first has
+        // returned; only the most recent load is allowed to publish its result.
+        int sequence = ++_loadSequence;
+
+        _isLoading = true;
+
+        LocationScope? scope = await ResolveScopeAsync();
+
+        if (sequence != _loadSequence)
+        {
+            return;
+        }
+
+        if (scope is null)
+        {
+            _isLoading = false;
+
+            return;
+        }
+
+        Result<List<Announcement>> result = await _announcementService.GetAnnouncementsAsync(scope, _allLocations);
+
+        if (sequence != _loadSequence)
+        {
+            return;
+        }
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _announcements = result.Data;
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to load announcements.");
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task OpenAddDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAnnouncementDialog>(options =>
+        {
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditAnnouncementDialog.Scope), _currentScope);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAnnouncementsAsync();
+        }
+    }
+
+    private async Task OpenEditDialogAsync(Announcement announcement)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAnnouncementDialog>(options =>
+        {
+            options.Width = "600px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditAnnouncementDialog.Content), announcement);
+            options.Parameters.Add(nameof(AddEditAnnouncementDialog.Scope), _currentScope);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAnnouncementsAsync();
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(Announcement announcement)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.DisplayName), announcement.Title);
+        });
+
+        if (result.Cancelled || _currentScope is null)
+        {
+            return;
+        }
+
+        Result<bool> deleteResult = await _announcementService.DeleteAnnouncementAsync(announcement.Id, _currentScope);
+
+        if (deleteResult.IsSuccess)
+        {
+            _toastService.ShowSuccess("Announcement deleted.");
+
+            await LoadAnnouncementsAsync();
+        }
+        else
+        {
+            _toastService.ShowError(deleteResult.Error ?? "Delete failed.");
+        }
+    }
+}
