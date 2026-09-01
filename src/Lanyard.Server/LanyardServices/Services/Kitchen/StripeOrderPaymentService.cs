@@ -102,7 +102,12 @@ public class StripeOrderPaymentService : IOrderPaymentService
         }
         catch (StripeException ex)
         {
-            _logger.LogError(ex, "Stripe refused to create a payment for order {OrderToken}", orderToken);
+            // The error code is what makes this alertable. "card_declined" is an ordinary
+            // Tuesday; "api_key_expired" or "account_invalid" means every order in the building
+            // is failing and somebody needs paging. Without the code both look identical.
+            _logger.LogError(ex,
+                "Stripe refused to create a payment for order {OrderToken} on account {StripeAccountId}: {StripeErrorType}/{StripeErrorCode} {StripeErrorMessage}",
+                orderToken, stripeAccountId, ex.StripeError?.Type, ex.StripeError?.Code, ex.StripeError?.Message);
 
             return Result<OrderPaymentIntent>.Fail("We couldn't start your payment. Please try again.");
         }
@@ -166,7 +171,9 @@ public class StripeOrderPaymentService : IOrderPaymentService
         }
         catch (StripeException ex)
         {
-            _logger.LogError(ex, "Stripe refused to refund payment {PaymentIntentId}", paymentIntentId);
+            _logger.LogError(ex,
+                "Stripe refused to refund payment {PaymentIntentId} on account {StripeAccountId}: {StripeErrorType}/{StripeErrorCode} {StripeErrorMessage}",
+                paymentIntentId, stripeAccountId, ex.StripeError?.Type, ex.StripeError?.Code, ex.StripeError?.Message);
 
             return Result<bool>.Fail($"Stripe refused the refund: {ex.StripeError?.Message ?? ex.Message}");
         }
