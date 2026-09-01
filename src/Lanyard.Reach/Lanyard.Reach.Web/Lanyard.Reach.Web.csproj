@@ -11,8 +11,4 @@
     <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="4.13.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Lanyard.Reach.Shared\Lanyard.Reach.Shared.csproj" />
-  </ItemGroup>
-
 </Project>

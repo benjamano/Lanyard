@@ -6,7 +6,6 @@
       "src/Lanyard.Client.Watchdog/LanyardClient.Watchdog.csproj",
       "src/Lanyard.Shared/Lanyard.Shared.csproj",
       "src/Lanyard.Tests/Lanyard.Tests.csproj",
-      "src\\Lanyard.Reach\\Lanyard.Reach.Shared\\Lanyard.Reach.Shared.csproj",
       "src\\Lanyard.Reach\\Lanyard.Reach.Web\\Lanyard.Reach.Web.csproj",
       "src/Lanyard.Server/LanyardAPI/Lanyard.API.csproj",
       "src/Lanyard.Server/LanyardApp/Lanyard.App.csproj",

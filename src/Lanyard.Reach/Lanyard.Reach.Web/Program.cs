@@ -1,6 +1,4 @@
 using Lanyard.Reach.Web.Components;
-using Lanyard.Reach.Shared.Services;
-using Lanyard.Reach.Web.Services;
 using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,9 +6,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-
-// Add device-specific services used by the Lanyard.Reach.Shared project
-builder.Services.AddSingleton<IFormFactor, FormFactor>();
 
 builder.Services.AddFluentUIComponents(options =>
 {
@@ -36,8 +31,6 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(
-        typeof(Lanyard.Reach.Shared._Imports).Assembly);
+    .AddInteractiveServerRenderMode();
 
 app.Run();
