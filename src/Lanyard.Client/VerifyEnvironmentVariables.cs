@@ -66,7 +66,7 @@ public class VerifyEnvironmentVariables
 
             config[envVar] = variable;
 
-            // Some vars (e.g. the OTLP ones) are genuinely optional — leave the process
+            // Some vars (e.g. the OTLP ones) are genuinely optional, so leave the process
             // environment untouched rather than setting it to an empty string, which would
             // override a real value already set at the OS/session level.
             if (!string.IsNullOrWhiteSpace(variable))

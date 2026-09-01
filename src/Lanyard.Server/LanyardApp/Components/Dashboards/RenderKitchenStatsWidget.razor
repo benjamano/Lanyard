@@ -86,7 +86,7 @@
 
     private string AverageLabel => _stats?.AverageSecondsToReady is double seconds
         ? TimeSpan.FromSeconds(seconds).Humanize(precision: 1)
-        : "—";
+        : "N/A";
 
     protected override void OnInitialized()
     {

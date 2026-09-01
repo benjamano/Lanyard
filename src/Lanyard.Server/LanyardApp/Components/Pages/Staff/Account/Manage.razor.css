@@ -4,7 +4,7 @@
 }
 
 /* FluentStack's default align-items is "start" (not "stretch"), so a plain
-   child div — and Fluent components inside it — shrink to content width
+   child div (and Fluent components inside it) shrinks to content width
    instead of filling the card. This flows down into YourDetailsCard/
    ContactDetailsCard's own FluentStack, which is why their percentage-width
    inputs (e.g. Width="61%") were computing against a shrunk container. */

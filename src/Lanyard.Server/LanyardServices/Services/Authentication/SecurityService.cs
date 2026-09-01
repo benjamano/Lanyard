@@ -188,7 +188,7 @@ public class SecurityService : ISecurityService
             user.EmailConfirmed = true;
             user.InvitedDate = DateTime.UtcNow;
 
-            // No password is set here — the invitee sets their own via the emailed link.
+            // No password is set here; the invitee sets their own via the emailed link.
             IdentityResult result = await _userManager.CreateAsync(user);
 
             if (!result.Succeeded)
@@ -423,7 +423,7 @@ public class SecurityService : ISecurityService
             }
             catch (Exception ex)
             {
-                // The user is already deleted at this point — this is best-effort
+                // The user is already deleted at this point, so this is best-effort
                 // cleanup of their now-orphaned CourseAssignments rows and must
                 // never undo or fail the deletion that already succeeded.
                 _logger.LogWarning(ex, "Failed to clean up CourseAssignments for deleted user {UserId}", userId);

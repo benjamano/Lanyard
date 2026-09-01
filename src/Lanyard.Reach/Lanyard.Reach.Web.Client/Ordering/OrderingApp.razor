@@ -91,7 +91,7 @@
 
             @if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Paid)
             {
-                <p class="ordering__pay-note ordering__pay-note--paid">Paid — thank you!</p>
+                <p class="ordering__pay-note ordering__pay-note--paid">Paid, thank you!</p>
             }
             else if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Refunded)
             {
@@ -389,7 +389,7 @@
 
             _dropNotice = dropped.Count == 0
                 ? null
-                : $"Sorry — we've just run out of {string.Join(", ", dropped)}, so we removed it from your basket.";
+                : $"Sorry, we've just run out of {string.Join(", ", dropped)}, so we removed it from your basket.";
 
             return true;
         }
@@ -750,7 +750,7 @@
     {
         // Shown in the seconds between paying and the webhook landing. Deliberately not phrased
         // as a problem: the money has left, and the kitchen is about to be told.
-        KitchenOrderStatus.AwaitingPayment => "This takes a few seconds — no need to pay again.",
+        KitchenOrderStatus.AwaitingPayment => "This takes a few seconds. No need to pay again.",
         KitchenOrderStatus.Received => "The kitchen has your order.",
         KitchenOrderStatus.Preparing => "It won't be long.",
         KitchenOrderStatus.Ready => "Come to the counter to collect and pay.",

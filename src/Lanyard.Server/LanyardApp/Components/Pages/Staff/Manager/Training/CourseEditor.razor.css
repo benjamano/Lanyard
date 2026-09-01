@@ -1,14 +1,14 @@
 /* Quill (via Blazored.TextEditor) renders its own plain-HTML DOM dynamically via JS,
-   so it never receives this file's scope attribute — ::deep plus this plain-div
+   so it never receives this file's scope attribute; ::deep plus this plain-div
    ancestor is required for any of these rules to actually match. */
 
 /* This div's own content-based height was silently undercounting the toolbar's
    height (a reproducible ~toolbar-height shortfall regardless of block/flow-root/
-   max-content sizing — never fully root-caused), which let the editor visually
+   max-content sizing, never fully root-caused), which let the editor visually
    overlap the Save/Delete button row rendered right after it. Sidestepping the
    whole "size to content" approach: give this wrapper an authoritative fixed
    height and let flexbox split it between the toolbar (auto) and the editor
-   (fills the rest) — that's immune to whatever was miscounting content height. */
+   (fills the rest). That's immune to whatever was miscounting content height. */
 .quill-editor-host {
     display: flex;
     flex-direction: column;
@@ -62,7 +62,7 @@
 }
 
 /* Content pasted into Quill (e.g. from Word) frequently carries its source's
-   own inline `style="color: ..."` on the pasted spans — inline styles beat
+   own inline `style="color: ..."` on the pasted spans, and inline styles beat
    any stylesheet rule regardless of selector specificity, so the plain
    .ql-editor color rule above silently loses to a pasted-in black/near-black
    color, leaving typed-over-paste text unreadable in dark mode. !important
@@ -154,14 +154,14 @@
 
 /* This plain div sits in the same non-stretching (align-items: start) flex
    column as .quill-editor-host above, so it shrinks to its content's width
-   unless forced — the same root cause, different element. */
+   unless forced: the same root cause, different element. */
 .option-radio-host {
     width: 100%;
 }
 
 /* FluentRadioGroup's Class="w-100" lands on a wrapping <fluent-field>, not on
    the real <fluent-radio-group> element (which renders with an empty class
-   attribute) — same Fluent Web Component quirk as the Quill host above.
+   attribute), the same Fluent Web Component quirk as the Quill host above.
    ::deep on a tag selector still matches it regardless. */
 .option-radio-host ::deep fluent-field {
     width: 100%;
@@ -187,7 +187,7 @@
 
 /* Each radio's label (our option-text row) is properly full-width by this
    point, but the nested FluentTextInput's own <fluent-field>/<fluent-text-input>
-   custom elements each shrink-wrap their content one level further down —
+   custom elements each shrink-wrap their content one level further down:
    same quirk, one more layer of nesting. */
 .option-radio-host ::deep label fluent-field {
     flex: 1 1 auto;
@@ -196,7 +196,7 @@
 
 .option-radio-host ::deep label fluent-text-input {
     /* width: 100% (not flex/auto) is what actually fills the parent
-       <fluent-field>'s box — that field isn't itself a flex container for
+       <fluent-field>'s box, and that field isn't itself a flex container for
        its own children, so "flex:" on the input here is a no-op and leaves
        it content-sized, floating with a visible gap before the delete
        button (which tracks the *field's* now-stretched right edge, not
@@ -206,15 +206,15 @@
     /* The real fix for the delete button getting clipped/needing a scroll:
        a flex item's default min-width is "auto" (its content's intrinsic
        width), which blocks the browser from ever shrinking a long option's
-       text input to make room for the delete button next to it — the row
+       text input to make room for the delete button next to it, so the row
        overflows instead. min-width: 0 lets it actually shrink. */
     min-width: 0;
 }
 
 /* Match "Add Option"'s width to the Save+Delete row below it: both become
    grid items in a single max-content column, so the column (and therefore
-   both rows) take on the width of whichever is naturally wider — here,
-   Save+Delete — while Save and Delete keep their own relative sizes. */
+   both rows) take on the width of whichever is naturally wider (here,
+   Save+Delete), while Save and Delete keep their own relative sizes. */
 .question-actions-group {
     display: inline-grid;
     grid-template-columns: max-content;
