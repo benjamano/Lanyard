@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830144846_AddButtonWidgetSkipToPreviousStep")]
+    partial class AddButtonWidgetSkipToPreviousStep
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,52 +92,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ClientId");
 
                     b.ToTable("ZoneScoreboardSettings");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Announcement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExpiryDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPinned")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("LocationId");
-
-                    b.ToTable("Announcements");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AppSetting", b =>
@@ -1695,17 +1652,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.AnnouncementsWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<int>("MaxItems")
-                        .HasColumnType("integer")
-                        .HasColumnName("AnnouncementsWidget_MaxItems");
-
-                    b.HasDiscriminator().HasValue(13);
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleStatusWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -1862,8 +1808,7 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int>("MaxItems")
-                        .HasColumnType("integer")
-                        .HasColumnName("MaxItems");
+                        .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue(11);
                 });
@@ -1923,21 +1868,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Announcement", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ApplicationRole", b =>

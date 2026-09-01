@@ -145,6 +145,10 @@ public class ButtonWidget : DashboardWidget
 
     // Which monitor the projection opens on; null uses the client's default display.
     public int? DisplayIndex { get; set; }
+
+    // Only meaningful for ActionType == SkipProjectionProgramStep. False (the default) skips
+    // forward, matching the runner's SkipToNextStep being the more common transport action.
+    public bool SkipToPreviousStep { get; set; }
 }
 
 public class MusicPlaylistSelectorWidget : DashboardWidget
@@ -270,6 +274,31 @@ public class GreetingWidget : DashboardWidget
         GridW = 4;
         GridH = 1;
     }
+}
+
+// A live "now playing" view of ProjectionProgramRunnerService for one client/display, reusing the
+// same progress-bar/step-label markup and runner events as the manager's Live Projection Control
+// panel. ShowControls off gives a read-only view suitable for a public kiosk dashboard; on, it adds
+// the same pause/skip/stop transport buttons that panel has.
+public class ProjectionStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ProjectionStatusWidget()
+    {
+        Type = WidgetType.ProjectionStatus;
+
+        GridW = 4;
+        GridH = 2;
+
+        ShowControls = false;
+    }
+
+    public Guid? ClientId { get; set; }
+
+    // Which monitor to watch; null uses the client's default display, matching ButtonWidget.
+    public int? DisplayIndex { get; set; }
+
+    public bool ShowControls { get; set; }
 }
 
 // Surfaces the live Staff Announcements for the viewer's own location. Per-viewer rather than

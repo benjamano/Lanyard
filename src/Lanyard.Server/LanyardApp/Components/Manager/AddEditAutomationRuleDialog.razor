@@ -95,6 +95,7 @@
                                 <FluentOption Value="@AutomationActionTypes.StartProjectionProgram">Start Projection Program</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.StopProjectionProgram">Stop Projection Program</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.DmxSceneControl">DMX Scene Control</FluentOption>
+                                <FluentOption Value="@AutomationActionTypes.ProjectionProgramControl">Projection Program Control</FluentOption>
                             </FluentSelect>
                         </div>
                         <div>
@@ -140,6 +141,53 @@
                                     ValueChanged="@((string? id) => _actionRows[index].ProjectionProgramIdString = id ?? string.Empty)"
                                     Style="flex: 1;" />
                             </div>
+                            <div>
+                                <FluentSelect TOption="string"
+                                    TValue="string"
+                                    Label="Screen"
+                                    Value="@_actionRows[index].DisplayIndexString"
+                                    ValueChanged="@((string? screen) => _actionRows[index].DisplayIndexString = screen ?? "default")"
+                                    Style="width: 160px;">
+                                    <FluentOption TValue="string" Value="default">Client default</FluentOption>
+                                    @foreach (ClientAvailableScreen screen in _actionRows[index].Screens)
+                                    {
+                                        <FluentOption TValue="string" Value="@screen.Index.ToString()">@($"{screen.Name} ({screen.Width}x{screen.Height})")</FluentOption>
+                                    }
+                                </FluentSelect>
+                            </div>
+                        }
+                        else if (_actionRows[index].ActionType == AutomationActionTypes.ProjectionProgramControl)
+                        {
+                            <div>
+                                <FluentSelect TOption="string"
+                                    TValue="string"
+                                    Label="Operation"
+                                    Value="@_actionRows[index].ProjectionControlOperation"
+                                    ValueChanged="@((string? op) => _actionRows[index].ProjectionControlOperation = op ?? ProjectionProgramControlActionExecutor.Start)"
+                                    Style="width: 150px;">
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.Start">Start</FluentOption>
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.Stop">Stop</FluentOption>
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.Pause">Pause</FluentOption>
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.Resume">Resume</FluentOption>
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.SkipToNext">Skip to Next Step</FluentOption>
+                                    <FluentOption Value="@ProjectionProgramControlActionExecutor.SkipToPrevious">Skip to Previous Step</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            @if (_actionRows[index].ProjectionControlOperation == ProjectionProgramControlActionExecutor.Start)
+                            {
+                                <div>
+                                    <FluentSelect TOption="ProjectionProgram"
+                                        TValue="string"
+                                        Label="Projection Program"
+                                        Placeholder="Select Program"
+                                        Items="@_programs"
+                                        OptionText="@(p => p?.Name ?? string.Empty)"
+                                        OptionValue="@(p => p?.Id.ToString())"
+                                        Value="@_actionRows[index].ProjectionProgramIdString"
+                                        ValueChanged="@((string? id) => _actionRows[index].ProjectionProgramIdString = id ?? string.Empty)"
+                                        Style="flex: 1;" />
+                                </div>
+                            }
                             <div>
                                 <FluentSelect TOption="string"
                                     TValue="string"
@@ -289,6 +337,7 @@
         public string SceneIdString { get; set; } = string.Empty;
         public int? HoldMilliseconds { get; set; }
         public List<DmxSceneDTO> Scenes { get; set; } = [];
+        public string ProjectionControlOperation { get; set; } = ProjectionProgramControlActionExecutor.Start;
     }
 
     private static bool IsRowValid(ActionRow row)
@@ -305,6 +354,9 @@
             AutomationActionTypes.StopProjectionProgram => true,
             AutomationActionTypes.DmxSceneControl => row.DmxOperation == DmxSceneControlActionExecutor.StopAllScenes
                 || !string.IsNullOrEmpty(row.SceneIdString),
+            // Every operation but Start needs only the target client, already validated above.
+            AutomationActionTypes.ProjectionProgramControl => row.ProjectionControlOperation != ProjectionProgramControlActionExecutor.Start
+                || !string.IsNullOrEmpty(row.ProjectionProgramIdString),
             _ => true
         };
     }
@@ -406,6 +458,26 @@
                         row.HoldMilliseconds = holdMilliseconds;
                     }
                 }
+                else if (action.ActionType == AutomationActionTypes.ProjectionProgramControl)
+                {
+                    if (doc.RootElement.TryGetProperty("Operation", out JsonElement projectionOperationElement))
+                    {
+                        row.ProjectionControlOperation = projectionOperationElement.GetString() ?? ProjectionProgramControlActionExecutor.Start;
+                    }
+
+                    if (doc.RootElement.TryGetProperty("ProjectionProgramId", out JsonElement controlProgramElement) &&
+                        controlProgramElement.ValueKind == JsonValueKind.String &&
+                        controlProgramElement.TryGetGuid(out Guid controlProgramId))
+                    {
+                        row.ProjectionProgramIdString = controlProgramId.ToString();
+                    }
+
+                    if (doc.RootElement.TryGetProperty("DisplayIndex", out JsonElement controlDisplayElement) &&
+                        controlDisplayElement.ValueKind == JsonValueKind.Number)
+                    {
+                        row.DisplayIndexString = controlDisplayElement.GetInt32().ToString();
+                    }
+                }
                 else if (action.ActionType == AutomationActionTypes.MusicControl)
                 {
                     if (doc.RootElement.TryGetProperty("Operation", out JsonElement operationElement))
@@ -425,7 +497,7 @@
 
                 if (!string.IsNullOrEmpty(row.TargetClientIdString))
                 {
-                    if (row.ActionType == AutomationActionTypes.StartProjectionProgram)
+                    if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.ProjectionProgramControl)
                     {
                         await LoadScreensForRowAsync(_actionRows.Count - 1);
                     }
@@ -481,6 +553,7 @@
         }
 
         if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.StopProjectionProgram
+            or AutomationActionTypes.ProjectionProgramControl
             && row.Screens.Count == 0)
         {
             await LoadScreensForRowAsync(index);
@@ -509,7 +582,8 @@
             return;
         }
 
-        if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.StopProjectionProgram)
+        if (row.ActionType is AutomationActionTypes.StartProjectionProgram or AutomationActionTypes.StopProjectionProgram
+            or AutomationActionTypes.ProjectionProgramControl)
         {
             await LoadScreensForRowAsync(index);
         }
@@ -638,6 +712,19 @@
                     HoldMilliseconds = row.DmxOperation == DmxSceneControlActionExecutor.StartScene && row.HoldMilliseconds > 0
                         ? row.HoldMilliseconds
                         : null
+                });
+            }
+            else if (row.ActionType == AutomationActionTypes.ProjectionProgramControl)
+            {
+                parametersJson = JsonSerializer.Serialize(new
+                {
+                    TargetClientId = targetClientId,
+                    Operation = row.ProjectionControlOperation,
+                    ProjectionProgramId = row.ProjectionControlOperation == ProjectionProgramControlActionExecutor.Start
+                        && Guid.TryParse(row.ProjectionProgramIdString, out Guid controlProgramId)
+                        ? controlProgramId
+                        : (Guid?)null,
+                    DisplayIndex = int.TryParse(row.DisplayIndexString, out int controlDisplayIndex) ? controlDisplayIndex : (int?)null
                 });
             }
             else

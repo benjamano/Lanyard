@@ -317,6 +317,7 @@ public class DashboardServiceTests
                 ActionType = ButtonActionType.TriggerProjectionProgram,
                 ClientId = clientId,
                 ProjectionProgramId = projectionProgramId,
+                SkipToPreviousStep = true,
                 IsActive = true
             }
         ];
@@ -332,6 +333,7 @@ public class DashboardServiceTests
         Assert.AreEqual(ButtonActionType.TriggerProjectionProgram, dbWidget.ActionType);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.AreEqual(projectionProgramId, dbWidget.ProjectionProgramId);
+        Assert.IsTrue(dbWidget.SkipToPreviousStep);
     }
 
     [TestMethod]
@@ -349,6 +351,7 @@ public class DashboardServiceTests
             ActionType = null,
             ClientId = null,
             ProjectionProgramId = null,
+            SkipToPreviousStep = false,
             IsActive = true
         };
 
@@ -362,9 +365,10 @@ public class DashboardServiceTests
 
         buttonWidget.Label = "Updated";
         buttonWidget.Appearance = ButtonAppearance.Subtle;
-        buttonWidget.ActionType = ButtonActionType.TriggerProjectionProgram;
+        buttonWidget.ActionType = ButtonActionType.SkipProjectionProgramStep;
         buttonWidget.ClientId = clientId;
         buttonWidget.ProjectionProgramId = projectionProgramId;
+        buttonWidget.SkipToPreviousStep = true;
 
         Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
         Assert.IsTrue(updateResult.Success, updateResult.Error);
@@ -373,9 +377,10 @@ public class DashboardServiceTests
         ButtonWidget dbWidget = await ctx.DashboardWidgets.OfType<ButtonWidget>().SingleAsync(x => x.Id == buttonWidget.Id);
         Assert.AreEqual("Updated", dbWidget.Label);
         Assert.AreEqual(ButtonAppearance.Subtle, dbWidget.Appearance);
-        Assert.AreEqual(ButtonActionType.TriggerProjectionProgram, dbWidget.ActionType);
+        Assert.AreEqual(ButtonActionType.SkipProjectionProgramStep, dbWidget.ActionType);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.AreEqual(projectionProgramId, dbWidget.ProjectionProgramId);
+        Assert.IsTrue(dbWidget.SkipToPreviousStep);
     }
 
     [TestMethod]
@@ -409,9 +414,10 @@ public class DashboardServiceTests
             DashboardId = dashboard.Id,
             Label = "Updated",
             Appearance = ButtonAppearance.Transparent,
-            ActionType = ButtonActionType.TriggerProjectionProgram,
+            ActionType = ButtonActionType.SkipProjectionProgramStep,
             ClientId = clientId,
             ProjectionProgramId = projectionProgramId,
+            SkipToPreviousStep = true,
             IsActive = true
         };
 
@@ -423,9 +429,10 @@ public class DashboardServiceTests
         ButtonWidget dbWidget = await ctx.DashboardWidgets.OfType<ButtonWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.AreEqual("Updated", dbWidget.Label);
         Assert.AreEqual(ButtonAppearance.Transparent, dbWidget.Appearance);
-        Assert.AreEqual(ButtonActionType.TriggerProjectionProgram, dbWidget.ActionType);
+        Assert.AreEqual(ButtonActionType.SkipProjectionProgramStep, dbWidget.ActionType);
         Assert.AreEqual(clientId, dbWidget.ClientId);
         Assert.AreEqual(projectionProgramId, dbWidget.ProjectionProgramId);
+        Assert.IsTrue(dbWidget.SkipToPreviousStep);
     }
 
     [TestMethod]
@@ -1376,6 +1383,121 @@ public class DashboardServiceTests
         MyTrainingWidget dbWidget = await ctx.DashboardWidgets.OfType<MyTrainingWidget>().SingleAsync(x => x.Id == myTrainingWidget.Id);
         Assert.IsTrue(dbWidget.IncludeCompleted);
         Assert.AreEqual(12, dbWidget.MaxItems);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewProjectionStatusWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        Guid clientId = Guid.NewGuid();
+
+        dashboard.Widgets =
+        [
+            new ProjectionStatusWidget
+            {
+                Id = Guid.Empty,
+                ClientId = clientId,
+                DisplayIndex = 2,
+                ShowControls = true,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ProjectionStatusWidget dbWidget = await ctx.DashboardWidgets.OfType<ProjectionStatusWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.AreEqual(2, dbWidget.DisplayIndex);
+        Assert.IsTrue(dbWidget.ShowControls);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingProjectionStatusWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ProjectionStatusWidget projectionStatusWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            ClientId = null,
+            DisplayIndex = null,
+            ShowControls = false,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [projectionStatusWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        Guid clientId = Guid.NewGuid();
+
+        projectionStatusWidget.ClientId = clientId;
+        projectionStatusWidget.DisplayIndex = 1;
+        projectionStatusWidget.ShowControls = true;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ProjectionStatusWidget dbWidget = await ctx.DashboardWidgets.OfType<ProjectionStatusWidget>().SingleAsync(x => x.Id == projectionStatusWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.AreEqual(1, dbWidget.DisplayIndex);
+        Assert.IsTrue(dbWidget.ShowControls);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesProjectionStatusConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ProjectionStatusWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            ClientId = null,
+            DisplayIndex = null,
+            ShowControls = false,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Guid clientId = Guid.NewGuid();
+
+        ProjectionStatusWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            ClientId = clientId,
+            DisplayIndex = 3,
+            ShowControls = true,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ProjectionStatusWidget dbWidget = await ctx.DashboardWidgets.OfType<ProjectionStatusWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(clientId, dbWidget.ClientId);
+        Assert.AreEqual(3, dbWidget.DisplayIndex);
+        Assert.IsTrue(dbWidget.ShowControls);
     }
 
     [TestMethod]
