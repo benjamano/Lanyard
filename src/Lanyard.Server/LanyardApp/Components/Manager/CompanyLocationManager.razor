@@ -40,6 +40,29 @@
                             never holds the money. Until this is set, the venue can't take QR orders.
                         </FluentText>
 
+                        @* Shown on the customer-facing ordering terms. Held per company so one
+                           terms template serves every tenant - a trader selling to consumers
+                           online has to identify itself, and that identity differs per company. *@
+                        <FluentText As="@TextTag.H5">Legal details</FluentText>
+                        <FluentText Class="clm-empty-note">
+                            Published on this company's ordering terms. Customers can't order until
+                            the trading name, registered address and contact email are filled in.
+                        </FluentText>
+
+                        <FluentTextInput @bind-Value="companyLegalName" Label="Registered trading name"
+                                         Placeholder="Play2Day Leisure Ltd" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="companyNumber" Label="Company number"
+                                         Placeholder="12345678" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="companyRegisteredAddress" Label="Registered address"
+                                         Placeholder="1 Example Street, Ipswich, IP1 1AA" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="companyContactEmail" Label="Contact email"
+                                         Placeholder="hello@play2day.co.uk" Class="clm-full-width" />
+                        <FluentTextInput @bind-Value="companyContactPhone" Label="Contact phone"
+                                         Placeholder="01473 000000" Class="clm-full-width" />
+                        <FluentNumberInput @bind-Value="companyCollectionHoldMinutes"
+                                           Label="Hold uncollected orders for (minutes)" Min="5" Max="240"
+                                           Class="clm-full-width" />
+
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
                                       PreviewUrl="@companyLogoPreviewUrl" />
@@ -209,6 +232,12 @@
     private string companySecondaryColor = string.Empty;
     private string companySlug = string.Empty;
     private string companyStripeAccountId = string.Empty;
+    private string companyLegalName = string.Empty;
+    private string companyNumber = string.Empty;
+    private string companyRegisteredAddress = string.Empty;
+    private string companyContactEmail = string.Empty;
+    private string companyContactPhone = string.Empty;
+    private int companyCollectionHoldMinutes = 30;
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
@@ -281,6 +310,12 @@
             SecondaryColorHex = companySecondaryColor,
             Slug = companySlug,
             StripeAccountId = companyStripeAccountId,
+            LegalName = companyLegalName,
+            CompanyNumber = companyNumber,
+            RegisteredAddress = companyRegisteredAddress,
+            ContactEmail = companyContactEmail,
+            ContactPhone = companyContactPhone,
+            CollectionHoldMinutes = companyCollectionHoldMinutes,
             LogoFileId = companyLogoFileId,
             BackgroundImageFileId = companyBackgroundImageFileId
         });
@@ -327,6 +362,12 @@
         companySecondaryColor = string.Empty;
         companySlug = string.Empty;
         companyStripeAccountId = string.Empty;
+        companyLegalName = string.Empty;
+        companyNumber = string.Empty;
+        companyRegisteredAddress = string.Empty;
+        companyContactEmail = string.Empty;
+        companyContactPhone = string.Empty;
+        companyCollectionHoldMinutes = 30;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
         companyBackgroundImageFileId = null;
@@ -340,6 +381,12 @@
         companySecondaryColor = company.SecondaryColorHex ?? string.Empty;
         companySlug = company.Slug ?? string.Empty;
         companyStripeAccountId = company.StripeAccountId ?? string.Empty;
+        companyLegalName = company.LegalName ?? string.Empty;
+        companyNumber = company.CompanyNumber ?? string.Empty;
+        companyRegisteredAddress = company.RegisteredAddress ?? string.Empty;
+        companyContactEmail = company.ContactEmail ?? string.Empty;
+        companyContactPhone = company.ContactPhone ?? string.Empty;
+        companyCollectionHoldMinutes = company.CollectionHoldMinutes;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
         companyBackgroundImageFileId = company.BackgroundImageFileId;

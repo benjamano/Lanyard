@@ -3,6 +3,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -54,7 +55,7 @@ public class MenuServiceTests
         ctx.MenuCategories.Add(category);
         await ctx.SaveChangesAsync();
 
-        MenuItem burger = new() { CategoryId = category.Id, Name = "Burger", PriceCents = 850, IsAvailable = true, IsActive = true };
+        MenuItem burger = new() { CategoryId = category.Id, Name = "Burger", PriceCents = 850, IsAvailable = true, IsActive = true, AllergensConfirmed = true };
         ctx.MenuItems.Add(burger);
         await ctx.SaveChangesAsync();
 
@@ -190,6 +191,54 @@ public class MenuServiceTests
         });
 
         Assert.IsFalse(result.Success);
+    }
+
+    /// <summary>
+    /// The central allergen rule: a blank declaration means "nobody has filled this in", not
+    /// "contains none of the fourteen", so the dish is withheld rather than shown as safe.
+    /// </summary>
+    [TestMethod]
+    public async Task GetPublicMenuAsync_HidesItemsWhoseAllergensAreNotConfirmed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            MenuItem burger = await ctx.MenuItems.FirstAsync(i => i.Id == fixture.BurgerId);
+            burger.AllergensConfirmed = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<MenuDto> result = await GetService(options).GetPublicMenuAsync(fixture.LocationId, fixture.CompanyId);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.AreEqual(0, result.Data!.Categories.Single().Items.Count);
+    }
+
+    [TestMethod]
+    public async Task GetPublicMenuAsync_PublishesDeclaredAllergens()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            MenuItem burger = await ctx.MenuItems.FirstAsync(i => i.Id == fixture.BurgerId);
+            burger.ContainsAllergens = Allergen.CerealsContainingGluten | Allergen.Milk;
+            burger.MayContainAllergens = Allergen.SesameSeeds;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<MenuDto> result = await GetService(options).GetPublicMenuAsync(fixture.LocationId, fixture.CompanyId);
+
+        MenuItemDto item = result.Data!.Categories.Single().Items.Single();
+        Assert.IsTrue(item.ContainsAllergens.HasFlag(Allergen.Milk));
+        Assert.IsTrue(item.ContainsAllergens.HasFlag(Allergen.CerealsContainingGluten));
+
+        // "May contain" must stay a separate claim from "contains" all the way to the customer.
+        Assert.IsFalse(item.ContainsAllergens.HasFlag(Allergen.SesameSeeds));
+        Assert.IsTrue(item.MayContainAllergens.HasFlag(Allergen.SesameSeeds));
     }
 
     [TestMethod]

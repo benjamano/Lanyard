@@ -23,6 +23,12 @@ public interface ITenantDirectoryService
     /// <summary>Fallback lookup for dev, staging, and the gap before a customer's DNS is pointed at us.</summary>
     Task<Result<TenantBrandingDto>> GetTenantBySlugAsync(string slug);
 
+    /// <summary>
+    /// The company's legal identity, for the customer-facing ordering terms. Separate from
+    /// branding because it is fetched only when someone opens the terms, not on every request.
+    /// </summary>
+    Task<Result<TenantLegalDetailsDto>> GetLegalDetailsAsync(int companyId);
+
     Task<Result<List<CompanyDomain>>> GetDomainsForCompanyAsync(int companyId);
 
     Task<Result<CompanyDomain>> SaveDomainAsync(CompanyDomain domain);

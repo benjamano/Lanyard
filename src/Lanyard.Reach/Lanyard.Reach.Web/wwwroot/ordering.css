@@ -600,3 +600,61 @@
     padding: 14px;
     min-height: 180px;
 }
+
+/* ---------- allergens ---------- */
+
+.ordering__item-allergens {
+    font-size: 0.78rem;
+    color: var(--ordering-ink-soft);
+    margin-top: 2px;
+    line-height: 1.35;
+}
+
+/* "May contain" is deliberately styled the same weight as "contains" rather than quieter -
+   a trace warning that reads as small print is a trace warning nobody reads. */
+.ordering__item-allergens--trace {
+    font-style: italic;
+}
+
+.ordering__item-allergens--none {
+    opacity: 0.8;
+}
+
+.ordering__allergy-banner {
+    background: #fff4e5;
+    border: 1px solid #f0c68a;
+    color: #7a4a06;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+    margin: 0 0 14px;
+}
+
+/* ---------- terms ---------- */
+
+.terms {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 20px 18px;
+    line-height: 1.55;
+}
+
+.terms h1 {
+    font-size: 1.35rem;
+    margin: 22px 0 10px;
+}
+
+.terms h1:first-child {
+    margin-top: 0;
+}
+
+.terms h2 {
+    font-size: 1rem;
+    margin: 18px 0 6px;
+}
+
+.terms p {
+    margin: 0 0 10px;
+    font-size: 0.92rem;
+}

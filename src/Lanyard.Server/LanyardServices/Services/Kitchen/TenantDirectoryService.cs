@@ -86,6 +86,46 @@ public class TenantDirectoryService(
         }
     }
 
+    public async Task<Result<TenantLegalDetailsDto>> GetLegalDetailsAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Company? company = await ctx.Companies
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(c => c.Id == companyId && c.IsActive);
+
+            if (company is null)
+            {
+                return Result<TenantLegalDetailsDto>.Fail("Company not found.");
+            }
+
+            return Result<TenantLegalDetailsDto>.Ok(new TenantLegalDetailsDto
+            {
+                CompanyName = company.Name,
+                LegalName = company.LegalName,
+                CompanyNumber = company.CompanyNumber,
+                RegisteredAddress = company.RegisteredAddress,
+                ContactEmail = company.ContactEmail,
+                ContactPhone = company.ContactPhone,
+                CollectionHoldMinutes = company.CollectionHoldMinutes,
+
+                // Trading identity and a contact route are the parts a consumer-facing trader
+                // has to publish; without them the terms page says so rather than rendering a
+                // document full of blanks.
+                IsComplete = !string.IsNullOrWhiteSpace(company.LegalName)
+                    && !string.IsNullOrWhiteSpace(company.RegisteredAddress)
+                    && !string.IsNullOrWhiteSpace(company.ContactEmail)
+            });
+        }
+        catch (Exception ex)
+        {
+            return Result<TenantLegalDetailsDto>.Fail($"Failed to retrieve company details: {ex.Message}");
+        }
+    }
+
     public async Task<Result<List<CompanyDomain>>> GetDomainsForCompanyAsync(int companyId)
     {
         try

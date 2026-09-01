@@ -87,6 +87,20 @@ namespace Lanyard.API.Controllers
             return result.Success && result.Data is not null ? Ok(result.Data) : NotFound();
         }
 
+        /// <summary>A company's legal identity, for rendering its ordering terms.</summary>
+        [HttpGet("tenants/{companyId:int}/legal")]
+        public async Task<IActionResult> GetTenantLegalDetails(int companyId)
+        {
+            if (!_reachCredentialValidator.IsAuthorized(HttpContext))
+            {
+                return Unauthorized();
+            }
+
+            Result<TenantLegalDetailsDto> result = await _tenantDirectory.GetLegalDetailsAsync(companyId);
+
+            return result.Success && result.Data is not null ? Ok(result.Data) : NotFound();
+        }
+
         [HttpGet("tables/{token}")]
         public async Task<IActionResult> ResolveTable(string token, [FromQuery] int companyId)
         {

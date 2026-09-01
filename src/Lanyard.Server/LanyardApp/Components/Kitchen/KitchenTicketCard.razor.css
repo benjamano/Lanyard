@@ -115,3 +115,12 @@
     font-size: 0.8rem;
     padding: 6px;
 }
+
+/* Quiet enough not to compete with the dish name, present enough to answer "does this have
+   nuts in" without anyone leaving the pass. */
+.kitchen-ticket__allergens {
+    display: block;
+    font-size: 0.75rem;
+    color: #7a4a06;
+    line-height: 1.3;
+}

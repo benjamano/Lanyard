@@ -22,7 +22,15 @@
         {
             <li class="kitchen-ticket__line">
                 <span class="kitchen-ticket__qty">@line.Quantity&times;</span>
-                <span class="kitchen-ticket__name">@line.Name</span>
+                <span class="kitchen-ticket__name">
+                    @line.Name
+                    @* Shown on the ticket so whoever hands the food over can answer an allergy
+                       question without going back to the menu. *@
+                    @if (line.ContainsAllergens != Allergen.None)
+                    {
+                        <span class="kitchen-ticket__allergens">@line.ContainsAllergens.ToDisplayList()</span>
+                    }
+                </span>
             </li>
         }
     </ul>

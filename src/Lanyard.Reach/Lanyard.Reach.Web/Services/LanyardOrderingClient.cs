@@ -20,6 +20,9 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
     public async Task<TenantBrandingDto?> GetTenantByHostAsync(string hostname, CancellationToken cancellationToken = default) =>
         await GetOrNullAsync<TenantBrandingDto>($"api/ordering/tenants/by-host/{Uri.EscapeDataString(hostname)}", cancellationToken);
 
+    public async Task<TenantLegalDetailsDto?> GetLegalDetailsAsync(int companyId, CancellationToken cancellationToken = default) =>
+        await GetOrNullAsync<TenantLegalDetailsDto>($"api/ordering/tenants/{companyId}/legal", cancellationToken);
+
     public async Task<TenantBrandingDto?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
         await GetOrNullAsync<TenantBrandingDto>($"api/ordering/tenants/by-slug/{Uri.EscapeDataString(slug)}", cancellationToken);
 

@@ -32,6 +32,25 @@ namespace Lanyard.Infrastructure.Models
         /// </summary>
         public string? StripeAccountId { get; set; }
 
+        /// <summary>
+        /// Legal identity and contact details, shown on the customer-facing ordering terms.
+        ///
+        /// Held per company rather than baked into the terms text so one template serves every
+        /// tenant - the E-Commerce Regulations require a trader selling to consumers online to
+        /// identify itself, and that identity differs per company by definition.
+        /// </summary>
+        public string? LegalName { get; set; }
+        public string? CompanyNumber { get; set; }
+        public string? RegisteredAddress { get; set; }
+        public string? ContactEmail { get; set; }
+        public string? ContactPhone { get; set; }
+
+        /// <summary>
+        /// How long a ready order is held before it may be disposed of. Appears in the terms, so
+        /// it is a number the venue commits to rather than one hardcoded on their behalf.
+        /// </summary>
+        public int CollectionHoldMinutes { get; set; } = 30;
+
         public virtual List<Location> Locations { get; set; } = [];
         public virtual List<CompanyDomain> Domains { get; set; } = [];
     }

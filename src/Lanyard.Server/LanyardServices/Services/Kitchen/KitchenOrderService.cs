@@ -108,6 +108,10 @@ public class KitchenOrderService(
                 .TagWithCallSite()
                 .Where(i => itemIds.Contains(i.Id)
                     && i.IsActive
+                    // Same guard as the public menu, repeated here rather than trusted from it:
+                    // a phone holding a menu from before an item's allergens were withdrawn must
+                    // not be able to order something with no declaration behind it.
+                    && i.AllergensConfirmed
                     && i.Category != null
                     // The category's own IsActive matters too: removing a whole menu section
                     // leaves its items active, and without this they stay orderable by anyone
@@ -141,6 +145,7 @@ public class KitchenOrderService(
                 MenuItemId = i.Id,
                 MenuItemNameSnapshot = i.Name,
                 UnitPriceCentsSnapshot = i.PriceCents,
+                ContainsAllergensSnapshot = i.ContainsAllergens,
                 Quantity = requestedQuantities[i.Id]
             })];
 
@@ -248,7 +253,8 @@ public class KitchenOrderService(
                 {
                     Name = i.MenuItemNameSnapshot,
                     Quantity = i.Quantity,
-                    UnitPriceCents = i.UnitPriceCentsSnapshot
+                    UnitPriceCents = i.UnitPriceCentsSnapshot,
+                    ContainsAllergens = i.ContainsAllergensSnapshot
                 })]
             });
         }
@@ -725,7 +731,8 @@ public class KitchenOrderService(
         {
             Name = i.MenuItemNameSnapshot,
             Quantity = i.Quantity,
-            UnitPriceCents = i.UnitPriceCentsSnapshot
+            UnitPriceCents = i.UnitPriceCentsSnapshot,
+            ContainsAllergens = i.ContainsAllergensSnapshot
         })]
     };
 }

@@ -72,6 +72,34 @@ public class MenuItemDto
     public bool IsAvailable { get; set; }
     public bool HasImage { get; set; }
     public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Allergens declared for this dish. Present on the public menu because a distance sale
+    /// requires the declaration before the customer buys, not on request afterwards.
+    /// </summary>
+    public Allergen ContainsAllergens { get; set; }
+    public Allergen MayContainAllergens { get; set; }
+}
+
+/// <summary>
+/// A company's legal identity, for the customer-facing ordering terms.
+/// </summary>
+public class TenantLegalDetailsDto
+{
+    public required string CompanyName { get; set; }
+    public string? LegalName { get; set; }
+    public string? CompanyNumber { get; set; }
+    public string? RegisteredAddress { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public int CollectionHoldMinutes { get; set; }
+
+    /// <summary>
+    /// False when the company has not filled in enough to identify itself. The terms page says
+    /// so plainly rather than rendering a document full of blanks, which would look like a bug
+    /// and satisfy nobody.
+    /// </summary>
+    public bool IsComplete { get; set; }
 }
 
 public class CreateOrderRequestDto
@@ -125,6 +153,13 @@ public class OrderStatusLineDto
     public required string Name { get; set; }
     public int Quantity { get; set; }
     public int UnitPriceCents { get; set; }
+
+    /// <summary>
+    /// Allergens as declared when the order was placed, snapshotted alongside name and price for
+    /// the same reason: what the customer was told is what the ticket must say, even if the menu
+    /// is edited afterwards.
+    /// </summary>
+    public Allergen ContainsAllergens { get; set; }
 }
 
 /// <summary>

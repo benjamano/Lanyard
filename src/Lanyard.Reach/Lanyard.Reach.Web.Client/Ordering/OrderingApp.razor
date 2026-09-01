@@ -173,7 +173,10 @@
                             disabled="@_isSubmitting" @onclick="PlaceOrderAsync">
                         @(_isSubmitting ? "Setting up payment…" : $"Pay {Money(_cart.TotalCents(_menu))}")
                     </button>
-                    <p class="ordering__pay-note">You'll pay now; the kitchen starts as soon as it goes through.</p>
+                    <p class="ordering__pay-note">
+                        You'll pay now; the kitchen starts as soon as it goes through.
+                        By ordering you accept our <a href="/order/terms" target="_blank">terms and refund policy</a>.
+                    </p>
                 }
             </section>
         }
@@ -184,6 +187,13 @@
                 {
                     <p class="ordering__notice" role="status">@_dropNotice</p>
                 }
+
+                @* Allergen data is declared per dish above, which is what the regulations
+                   require. This is the additional safety net for a severe allergy, where a
+                   label is not the same as being able to ask someone. *@
+                <p class="ordering__allergy-banner">
+                    Allergy or intolerance? Please speak to a member of staff before ordering.
+                </p>
 
                 @foreach (MenuCategoryDto category in _menu.Categories.Where(c => c.Items.Count > 0))
                 {
@@ -205,6 +215,29 @@
                                     {
                                         <span class="ordering__item-desc">@item.Description</span>
                                     }
+
+                                    @* Declared before the customer buys, not on request after -
+                                       a distance sale requires it up front. "Contains" and "may
+                                       contain" stay visibly distinct claims. *@
+                                    @if (item.ContainsAllergens != Allergen.None)
+                                    {
+                                        <span class="ordering__item-allergens">
+                                            <strong>Contains:</strong> @item.ContainsAllergens.ToDisplayList()
+                                        </span>
+                                    }
+                                    @if (item.MayContainAllergens != Allergen.None)
+                                    {
+                                        <span class="ordering__item-allergens ordering__item-allergens--trace">
+                                            May contain: @item.MayContainAllergens.ToDisplayList()
+                                        </span>
+                                    }
+                                    @if (item.ContainsAllergens == Allergen.None && item.MayContainAllergens == Allergen.None)
+                                    {
+                                        <span class="ordering__item-allergens ordering__item-allergens--none">
+                                            No declared allergens
+                                        </span>
+                                    }
+
                                     <span class="ordering__item-price">@Money(item.PriceCents)</span>
                                 </div>
 

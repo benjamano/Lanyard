@@ -10,6 +10,9 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
+    /// <summary>Blank and whitespace both mean "not set", so both are stored as null.</summary>
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public async Task<Result<List<Company>>> GetCompaniesAsync()
     {
         try
@@ -103,6 +106,12 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                     SecondaryColorHex = normalizedSecondaryColor,
                     Slug = normalizedSlug,
                     StripeAccountId = normalizedStripeAccountId,
+                    LegalName = Trimmed(company.LegalName),
+                    CompanyNumber = Trimmed(company.CompanyNumber),
+                    RegisteredAddress = Trimmed(company.RegisteredAddress),
+                    ContactEmail = Trimmed(company.ContactEmail),
+                    ContactPhone = Trimmed(company.ContactPhone),
+                    CollectionHoldMinutes = company.CollectionHoldMinutes,
                     LogoFileId = company.LogoFileId,
                     BackgroundImageFileId = company.BackgroundImageFileId
                 };
@@ -120,6 +129,12 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 target.SecondaryColorHex = normalizedSecondaryColor;
                 target.Slug = normalizedSlug;
                 target.StripeAccountId = normalizedStripeAccountId;
+                target.LegalName = Trimmed(company.LegalName);
+                target.CompanyNumber = Trimmed(company.CompanyNumber);
+                target.RegisteredAddress = Trimmed(company.RegisteredAddress);
+                target.ContactEmail = Trimmed(company.ContactEmail);
+                target.ContactPhone = Trimmed(company.ContactPhone);
+                target.CollectionHoldMinutes = company.CollectionHoldMinutes;
                 target.LogoFileId = company.LogoFileId;
                 target.BackgroundImageFileId = company.BackgroundImageFileId;
             }

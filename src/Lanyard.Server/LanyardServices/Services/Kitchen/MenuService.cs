@@ -52,8 +52,13 @@ public class MenuService(
                     // can show them greyed out. Dropping them would make a sold-out item look
                     // like it never existed, which reads as a broken menu rather than a sold-out
                     // dish - and would silently reshuffle the list under a browsing customer.
+                    //
+                    // Items whose allergens have not been declared are a different matter and are
+                    // withheld entirely: selling food at a distance requires the declaration
+                    // before purchase, and showing the dish without it would be offering
+                    // something that cannot lawfully be sold.
                     Items = c.Items
-                        .Where(i => i.IsActive)
+                        .Where(i => i.IsActive && i.AllergensConfirmed)
                         .OrderBy(i => i.SortOrder)
                         .ThenBy(i => i.Name)
                         .Select(i => new MenuItemDto
@@ -64,7 +69,9 @@ public class MenuService(
                             PriceCents = i.PriceCents,
                             IsAvailable = i.IsAvailable,
                             HasImage = i.ImageFileId != null,
-                            SortOrder = i.SortOrder
+                            SortOrder = i.SortOrder,
+                            ContainsAllergens = i.ContainsAllergens,
+                            MayContainAllergens = i.MayContainAllergens
                         })
                         .ToList()
                 })
@@ -229,6 +236,9 @@ public class MenuService(
                     ImageFileId = item.ImageFileId,
                     IsAvailable = item.IsAvailable,
                     SortOrder = item.SortOrder,
+                    ContainsAllergens = item.ContainsAllergens,
+                    MayContainAllergens = item.MayContainAllergens,
+                    AllergensConfirmed = item.AllergensConfirmed,
                     IsActive = true,
                     CreateDate = now,
                     UpdateDate = now
@@ -252,6 +262,9 @@ public class MenuService(
                 existing.ImageFileId = item.ImageFileId;
                 existing.IsAvailable = item.IsAvailable;
                 existing.SortOrder = item.SortOrder;
+                existing.ContainsAllergens = item.ContainsAllergens;
+                existing.MayContainAllergens = item.MayContainAllergens;
+                existing.AllergensConfirmed = item.AllergensConfirmed;
                 existing.IsActive = item.IsActive;
                 existing.UpdateDate = now;
                 entity = existing;

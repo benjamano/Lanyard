@@ -1,5 +1,6 @@
 @using Lanyard.App.Components.Files
 @using Lanyard.Infrastructure.Models
+@using Lanyard.Shared.Enum
 
 @*
     Shown through IDialogService rather than declared inline on the page. An inline
@@ -28,6 +29,46 @@
                           OnFileUploaded="OnImageUploaded" Label="Photo (optional)"
                           PreviewUrl="@_imagePreviewUrl" />
 
+            @* Selling food at a distance means declaring allergens before the customer buys, so
+               this is not optional - a dish stays off the customer menu until it is confirmed. *@
+            <FluentText As="@TextTag.H5" Class="menu-item-allergens-heading">Allergens</FluentText>
+            <FluentText Class="menu-item-allergens-note">
+                Tick everything this dish contains. Leaving them all unticked means "contains none
+                of the fourteen" — it is a declaration, not a way to skip this.
+            </FluentText>
+
+            @* Twenty-eight checkboxes made the dialog taller than a laptop screen, pushing the
+               confirm box and Save button off the bottom. One scroll region keeps them in view. *@
+            <div class="menu-item-allergens-scroll">
+                <div class="menu-item-allergens">
+                    @foreach (Allergen allergen in AllergenExtensions.All)
+                    {
+                        <FluentCheckbox Value="@Contains(allergen)"
+                                        ValueChanged="@((bool v) => SetContains(allergen, v))"
+                                        Label="@allergen.DisplayName()" />
+                    }
+                </div>
+
+                <FluentText Class="menu-item-allergens-note">
+                    May contain (cross-contamination) — a different claim from "contains", so kept separate.
+                </FluentText>
+
+                <div class="menu-item-allergens">
+                    @foreach (Allergen allergen in AllergenExtensions.All)
+                    {
+                        <FluentCheckbox Value="@MayContain(allergen)"
+                                        ValueChanged="@((bool v) => SetMayContain(allergen, v))"
+                                        Label="@allergen.DisplayName()" />
+                    }
+                </div>
+            </div>
+
+            <FluentCheckbox @bind-Value="AllergensConfirmed"
+                            Label="I confirm this dish's allergens are correct" />
+            <FluentText Class="menu-item-allergens-note">
+                Until this is ticked the dish stays off the customer menu and can't be ordered.
+            </FluentText>
+
             @if (_error is not null)
             {
                 <FluentText Color="Color.Error">@_error</FluentText>
@@ -50,6 +91,19 @@
     private string Name { get; set; } = string.Empty;
     private string? Description { get; set; }
     private decimal Price { get; set; }
+    private Allergen ContainsAllergens { get; set; } = Allergen.None;
+    private Allergen MayContainAllergens { get; set; } = Allergen.None;
+    private bool AllergensConfirmed { get; set; }
+
+    private bool Contains(Allergen allergen) => ContainsAllergens.HasFlag(allergen);
+
+    private bool MayContain(Allergen allergen) => MayContainAllergens.HasFlag(allergen);
+
+    private void SetContains(Allergen allergen, bool selected) =>
+        ContainsAllergens = selected ? ContainsAllergens | allergen : ContainsAllergens & ~allergen;
+
+    private void SetMayContain(Allergen allergen, bool selected) =>
+        MayContainAllergens = selected ? MayContainAllergens | allergen : MayContainAllergens & ~allergen;
 
     private Guid? _imageFileId;
     private string? _imagePreviewUrl;
@@ -86,7 +140,10 @@
             PriceCents = (int)Math.Round(Price * 100m, MidpointRounding.AwayFromZero),
             ImageFileId = _imageFileId,
             IsAvailable = true,
-            SortOrder = SortOrder
+            SortOrder = SortOrder,
+            ContainsAllergens = ContainsAllergens,
+            MayContainAllergens = MayContainAllergens,
+            AllergensConfirmed = AllergensConfirmed
         });
     }
 

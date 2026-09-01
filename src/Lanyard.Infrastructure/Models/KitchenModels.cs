@@ -53,6 +53,26 @@ namespace Lanyard.Infrastructure.Models
         public bool IsActive { get; set; } = true;
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
+
+        /// <summary>Allergens this dish contains, declared under the Food Information Regulations.</summary>
+        public Allergen ContainsAllergens { get; set; } = Allergen.None;
+
+        /// <summary>
+        /// Allergens this dish may contain through cross-contamination. Deliberately a separate
+        /// field: "may contain traces of nuts" is a different claim from "contains nuts", and
+        /// collapsing the two is how someone gets hurt.
+        /// </summary>
+        public Allergen MayContainAllergens { get; set; } = Allergen.None;
+
+        /// <summary>
+        /// Set only when someone has actively declared this dish's allergens.
+        ///
+        /// This exists because an empty <see cref="ContainsAllergens"/> is ambiguous - it reads
+        /// identically as "contains none of the fourteen" and "nobody has filled this in yet".
+        /// Treating blank as allergen-free would turn every half-finished menu item into a false
+        /// safety claim, so an unconfirmed item is withheld from the public menu instead.
+        /// </summary>
+        public bool AllergensConfirmed { get; set; }
     }
 
     /// <summary>
@@ -159,6 +179,13 @@ namespace Lanyard.Infrastructure.Models
         /// </summary>
         public required string MenuItemNameSnapshot { get; set; }
         public int UnitPriceCentsSnapshot { get; set; }
+
+        /// <summary>
+        /// Allergens as declared at order time. Snapshotted for the same reason as name and
+        /// price: a menu correction tomorrow must not rewrite what the customer was told today,
+        /// and staff handing the food over need the declaration the customer actually saw.
+        /// </summary>
+        public Allergen ContainsAllergensSnapshot { get; set; }
 
         public int Quantity { get; set; }
     }

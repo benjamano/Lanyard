@@ -116,8 +116,8 @@ public class KitchenOrderServiceTests
         ctx.MenuCategories.Add(category);
         await ctx.SaveChangesAsync();
 
-        MenuItem burger = new() { CategoryId = category.Id, Name = "Burger", PriceCents = 850, IsAvailable = true, IsActive = true };
-        MenuItem chips = new() { CategoryId = category.Id, Name = "Chips", PriceCents = 300, IsAvailable = true, IsActive = true };
+        MenuItem burger = new() { CategoryId = category.Id, Name = "Burger", PriceCents = 850, IsAvailable = true, IsActive = true, AllergensConfirmed = true, ContainsAllergens = Allergen.CerealsContainingGluten | Allergen.Milk };
+        MenuItem chips = new() { CategoryId = category.Id, Name = "Chips", PriceCents = 300, IsAvailable = true, IsActive = true, AllergensConfirmed = true };
         ctx.MenuItems.AddRange(burger, chips);
 
         QrTableToken table = new()
@@ -654,6 +654,57 @@ public class KitchenOrderServiceTests
 
         Assert.AreEqual(0, stats.Data!.TakingsCents);
         Assert.AreEqual(0, stats.Data.ServedCount);
+    }
+
+    /// <summary>
+    /// The public menu hides undeclared items, but a phone holding an older menu must not be
+    /// able to order one either - so the guard is repeated at order time rather than trusted.
+    /// </summary>
+    [TestMethod]
+    public async Task CreateOrderAsync_RejectsItemsWhoseAllergensAreNotConfirmed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            MenuItem burger = await ctx.MenuItems.FirstAsync(i => i.Id == fixture.BurgerId);
+            burger.AllergensConfirmed = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CreateOrderResultDto> result = await GetService(options)
+            .CreateOrderAsync(OrderFor(fixture, (fixture.BurgerId, 1)), fixture.CompanyId);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    /// <summary>
+    /// Allergens are snapshotted with the line for the same reason as name and price: correcting
+    /// the menu tomorrow must not rewrite what the customer was told, or what the ticket says to
+    /// whoever hands the food over.
+    /// </summary>
+    [TestMethod]
+    public async Task OrderLines_SnapshotAllergensAgainstLaterMenuEdits()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+        KitchenOrderService service = GetService(options);
+
+        CreateOrderResultDto placed = await PlaceAndPayAsync(service, fixture, (fixture.BurgerId, 1));
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            MenuItem burger = await ctx.MenuItems.FirstAsync(i => i.Id == fixture.BurgerId);
+            burger.ContainsAllergens = Allergen.Peanuts;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<OrderStatusDto> status = await service.GetOrderStatusAsync(placed.OrderToken, fixture.CompanyId);
+
+        OrderStatusLineDto line = status.Data!.Lines.Single();
+        Assert.IsTrue(line.ContainsAllergens.HasFlag(Allergen.Milk), "The order should keep the declaration the customer saw.");
+        Assert.IsFalse(line.ContainsAllergens.HasFlag(Allergen.Peanuts), "A later menu edit must not rewrite a placed order.");
     }
 
     private static async Task<int> OrderIdForAsync(DbContextOptions<ApplicationDbContext> options, Guid orderToken)

@@ -78,6 +78,16 @@
                                         <div class="kitchen-admin__item">
                                             <span class="kitchen-admin__item-name">@item.Name</span>
                                             <span class="kitchen-admin__item-price">@Money(item.PriceCents)</span>
+                                            @* Surfaced here because an unconfirmed dish is
+                                               invisible to customers, and a dish silently missing
+                                               from the menu is far harder to diagnose than one
+                                               flagged as needing a declaration. *@
+                                            @if (!item.AllergensConfirmed)
+                                            {
+                                                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">
+                                                    Allergens needed
+                                                </FluentBadge>
+                                            }
                                             @if (!item.IsAvailable)
                                             {
                                                 <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Warning">
