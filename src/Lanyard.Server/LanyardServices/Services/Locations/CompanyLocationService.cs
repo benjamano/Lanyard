@@ -56,6 +56,18 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Company>.Fail("Secondary color must be a hex value like #C8102E.");
             }
 
+            string? normalizedStripeAccountId = string.IsNullOrWhiteSpace(company.StripeAccountId)
+                ? null
+                : company.StripeAccountId.Trim();
+
+            // Shape-checked only. Whether the account exists and can accept charges is Stripe's
+            // to answer, and it answers at payment time; rejecting a well-formed id here on a
+            // guess would just block onboarding.
+            if (normalizedStripeAccountId is not null && !normalizedStripeAccountId.StartsWith("acct_", StringComparison.Ordinal))
+            {
+                return Result<Company>.Fail("A Stripe account ID looks like 'acct_1234...'.");
+            }
+
             string? normalizedSlug = string.IsNullOrWhiteSpace(company.Slug) ? null : company.Slug.Trim().ToLowerInvariant();
 
             // Constrained to what can sit in a URL path segment unescaped, since that is the only
@@ -90,6 +102,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                     ThemeColorHex = normalizedColor,
                     SecondaryColorHex = normalizedSecondaryColor,
                     Slug = normalizedSlug,
+                    StripeAccountId = normalizedStripeAccountId,
                     LogoFileId = company.LogoFileId,
                     BackgroundImageFileId = company.BackgroundImageFileId
                 };
@@ -106,6 +119,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 target.ThemeColorHex = normalizedColor;
                 target.SecondaryColorHex = normalizedSecondaryColor;
                 target.Slug = normalizedSlug;
+                target.StripeAccountId = normalizedStripeAccountId;
                 target.LogoFileId = company.LogoFileId;
                 target.BackgroundImageFileId = company.BackgroundImageFileId;
             }

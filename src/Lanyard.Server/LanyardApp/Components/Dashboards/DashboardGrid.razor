@@ -415,7 +415,8 @@
 
     private async Task ShowConfigureKitchenOrdersDialog(KitchenOrdersWidget kitchenOrdersWidget)
     {
-        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+        Result<List<Location>> locationsResult = await VisibleLocations
+            .GetForCurrentUserAsync(_companyLocationService, _currentLocationContext);
 
         if (!locationsResult.IsSuccess || locationsResult.Data is null)
         {

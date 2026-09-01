@@ -218,13 +218,16 @@
   {
     "version": "1.4.0",
     "releaseDate": "2026-09-01",
-    "summary": "Customers can now order food by scanning a QR code at their table.",
+    "summary": "Customers can now order and pay for food by scanning a QR code at their table.",
     "details": [
       "Added QR code food ordering. Print a code for each table from Kitchen > Menu & Table Codes, and customers can scan it to see your menu and order from their phone - no app to install and no table number to type in.",
+      "Customers pay when they order, by card or with Apple Pay and Google Pay. Nothing to settle at the till.",
+      "Payments go straight into your own Stripe account. Add it in Companies & Locations; until it's set, the venue can't take QR orders.",
       "Added a Kitchen > Orders screen showing live tickets as they arrive, oldest first, with one tap to move an order through cooking, ready and collected. Orders waiting too long are highlighted.",
+      "Orders only reach the kitchen once payment has gone through, so nothing gets cooked that hasn't been paid for.",
+      "Cancelling an order asks whether to refund the customer, and issues the refund for you.",
       "Staff can mark a dish as sold out straight from the Orders screen, and it disappears from the menu on phones that are already browsing.",
       "Added a Kitchen Orders dashboard widget showing how many orders are open and how long the oldest has been waiting.",
-      "Orders are paid for at the till - nothing is charged online.",
       "Customers see live progress of their own order, and it survives closing the browser or losing signal.",
       "Added a Public Domains section to Companies & Locations, so a company's customer-facing site can be served on its own web address with its own colours and logo.",
       "QR ordering is off until it's switched on per venue in Kitchen > Menu & Table Codes.",

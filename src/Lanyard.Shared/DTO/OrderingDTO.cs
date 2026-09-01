@@ -92,6 +92,17 @@ public class CreateOrderResultDto
     public Guid OrderToken { get; set; }
     public int TotalCents { get; set; }
     public required string TableLabel { get; set; }
+
+    /// <summary>
+    /// What the customer's browser needs to complete payment with Stripe.js.
+    ///
+    /// The client secret only authorises paying this one order and nothing else, which is why
+    /// it is safe to hand to the browser - unlike an API key. The account id is needed because
+    /// the charge is created on the venue's own connected account.
+    /// </summary>
+    public string? ClientSecret { get; set; }
+    public string? PublishableKey { get; set; }
+    public string? StripeAccountId { get; set; }
 }
 
 public class OrderStatusDto

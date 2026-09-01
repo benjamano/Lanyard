@@ -12,10 +12,12 @@ namespace Lanyard.Application.Services.Kitchen;
 public class KitchenOrderService(
     IDbContextFactory<ApplicationDbContext> factory,
     IKitchenHubNotifier hubNotifier,
+    IOrderPaymentService paymentService,
     ILogger<KitchenOrderService> logger) : IKitchenOrderService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IKitchenHubNotifier _hubNotifier = hubNotifier;
+    private readonly IOrderPaymentService _paymentService = paymentService;
     private readonly ILogger<KitchenOrderService> _logger = logger;
 
     /// <summary>
@@ -41,9 +43,9 @@ public class KitchenOrderService(
                 return Result<CreateOrderResultDto>.Fail("That order has too many separate items.");
             }
 
-            if (request.Lines.Any(l => l.Quantity < 1 || l.Quantity > MaxQuantityPerLine))
+            if (request.Lines.Any(l => l.Quantity < 1))
             {
-                return Result<CreateOrderResultDto>.Fail($"Quantities must be between 1 and {MaxQuantityPerLine}.");
+                return Result<CreateOrderResultDto>.Fail("Quantities must be at least 1.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -59,7 +61,8 @@ public class KitchenOrderService(
                     t.LocationId,
                     LocationActive = t.Location!.IsActive,
                     t.Location.OrderingEnabled,
-                    t.Location.CompanyId
+                    t.Location.CompanyId,
+                    StripeAccountId = t.Location.Company!.StripeAccountId
                 })
                 .FirstOrDefaultAsync();
 
@@ -90,6 +93,14 @@ public class KitchenOrderService(
                 .GroupBy(l => l.MenuItemId)
                 .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
 
+            // Checked after collapsing, not before: per-line caps are trivially defeated by
+            // splitting one item across many lines, which would turn a hundred legal-looking
+            // lines into a single five-thousand-unit ticket.
+            if (requestedQuantities.Values.Any(q => q > MaxQuantityPerLine))
+            {
+                return Result<CreateOrderResultDto>.Fail($"You can order at most {MaxQuantityPerLine} of any one item.");
+            }
+
             List<int> itemIds = [.. requestedQuantities.Keys];
 
             List<MenuItem> items = await ctx.MenuItems
@@ -98,6 +109,10 @@ public class KitchenOrderService(
                 .Where(i => itemIds.Contains(i.Id)
                     && i.IsActive
                     && i.Category != null
+                    // The category's own IsActive matters too: removing a whole menu section
+                    // leaves its items active, and without this they stay orderable by anyone
+                    // holding a stale menu.
+                    && i.Category.IsActive
                     && i.Category.LocationId == table.LocationId)
                 .ToListAsync();
 
@@ -129,14 +144,22 @@ public class KitchenOrderService(
                 Quantity = requestedQuantities[i.Id]
             })];
 
+            if (string.IsNullOrWhiteSpace(table.StripeAccountId))
+            {
+                return Result<CreateOrderResultDto>.Fail("This venue isn't set up to take payments yet. Please order at the till.");
+            }
+
             KitchenOrder order = new()
             {
                 LocationId = table.LocationId,
                 OrderToken = Guid.NewGuid(),
                 QrTableTokenId = table.Id,
                 TableLabelSnapshot = table.Label,
-                Status = KitchenOrderStatus.Received,
-                PaymentStatus = KitchenOrderPaymentStatus.Unpaid,
+                // Not Received. The kitchen must not see this ticket until the money is
+                // confirmed, or a customer who abandons the checkout page gets food cooked
+                // for them anyway.
+                Status = KitchenOrderStatus.AwaitingPayment,
+                PaymentStatus = KitchenOrderPaymentStatus.Pending,
                 TotalCents = orderItems.Sum(i => i.UnitPriceCentsSnapshot * i.Quantity),
                 CustomerNote = string.IsNullOrWhiteSpace(request.CustomerNote) ? null : request.CustomerNote.Trim(),
                 CreateDate = now,
@@ -144,19 +167,34 @@ public class KitchenOrderService(
                 Items = orderItems
             };
 
+            // The payment is created before the row is written, so a Stripe failure leaves no
+            // order behind at all - rather than an orphaned ticket the customer can never pay
+            // for and the kitchen has to work out how to void.
+            Result<OrderPaymentIntent> payment = await _paymentService.CreatePaymentIntentAsync(
+                table.StripeAccountId, order.TotalCents, order.OrderToken, order.TableLabelSnapshot);
+
+            if (!payment.IsSuccess || payment.Data is null)
+            {
+                return Result<CreateOrderResultDto>.Fail(payment.Error ?? "We couldn't start your payment. Please try again.");
+            }
+
+            order.PaymentIntentId = payment.Data.PaymentIntentId;
+
             await ctx.KitchenOrders.AddAsync(order);
             await ctx.SaveChangesAsync();
 
-            _logger.LogInformation("Order {OrderId} received for {TableLabel} at location {LocationId} ({LineCount} lines, {TotalCents}p)",
+            _logger.LogInformation("Order {OrderId} created for {TableLabel} at location {LocationId} awaiting payment ({LineCount} lines, {TotalCents}p)",
                 order.Id, order.TableLabelSnapshot, order.LocationId, orderItems.Count, order.TotalCents);
 
-            await _hubNotifier.NotifyOrderReceivedAsync(order.LocationId, ToTicket(order));
-
+            // Deliberately no kitchen notification here - that happens on payment confirmation.
             return Result<CreateOrderResultDto>.Ok(new CreateOrderResultDto
             {
                 OrderToken = order.OrderToken,
                 TotalCents = order.TotalCents,
-                TableLabel = order.TableLabelSnapshot
+                TableLabel = order.TableLabelSnapshot,
+                ClientSecret = payment.Data.ClientSecret,
+                PublishableKey = payment.Data.PublishableKey,
+                StripeAccountId = payment.Data.StripeAccountId
             });
         }
         catch (Exception ex)
@@ -230,9 +268,12 @@ public class KitchenOrderService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(o => o.Items)
+                // AwaitingPayment is excluded as well as the terminal states: an unpaid order is
+                // not work the kitchen should be looking at, and may never become one.
                 .Where(o => o.LocationId == locationId
                     && o.Status != KitchenOrderStatus.Completed
-                    && o.Status != KitchenOrderStatus.Cancelled)
+                    && o.Status != KitchenOrderStatus.Cancelled
+                    && o.Status != KitchenOrderStatus.AwaitingPayment)
                 .OrderBy(o => o.CreateDate)
                 .ToListAsync();
 
@@ -271,6 +312,17 @@ public class KitchenOrderService(
                 return Result<KitchenOrder>.Fail($"This order is already {order.Status.ToString().ToLowerInvariant()}.");
             }
 
+            // Cancelling goes through CancelOrderAsync, which also decides about the refund.
+            if (status == KitchenOrderStatus.Cancelled)
+            {
+                return Result<KitchenOrder>.Fail("Use CancelOrderAsync to cancel an order.");
+            }
+
+            if (order.Status == KitchenOrderStatus.AwaitingPayment)
+            {
+                return Result<KitchenOrder>.Fail("This order hasn't been paid for yet.");
+            }
+
             KitchenOrderStatus previous = order.Status;
 
             order.Status = status;
@@ -281,7 +333,14 @@ public class KitchenOrderService(
             _logger.LogInformation("Order {OrderId} at location {LocationId} moved from {PreviousStatus} to {NewStatus}",
                 order.Id, order.LocationId, previous, status);
 
-            await _hubNotifier.NotifyOrderStatusChangedAsync(order.LocationId, ToTicket(order));
+            // Notified outside the try that wraps the commit: the status change is already
+            // persisted, so a SignalR failure must not be reported as the update failing and
+            // invite staff to tap the button again.
+            KitchenOrder saved = order;
+
+            await NotifySafelyAsync(
+                () => _hubNotifier.NotifyOrderStatusChangedAsync(saved.LocationId, ToTicket(saved)),
+                saved.Id);
 
             return Result<KitchenOrder>.Ok(order);
         }
@@ -291,36 +350,246 @@ public class KitchenOrderService(
         }
     }
 
-    public async Task<Result<KitchenOrder>> MarkPaidAtTillAsync(int orderId)
+    public async Task<Result<KitchenOrder>> ConfirmPaymentAsync(string paymentIntentId)
+    {
+        KitchenOrder order;
+        bool alreadyConfirmed;
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            KitchenOrder? found = await ctx.KitchenOrders
+                .Include(o => o.Items)
+                .FirstOrDefaultAsync(o => o.PaymentIntentId == paymentIntentId);
+
+            if (found is null)
+            {
+                return Result<KitchenOrder>.Fail("No order matches that payment.");
+            }
+
+            // Stripe retries webhooks, and the customer's poll can reconcile the same payment
+            // at the same moment. Confirming twice would put a second ticket in front of the
+            // kitchen for one order, so the second caller returns the order untouched.
+            alreadyConfirmed = found.PaymentStatus == KitchenOrderPaymentStatus.Paid;
+
+            if (!alreadyConfirmed)
+            {
+                DateTime now = DateTime.UtcNow;
+
+                found.PaymentStatus = KitchenOrderPaymentStatus.Paid;
+                found.PaidDate = now;
+                found.UpdateDate = now;
+
+                // Only a still-awaiting order advances. A late webhook must not resurrect an
+                // order staff have already cancelled.
+                if (found.Status == KitchenOrderStatus.AwaitingPayment)
+                {
+                    found.Status = KitchenOrderStatus.Received;
+                }
+
+                await ctx.SaveChangesAsync();
+            }
+
+            order = found;
+        }
+        catch (Exception ex)
+        {
+            return Result<KitchenOrder>.Fail($"Failed to confirm payment: {ex.Message}");
+        }
+
+        if (!alreadyConfirmed && order.Status == KitchenOrderStatus.Received)
+        {
+            _logger.LogInformation("Order {OrderId} paid ({TotalCents}p) and released to the kitchen at location {LocationId}",
+                order.Id, order.TotalCents, order.LocationId);
+
+            // Outside the transaction on purpose: the money has been taken and the order is
+            // committed, so a SignalR failure must not turn a successful payment into a
+            // reported failure that the customer retries into a second charge.
+            await NotifySafelyAsync(
+                () => _hubNotifier.NotifyOrderReceivedAsync(order.LocationId, ToTicket(order)),
+                order.Id);
+        }
+
+        return Result<KitchenOrder>.Ok(order);
+    }
+
+    public async Task<Result<bool>> MarkPaymentFailedAsync(string paymentIntentId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             KitchenOrder? order = await ctx.KitchenOrders
-                .Include(o => o.Items)
-                .FirstOrDefaultAsync(o => o.Id == orderId);
+                .FirstOrDefaultAsync(o => o.PaymentIntentId == paymentIntentId);
 
             if (order is null)
             {
-                return Result<KitchenOrder>.Fail("Order not found.");
+                return Result<bool>.Fail("No order matches that payment.");
             }
 
-            order.PaymentStatus = KitchenOrderPaymentStatus.PaidAtTill;
+            // A failure arriving after a success is ignored rather than applied - Stripe can
+            // deliver events out of order, and money already taken outranks a stale failure.
+            if (order.PaymentStatus == KitchenOrderPaymentStatus.Paid)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            order.PaymentStatus = KitchenOrderPaymentStatus.Failed;
             order.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
 
-            _logger.LogInformation("Order {OrderId} at location {LocationId} marked paid at till ({TotalCents}p)",
-                order.Id, order.LocationId, order.TotalCents);
+            _logger.LogInformation("Payment failed for order {OrderId} at location {LocationId}", order.Id, order.LocationId);
 
-            await _hubNotifier.NotifyOrderStatusChangedAsync(order.LocationId, ToTicket(order));
-
-            return Result<KitchenOrder>.Ok(order);
+            return Result<bool>.Ok(true);
         }
         catch (Exception ex)
         {
-            return Result<KitchenOrder>.Fail($"Failed to mark order paid: {ex.Message}");
+            return Result<bool>.Fail($"Failed to record payment failure: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> ReconcilePaymentAsync(Guid orderToken, int expectedCompanyId)
+    {
+        try
+        {
+            string paymentIntentId;
+            string stripeAccountId;
+
+            await using (ApplicationDbContext ctx = await _factory.CreateDbContextAsync())
+            {
+                var pending = await ctx.KitchenOrders
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(o => o.OrderToken == orderToken
+                        && o.PaymentStatus == KitchenOrderPaymentStatus.Pending
+                        && o.PaymentIntentId != null)
+                    .Select(o => new
+                    {
+                        o.PaymentIntentId,
+                        CompanyId = o.Location!.CompanyId,
+                        StripeAccountId = o.Location.Company!.StripeAccountId
+                    })
+                    .FirstOrDefaultAsync();
+
+                // Nothing to reconcile is the normal case, not an error - most polls arrive
+                // for an order that is already paid.
+                if (pending is null || pending.CompanyId != expectedCompanyId || pending.StripeAccountId is null)
+                {
+                    return Result<bool>.Ok(false);
+                }
+
+                paymentIntentId = pending.PaymentIntentId!;
+                stripeAccountId = pending.StripeAccountId;
+            }
+
+            Result<bool> succeeded = await _paymentService.IsPaymentSucceededAsync(stripeAccountId, paymentIntentId);
+
+            if (!succeeded.IsSuccess || !succeeded.Data)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            Result<KitchenOrder> confirmed = await ConfirmPaymentAsync(paymentIntentId);
+
+            return confirmed.IsSuccess ? Result<bool>.Ok(true) : Result<bool>.Fail(confirmed.Error!);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to reconcile payment: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<KitchenOrder>> CancelOrderAsync(int orderId, bool refund)
+    {
+        KitchenOrder order;
+        string? refundFailure = null;
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            KitchenOrder? found = await ctx.KitchenOrders
+                .Include(o => o.Items)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
+            if (found is null)
+            {
+                return Result<KitchenOrder>.Fail("Order not found.");
+            }
+
+            if (found.Status is KitchenOrderStatus.Completed or KitchenOrderStatus.Cancelled)
+            {
+                return Result<KitchenOrder>.Fail($"This order is already {found.Status.ToString().ToLowerInvariant()}.");
+            }
+
+            if (refund && found.PaymentStatus == KitchenOrderPaymentStatus.Paid && found.PaymentIntentId is not null)
+            {
+                string? stripeAccountId = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(l => l.Id == found.LocationId)
+                    .Select(l => l.Company!.StripeAccountId)
+                    .FirstOrDefaultAsync();
+
+                Result<bool> refunded = stripeAccountId is null
+                    ? Result<bool>.Fail("This venue has no payment account configured.")
+                    : await _paymentService.RefundAsync(stripeAccountId, found.PaymentIntentId);
+
+                if (refunded.IsSuccess)
+                {
+                    found.PaymentStatus = KitchenOrderPaymentStatus.Refunded;
+                    found.RefundedDate = DateTime.UtcNow;
+                }
+                else
+                {
+                    // The cancellation still goes through. Refusing to cancel because the
+                    // refund failed would leave a ticket the kitchen cannot clear; instead the
+                    // order is cancelled and staff are told the money still needs handling.
+                    refundFailure = refunded.Error;
+                }
+            }
+
+            found.Status = KitchenOrderStatus.Cancelled;
+            found.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            order = found;
+        }
+        catch (Exception ex)
+        {
+            return Result<KitchenOrder>.Fail($"Failed to cancel order: {ex.Message}");
+        }
+
+        _logger.LogInformation("Order {OrderId} at location {LocationId} cancelled (payment now {PaymentStatus})",
+            order.Id, order.LocationId, order.PaymentStatus);
+
+        await NotifySafelyAsync(
+            () => _hubNotifier.NotifyOrderStatusChangedAsync(order.LocationId, ToTicket(order)),
+            order.Id);
+
+        return refundFailure is null
+            ? Result<KitchenOrder>.Ok(order)
+            : Result<KitchenOrder>.Fail($"Order cancelled, but the refund failed: {refundFailure}");
+    }
+
+    /// <summary>
+    /// Runs a hub notification without letting its failure surface as the caller's failure.
+    ///
+    /// Every call site here has already committed - money taken, status changed - so reporting
+    /// a SignalR problem as the operation failing would invite exactly the wrong retry.
+    /// </summary>
+    private async Task NotifySafelyAsync(Func<Task> notify, int orderId)
+    {
+        try
+        {
+            await notify();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Order {OrderId} was saved but the kitchen display could not be notified", orderId);
         }
     }
 
@@ -337,7 +606,8 @@ public class KitchenOrderService(
                 .TagWithCallSite()
                 .Where(o => o.LocationId == locationId
                     && o.Status != KitchenOrderStatus.Completed
-                    && o.Status != KitchenOrderStatus.Cancelled)
+                    && o.Status != KitchenOrderStatus.Cancelled
+                    && o.Status != KitchenOrderStatus.AwaitingPayment)
                 .GroupBy(_ => 1)
                 .Select(g => new
                 {

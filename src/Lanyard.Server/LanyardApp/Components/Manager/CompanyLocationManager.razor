@@ -33,6 +33,13 @@
                             Used to reach this company's public site before its own domain is pointed at us.
                         </FluentText>
 
+                        <FluentTextInput @bind-Value="companyStripeAccountId" Label="Stripe account ID"
+                                         Placeholder="acct_..." Class="clm-full-width" Margin="@Margin.Bottom0" />
+                        <FluentText Class="clm-empty-note">
+                            The company's own Stripe account. Customer payments go straight to it — Lanyard
+                            never holds the money. Until this is set, the venue can't take QR orders.
+                        </FluentText>
+
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
                                       PreviewUrl="@companyLogoPreviewUrl" />
@@ -201,6 +208,7 @@
     private string companyThemeColor = string.Empty;
     private string companySecondaryColor = string.Empty;
     private string companySlug = string.Empty;
+    private string companyStripeAccountId = string.Empty;
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
@@ -272,6 +280,7 @@
             ThemeColorHex = companyThemeColor,
             SecondaryColorHex = companySecondaryColor,
             Slug = companySlug,
+            StripeAccountId = companyStripeAccountId,
             LogoFileId = companyLogoFileId,
             BackgroundImageFileId = companyBackgroundImageFileId
         });
@@ -317,6 +326,7 @@
         companyThemeColor = string.Empty;
         companySecondaryColor = string.Empty;
         companySlug = string.Empty;
+        companyStripeAccountId = string.Empty;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
         companyBackgroundImageFileId = null;
@@ -329,6 +339,7 @@
         companyThemeColor = company.ThemeColorHex ?? string.Empty;
         companySecondaryColor = company.SecondaryColorHex ?? string.Empty;
         companySlug = company.Slug ?? string.Empty;
+        companyStripeAccountId = company.StripeAccountId ?? string.Empty;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
         companyBackgroundImageFileId = company.BackgroundImageFileId;

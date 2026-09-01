@@ -81,6 +81,7 @@ builder.Services.AddScoped<ITenantDirectoryService, TenantDirectoryService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IQrTableTokenService, QrTableTokenService>();
 builder.Services.AddScoped<IKitchenOrderService, KitchenOrderService>();
+builder.Services.AddSingleton<IOrderPaymentService, StripeOrderPaymentService>();
 builder.Services.AddSingleton<KitchenOrderEvents>();
 builder.Services.AddSingleton<IKitchenHubNotifier, KitchenHubNotifier>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
@@ -327,6 +328,19 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    // Partitioned by IP rather than customer: Stripe does not send the per-customer header,
+    // and a throttled webhook retry means a paid order never reaching the kitchen.
+    options.AddPolicy(OrderingRateLimits.WebhookPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = OrderingRateLimits.WebhookPermitLimit,
+                Window = OrderingRateLimits.Window,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -416,7 +430,13 @@ app.MapHub<SignalRControlHub>("/websocket");
 // role instead (see KitchenHub's [Authorize]).
 app.MapHub<KitchenHub>("/kitchenhub");
 
-app.MapControllers().RequireRateLimiting("ip-fixed");
+// Deliberately no .RequireRateLimiting("ip-fixed") here. Applying a policy as a route
+// convention makes it win over any [EnableRateLimiting] attribute on a controller - per the
+// ASP.NET Core rate-limiting docs, the attribute is simply "not applied" when the endpoint
+// already got a policy this way. That silently defeated the ordering API's own limits, so
+// every controller now opts in explicitly instead: ip-fixed on the five that want per-IP
+// limiting, and the ordering policies on OrderingController.
+app.MapControllers();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

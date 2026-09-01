@@ -36,6 +36,10 @@
         </style>
     }
 
+    @* Stripe requires its script be loaded from their domain rather than bundled - it is how
+       they ship PCI-relevant fixes without every site redeploying. *@
+    <script src="https://js.stripe.com/v3/"></script>
+
     <HeadOutlet />
 </head>
 

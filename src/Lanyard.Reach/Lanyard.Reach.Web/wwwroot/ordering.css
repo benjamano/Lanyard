@@ -572,3 +572,31 @@
         font-size: 2rem;
     }
 }
+
+/* ---------- checkout ---------- */
+
+.ordering__checkout {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ordering__checkout-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 14px 4px;
+    font-size: 1.1rem;
+    border-bottom: 1px solid var(--ordering-line);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Stripe renders its own iframe in here, so this only reserves space and gives it a surface
+   to sit on - styling of the fields themselves is passed to Stripe as appearance options. */
+.ordering__payment-element {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 14px;
+    min-height: 180px;
+}

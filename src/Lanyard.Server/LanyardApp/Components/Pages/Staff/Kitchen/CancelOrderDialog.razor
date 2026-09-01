@@ -1,0 +1,62 @@
+@*
+    Cancelling a paid order asks, rather than assuming, what should happen to the money.
+
+    Refunding automatically would make a mis-tap an instant refund; never refunding would leave
+    staff holding a customer's money for food that will not arrive. So the question is put
+    once, with the amount spelled out, and defaults to refunding - that is the right answer
+    nearly every time and the wrong one is recoverable.
+*@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Dismiss())" />
+            <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Cancel order</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="10">
+            <FluentText>
+                Cancel the order for <strong>@TableLabel</strong>? It will disappear from the kitchen screen.
+            </FluentText>
+
+            @if (CanRefund)
+            {
+                <FluentCheckbox @bind-Value="_refund" Label="@($"Refund {Money(TotalCents)} to the customer")" />
+                <FluentText Class="cancel-order-note">
+                    Refunds go back to the card the customer paid with and usually take a few days to appear.
+                </FluentText>
+            }
+            else
+            {
+                <FluentText Class="cancel-order-note">
+                    There is nothing to refund on this order.
+                </FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ConfirmAsync">
+            @(CanRefund && _refund ? "Cancel and refund" : "Cancel order")
+        </FluentButton>
+        <FluentButton OnClick="@DismissAsync">Keep order</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public required string TableLabel { get; set; }
+
+    [Parameter] public int TotalCents { get; set; }
+
+    [Parameter] public bool CanRefund { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private bool _refund = true;
+
+    private async Task ConfirmAsync() => await Dialog.CloseAsync(CanRefund && _refund);
+
+    private async Task DismissAsync() => await Dialog.CancelAsync();
+
+    private static string Money(int cents) => $"£{cents / 100m:0.00}";
+}

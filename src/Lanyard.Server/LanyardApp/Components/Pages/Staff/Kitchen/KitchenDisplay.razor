@@ -96,22 +96,18 @@
                             </FluentButton>
                         }
 
-                        @if (ticket.PaymentStatus == KitchenOrderPaymentStatus.Unpaid)
-                        {
-                            <FluentButton Appearance="ButtonAppearance.Outline"
-                                          OnClick="@(() => MarkPaidAsync(ticket))">
-                                Paid
-                            </FluentButton>
-                        }
-                        else
-                        {
-                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Paid</FluentBadge>
-                        }
+                        @* Every ticket on this screen has already been paid for online - an
+                           unpaid order never reaches the kitchen - so this is a statement of
+                           fact rather than something staff have to act on. Orders taken before
+                           online payment still show their historical till status. *@
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@PaymentBadgeColor(ticket.PaymentStatus)">
+                            @PaymentLabel(ticket.PaymentStatus)
+                        </FluentBadge>
 
                         <FluentButton Appearance="ButtonAppearance.Transparent"
                                       IconStart="@(new Icons.Regular.Size20.Dismiss())"
                                       Title="Cancel this order"
-                                      OnClick="@(() => AdvanceAsync(ticket, KitchenOrderStatus.Cancelled))" />
+                                      OnClick="@(() => CancelAsync(ticket))" />
                     </footer>
                 </article>
             }
@@ -158,7 +154,8 @@
         _kitchenOrderEvents.OnOrderReceived += HandleOrderReceived;
         _kitchenOrderEvents.OnOrderStatusChanged += HandleOrderStatusChanged;
 
-        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+        Result<List<Location>> locations = await VisibleLocations
+            .GetForCurrentUserAsync(_companyLocationService, _currentLocationContext);
 
         if (locations.IsSuccess && locations.Data is not null)
         {
@@ -297,15 +294,63 @@
         }
     }
 
-    private async Task MarkPaidAsync(KitchenOrderTicketDto ticket)
+    private async Task CancelAsync(KitchenOrderTicketDto ticket)
     {
-        Result<KitchenOrder> result = await _kitchenOrderService.MarkPaidAtTillAsync(ticket.OrderId);
+        bool wasPaid = ticket.PaymentStatus == KitchenOrderPaymentStatus.Paid;
 
-        if (!result.IsSuccess)
+        // Confirmed, and the refund is a deliberate choice rather than automatic: a cancel that
+        // is really a correction should not silently move the customer's money, and an
+        // accidental tap should not either.
+        DialogResult confirmation = await _dialogService.ShowDialogAsync<CancelOrderDialog>(options =>
         {
-            _toastService.ShowError(result.Error ?? "Couldn't mark that order paid.");
+            options.Header.Title = "Cancel order";
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(CancelOrderDialog.TableLabel), ticket.TableLabel);
+            options.Parameters.Add(nameof(CancelOrderDialog.TotalCents), ticket.TotalCents);
+            options.Parameters.Add(nameof(CancelOrderDialog.CanRefund), wasPaid);
+        });
+
+        if (confirmation.Cancelled || confirmation.Value is not bool refund)
+        {
+            return;
+        }
+
+        Result<KitchenOrder> result = await _kitchenOrderService.CancelOrderAsync(ticket.OrderId, refund);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(refund
+                ? $"{ticket.TableLabel} cancelled and refunded."
+                : $"{ticket.TableLabel} cancelled.");
+        }
+        else
+        {
+            // Covers the "cancelled but the refund failed" case too, which is a warning rather
+            // than a plain failure - the ticket is gone, but the money still needs attention.
+            _toastService.ShowError(result.Error ?? "Couldn't cancel that order.");
+            await ReloadOrdersAsync();
         }
     }
+
+    private static BadgeColor PaymentBadgeColor(KitchenOrderPaymentStatus status) => status switch
+    {
+        KitchenOrderPaymentStatus.Paid => BadgeColor.Success,
+        KitchenOrderPaymentStatus.PaidAtTill => BadgeColor.Success,
+        KitchenOrderPaymentStatus.Refunded => BadgeColor.Warning,
+        KitchenOrderPaymentStatus.Failed => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+
+    private static string PaymentLabel(KitchenOrderPaymentStatus status) => status switch
+    {
+        KitchenOrderPaymentStatus.Paid => "Paid",
+        KitchenOrderPaymentStatus.PaidAtTill => "Paid at till",
+        KitchenOrderPaymentStatus.Refunded => "Refunded",
+        KitchenOrderPaymentStatus.Failed => "Payment failed",
+        KitchenOrderPaymentStatus.Unpaid => "Unpaid",
+        _ => "Pending"
+    };
 
     private async Task ToggleAvailabilityAsync(MenuItemDto item)
     {

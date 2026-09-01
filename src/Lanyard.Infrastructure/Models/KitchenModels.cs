@@ -113,6 +113,16 @@ namespace Lanyard.Infrastructure.Models
 
         public string? CustomerNote { get; set; }
 
+        /// <summary>
+        /// Stripe PaymentIntent for this order, on the venue's own connected account. Stored so
+        /// the webhook can find the order it belongs to, and so a refund can be issued later
+        /// without the customer being present.
+        /// </summary>
+        public string? PaymentIntentId { get; set; }
+
+        public DateTime? PaidDate { get; set; }
+        public DateTime? RefundedDate { get; set; }
+
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
 

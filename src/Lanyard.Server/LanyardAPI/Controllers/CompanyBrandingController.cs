@@ -4,11 +4,13 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/companies")]
+    [EnableRateLimiting("ip-fixed")]
     public class CompanyBrandingController : ControllerBase
     {
         private readonly ICompanyLocationService _companyLocationService;

@@ -129,9 +129,23 @@ public class TenantDirectoryService(
             // Checked explicitly rather than relying on the unique index, so the admin sees which
             // company already claims the host instead of a raw constraint violation.
             CompanyDomain? clash = await ctx.CompanyDomains
-                .AsNoTracking()
                 .TagWithCallSite()
                 .FirstOrDefaultAsync(d => d.Hostname == normalized && d.Id != domain.Id);
+
+            // A removed domain still occupies the hostname's unique index but has no visible row
+            // to fix, so blocking on it would permanently lock a company out of re-adding its own
+            // domain with nothing on screen explaining why. Reviving it is what the admin meant.
+            if (clash is not null && !clash.IsActive && clash.CompanyId == domain.CompanyId)
+            {
+                clash.IsActive = true;
+                clash.IsPrimary = domain.IsPrimary;
+                clash.UpdateDate = DateTime.UtcNow;
+
+                await ApplySinglePrimaryAsync(ctx, clash, DateTime.UtcNow);
+                await ctx.SaveChangesAsync();
+
+                return Result<CompanyDomain>.Ok(clash);
+            }
 
             if (clash is not null)
             {
@@ -172,21 +186,7 @@ public class TenantDirectoryService(
                 entity = existing;
             }
 
-            // Exactly one primary per company: absolute URLs built from it (printed QR codes
-            // above all) must be stable, and "whichever row came back first" is not stable.
-            if (entity.IsPrimary)
-            {
-                List<CompanyDomain> others = await ctx.CompanyDomains
-                    .Where(d => d.CompanyId == entity.CompanyId && d.Id != entity.Id && d.IsPrimary)
-                    .ToListAsync();
-
-                foreach (CompanyDomain other in others)
-                {
-                    other.IsPrimary = false;
-                    other.UpdateDate = now;
-                }
-            }
-
+            await ApplySinglePrimaryAsync(ctx, entity, now);
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("Saved domain {Hostname} for company {CompanyId} (primary: {IsPrimary})",
@@ -225,6 +225,28 @@ public class TenantDirectoryService(
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to deactivate company domain: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Exactly one primary per company: absolute URLs built from it - printed QR codes above all
+    /// - must be stable, and "whichever row came back first" is not stable.
+    /// </summary>
+    private static async Task ApplySinglePrimaryAsync(ApplicationDbContext ctx, CompanyDomain entity, DateTime now)
+    {
+        if (!entity.IsPrimary)
+        {
+            return;
+        }
+
+        List<CompanyDomain> others = await ctx.CompanyDomains
+            .Where(d => d.CompanyId == entity.CompanyId && d.Id != entity.Id && d.IsPrimary)
+            .ToListAsync();
+
+        foreach (CompanyDomain other in others)
+        {
+            other.IsPrimary = false;
+            other.UpdateDate = now;
         }
     }
 

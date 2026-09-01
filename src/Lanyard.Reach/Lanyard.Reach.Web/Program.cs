@@ -19,7 +19,9 @@ builder.Services.AddFluentUIComponents(options =>
 });
 
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddTransient<CustomerIdentityForwardingHandler>();
 
 // The one place that knows the Lanyard server exists. Customers' browsers only ever talk to this
 // host; this client makes the onward call with Reach's credential attached server-side.
@@ -37,17 +39,44 @@ builder.Services.AddHttpClient<LanyardOrderingClient>(client =>
     {
         client.DefaultRequestHeaders.Add("X-Lanyard-Reach-Secret", secret);
     }
-});
+})
+// Without this the ordering rate limits partition every customer in every venue into one
+// window, because the Lanyard server only ever sees Reach's own address.
+.AddHttpMessageHandler<CustomerIdentityForwardingHandler>();
 
 var app = builder.Build();
 
 // Must come first, and must stay paired with tenant resolution: behind Cloudflare the customer's
 // domain only reaches us in a forwarded header, so without this every request would look like it
 // arrived for the origin's own hostname and no tenant would ever resolve.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+ForwardedHeadersOptions forwardedHeadersOptions = new()
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
-});
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+
+    // Cloudflare chains several hops; the default of 1 drops the customer's real address and,
+    // worse, the forwarded Host - which would leave every request looking like it arrived for
+    // the origin's own hostname and no tenant resolving at all.
+    ForwardLimit = null
+};
+
+// KnownProxies/KnownNetworks default to loopback only, and anything from another address is
+// silently ignored - so without clearing them this call does nothing behind a real CDN. The
+// trusted proxy list therefore has to be configured per environment. Empty means "trust the
+// forwarded headers", which is only safe because the origin is reachable exclusively through
+// the CDN; if it is ever exposed directly, set Reach:TrustedProxies and these stop being
+// blanket-trusted.
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+
+foreach (string proxy in builder.Configuration.GetSection("Reach:TrustedProxies").Get<string[]>() ?? [])
+{
+    if (System.Net.IPAddress.TryParse(proxy, out System.Net.IPAddress? parsed))
+    {
+        forwardedHeadersOptions.KnownProxies.Add(parsed);
+    }
+}
+
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 if (!app.Environment.IsDevelopment())
 {

@@ -178,7 +178,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+        Result<List<Location>> locations = await VisibleLocations
+            .GetForCurrentUserAsync(_companyLocationService, _currentLocationContext);
 
         if (locations.IsSuccess && locations.Data is not null)
         {

@@ -19,6 +19,15 @@ namespace Lanyard.API
         public const string WritePolicy = "ordering-write";
 
         /// <summary>
+        /// Stripe's webhook. Generous and partitioned by IP, because Stripe does not send the
+        /// per-customer header and a throttled retry means a paid order never reaching the
+        /// kitchen. Present at all only so a flood cannot be aimed at this endpoint for free.
+        /// </summary>
+        public const string WebhookPolicy = "ordering-webhook";
+
+        public const int WebhookPermitLimit = 600;
+
+        /// <summary>
         /// Set by Reach to the customer's own address as Reach sees it. Falls back to the
         /// connection IP when absent, which in practice means "Reach itself" - deliberately the
         /// conservative direction, since a missing header should tighten limits, not remove them.

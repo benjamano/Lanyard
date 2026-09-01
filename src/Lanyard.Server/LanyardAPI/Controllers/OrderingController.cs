@@ -41,6 +41,7 @@ namespace Lanyard.API.Controllers
         private readonly IMenuService _menuService;
         private readonly IKitchenOrderService _orderService;
         private readonly IFileService _fileService;
+        private readonly IOrderPaymentService _paymentService;
 
         public OrderingController(
             IReachApiCredentialValidator reachCredentialValidator,
@@ -48,7 +49,8 @@ namespace Lanyard.API.Controllers
             IQrTableTokenService tableTokens,
             IMenuService menuService,
             IKitchenOrderService orderService,
-            IFileService fileService)
+            IFileService fileService,
+            IOrderPaymentService paymentService)
         {
             _reachCredentialValidator = reachCredentialValidator;
             _tenantDirectory = tenantDirectory;
@@ -56,6 +58,7 @@ namespace Lanyard.API.Controllers
             _menuService = menuService;
             _orderService = orderService;
             _fileService = fileService;
+            _paymentService = paymentService;
         }
 
         [HttpGet("tenants/by-host/{hostname}")]
@@ -188,9 +191,53 @@ namespace Lanyard.API.Controllers
                 return Unauthorized();
             }
 
+            // Backstop for a slow or lost webhook, driven off the poll the customer is already
+            // making. Cheap in the common case - it only calls Stripe for an order still
+            // sitting at Pending.
+            await _orderService.ReconcilePaymentAsync(orderToken, companyId);
+
             Result<OrderStatusDto> result = await _orderService.GetOrderStatusAsync(orderToken, companyId);
 
             return result.Success && result.Data is not null ? Ok(result.Data) : NotFound();
+        }
+
+        /// <summary>
+        /// Stripe's payment webhook. This is what actually releases an order to the kitchen.
+        /// </summary>
+        /// <remarks>
+        /// Called by Stripe directly, not through Reach, so it does not present the Reach
+        /// credential - the signature on the payload is the authentication, and a payload that
+        /// does not verify is rejected. It is also excluded from the ordering rate limits,
+        /// which partition on a header Stripe does not send; webhook retries must not be
+        /// throttled into dropping a payment confirmation.
+        /// </remarks>
+        [HttpPost("payments/webhook")]
+        [AllowAnonymous]
+        [EnableRateLimiting(OrderingRateLimits.WebhookPolicy)]
+        public async Task<IActionResult> PaymentWebhook()
+        {
+            using StreamReader reader = new(HttpContext.Request.Body);
+            string payload = await reader.ReadToEndAsync();
+
+            Result<OrderPaymentWebhookResult> parsed = _paymentService.ParseWebhook(
+                payload, Request.Headers["Stripe-Signature"].ToString());
+
+            if (!parsed.Success || parsed.Data is null)
+            {
+                return BadRequest();
+            }
+
+            if (parsed.Data.Succeeded)
+            {
+                await _orderService.ConfirmPaymentAsync(parsed.Data.PaymentIntentId);
+            }
+            else if (parsed.Data.Failed)
+            {
+                await _orderService.MarkPaymentFailedAsync(parsed.Data.PaymentIntentId);
+            }
+
+            // 200 even for an event we do not act on, so Stripe stops retrying it.
+            return Ok();
         }
     }
 }

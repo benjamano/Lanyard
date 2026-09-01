@@ -27,6 +27,36 @@
             <p>@_fatalMessage</p>
         </div>
     }
+    else if (_phase == Phase.Paying)
+    {
+        <section class="ordering__checkout">
+            <header class="ordering__cart-header">
+                <button type="button" class="ordering__back" @onclick="AbandonCheckoutAsync">
+                    &larr; Back to my order
+                </button>
+                <h2>Payment</h2>
+            </header>
+
+            <div class="ordering__checkout-total">
+                <span>Total to pay</span>
+                <strong>@Money(_checkoutTotalCents)</strong>
+            </div>
+
+            @* Stripe mounts its own iframe into this element; card details never enter this page. *@
+            <div id="payment-element" class="ordering__payment-element"></div>
+
+            @if (_submitError is not null)
+            {
+                <p class="ordering__error" role="alert">@_submitError</p>
+            }
+
+            <button type="button" class="ordering__button ordering__button--primary"
+                    disabled="@_isSubmitting" @onclick="ConfirmPaymentAsync">
+                @(_isSubmitting ? "Taking payment…" : $"Pay {Money(_checkoutTotalCents)}")
+            </button>
+            <p class="ordering__pay-note">Your order goes to the kitchen as soon as this succeeds.</p>
+        </section>
+    }
     else if (_phase == Phase.Placed && _orderStatus is not null)
     {
         <section class="ordering__tracker" aria-live="polite">
@@ -59,13 +89,26 @@
                 </div>
             </div>
 
-            @if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Unpaid)
+            @if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Paid)
             {
-                <p class="ordering__pay-note">Please pay at the till when you collect your order.</p>
+                <p class="ordering__pay-note ordering__pay-note--paid">Paid — thank you!</p>
+            }
+            else if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Refunded)
+            {
+                <p class="ordering__pay-note">Refunded. It can take a few days to reach your card.</p>
+            }
+            else if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Pending)
+            {
+                <p class="ordering__pay-note">Confirming your payment…</p>
+            }
+            else if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Failed)
+            {
+                <p class="ordering__pay-note">Your payment didn't go through, so nothing has been charged.</p>
             }
             else
             {
-                <p class="ordering__pay-note ordering__pay-note--paid">Paid — thank you!</p>
+                @* Orders taken before online payment existed. *@
+                <p class="ordering__pay-note">Please pay at the till when you collect your order.</p>
             }
 
             <button type="button" class="ordering__button ordering__button--ghost" @onclick="StartNewOrderAsync">
@@ -128,9 +171,9 @@
 
                     <button type="button" class="ordering__button ordering__button--primary"
                             disabled="@_isSubmitting" @onclick="PlaceOrderAsync">
-                        @(_isSubmitting ? "Sending to the kitchen…" : "Place order")
+                        @(_isSubmitting ? "Setting up payment…" : $"Pay {Money(_cart.TotalCents(_menu))}")
                     </button>
-                    <p class="ordering__pay-note">You'll pay at the till when you collect it.</p>
+                    <p class="ordering__pay-note">You'll pay now; the kitchen starts as soon as it goes through.</p>
                 }
             </section>
         }
@@ -214,7 +257,7 @@
 @code {
     [Parameter, EditorRequired] public string TableToken { get; set; } = string.Empty;
 
-    private enum Phase { Loading, Browsing, Cart, Placed, Unavailable }
+    private enum Phase { Loading, Browsing, Cart, Paying, Placed, Unavailable }
 
     private Phase _phase = Phase.Loading;
     private MenuDto? _menu;
@@ -228,6 +271,10 @@
     private string _fatalMessage = "Please order at the till.";
     private bool _isSubmitting;
     private CancellationTokenSource? _pollCts;
+    private IJSObjectReference? _checkout;
+    private CreateOrderResultDto? _pendingOrder;
+    private int _checkoutTotalCents;
+    private bool _paymentElementMounted;
 
     private static readonly (KitchenOrderStatus Status, string Label)[] TrackerSteps =
     [
@@ -251,7 +298,7 @@
         // it: without this, a customer who locked their phone loses sight of their food.
         _orderToken = await ReadStoredOrderTokenAsync();
 
-        if (!await LoadMenuAsync())
+        if (!await LoadMenuAsync(isInitialLoad: true))
         {
             return;
         }
@@ -268,7 +315,12 @@
         StartPolling();
     }
 
-    private async Task<bool> LoadMenuAsync()
+    /// <param name="isInitialLoad">
+    /// Only the first load may take the page to <see cref="Phase.Unavailable"/>. A background
+    /// refresh that fails must leave the customer where they are: a momentary wifi drop is not
+    /// a reason to replace a working basket with an error screen the poll can never undo.
+    /// </param>
+    private async Task<bool> LoadMenuAsync(bool isInitialLoad = false)
     {
         try
         {
@@ -276,21 +328,29 @@
 
             if (!response.IsSuccessStatusCode)
             {
-                _fatalHeading = "We couldn't find this table";
-                _fatalMessage = "The code may have been replaced. Please ask a member of staff.";
-                _phase = Phase.Unavailable;
+                if (isInitialLoad)
+                {
+                    _fatalHeading = "We couldn't find this table";
+                    _fatalMessage = "The code may have been replaced. Please ask a member of staff.";
+                    _phase = Phase.Unavailable;
+                }
 
                 return false;
             }
 
-            _menu = await response.Content.ReadFromJsonAsync<MenuDto>();
+            MenuDto? menu = await response.Content.ReadFromJsonAsync<MenuDto>();
 
-            if (_menu is null)
+            if (menu is null)
             {
-                _phase = Phase.Unavailable;
+                if (isInitialLoad)
+                {
+                    _phase = Phase.Unavailable;
+                }
 
                 return false;
             }
+
+            _menu = menu;
 
             List<string> dropped = await _cart.ReconcileWithMenuAsync(_menu);
 
@@ -302,9 +362,12 @@
         }
         catch
         {
-            _fatalHeading = "We couldn't load the menu";
-            _fatalMessage = "Check your connection and refresh the page.";
-            _phase = Phase.Unavailable;
+            if (isInitialLoad)
+            {
+                _fatalHeading = "We couldn't load the menu";
+                _fatalMessage = "Check your connection and refresh the page.";
+                _phase = Phase.Unavailable;
+            }
 
             return false;
         }
@@ -382,6 +445,8 @@
                     {
                         await LoadMenuAsync();
                     }
+                    // Nothing polls during Phase.Paying: refreshing the menu underneath a
+                    // mounted Stripe element would rerender it mid-payment.
 
                     await InvokeAsync(StateHasChanged);
                 }
@@ -444,22 +509,20 @@
 
             CreateOrderResultDto? placed = await response.Content.ReadFromJsonAsync<CreateOrderResultDto>();
 
-            if (placed is null)
+            if (placed is null || string.IsNullOrEmpty(placed.ClientSecret))
             {
-                _submitError = "We couldn't send your order. Please try again.";
+                _submitError = "We couldn't start your payment. Please try again.";
 
                 return;
             }
 
-            _orderToken = placed.OrderToken;
-            await WriteStoredOrderTokenAsync(placed.OrderToken);
-            await _cart.ClearAsync();
-
-            _customerNote = null;
-            await LoadOrderStatusAsync(placed.OrderToken);
-            _phase = Phase.Placed;
-
-            StartPolling();
+            // The order exists but is not yet the kitchen's problem - it sits at awaiting
+            // payment until Stripe confirms. The basket is deliberately *not* cleared yet, so
+            // abandoning the payment leaves the customer their order rather than nothing.
+            _pendingOrder = placed;
+            _checkoutTotalCents = placed.TotalCents;
+            _paymentElementMounted = false;
+            _phase = Phase.Paying;
         }
         catch
         {
@@ -470,6 +533,106 @@
             _isSubmitting = false;
         }
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Mounted after render because Stripe needs the target element to exist in the DOM.
+        if (_phase != Phase.Paying || _paymentElementMounted || _pendingOrder is null)
+        {
+            return;
+        }
+
+        _paymentElementMounted = true;
+
+        try
+        {
+            _checkout ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/checkout.js");
+
+            await _checkout.InvokeVoidAsync(
+                "mountPaymentElement",
+                _pendingOrder.PublishableKey,
+                _pendingOrder.StripeAccountId,
+                _pendingOrder.ClientSecret,
+                "payment-element");
+        }
+        catch
+        {
+            _submitError = "We couldn't load the payment form. Please check your connection and try again.";
+            _paymentElementMounted = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ConfirmPaymentAsync()
+    {
+        if (_isSubmitting || _checkout is null || _pendingOrder is null)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+        _submitError = null;
+
+        try
+        {
+            ConfirmPaymentResult? result = await _checkout.InvokeAsync<ConfirmPaymentResult>("confirmPayment");
+
+            if (result is null || !result.Ok)
+            {
+                _submitError = result?.Error ?? "Your payment could not be completed.";
+
+                return;
+            }
+
+            // Payment taken. The order token is stored only now, so an abandoned checkout never
+            // leaves the phone resuming into an order that was never paid for.
+            _orderToken = _pendingOrder.OrderToken;
+            await WriteStoredOrderTokenAsync(_pendingOrder.OrderToken);
+            await _cart.ClearAsync();
+
+            _customerNote = null;
+            _pendingOrder = null;
+
+            await LoadOrderStatusAsync(_orderToken.Value);
+            _phase = Phase.Placed;
+
+            StartPolling();
+        }
+        catch
+        {
+            // Deliberately not treated as a failed payment: the charge may well have gone
+            // through, and telling the customer it failed would invite a second one. The status
+            // poll reconciles the truth with Stripe.
+            _submitError = "We lost the connection while paying. Check your order status before trying again.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task AbandonCheckoutAsync()
+    {
+        _pendingOrder = null;
+        _paymentElementMounted = false;
+        _submitError = null;
+        _phase = Phase.Cart;
+
+        if (_checkout is not null)
+        {
+            try
+            {
+                await _checkout.InvokeVoidAsync("unmount");
+            }
+            catch
+            {
+                // Nothing useful to do if teardown fails; the next mount replaces it anyway.
+            }
+        }
+    }
+
+    private sealed record ConfirmPaymentResult(bool Ok, string? Error);
 
     private async Task StartNewOrderAsync()
     {
@@ -541,6 +704,7 @@
 
     private static string StatusHeading(KitchenOrderStatus status) => status switch
     {
+        KitchenOrderStatus.AwaitingPayment => "Confirming your payment",
         KitchenOrderStatus.Received => "Order received",
         KitchenOrderStatus.Preparing => "We're making it",
         KitchenOrderStatus.Ready => "Ready to collect",
@@ -551,6 +715,9 @@
 
     private static string StatusSubtitle(KitchenOrderStatus status) => status switch
     {
+        // Shown in the seconds between paying and the webhook landing. Deliberately not phrased
+        // as a problem: the money has left, and the kitchen is about to be told.
+        KitchenOrderStatus.AwaitingPayment => "This takes a few seconds — no need to pay again.",
         KitchenOrderStatus.Received => "The kitchen has your order.",
         KitchenOrderStatus.Preparing => "It won't be long.",
         KitchenOrderStatus.Ready => "Come to the counter to collect and pay.",
@@ -582,11 +749,21 @@
         return current == thisStep ? "ordering__step--current" : string.Empty;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _pollCts?.Cancel();
         _pollCts?.Dispose();
 
-        return ValueTask.CompletedTask;
+        if (_checkout is not null)
+        {
+            try
+            {
+                await _checkout.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is already gone; nothing to tear down.
+            }
+        }
     }
 }

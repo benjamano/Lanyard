@@ -252,6 +252,14 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => x.OrderToken)
                 .IsUnique();
 
+            // Payment webhooks arrive keyed by PaymentIntent and have to find their order fast.
+            // Filtered because most rows have none until checkout starts, and unique because two
+            // orders sharing a PaymentIntent would mean one payment marking both as paid.
+            modelBuilder.Entity<KitchenOrder>()
+                .HasIndex(x => x.PaymentIntentId)
+                .IsUnique()
+                .HasFilter("\"PaymentIntentId\" IS NOT NULL");
+
             // The kitchen display's query shape: open tickets for one venue, oldest first.
             modelBuilder.Entity<KitchenOrder>()
                 .HasIndex(x => new { x.LocationId, x.Status, x.CreateDate });

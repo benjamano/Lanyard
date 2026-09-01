@@ -28,7 +28,26 @@ public interface IKitchenOrderService
 
     Task<Result<KitchenOrder>> SetOrderStatusAsync(int orderId, KitchenOrderStatus status);
 
-    Task<Result<KitchenOrder>> MarkPaidAtTillAsync(int orderId);
+    /// <summary>
+    /// Records that a payment succeeded and releases the order to the kitchen.
+    ///
+    /// Idempotent: Stripe retries webhooks, and the customer's own status poll can confirm the
+    /// same payment concurrently, so this must not produce two tickets for one order.
+    /// </summary>
+    Task<Result<KitchenOrder>> ConfirmPaymentAsync(string paymentIntentId);
+
+    /// <summary>Records that a payment failed, so the customer is told rather than left waiting.</summary>
+    Task<Result<bool>> MarkPaymentFailedAsync(string paymentIntentId);
+
+    /// <summary>
+    /// Re-checks an order's payment directly with Stripe. Backstop for a webhook that is slow
+    /// or lost, driven from the customer's status poll so their order is not stuck pending
+    /// because of an infrastructure hiccup they cannot see.
+    /// </summary>
+    Task<Result<bool>> ReconcilePaymentAsync(Guid orderToken, int expectedCompanyId);
+
+    /// <summary>Cancels an order and, when asked, refunds the customer in full.</summary>
+    Task<Result<KitchenOrder>> CancelOrderAsync(int orderId, bool refund);
 
     /// <summary>Counts for the glanceable dashboard widget: how many open, and how old the oldest is.</summary>
     Task<Result<KitchenOrderSummary>> GetOpenOrderSummaryAsync(int locationId);

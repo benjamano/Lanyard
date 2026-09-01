@@ -22,6 +22,16 @@ namespace Lanyard.Infrastructure.Models
         /// </summary>
         public string? Slug { get; set; }
 
+        /// <summary>
+        /// This company's Stripe Connect account id. Customer payments are created directly on
+        /// it, so takings land with the company that cooked the food rather than passing through
+        /// a Lanyard-held balance - which would make Lanyard a money transmitter.
+        ///
+        /// Null means this company cannot take online orders yet; ordering is refused rather
+        /// than silently falling back to charging somebody else's account.
+        /// </summary>
+        public string? StripeAccountId { get; set; }
+
         public virtual List<Location> Locations { get; set; } = [];
         public virtual List<CompanyDomain> Domains { get; set; } = [];
     }
