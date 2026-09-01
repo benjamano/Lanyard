@@ -23,3 +23,10 @@
     height: 24px;
     border-radius: 4px;
 }
+
+/* The locations and domains cards share the right-hand column, so they need a gap between
+   them - FluentGridItem only spaces its children horizontally. ::deep because the class sits
+   on a Fluent component's root, where a plain scoped rule would silently no-op. */
+.company-location-manager ::deep .clm-locations-card {
+    margin-bottom: 12px;
+}

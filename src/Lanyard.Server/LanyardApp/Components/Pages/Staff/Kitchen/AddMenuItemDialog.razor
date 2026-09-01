@@ -1,0 +1,94 @@
+@using Lanyard.App.Components.Files
+@using Lanyard.Infrastructure.Models
+
+@*
+    Shown through IDialogService rather than declared inline on the page. An inline
+    <FluentDialog Hidden="false"> renders into the page markup but never becomes visible in
+    Fluent v5 - the dialog service is what actually attaches it to the dialog provider.
+*@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Food())" />
+            <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Add a dish</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentTextInput @bind-Value="Name" Label="Name" Class="w-100" />
+            <FluentTextInput @bind-Value="Description" Label="Description (optional)" Class="w-100" />
+
+            @* Entered in pounds, stored as integer pence. The conversion happens once, on save,
+               so nothing downstream ever holds a fractional price. *@
+            <FluentNumberInput @bind-Value="Price" Label="Price (£)" Step="0.10M" Class="w-100" />
+
+            <FileUploader Id="menu-item-image-uploader" Accept=" image/*"
+                          MaximumFileSize="@(5 * 1024 * 1024)" MaximumFileCount="1"
+                          OnFileUploaded="OnImageUploaded" Label="Photo (optional)"
+                          PreviewUrl="@_imagePreviewUrl" />
+
+            @if (_error is not null)
+            {
+                <FluentText Color="Color.Error">@_error</FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public int CategoryId { get; set; }
+
+    [Parameter] public int SortOrder { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private string Name { get; set; } = string.Empty;
+    private string? Description { get; set; }
+    private decimal Price { get; set; }
+
+    private Guid? _imageFileId;
+    private string? _imagePreviewUrl;
+    private string? _error;
+
+    private void OnImageUploaded(FileMetadata file)
+    {
+        _imageFileId = file.Id;
+        _imagePreviewUrl = $"/api/files/download/{file.Id}";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            _error = "Give the dish a name.";
+
+            return;
+        }
+
+        if (Price < 0)
+        {
+            _error = "Price can't be negative.";
+
+            return;
+        }
+
+        await Dialog.CloseAsync(new MenuItem
+        {
+            CategoryId = CategoryId,
+            Name = Name,
+            Description = Description,
+            // Rounded rather than truncated: 4.99 arriving as 4.9899999 must become 499p, not 498p.
+            PriceCents = (int)Math.Round(Price * 100m, MidpointRounding.AwayFromZero),
+            ImageFileId = _imageFileId,
+            IsAvailable = true,
+            SortOrder = SortOrder
+        });
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

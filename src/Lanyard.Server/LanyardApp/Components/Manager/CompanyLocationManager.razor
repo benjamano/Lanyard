@@ -97,7 +97,9 @@
             <FluentGridItem Xs="12" Sm="8">
                 @if (selectedCompany is not null)
                 {
-                    <FluentCard Height="100%">
+                    @* Height auto, not 100%: this card now shares its column with the domains
+                       card below, and stretching to fill left a large blank gap between them. *@
+                    <FluentCard Height="auto" Class="clm-locations-card">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                             <FluentText Typo="Typography.H6">Locations for @selectedCompany.Name</FluentText>
 

@@ -93,7 +93,7 @@
 
                                     <FluentButton Appearance="ButtonAppearance.Outline"
                                                   IconStart="@(new Icons.Regular.Size20.Add())"
-                                                  OnClick="@(() => StartNewItem(category.Id))">
+                                                  OnClick="@(() => AddItemAsync(category.Id))">
                                         Add dish
                                     </FluentButton>
                                 </div>
@@ -161,41 +161,6 @@
     </FluentStack>
 </div>
 
-@if (_editingItem is not null)
-{
-    <FluentDialog Hidden="false" Modal="true">
-        <FluentDialogBody>
-            <TitleTemplate>
-                <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Add a dish</FluentText>
-            </TitleTemplate>
-            <ChildContent>
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                    <FluentTextInput @bind-Value="_editingItem.Name" Label="Name" Class="w-100" />
-                    <FluentTextInput @bind-Value="_editingItem.Description" Label="Description (optional)" Class="w-100" />
-
-                    @* Price is entered in pounds but stored as integer pence. The conversion
-                       happens once, here, so nothing downstream ever holds a fractional price. *@
-                    <FluentNumberInput @bind-Value="_editingItemPrice" Label="Price (£)" Step="0.10M" Class="w-100" />
-
-                    <FileUploader Id="menu-item-image-uploader" Accept=" image/*"
-                                  MaximumFileSize="@(5 * 1024 * 1024)" MaximumFileCount="1"
-                                  OnFileUploaded="OnItemImageUploaded" Label="Photo (optional)"
-                                  PreviewUrl="@_editingItemImagePreviewUrl" />
-
-                    @if (_itemError is not null)
-                    {
-                        <FluentText Color="Color.Error">@_itemError</FluentText>
-                    }
-                </FluentStack>
-            </ChildContent>
-            <ActionTemplate>
-                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveItemAsync">Save</FluentButton>
-                <FluentButton OnClick="@(() => _editingItem = null)">Cancel</FluentButton>
-            </ActionTemplate>
-        </FluentDialogBody>
-    </FluentDialog>
-}
-
 @code {
     private List<Location> _locations = [];
     private Location? _selectedLocation;
@@ -210,10 +175,6 @@
     private string _newCategoryName = string.Empty;
     private string _newTableLabel = string.Empty;
 
-    private MenuItem? _editingItem;
-    private decimal _editingItemPrice;
-    private string? _editingItemImagePreviewUrl;
-    private string? _itemError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -340,46 +301,30 @@
         }
     }
 
-    private void StartNewItem(int categoryId)
+    private async Task AddItemAsync(int categoryId)
     {
-        _itemError = null;
-        _editingItemPrice = 0m;
-        _editingItemImagePreviewUrl = null;
-        _editingItem = new MenuItem { CategoryId = categoryId, Name = string.Empty, IsAvailable = true };
-    }
-
-    private void OnItemImageUploaded(FileMetadata file)
-    {
-        if (_editingItem is not null)
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<AddMenuItemDialog>(options =>
         {
-            _editingItem.ImageFileId = file.Id;
-            _editingItemImagePreviewUrl = $"/api/files/download/{file.Id}";
-        }
-    }
+            options.Modal = true;
+            options.Width = "480px";
+            options.Parameters.Add(nameof(AddMenuItemDialog.CategoryId), categoryId);
+            options.Parameters.Add(nameof(AddMenuItemDialog.SortOrder), _items.Count(i => i.CategoryId == categoryId));
+        });
 
-    private async Task SaveItemAsync()
-    {
-        if (_editingItem is null)
+        if (dialogResult.Cancelled || dialogResult.Value is not MenuItem item)
         {
             return;
         }
 
-        _itemError = null;
-
-        // Rounded rather than truncated: 4.99 arriving as 4.9899999 must become 499p, not 498p.
-        _editingItem.PriceCents = (int)Math.Round(_editingItemPrice * 100m, MidpointRounding.AwayFromZero);
-        _editingItem.SortOrder = _items.Count(i => i.CategoryId == _editingItem.CategoryId);
-
-        Result<MenuItem> result = await _menuService.SaveItemAsync(_editingItem);
+        Result<MenuItem> result = await _menuService.SaveItemAsync(item);
 
         if (result.IsSuccess)
         {
-            _editingItem = null;
             await ReloadAsync();
         }
         else
         {
-            _itemError = result.Error;
+            _toastService.ShowError(result.Error ?? "Couldn't add that dish.");
         }
     }
 
