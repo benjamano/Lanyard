@@ -1,5 +1,6 @@
 ﻿using Lanyard.App.Components;
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Gdpr;
@@ -116,12 +117,16 @@ builder.Services.AddSingleton<IActionExecutor, MusicControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
+builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
+
+builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
 builder.Services.AddSignalR();
 

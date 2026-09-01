@@ -39,9 +39,13 @@
                           Style="width: 100%;">
                 <FluentOption Value="@(((int)ButtonActionType.Unknown).ToString())">No Action</FluentOption>
                 <FluentOption Value="@(((int)ButtonActionType.TriggerProjectionProgram).ToString())">Trigger Projection Program</FluentOption>
+                <FluentOption Value="@(((int)ButtonActionType.PauseProjectionProgram).ToString())">Pause Projection Program</FluentOption>
+                <FluentOption Value="@(((int)ButtonActionType.ResumeProjectionProgram).ToString())">Resume Projection Program</FluentOption>
+                <FluentOption Value="@(((int)ButtonActionType.SkipProjectionProgramStep).ToString())">Skip Projection Program Step</FluentOption>
+                <FluentOption Value="@(((int)ButtonActionType.StopProjectionProgram).ToString())">Stop Projection Program</FluentOption>
             </FluentSelect>
 
-            @if (Widget.ActionType == ButtonActionType.TriggerProjectionProgram)
+            @if (IsProjectionControlAction)
             {
                 <FluentSelect TOption="Client"
                               TValue="string"
@@ -54,16 +58,32 @@
                               ValueChanged="OnClientChanged"
                               Style="width: 100%;" />
 
-                <FluentSelect TOption="ProjectionProgram"
-                              TValue="string"
-                              Items="@Programs"
-                              OptionText="@(p => p?.Name ?? string.Empty)"
-                              OptionValue="@(p => p?.Id.ToString())"
-                              Label="Projection Program"
-                              Placeholder="Select a projection program..."
-                              Value="@_programValue"
-                              ValueChanged="OnProgramChanged"
-                              Style="width: 100%;" />
+                @if (Widget.ActionType == ButtonActionType.TriggerProjectionProgram)
+                {
+                    <FluentSelect TOption="ProjectionProgram"
+                                  TValue="string"
+                                  Items="@Programs"
+                                  OptionText="@(p => p?.Name ?? string.Empty)"
+                                  OptionValue="@(p => p?.Id.ToString())"
+                                  Label="Projection Program"
+                                  Placeholder="Select a projection program..."
+                                  Value="@_programValue"
+                                  ValueChanged="OnProgramChanged"
+                                  Style="width: 100%;" />
+                }
+
+                @if (Widget.ActionType == ButtonActionType.SkipProjectionProgramStep)
+                {
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="Direction"
+                                  Value="@(Widget.SkipToPreviousStep ? "previous" : "next")"
+                                  ValueChanged="@((string? v) => Widget.SkipToPreviousStep = v == "previous")"
+                                  Style="width: 100%;">
+                        <FluentOption TValue="string" Value="@("next")">Next Step</FluentOption>
+                        <FluentOption TValue="string" Value="@("previous")">Previous Step</FluentOption>
+                    </FluentSelect>
+                }
 
                 @if (Widget.ClientId is not null)
                 {
@@ -111,6 +131,9 @@
 
     private List<ClientAvailableScreen> _screens = [];
 
+    private bool IsProjectionControlAction =>
+        Widget.ActionType is ButtonActionType actionType && actionType.IsProjectionControlAction();
+
     // Snapshot so Cancel can revert the live-edited widget.
     private string? _originalLabel;
     private ButtonAppearance _originalAppearance;
@@ -118,6 +141,7 @@
     private Guid? _originalClientId;
     private Guid? _originalProjectionProgramId;
     private int? _originalDisplayIndex;
+    private bool _originalSkipToPreviousStep;
 
     protected override async Task OnInitializedAsync()
     {
@@ -127,6 +151,7 @@
         _originalClientId = Widget.ClientId;
         _originalProjectionProgramId = Widget.ProjectionProgramId;
         _originalDisplayIndex = Widget.DisplayIndex;
+        _originalSkipToPreviousStep = Widget.SkipToPreviousStep;
 
         _actionValue = ((int)(Widget.ActionType ?? ButtonActionType.Unknown)).ToString();
         _clientValue = Widget.ClientId?.ToString() ?? string.Empty;
@@ -147,6 +172,19 @@
         }
 
         _actionValue = newValue ?? string.Empty;
+
+        // Clear fields that only apply to a different action type, so switching away from Trigger
+        // or Skip doesn't leave stale data behind for an action that never reads it.
+        if (Widget.ActionType != ButtonActionType.TriggerProjectionProgram)
+        {
+            Widget.ProjectionProgramId = null;
+            _programValue = string.Empty;
+        }
+
+        if (Widget.ActionType != ButtonActionType.SkipProjectionProgramStep)
+        {
+            Widget.SkipToPreviousStep = false;
+        }
     }
 
     private async Task OnClientChanged(string? newValue)
@@ -211,6 +249,7 @@
         Widget.ClientId = _originalClientId;
         Widget.ProjectionProgramId = _originalProjectionProgramId;
         Widget.DisplayIndex = _originalDisplayIndex;
+        Widget.SkipToPreviousStep = _originalSkipToPreviousStep;
 
         await Dialog.CancelAsync();
     }

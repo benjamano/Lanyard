@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831211740_AddAnnouncements")]
+    partial class AddAnnouncements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -221,12 +224,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<string>("ScheduledDaysOfWeek")
-                        .HasColumnType("text");
-
-                    b.Property<TimeOnly?>("ScheduledTimeOfDay")
-                        .HasColumnType("time without time zone");
 
                     b.Property<Guid>("TriggerClientId")
                         .HasColumnType("uuid");
@@ -1745,9 +1742,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<Guid?>("ProjectionProgramId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("SkipToPreviousStep")
-                        .HasColumnType("boolean");
-
                     b.HasDiscriminator().HasValue(5);
                 });
 
@@ -1872,31 +1866,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnName("MaxItems");
 
                     b.HasDiscriminator().HasValue(11);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionStatusWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<Guid?>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("DisplayIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ShowControls")
-                        .HasColumnType("boolean");
-
-                    b.ToTable("DashboardWidgets", t =>
-                        {
-                            t.Property("ClientId")
-                                .HasColumnName("ProjectionStatusWidget_ClientId");
-
-                            t.Property("DisplayIndex")
-                                .HasColumnName("ProjectionStatusWidget_DisplayIndex");
-                        });
-
-                    b.HasDiscriminator().HasValue(13);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TextAreaWidget", b =>
