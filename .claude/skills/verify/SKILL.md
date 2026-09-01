@@ -34,11 +34,12 @@ Check before launching: `ss -ltnp | grep 5096`, then `ps -p <pid> -o pid,cmd`. I
 
 Screenshots must end up **on the pull request**, not only inline in the chat. An image attached inline lives solely in the transcript, and the transcript loses images — they disappear permanently. The PR is durable and reachable from any device.
 
-Capture into a temp dir **outside the repo** so a stray PNG can never be committed:
+Capture into `.playwright-mcp/`, which is already gitignored, so a stray PNG can never be committed:
 
-1. `browser_resize` to the viewport you want, `mcp__playwright__browser_navigate` to the page, then `mcp__playwright__browser_take_screenshot` (`scale: "css"`, give it a `filename`). Move/save the PNGs under `/tmp/shots/`.
+1. `browser_resize` to the viewport you want, `mcp__playwright__browser_navigate` to the page, then `mcp__playwright__browser_take_screenshot` with `scale: "css"` and `filename: ".playwright-mcp/<name>.png"`.
+   **The Playwright MCP refuses paths outside the repo** — `/tmp/...` fails with "outside allowed roots", and a bare `filename` drops the PNG in the *repo root*, where it is untracked and **not** ignored. `.playwright-mcp/` is the one path that is both allowed and ignored.
 2. `Read` each PNG path — renders it inline so the user sees it immediately (a screenshot call alone is invisible to them). Still do this; it is the fast feedback loop.
-3. Publish to the PR (see below). Then `rm -rf /tmp/shots`.
+3. Publish to the PR (see below). Then `rm -f .playwright-mcp/*.png`.
 
 Per the global CLAUDE.md, UI work needs **both a phone (390x844) and a desktop (1440x900)** layout, covering each new screen, each visible state (empty, populated, error), and any new dialog — not a single token shot.
 
@@ -52,8 +53,8 @@ Write a manifest describing the shots (`caption` = what it shows; optional `size
 
 ```json
 [
-  { "file": "/tmp/shots/desktop-analytics.png", "viewport": "desktop", "caption": "Analytics page, populated" },
-  { "file": "/tmp/shots/phone-analytics.png",   "viewport": "phone",   "caption": "Analytics page, populated" }
+  { "file": ".playwright-mcp/desktop-analytics.png", "viewport": "desktop", "caption": "Analytics page, populated" },
+  { "file": ".playwright-mcp/phone-analytics.png",   "viewport": "phone",   "caption": "Analytics page, populated" }
 ]
 ```
 
@@ -61,11 +62,11 @@ Write a manifest describing the shots (`caption` = what it shows; optional `size
 
 ```bash
 # Preferred: fold the markdown straight into the new PR
-.claude/scripts/publish-screenshots.sh --manifest /tmp/shots/manifest.json --emit-markdown >> /tmp/pr-body.md
+.claude/scripts/publish-screenshots.sh --manifest .playwright-mcp/manifest.json --emit-markdown >> /tmp/pr-body.md
 gh pr create --base dev --body-file /tmp/pr-body.md
 
 # Or, against a PR that already exists
-.claude/scripts/publish-screenshots.sh --manifest /tmp/shots/manifest.json --pr 110
+.claude/scripts/publish-screenshots.sh --manifest .playwright-mcp/manifest.json --pr 110
 ```
 
 Re-running on the same branch overwrites the same paths and rewrites the section in place, so the description always shows the current UI — no duplicated sections, and no stale images (URLs are cache-busted by commit SHA).
