@@ -415,6 +415,11 @@ scratch_publish/
 # Local secrets / environment overrides — never commit real credentials
 appsettings.*.local.json
 appsettings.Local.json
+# Lowercase spelling listed separately on purpose. This is the exact filename Program.cs loads,
+# and the two patterns above do not cover it: "appsettings.Local.json" only matches it where git
+# is case-insensitive (Windows), and "appsettings.*.local.json" needs a segment between the dots.
+# On Linux and macOS it was therefore committable.
+appsettings.local.json
 .env
 .env.*
 !.env.example
