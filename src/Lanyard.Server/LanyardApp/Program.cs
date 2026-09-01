@@ -9,6 +9,8 @@ using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Kitchen;
+using Lanyard.API;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -71,6 +73,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISecurityService, SecurityService>();
 builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
+// Separate from the kiosk secret above on purpose: Reach is internet-facing and serves anonymous
+// customers, so sharing one secret would let a compromise of the public site drive the light rig.
+builder.Services.AddSingleton<IReachApiCredentialValidator, ReachApiCredentialValidator>();
+builder.Services.AddScoped<ITenantDirectoryService, TenantDirectoryService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IQrTableTokenService, QrTableTokenService>();
+builder.Services.AddScoped<IKitchenOrderService, KitchenOrderService>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
@@ -288,6 +297,32 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+
+    // The ordering API cannot use "ip-fixed": Reach proxies every customer's request
+    // server-side, so the whole customer base shares Reach's single IP and a per-IP window
+    // would cap an entire venue at 25 requests a minute between them. These partition on a
+    // per-customer id Reach forwards instead - see Lanyard.API.OrderingRateLimits.
+    options.AddPolicy(OrderingRateLimits.ReadPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            OrderingRateLimits.ResolvePartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = OrderingRateLimits.ReadPermitLimit,
+                Window = OrderingRateLimits.Window,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    options.AddPolicy(OrderingRateLimits.WritePolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            OrderingRateLimits.ResolvePartitionKey(httpContext),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = OrderingRateLimits.WritePermitLimit,
+                Window = OrderingRateLimits.Window,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 
     options.OnRejected = async (context, token) =>
     {

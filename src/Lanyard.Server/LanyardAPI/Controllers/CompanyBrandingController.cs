@@ -20,17 +20,9 @@ namespace Lanyard.API.Controllers
             _fileService = fileService;
         }
 
-        // Raster image types only. An SVG served same-origin from this anonymous URL would
-        // execute any embedded <script> when navigated to directly, and the admin-side
-        // uploader's Accept="image/*" is only a client-side hint - this is the real gate.
-        // Shared by both the logo and background-image endpoints below.
-        private static readonly HashSet<string> AllowedImageContentTypes = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "image/png",
-            "image/jpeg",
-            "image/gif",
-            "image/webp"
-        };
+        // Raster image types only - see PublicImageContentTypes for why, and note that the
+        // ordering API's menu-photo endpoint deliberately shares the same list.
+        private static readonly HashSet<string> AllowedImageContentTypes = PublicImageContentTypes.Allowed;
 
         // Deliberately its own anonymous endpoint, not an addition to FilesController's
         // gated /api/files/download/{id} route - it accepts only a companyId (never a raw
