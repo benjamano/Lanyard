@@ -15,7 +15,25 @@ public interface ITenantContext
 
     TenantBrandingDto Tenant { get; }
 
+    /// <summary>
+    /// Why resolution failed, when it did. A page that cannot tell "this host belongs to nobody"
+    /// from "we could not reach the Lanyard server" has to guess, and guessing "unknown" told
+    /// customers their QR code was wrong when the real fault was ours.
+    /// </summary>
+    TenantResolutionFailure Failure { get; }
+
     void Set(TenantBrandingDto tenant);
+
+    void SetResolutionFailure(TenantResolutionFailure failure);
+}
+
+public enum TenantResolutionFailure
+{
+    /// <summary>No tenant is mapped to this hostname. The visitor is genuinely in the wrong place.</summary>
+    UnknownHost,
+
+    /// <summary>We could not ask, or were not allowed to. Ours to fix, and transient from the visitor's side.</summary>
+    ServerUnavailable
 }
 
 public class TenantContext : ITenantContext
@@ -30,5 +48,9 @@ public class TenantContext : ITenantContext
     public TenantBrandingDto Tenant => _tenant
         ?? throw new InvalidOperationException("No tenant has been resolved for this request.");
 
+    public TenantResolutionFailure Failure { get; private set; } = TenantResolutionFailure.UnknownHost;
+
     public void Set(TenantBrandingDto tenant) => _tenant = tenant;
+
+    public void SetResolutionFailure(TenantResolutionFailure failure) => Failure = failure;
 }

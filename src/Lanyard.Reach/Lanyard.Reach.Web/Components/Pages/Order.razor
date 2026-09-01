@@ -33,7 +33,7 @@
         <button class="ordering__button ordering__button--primary ordering__status-panel__action" onclick="window.location.reload()">Try again</button>
     </div>
 }
-else if (_outcome == OrderingApiOutcome.Unavailable)
+else if (_outcome is OrderingApiOutcome.Unavailable or OrderingApiOutcome.Unauthorized)
 {
     <div class="ordering__status-panel">
         <h1>We can't load the menu</h1>
@@ -85,6 +85,13 @@ else
     {
         if (!TenantContext.IsResolved)
         {
+            // An unresolved tenant is not evidence that the table code is wrong. If we could not
+            // reach the Lanyard server, or it refused us, say so rather than sending the customer
+            // to find a member of staff about a QR code that is working perfectly.
+            _outcome = TenantContext.Failure == TenantResolutionFailure.ServerUnavailable
+                ? OrderingApiOutcome.Unavailable
+                : OrderingApiOutcome.NotFound;
+
             return;
         }
 

@@ -17,14 +17,14 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
     private readonly HttpClient _httpClient = httpClient;
     private readonly ILogger<LanyardOrderingClient> _logger = logger;
 
-    public async Task<TenantBrandingDto?> GetTenantByHostAsync(string hostname, CancellationToken cancellationToken = default) =>
-        await GetOrNullAsync<TenantBrandingDto>($"api/ordering/tenants/by-host/{Uri.EscapeDataString(hostname)}", cancellationToken);
+    public async Task<OrderingApiResult<TenantBrandingDto>> GetTenantByHostAsync(string hostname, CancellationToken cancellationToken = default) =>
+        await GetAsync<TenantBrandingDto>($"api/ordering/tenants/by-host/{Uri.EscapeDataString(hostname)}", cancellationToken);
 
     public async Task<TenantLegalDetailsDto?> GetLegalDetailsAsync(int companyId, CancellationToken cancellationToken = default) =>
         await GetOrNullAsync<TenantLegalDetailsDto>($"api/ordering/tenants/{companyId}/legal", cancellationToken);
 
-    public async Task<TenantBrandingDto?> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
-        await GetOrNullAsync<TenantBrandingDto>($"api/ordering/tenants/by-slug/{Uri.EscapeDataString(slug)}", cancellationToken);
+    public async Task<OrderingApiResult<TenantBrandingDto>> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
+        await GetAsync<TenantBrandingDto>($"api/ordering/tenants/by-slug/{Uri.EscapeDataString(slug)}", cancellationToken);
 
     public async Task<TableResolutionDto?> ResolveTableAsync(string tableToken, int companyId, CancellationToken cancellationToken = default) =>
         await GetOrNullAsync<TableResolutionDto>(
@@ -88,6 +88,16 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
                 return new OrderingApiResult<T>(default, OrderingApiOutcome.RateLimited);
             }
 
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                _logger.LogError(
+                    "The Lanyard server rejected Reach's credential for {Path}. Reach:SharedSecret here must "
+                    + "match Reach__SharedSecret on the Lanyard server; until it does, every ordering request "
+                    + "from this site fails.", path);
+
+                return new OrderingApiResult<T>(default, OrderingApiOutcome.Unauthorized);
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Lanyard ordering API returned {StatusCode} for {Path}", (int)response.StatusCode, path);
@@ -116,6 +126,13 @@ public enum OrderingApiOutcome
 
     /// <summary>Throttled. Transient, and must not be reported to the customer as "not found".</summary>
     RateLimited,
+
+    /// <summary>
+    /// The Lanyard server refused our credential. Called out separately from Unavailable because
+    /// it is a configuration mistake with one specific fix, not a transient fault, and it takes
+    /// the entire site down while looking from the outside like a bad table code.
+    /// </summary>
+    Unauthorized,
 
     /// <summary>Anything else - the server erred or could not be reached at all.</summary>
     Unavailable

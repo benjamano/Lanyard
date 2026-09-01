@@ -25,13 +25,33 @@ public static class OrderingBffEndpoints
     private static IResult Translate(OrderingApiOutcome outcome) => outcome switch
     {
         OrderingApiOutcome.RateLimited => Results.Json(
-            new { error = "We're a bit busy — give it a few seconds and try again." },
+            new { error = "We're a bit busy. Give it a few seconds and try again." },
             statusCode: StatusCodes.Status429TooManyRequests),
-        OrderingApiOutcome.Unavailable => Results.Json(
+        // Unauthorized is ours, not the caller's: a rejected credential is a bad gateway from the
+        // customer's point of view, and must never be reported as a missing table.
+        OrderingApiOutcome.Unavailable or OrderingApiOutcome.Unauthorized => Results.Json(
             new { error = "We couldn't reach the kitchen just now. Please try again." },
             statusCode: StatusCodes.Status502BadGateway),
         _ => Results.NotFound()
     };
+
+    /// <summary>
+    /// The guard every endpoint runs first. Returns null when a tenant resolved, otherwise the
+    /// response to send. An unresolved tenant is only a 404 when the hostname genuinely belongs
+    /// to nobody; if we simply could not ask the Lanyard server, that is a 502 and the caller
+    /// should retry rather than conclude the table does not exist.
+    /// </summary>
+    private static IResult? TenantGate(ITenantContext tenantContext)
+    {
+        if (tenantContext.IsResolved)
+        {
+            return null;
+        }
+
+        return tenantContext.Failure == TenantResolutionFailure.ServerUnavailable
+            ? Translate(OrderingApiOutcome.Unavailable)
+            : Results.NotFound();
+    }
 
     public static void MapOrderingBff(this WebApplication app)
     {
@@ -43,9 +63,9 @@ public static class OrderingBffEndpoints
             LanyardOrderingClient client,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             OrderingApiResult<TableResolutionDto> table = await client.GetAsync<TableResolutionDto>(
@@ -63,9 +83,9 @@ public static class OrderingBffEndpoints
             LanyardOrderingClient client,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             int companyId = tenantContext.Tenant.CompanyId;
@@ -92,9 +112,9 @@ public static class OrderingBffEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             HttpResponseMessage response = await client.CreateOrderAsync(
@@ -121,7 +141,7 @@ public static class OrderingBffEndpoints
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 return Results.Json(
-                    new { error = "You're going a bit fast for us — please wait a moment and try again." },
+                    new { error = "You're going a bit fast for us. Please wait a moment and try again." },
                     statusCode: (int)HttpStatusCode.TooManyRequests);
             }
 
@@ -136,9 +156,9 @@ public static class OrderingBffEndpoints
             LanyardOrderingClient client,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             OrderingApiResult<OrderStatusDto> status = await client.GetAsync<OrderStatusDto>(
@@ -161,9 +181,9 @@ public static class OrderingBffEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             HttpResponseMessage response = await client.GetMenuItemImageAsync(
@@ -189,9 +209,9 @@ public static class OrderingBffEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            if (!tenantContext.IsResolved)
+            if (TenantGate(tenantContext) is IResult gate)
             {
-                return Results.NotFound();
+                return gate;
             }
 
             HttpResponseMessage response = await client.GetCompanyLogoAsync(

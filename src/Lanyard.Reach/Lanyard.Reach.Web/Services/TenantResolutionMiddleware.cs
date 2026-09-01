@@ -40,13 +40,27 @@ public class TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantReso
             ? $"tenant:host:{hostname}"
             : $"tenant:host:{hostname}:slug:{slug.ToLowerInvariant()}";
 
+        OrderingApiOutcome outcome = OrderingApiOutcome.Ok;
+
         if (!cache.TryGetValue(cacheKey, out TenantBrandingDto? tenant))
         {
-            tenant = await orderingClient.GetTenantByHostAsync(hostname, context.RequestAborted);
+            OrderingApiResult<TenantBrandingDto> byHost =
+                await orderingClient.GetTenantByHostAsync(hostname, context.RequestAborted);
 
-            if (tenant is null && !string.IsNullOrWhiteSpace(slug))
+            tenant = byHost.Value;
+            outcome = byHost.Outcome;
+
+            // The slug is only worth trying when the host is genuinely unmapped. If the lookup
+            // failed because the server refused our credential or could not be reached, the slug
+            // call would fail for exactly the same reason - and retrying would replace an
+            // accurate diagnosis with a second, identical one.
+            if (tenant is null && outcome == OrderingApiOutcome.NotFound && !string.IsNullOrWhiteSpace(slug))
             {
-                tenant = await orderingClient.GetTenantBySlugAsync(slug, context.RequestAborted);
+                OrderingApiResult<TenantBrandingDto> bySlug =
+                    await orderingClient.GetTenantBySlugAsync(slug, context.RequestAborted);
+
+                tenant = bySlug.Value;
+                outcome = bySlug.Outcome;
 
                 if (tenant is not null)
                 {
@@ -55,11 +69,10 @@ public class TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantReso
                 }
             }
 
-            // Only successful lookups are cached. GetTenantByHostAsync returns null both for a
-            // genuinely unknown host and for a transient failure reaching the Lanyard server,
-            // and it cannot distinguish them - so caching null would let one blip take a live
-            // customer's whole site offline for the full TTL. Re-asking on every request until
-            // an answer arrives is the cheaper mistake.
+            // Only successful lookups are cached. Caching a failure would let one blip - or one
+            // wrong environment variable - take a live customer's whole site offline for the
+            // full TTL, and re-asking every request until an answer arrives is the cheaper
+            // mistake.
             if (tenant is not null)
             {
                 cache.Set(cacheKey, tenant, CacheDuration);
@@ -72,9 +85,34 @@ public class TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantReso
         }
         else
         {
-            // Logged at Information, not Warning: bots probe bare IPs and stale hostnames
-            // constantly, and a warning per hit would bury anything that actually matters.
-            _logger.LogInformation("No tenant is mapped to host {Hostname}", hostname);
+            // Why it failed decides both the log level and what the customer is told. These used
+            // to be indistinguishable, which is how a missing Reach:SharedSecret came to be
+            // reported to customers as an unrecognised table code.
+            switch (outcome)
+            {
+                case OrderingApiOutcome.Unauthorized:
+                    tenantContext.SetResolutionFailure(TenantResolutionFailure.ServerUnavailable);
+
+                    _logger.LogError(
+                        "Cannot serve {Hostname}: the Lanyard server refused Reach's credential. Set "
+                        + "Reach__SharedSecret on this site to the same value as the Lanyard server's.",
+                        hostname);
+                    break;
+
+                case OrderingApiOutcome.NotFound:
+                    // Information, not Warning: bots probe bare IPs and stale hostnames constantly,
+                    // and a warning per hit would bury anything that actually matters.
+                    _logger.LogInformation("No tenant is mapped to host {Hostname}", hostname);
+                    break;
+
+                default:
+                    tenantContext.SetResolutionFailure(TenantResolutionFailure.ServerUnavailable);
+
+                    _logger.LogWarning(
+                        "Cannot serve {Hostname}: the tenant lookup against the Lanyard server failed ({Outcome}).",
+                        hostname, outcome);
+                    break;
+            }
         }
 
         await _next(context);

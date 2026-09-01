@@ -33,11 +33,32 @@ builder.Services.AddHttpClient<LanyardOrderingClient>(client =>
 
     client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
 
-    string? secret = builder.Configuration["Lanyard:ReachSecret"];
+    // Reach:SharedSecret is the same key the Lanyard server reads, and they must match: this is
+    // one secret with two ends, not two settings. It previously read Lanyard:ReachSecret here
+    // while the server read Reach:SharedSecret, so setting the documented key configured exactly
+    // one side. Reach then started perfectly, 401'd on every ordering call, and the failure
+    // reached customers as "we couldn't find this table" - blaming their QR code for a missing
+    // environment variable. Lanyard:ReachSecret is still accepted so an instance already
+    // deployed with the old key keeps working.
+    string? secret = builder.Configuration[Lanyard.Shared.ReachApiConstants.SharedSecretConfigurationKey]
+        ?? builder.Configuration["Lanyard:ReachSecret"];
 
-    if (!string.IsNullOrWhiteSpace(secret))
+    if (string.IsNullOrWhiteSpace(secret))
     {
-        client.DefaultRequestHeaders.Add("X-Lanyard-Reach-Secret", secret);
+        // Fail at startup rather than per request, and for the same reason Lanyard:ServerUrl
+        // does above: without a credential every ordering call is rejected, so a Reach that
+        // boots without one is not degraded, it is entirely non-functional - but looks healthy.
+        if (!builder.Environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                "Reach:SharedSecret is not configured. Set Reach__SharedSecret to the same value as "
+                + "the Lanyard server's Reach__SharedSecret; without it the ordering API rejects "
+                + "every request from this site.");
+        }
+    }
+    else
+    {
+        client.DefaultRequestHeaders.Add(Lanyard.Shared.ReachApiConstants.SecretHeaderName, secret);
     }
 })
 // Without this the ordering rate limits partition every customer in every venue into one
@@ -45,6 +66,16 @@ builder.Services.AddHttpClient<LanyardOrderingClient>(client =>
 .AddHttpMessageHandler<CustomerIdentityForwardingHandler>();
 
 var app = builder.Build();
+
+// Stated once, at startup, because the two settings below are the difference between a working
+// customer site and one that shows "we couldn't find this table" to everybody. Whether a secret
+// is set is logged; the secret itself is not.
+app.Logger.LogInformation(
+    "Reach is configured to call the Lanyard server at {ServerUrl}; Reach:SharedSecret configured: {HasSecret}",
+    builder.Configuration["Lanyard:ServerUrl"],
+    !string.IsNullOrWhiteSpace(
+        builder.Configuration[Lanyard.Shared.ReachApiConstants.SharedSecretConfigurationKey]
+        ?? builder.Configuration["Lanyard:ReachSecret"]));
 
 // Must come first, and must stay paired with tenant resolution: behind Cloudflare the customer's
 // domain only reaches us in a forwarded header, so without this every request would look like it

@@ -14,7 +14,20 @@
     <link rel="stylesheet" href="ordering.css" />
     <link rel="stylesheet" href="Lanyard.Reach.Web.styles.css" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    @*
+        A tenant's own logo is the right favicon for their site: on a customer's phone this is a
+        Play2Day tab, not a Lanyard one. Falls back to the Lanyard mark on any page where no
+        tenant resolved. /tenant-logo is the same same-origin proxy the header already uses, so
+        this costs no extra round trip to the Lanyard server.
+    *@
+    @if (TenantContext.IsResolved)
+    {
+        <link rel="icon" href="/tenant-logo" />
+    }
+    else
+    {
+        <link rel="icon" type="image/png" href="favicon.png" />
+    }
 
     @*
         The tenant's colours, written server-side into custom properties on :root.

@@ -65,6 +65,23 @@ public class LanyardOrderingClientTests
         Assert.AreEqual(OrderingApiOutcome.NotFound, result.Outcome);
     }
 
+    /// <summary>
+    /// The one that cost a staging evening. Reach read Lanyard:ReachSecret while the server read
+    /// Reach:SharedSecret, so setting the documented key configured exactly one side; the server
+    /// then 401'd every call and customers were told their table code was wrong.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_ReportsARefusedCredentialSeparatelyFromNotFound()
+    {
+        LanyardOrderingClient client = BuildClient(new StubHandler(HttpStatusCode.Unauthorized));
+
+        OrderingApiResult<TableResolutionDto> result =
+            await client.GetAsync<TableResolutionDto>("api/ordering/tables/abc", CancellationToken.None);
+
+        Assert.AreEqual(OrderingApiOutcome.Unauthorized, result.Outcome);
+        Assert.AreNotEqual(OrderingApiOutcome.NotFound, result.Outcome);
+    }
+
     [TestMethod]
     public async Task Get_ReportsAServerErrorAsUnavailableRatherThanMissing()
     {

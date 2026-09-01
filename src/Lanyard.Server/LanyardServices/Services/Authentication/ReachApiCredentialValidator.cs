@@ -39,7 +39,7 @@ namespace Lanyard.Application.Services.Authentication
         /// one because SignalR's negotiate cannot set headers; Reach is a server calling a server
         /// and always can. Keeping it out of the query string keeps it out of access logs.
         /// </summary>
-        public const string SecretHeaderName = "X-Lanyard-Reach-Secret";
+        public const string SecretHeaderName = Lanyard.Shared.ReachApiConstants.SecretHeaderName;
 
         private readonly byte[]? _secretBytes;
         private readonly bool _isDevelopment;
@@ -53,7 +53,7 @@ namespace Lanyard.Application.Services.Authentication
             _logger = logger;
             _isDevelopment = environment.IsDevelopment();
 
-            string? secret = configuration["Reach:SharedSecret"];
+            string? secret = configuration[Lanyard.Shared.ReachApiConstants.SharedSecretConfigurationKey];
 
             if (string.IsNullOrWhiteSpace(secret))
             {
