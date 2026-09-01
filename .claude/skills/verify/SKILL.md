@@ -31,11 +31,44 @@ Check before launching: `ss -ltnp | grep 5096`, then `ps -p <pid> -o pid,cmd`. I
   `ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5197 dotnet run --project src/Lanyard.Server/LanyardApp/Lanyard.App.csproj --no-launch-profile --no-build`
 
 ## Screenshots — presenting UI back to the user
-There's no dedicated screenshot skill; it's just two calls:
-1. `mcp__playwright__browser_navigate` to the page, then `mcp__playwright__browser_take_screenshot` (`scale: "css"`, give it a `filename`) — saves a PNG to the repo root.
-2. `Read` that PNG path — this renders the image inline in the conversation so the user actually sees it (a screenshot call alone is invisible to them).
 
-For anything below the fold (e.g. a footer link), `browser_resize` to a taller viewport first, or the screenshot will only show what's visible at default size. Delete the PNG files (`rm -f *.png` at repo root, or scope to the filenames used) once you're done — they're scratch output, not something to leave lying around or commit.
+Screenshots must end up **on the pull request**, not only inline in the chat. An image attached inline lives solely in the transcript, and the transcript loses images — they disappear permanently. The PR is durable and reachable from any device.
+
+Capture into a temp dir **outside the repo** so a stray PNG can never be committed:
+
+1. `browser_resize` to the viewport you want, `mcp__playwright__browser_navigate` to the page, then `mcp__playwright__browser_take_screenshot` (`scale: "css"`, give it a `filename`). Move/save the PNGs under `/tmp/shots/`.
+2. `Read` each PNG path — renders it inline so the user sees it immediately (a screenshot call alone is invisible to them). Still do this; it is the fast feedback loop.
+3. Publish to the PR (see below). Then `rm -rf /tmp/shots`.
+
+Per the global CLAUDE.md, UI work needs **both a phone (390x844) and a desktop (1440x900)** layout, covering each new screen, each visible state (empty, populated, error), and any new dialog — not a single token shot.
+
+For anything below the fold (e.g. a footer link), `browser_resize` to a taller viewport first, or the screenshot only shows what was visible at default size.
+
+### Publishing to the PR
+
+`.claude/scripts/publish-screenshots.sh` uploads the PNGs to the orphan `screenshots` branch and writes a managed `## Screenshots` section into the PR description. It talks to the GitHub API only — no checkout, no index write, no stash — so it is safe to run from a worktree.
+
+Write a manifest describing the shots (`caption` = what it shows; optional `size` overrides the default viewport label):
+
+```json
+[
+  { "file": "/tmp/shots/desktop-analytics.png", "viewport": "desktop", "caption": "Analytics page, populated" },
+  { "file": "/tmp/shots/phone-analytics.png",   "viewport": "phone",   "caption": "Analytics page, populated" }
+]
+```
+
+**Sequencing — capture before opening the PR.** Storage is keyed on branch name, not PR number, so you can upload first and let the PR be born with its screenshots already in the body:
+
+```bash
+# Preferred: fold the markdown straight into the new PR
+.claude/scripts/publish-screenshots.sh --manifest /tmp/shots/manifest.json --emit-markdown >> /tmp/pr-body.md
+gh pr create --base dev --body-file /tmp/pr-body.md
+
+# Or, against a PR that already exists
+.claude/scripts/publish-screenshots.sh --manifest /tmp/shots/manifest.json --pr 110
+```
+
+Re-running on the same branch overwrites the same paths and rewrites the section in place, so the description always shows the current UI — no duplicated sections, and no stale images (URLs are cache-busted by commit SHA).
 
 ## Login (Playwright MCP)
 
