@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
@@ -235,6 +235,15 @@ public class GdprService : IGdprService
                 {
                     member.DeleteByUserId = null;
                 }
+            }
+
+            List<Announcement> announcements = await ctx.Announcements
+                .Where(x => x.CreatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (Announcement announcement in announcements)
+            {
+                announcement.CreatedByUserId = null;
             }
 
             List<CourseAssignment> assignedByRows = await ctx.CourseAssignments

@@ -1,4 +1,4 @@
-@using Lanyard.Infrastructure.Models
+﻿@using Lanyard.Infrastructure.Models
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -11,7 +11,7 @@
     </TitleTemplate>
     <ChildContent>
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-            <FluentNumberInput TValue="int" @bind-Value="Widget.MaxItems" Min="1" Max="50"
+            <FluentNumberInput TValue="int" @bind-Value="Widget.MaxItems" Min="1" Max="AnnouncementsWidget.MaxSupportedItems"
                                Label="Maximum announcements to show" />
         </FluentStack>
     </ChildContent>
@@ -42,7 +42,7 @@
     {
         // Min on the input only constrains the stepper buttons - a typed-in 0 or negative would
         // otherwise persist and render an empty widget.
-        Widget.MaxItems = Math.Clamp(Widget.MaxItems, 1, 50);
+        Widget.MaxItems = Math.Clamp(Widget.MaxItems, 1, AnnouncementsWidget.MaxSupportedItems);
 
         await Dialog.CloseAsync(true);
     }

@@ -1,7 +1,9 @@
-@using Lanyard.Application.Services.Announcements
+﻿@using Lanyard.Application.Services.Announcements
 @using Lanyard.Application.Services.Locations
 
 @inject IAnnouncementService _announcementService
+
+@implements IDisposable
 
 @* Per-viewer, not per-dashboard: the announcements shown are those for the viewer's own location,
    so the same shared dashboard shows each site its own notices. Dashboards also render on a kiosk
@@ -13,7 +15,7 @@
     <div class="announcements-body">
         <div class="announcements-header">
             <span class="announcements-title">@(Widget.Title ?? "Announcements")</span>
-            @if (!_isLoading && !_loadFailed && !_noLocation && _totalCount > _displayed.Count)
+            @if (!_isLoading && !_loadFailed && !_notSignedIn && !_noLocation && _totalCount > _displayed.Count)
             {
                 <span class="announcements-count">+@(_totalCount - _displayed.Count) more</span>
             }
@@ -35,11 +37,22 @@
                 </FluentBadge>
             </div>
         }
-        else if (_noLocation)
+        else if (_notSignedIn)
         {
             <div class="announcements-empty">
                 <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
                     Sign in to see announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_noLocation)
+        {
+            @* Reachable while signed in: an Admin need not pick a location at login, and one whose
+               chosen location was since deactivated lands here too. Telling them to sign in would
+               be nonsense - they already are. *@
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Pick a location to see its announcements
                 </FluentBadge>
             </div>
         }
@@ -84,8 +97,9 @@
     [Parameter]
     public bool AllowTrigger { get; set; } = true;
 
-    // Fetch beyond MaxItems so raising it in the config dialog re-slices rather than re-queries.
-    private const int FetchLimit = 20;
+    // A kiosk is left running for days. Without this it would keep showing announcements that have
+    // since expired and never pick up newly posted ones. Same reasoning as GreetingCard's timer.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
 
     private List<Announcement> _all = [];
     private List<Announcement> _displayed = [];
@@ -93,37 +107,89 @@
     private int _totalCount;
     private bool _isLoading = true;
     private bool _loadFailed;
+    private bool _notSignedIn;
     private bool _noLocation;
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadAsync();
+
+        _isLoading = false;
+
+        // Only worth polling once there is a location to poll for; the anonymous kiosk and the
+        // no-location admin have nothing that can change without a fresh sign-in.
+        if (_notSignedIn || _noLocation)
+        {
+            return;
+        }
+
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await LoadAsync();
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
+            }
+        });
+    }
+
+    private async Task LoadAsync()
+    {
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
-        // A failed scope on the anonymous kiosk is expected, not an error - treat it the same as
-        // having no location rather than showing a red failure badge on a wall display.
-        if (!scopeResult.IsSuccess || scopeResult.Data is null || scopeResult.Data.LocationId is null)
+        // A failed scope means nobody is signed in - the anonymous kiosk case. That is expected,
+        // not an error, so it gets its own state rather than a red failure badge on a wall display.
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
         {
-            _noLocation = true;
-            _isLoading = false;
+            _notSignedIn = true;
 
             return;
         }
 
+        // Signed in, but with no location to scope to. Distinct from the above: an Admin can hold
+        // no location claim at all, or one that has since been deactivated.
+        if (scopeResult.Data.LocationId is null)
+        {
+            _noLocation = true;
+
+            return;
+        }
+
+        _notSignedIn = false;
+        _noLocation = false;
+
         Result<List<Announcement>> result =
-            await _announcementService.GetActiveAnnouncementsAsync(scopeResult.Data, FetchLimit);
+            await _announcementService.GetActiveAnnouncementsAsync(scopeResult.Data, AnnouncementsWidget.MaxSupportedItems);
 
         if (result.IsSuccess && result.Data is not null)
         {
             _all = result.Data;
+            _loadFailed = false;
         }
         else
         {
+            // Distinct from the empty state on purpose: telling staff there are no announcements
+            // when there may be an urgent one is worse than admitting the load failed.
             _loadFailed = true;
         }
 
         ApplyFilter();
-
-        _isLoading = false;
     }
 
     // MaxItems can change while the dashboard is open via the config dialog, and it does not
@@ -138,8 +204,15 @@
         _totalCount = _all.Count;
 
         _displayed = _all
-            .Take(Math.Clamp(Widget.MaxItems, 1, 50))
+            .Take(Math.Clamp(Widget.MaxItems, 1, AnnouncementsWidget.MaxSupportedItems))
             .ToList();
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
     }
 
     private static string DescribePostedDate(Announcement announcement)

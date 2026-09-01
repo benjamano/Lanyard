@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Lanyard.Infrastructure.Models;
 
@@ -35,8 +35,10 @@ public class Announcement
     public DateTime? LastUpdateDate { get; set; }
 
     // Deliberately nullable rather than inheriting CreateAndUpdateBase, whose CreateByUserId is a
-    // `required string` and so a non-nullable FK that GdprService has to repoint to the placeholder
-    // user on erasure. Nullable here keeps announcements out of that machinery entirely.
+    // `required string` and so has to be repointed to the placeholder account on erasure. Nullable
+    // means GdprService can simply null it instead - but it must still do so explicitly
+    // (AnonymizeAttributionAsync), exactly like Playlist.CreateByUserId: the FK is NO ACTION, so an
+    // announcement left pointing at a deleted user fails the delete with a Postgres 23503.
     public string? CreatedByUserId { get; set; }
     public UserProfile? CreatedByUser { get; set; }
 }

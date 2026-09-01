@@ -1,4 +1,4 @@
-@using Lanyard.Application.Services.Announcements
+﻿@using Lanyard.Application.Services.Announcements
 @using Lanyard.Application.Services.Locations
 @using Lanyard.Infrastructure.Models
 
@@ -99,7 +99,10 @@
                 CreatedByUserId = Content.CreatedByUserId
             };
 
-            _expiryDate = Content.ExpiryDate?.ToLocalTime();
+            // Undo the end-of-day adjustment SubmitAsync applies, so the picker shows the day the
+            // author actually chose. Without this the date reads a day late and every re-save
+            // pushes the expiry out by another day.
+            _expiryDate = Content.ExpiryDate?.ToLocalTime().AddDays(-1).Date;
         }
         else
         {

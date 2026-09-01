@@ -1,4 +1,4 @@
-using Lanyard.Application.Services.Locations;
+﻿using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -28,7 +28,6 @@ public class AnnouncementService(
                 .TagWithCallSite()
                 .Include(x => x.Location)
                     .ThenInclude(x => x!.Company)
-                .Include(x => x.CreatedByUser)
                 .Where(x => x.IsActive);
 
             // Mirrors CourseService.GetCoursesAsync: the filter applies to an Admin too, and
@@ -80,7 +79,7 @@ public class AnnouncementService(
                     && (x.ExpiryDate == null || x.ExpiryDate > nowUtc))
                 .OrderByDescending(x => x.IsPinned)
                 .ThenByDescending(x => x.CreateDate)
-                .Take(Math.Clamp(maxItems, 1, 50))
+                .Take(Math.Clamp(maxItems, 1, AnnouncementsWidget.MaxSupportedItems))
                 .ToListAsync();
 
             return Result<List<Announcement>>.Ok(announcements);

@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.Locations;
@@ -345,6 +345,52 @@ public class AnnouncementServiceTests
         Assert.AreEqual("Updated", saved.Title);
         Assert.IsTrue(saved.IsPinned);
         Assert.IsNotNull(saved.LastUpdateDate);
+    }
+
+    // Guards the AddEditAnnouncementDialog round-trip: SubmitAsync stores the picked day + 1 (so an
+    // announcement stays live for the whole of its expiry day) and OnInitializedAsync must subtract
+    // it again. When it didn't, the picker read a day late and every re-save pushed the expiry out
+    // by another day. Encoded here as the invariant the dialog has to preserve.
+    [TestMethod]
+    public async Task SaveAnnouncement_ExpiryDateSurvivesAnEditRoundTripUnchanged()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        AnnouncementService service = GetService(options);
+
+        DateTime pickedDay = new(2026, 12, 31, 0, 0, 0, DateTimeKind.Local);
+
+        // What the dialog sends on first save.
+        Result<Announcement> created = await service.SaveAnnouncementAsync(
+            new Announcement
+            {
+                Title = "Staff party",
+                Body = "Sign up by Friday.",
+                LocationId = HomeLocationId,
+                ExpiryDate = pickedDay.Date.AddDays(1).ToUniversalTime()
+            },
+            StaffScope);
+
+        Assert.IsTrue(created.IsSuccess, created.Error);
+        DateTime? stored = created.Data!.ExpiryDate;
+
+        // Reopening the dialog: what OnInitializedAsync puts back in the picker.
+        DateTime? shownInPicker = stored?.ToLocalTime().AddDays(-1).Date;
+        Assert.AreEqual(pickedDay.Date, shownInPicker, "The picker must show the day the author chose.");
+
+        // Saving again without touching the date must not move it.
+        Result<Announcement> resaved = await service.SaveAnnouncementAsync(
+            new Announcement
+            {
+                Id = created.Data!.Id,
+                Title = "Staff party",
+                Body = "Sign up by Friday.",
+                LocationId = HomeLocationId,
+                ExpiryDate = shownInPicker?.Date.AddDays(1).ToUniversalTime()
+            },
+            StaffScope);
+
+        Assert.IsTrue(resaved.IsSuccess, resaved.Error);
+        Assert.AreEqual(stored, resaved.Data!.ExpiryDate, "Re-saving must not extend the expiry.");
     }
 
     [TestMethod]
