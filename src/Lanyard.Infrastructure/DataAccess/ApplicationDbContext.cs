@@ -20,6 +20,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanClockInRoleId = "dev-role-can-clock-in";
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
+        public const string SeedCanManageKitchenRoleId = "dev-role-can-manage-kitchen";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
         public const int SeedIpswichLocationId = 1;
@@ -53,8 +54,14 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
         public DbSet<Company> Companies { get; set; }
+        public DbSet<CompanyDomain> CompanyDomains { get; set; }
         public DbSet<Location> Locations { get; set; }
         public DbSet<UserLocationMembership> UserLocationMemberships { get; set; }
+        public DbSet<MenuCategory> MenuCategories { get; set; }
+        public DbSet<MenuItem> MenuItems { get; set; }
+        public DbSet<QrTableToken> QrTableTokens { get; set; }
+        public DbSet<KitchenOrder> KitchenOrders { get; set; }
+        public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -184,6 +191,90 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasOne(x => x.BackgroundImageFile)
                 .WithMany()
                 .HasForeignKey(x => x.BackgroundImageFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Hostname is the lookup key for every single public request, including static
+            // assets, so it is indexed and unique. Unique across all companies, not per company:
+            // one hostname can only ever mean one tenant, and letting two rows claim the same
+            // host would make which tenant a customer sees depend on row order.
+            modelBuilder.Entity<CompanyDomain>()
+                .HasIndex(x => x.Hostname)
+                .IsUnique();
+
+            modelBuilder.Entity<CompanyDomain>()
+                .HasOne(x => x.Company)
+                .WithMany(x => x.Domains)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Slug is the pre-DNS fallback route, so it has to be unambiguous the same way a
+            // hostname does. Nullable, hence a filtered index - most companies never set one.
+            modelBuilder.Entity<Company>()
+                .HasIndex(x => x.Slug)
+                .IsUnique()
+                .HasFilter("\"Slug\" IS NOT NULL");
+
+            modelBuilder.Entity<MenuCategory>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MenuItem>()
+                .HasOne(x => x.Category)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Same reasoning as Company.LogoFile: a menu photo being hard-deleted should leave
+            // the item on the menu without a picture, not remove the item from the menu.
+            modelBuilder.Entity<MenuItem>()
+                .HasOne(x => x.ImageFile)
+                .WithMany()
+                .HasForeignKey(x => x.ImageFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Resolved on every scan of a printed code, so indexed; unique because the token is
+            // the only thing identifying which table an order came from.
+            modelBuilder.Entity<QrTableToken>()
+                .HasIndex(x => x.Token)
+                .IsUnique();
+
+            modelBuilder.Entity<QrTableToken>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The customer's status poll hits this on a timer for the life of every open order.
+            modelBuilder.Entity<KitchenOrder>()
+                .HasIndex(x => x.OrderToken)
+                .IsUnique();
+
+            // The kitchen display's query shape: open tickets for one venue, oldest first.
+            modelBuilder.Entity<KitchenOrder>()
+                .HasIndex(x => new { x.LocationId, x.Status, x.CreateDate });
+
+            // Retiring a table must not delete the orders taken at it - the label was snapshotted
+            // onto the order precisely so the history survives without the table row.
+            modelBuilder.Entity<KitchenOrder>()
+                .HasOne(x => x.QrTableToken)
+                .WithMany()
+                .HasForeignKey(x => x.QrTableTokenId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<KitchenOrderItem>()
+                .HasOne(x => x.Order)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Likewise: deleting a menu item must not erase the orders that contained it. The
+            // name and price on the line are snapshots, so the line still reads correctly.
+            modelBuilder.Entity<KitchenOrderItem>()
+                .HasOne(x => x.MenuItem)
+                .WithMany()
+                .HasForeignKey(x => x.MenuItemId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<UserErasureRecord>()

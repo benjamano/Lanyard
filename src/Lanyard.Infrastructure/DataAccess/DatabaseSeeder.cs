@@ -21,6 +21,7 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedCanClockInRoleId, "CanClockIn", "SEED-ROLE-CAN-CLOCK-IN-CS"),
         (ApplicationDbContext.SeedCanManageDmxSystemsRoleId, "CanManageDmxSystems", "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS"),
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
+        (ApplicationDbContext.SeedCanManageKitchenRoleId, "CanManageKitchen", "SEED-ROLE-CAN-MANAGE-KITCHEN-CS"),
     ];
 
     public static async Task SeedAsync(IServiceProvider services)
@@ -37,6 +38,7 @@ public static class DatabaseSeeder
         await SeedGdprPlaceholderUserAsync(context, userManager);
 
         await SeedCompanyAndLocationsAsync(context);
+        await SeedCompanyDomainsAsync(context);
 
         await ResetIdentitySequencesAsync(context);
     }
@@ -232,6 +234,7 @@ public static class DatabaseSeeder
         {
             Id = ApplicationDbContext.SeedPlay2DayCompanyId,
             Name = "Play2Day",
+            Slug = "play2day",
             IsActive = true,
             CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
             UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
@@ -262,6 +265,36 @@ public static class DatabaseSeeder
         await context.UserLocationMemberships.AddRangeAsync(
             new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedIpswichLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc },
             new UserLocationMembership { UserId = ApplicationDbContext.SeedAdminUserId, LocationId = ApplicationDbContext.SeedWisbechLocationId, CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc });
+
+        await context.SaveChangesAsync();
+    }
+
+    // Deliberately separate from SeedCompanyAndLocationsAsync, which returns early once the
+    // seeded company exists: a developer whose database predates multi-tenancy still needs a
+    // hostname mapping, or the public site has no tenant to resolve and serves nothing but 404s.
+    private static async Task SeedCompanyDomainsAsync(ApplicationDbContext context)
+    {
+        if (await context.CompanyDomains.AnyAsync(d => d.CompanyId == ApplicationDbContext.SeedPlay2DayCompanyId))
+        {
+            return;
+        }
+
+        if (!await context.Companies.AnyAsync(c => c.Id == ApplicationDbContext.SeedPlay2DayCompanyId))
+        {
+            return;
+        }
+
+        // localhost only - a real customer domain is onboarded through the admin UI, never
+        // hardcoded here, since that is the whole point of resolving tenants from a table.
+        await context.CompanyDomains.AddAsync(new CompanyDomain
+        {
+            CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId,
+            Hostname = "localhost",
+            IsPrimary = true,
+            IsActive = true,
+            CreateDate = ApplicationDbContext.SeedRoleCreateDateUtc,
+            UpdateDate = ApplicationDbContext.SeedRoleCreateDateUtc
+        });
 
         await context.SaveChangesAsync();
     }
