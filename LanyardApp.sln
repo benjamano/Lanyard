@@ -21,6 +21,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Services", "src\Lan
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lanyard.Reach", "Lanyard.Reach", "{F5084326-307E-4835-5EA0-4FD8E1067E7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Web.Client", "src\Lanyard.Reach\Lanyard.Reach.Web.Client\Lanyard.Reach.Web.Client.csproj", "{177C521D-0FFD-498B-A237-A13676AF3497}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,9 +145,25 @@ Global
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x64.Build.0 = Release|Any CPU
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x86.ActiveCfg = Release|Any CPU
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x86.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x64.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x86.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|Any CPU.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x64.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x64.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x86.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F5084326-307E-4835-5EA0-4FD8E1067E7E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{177C521D-0FFD-498B-A237-A13676AF3497} = {F5084326-307E-4835-5EA0-4FD8E1067E7E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {85BB633E-F82D-4FA8-BA47-44765A2C07CF}

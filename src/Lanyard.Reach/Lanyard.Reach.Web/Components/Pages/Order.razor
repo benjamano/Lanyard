@@ -1,0 +1,73 @@
+@page "/order/t/{TableToken}"
+@using Lanyard.Reach.Web.Client.Ordering
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
+@layout OrderingLayout
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
+
+@*
+    The page a customer lands on after scanning the QR code on their table.
+
+    The venue and table are resolved server-side and rendered immediately, so the customer sees
+    where they are before any framework has downloaded. Everything interactive - menu, basket,
+    checkout, live status - is the WebAssembly island below.
+*@
+
+<PageTitle>@PageHeading</PageTitle>
+
+<HeadContent>
+    @* A table-specific ordering page has nothing to offer a search engine, and every reason
+       not to be indexed: the URL is effectively a table's identifier. *@
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+@if (_table is null)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>We couldn't find this table</h1>
+        <p>
+            This code may have been replaced. Please order at the till, or ask a member of staff
+            for a hand.
+        </p>
+    </div>
+}
+else if (!_table.OrderingEnabled)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Ordering isn't available here</h1>
+        <p>@_table.LocationName isn't taking orders from your phone at the moment. Please order at the till.</p>
+    </div>
+}
+else
+{
+    <header class="ordering__header">
+        <p class="ordering__venue">@_table.LocationName</p>
+        <h1 class="ordering__table">@_table.TableLabel</h1>
+    </header>
+
+    @* Prerendering is off deliberately. The island's first job is to read the basket out of
+       localStorage, which does not exist on the server - prerendering would paint an empty
+       basket and then visibly correct itself a moment later. *@
+    <OrderingApp TableToken="@TableToken" @rendermode="@(new InteractiveWebAssemblyRenderMode(prerender: false))" />
+}
+
+@code {
+    [Parameter] public string TableToken { get; set; } = string.Empty;
+
+    private TableResolutionDto? _table;
+
+    private string PageHeading => _table is null
+        ? "Order"
+        : $"{_table.TableLabel} · {_table.LocationName}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            return;
+        }
+
+        _table = await OrderingClient.ResolveTableAsync(TableToken, TenantContext.Tenant.CompanyId);
+    }
+}

@@ -1,0 +1,592 @@
+@using System.Net.Http.Json
+@implements IAsyncDisposable
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+@*
+    The customer's ordering flow: menu, basket, checkout, then live status.
+
+    One component rather than four routed pages because the basket is the state that matters and
+    it never has to survive a navigation this way. Every call goes to this tenant's own domain,
+    which proxies on to the Lanyard server - the browser never holds a credential and never makes
+    a cross-origin request.
+*@
+
+<div class="ordering">
+    @if (_phase == Phase.Loading)
+    {
+        <div class="ordering__status-panel">
+            <div class="ordering__spinner" aria-hidden="true"></div>
+            <p>Loading the menu…</p>
+        </div>
+    }
+    else if (_phase == Phase.Unavailable)
+    {
+        <div class="ordering__status-panel ordering__status-panel--error">
+            <h2>@_fatalHeading</h2>
+            <p>@_fatalMessage</p>
+        </div>
+    }
+    else if (_phase == Phase.Placed && _orderStatus is not null)
+    {
+        <section class="ordering__tracker" aria-live="polite">
+            <h2 class="ordering__tracker-heading">@StatusHeading(_orderStatus.Status)</h2>
+            <p class="ordering__tracker-sub">@StatusSubtitle(_orderStatus.Status)</p>
+
+            <ol class="ordering__steps">
+                @foreach ((KitchenOrderStatus step, string label) in TrackerSteps)
+                {
+                    <li class="ordering__step @(StepClass(step))">
+                        <span class="ordering__step-dot" aria-hidden="true"></span>
+                        <span class="ordering__step-label">@label</span>
+                    </li>
+                }
+            </ol>
+
+            <div class="ordering__receipt">
+                <h3>@_orderStatus.TableLabel</h3>
+                @foreach (OrderStatusLineDto line in _orderStatus.Lines)
+                {
+                    <div class="ordering__receipt-line">
+                        <span class="ordering__receipt-qty">@line.Quantity&times;</span>
+                        <span class="ordering__receipt-name">@line.Name</span>
+                        <span class="ordering__receipt-price">@Money(line.UnitPriceCents * line.Quantity)</span>
+                    </div>
+                }
+                <div class="ordering__receipt-line ordering__receipt-line--total">
+                    <span class="ordering__receipt-name">Total</span>
+                    <span class="ordering__receipt-price">@Money(_orderStatus.TotalCents)</span>
+                </div>
+            </div>
+
+            @if (_orderStatus.PaymentStatus == KitchenOrderPaymentStatus.Unpaid)
+            {
+                <p class="ordering__pay-note">Please pay at the till when you collect your order.</p>
+            }
+            else
+            {
+                <p class="ordering__pay-note ordering__pay-note--paid">Paid — thank you!</p>
+            }
+
+            <button type="button" class="ordering__button ordering__button--ghost" @onclick="StartNewOrderAsync">
+                Start another order
+            </button>
+        </section>
+    }
+    else if (_menu is not null)
+    {
+        @if (_phase == Phase.Cart)
+        {
+            <section class="ordering__cart">
+                <header class="ordering__cart-header">
+                    <button type="button" class="ordering__back" @onclick="() => _phase = Phase.Browsing">
+                        &larr; Back to menu
+                    </button>
+                    <h2>Your order</h2>
+                </header>
+
+                @if (_cart.IsEmpty)
+                {
+                    <p class="ordering__empty">Your basket is empty.</p>
+                }
+                else
+                {
+                    <ul class="ordering__cart-lines">
+                        @foreach (MenuItemDto item in CartItems)
+                        {
+                            <li class="ordering__cart-line">
+                                <div class="ordering__cart-line-text">
+                                    <span class="ordering__cart-line-name">@item.Name</span>
+                                    <span class="ordering__cart-line-unit">@Money(item.PriceCents) each</span>
+                                </div>
+                                <div class="ordering__stepper">
+                                    <button type="button" class="ordering__stepper-btn"
+                                            aria-label="@($"Remove one {item.Name}")"
+                                            @onclick="() => ChangeQuantityAsync(item.Id, -1)">&minus;</button>
+                                    <span class="ordering__stepper-count">@_cart.QuantityOf(item.Id)</span>
+                                    <button type="button" class="ordering__stepper-btn"
+                                            aria-label="@($"Add another {item.Name}")"
+                                            @onclick="() => ChangeQuantityAsync(item.Id, 1)">+</button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+
+                    <label class="ordering__note-label" for="order-note">Anything we should know?</label>
+                    <textarea id="order-note" class="ordering__note" rows="2" maxlength="500"
+                              placeholder="Allergies, no onions, …" @bind="_customerNote"></textarea>
+
+                    @if (_submitError is not null)
+                    {
+                        <p class="ordering__error" role="alert">@_submitError</p>
+                    }
+
+                    <div class="ordering__cart-total">
+                        <span>Total</span>
+                        <strong>@Money(_cart.TotalCents(_menu))</strong>
+                    </div>
+
+                    <button type="button" class="ordering__button ordering__button--primary"
+                            disabled="@_isSubmitting" @onclick="PlaceOrderAsync">
+                        @(_isSubmitting ? "Sending to the kitchen…" : "Place order")
+                    </button>
+                    <p class="ordering__pay-note">You'll pay at the till when you collect it.</p>
+                }
+            </section>
+        }
+        else
+        {
+            <section class="ordering__menu">
+                @if (_dropNotice is not null)
+                {
+                    <p class="ordering__notice" role="status">@_dropNotice</p>
+                }
+
+                @foreach (MenuCategoryDto category in _menu.Categories.Where(c => c.Items.Count > 0))
+                {
+                    <h2 class="ordering__category">@category.Name</h2>
+
+                    <ul class="ordering__items">
+                        @foreach (MenuItemDto item in category.Items)
+                        {
+                            <li class="ordering__item @(item.IsAvailable ? "" : "ordering__item--sold-out")">
+                                @if (item.HasImage)
+                                {
+                                    <img class="ordering__item-image" src="@($"/menu-image/{item.Id}")"
+                                         alt="" loading="lazy" />
+                                }
+
+                                <div class="ordering__item-text">
+                                    <span class="ordering__item-name">@item.Name</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.Description))
+                                    {
+                                        <span class="ordering__item-desc">@item.Description</span>
+                                    }
+                                    <span class="ordering__item-price">@Money(item.PriceCents)</span>
+                                </div>
+
+                                @if (item.IsAvailable)
+                                {
+                                    @if (_cart.QuantityOf(item.Id) == 0)
+                                    {
+                                        <button type="button" class="ordering__add"
+                                                aria-label="@($"Add {item.Name}")"
+                                                @onclick="() => ChangeQuantityAsync(item.Id, 1)">Add</button>
+                                    }
+                                    else
+                                    {
+                                        <div class="ordering__stepper">
+                                            <button type="button" class="ordering__stepper-btn"
+                                                    aria-label="@($"Remove one {item.Name}")"
+                                                    @onclick="() => ChangeQuantityAsync(item.Id, -1)">&minus;</button>
+                                            <span class="ordering__stepper-count">@_cart.QuantityOf(item.Id)</span>
+                                            <button type="button" class="ordering__stepper-btn"
+                                                    aria-label="@($"Add another {item.Name}")"
+                                                    @onclick="() => ChangeQuantityAsync(item.Id, 1)">+</button>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="ordering__sold-out-tag">Sold out</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @if (!_cart.IsEmpty)
+            {
+                <div class="ordering__bar">
+                    <button type="button" class="ordering__button ordering__button--primary"
+                            @onclick="() => _phase = Phase.Cart">
+                        <span class="ordering__bar-count">@_cart.TotalItems</span>
+                        View order
+                        <span class="ordering__bar-total">@Money(_cart.TotalCents(_menu))</span>
+                    </button>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string TableToken { get; set; } = string.Empty;
+
+    private enum Phase { Loading, Browsing, Cart, Placed, Unavailable }
+
+    private Phase _phase = Phase.Loading;
+    private MenuDto? _menu;
+    private CartState _cart = null!;
+    private OrderStatusDto? _orderStatus;
+    private Guid? _orderToken;
+    private string? _customerNote;
+    private string? _submitError;
+    private string? _dropNotice;
+    private string _fatalHeading = "We can't take orders here just now";
+    private string _fatalMessage = "Please order at the till.";
+    private bool _isSubmitting;
+    private CancellationTokenSource? _pollCts;
+
+    private static readonly (KitchenOrderStatus Status, string Label)[] TrackerSteps =
+    [
+        (KitchenOrderStatus.Received, "Received"),
+        (KitchenOrderStatus.Preparing, "Being made"),
+        (KitchenOrderStatus.Ready, "Ready")
+    ];
+
+    private IEnumerable<MenuItemDto> CartItems =>
+        _menu is null
+            ? []
+            : _menu.Categories.SelectMany(c => c.Items).Where(i => _cart.QuantityOf(i.Id) > 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cart = new CartState(JS, TableToken);
+        await _cart.LoadAsync();
+
+        // An order token already in storage means this phone placed an order and then closed the
+        // tab or lost signal. Resuming straight into the tracker is the whole point of persisting
+        // it: without this, a customer who locked their phone loses sight of their food.
+        _orderToken = await ReadStoredOrderTokenAsync();
+
+        if (!await LoadMenuAsync())
+        {
+            return;
+        }
+
+        if (_orderToken is Guid token && await LoadOrderStatusAsync(token))
+        {
+            _phase = Phase.Placed;
+            StartPolling();
+
+            return;
+        }
+
+        _phase = Phase.Browsing;
+        StartPolling();
+    }
+
+    private async Task<bool> LoadMenuAsync()
+    {
+        try
+        {
+            HttpResponseMessage response = await Http.GetAsync($"/api/order/table/{Uri.EscapeDataString(TableToken)}/menu");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _fatalHeading = "We couldn't find this table";
+                _fatalMessage = "The code may have been replaced. Please ask a member of staff.";
+                _phase = Phase.Unavailable;
+
+                return false;
+            }
+
+            _menu = await response.Content.ReadFromJsonAsync<MenuDto>();
+
+            if (_menu is null)
+            {
+                _phase = Phase.Unavailable;
+
+                return false;
+            }
+
+            List<string> dropped = await _cart.ReconcileWithMenuAsync(_menu);
+
+            _dropNotice = dropped.Count == 0
+                ? null
+                : $"Sorry — we've just run out of {string.Join(", ", dropped)}, so we removed it from your basket.";
+
+            return true;
+        }
+        catch
+        {
+            _fatalHeading = "We couldn't load the menu";
+            _fatalMessage = "Check your connection and refresh the page.";
+            _phase = Phase.Unavailable;
+
+            return false;
+        }
+    }
+
+    private async Task<bool> LoadOrderStatusAsync(Guid token)
+    {
+        try
+        {
+            HttpResponseMessage response = await Http.GetAsync($"/api/order/orders/{token}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // The order is gone or belongs to a different venue - clear it rather than
+                // leaving the phone polling something it will never get an answer for.
+                await ClearStoredOrderTokenAsync();
+                _orderToken = null;
+
+                return false;
+            }
+
+            _orderStatus = await response.Content.ReadFromJsonAsync<OrderStatusDto>();
+
+            return _orderStatus is not null;
+        }
+        catch
+        {
+            return _orderStatus is not null;
+        }
+    }
+
+    /// <summary>
+    /// Polling, not a push connection. A dropped poll simply retries on the next tick, which on a
+    /// customer's phone is a far better failure mode than a live connection that needs recovering.
+    /// While browsing this also picks up items the kitchen has just run out of.
+    /// </summary>
+    private void StartPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        CancellationToken token = _pollCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(_phase == Phase.Placed ? 5 : 20), token);
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (_phase == Phase.Placed && _orderToken is Guid orderToken)
+                    {
+                        DateTime knownVersion = _menu?.MenuVersion ?? DateTime.MinValue;
+
+                        if (await LoadOrderStatusAsync(orderToken)
+                            && _orderStatus is not null
+                            && _orderStatus.MenuVersion > knownVersion)
+                        {
+                            await LoadMenuAsync();
+                        }
+                    }
+                    else if (_phase is Phase.Browsing or Phase.Cart)
+                    {
+                        await LoadMenuAsync();
+                    }
+
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch
+                {
+                    // A failed poll is not worth surfacing: the next tick will very likely work,
+                    // and an error banner that flickers on every wifi blip is worse than silence.
+                }
+            }
+        }, token);
+    }
+
+    private async Task ChangeQuantityAsync(int menuItemId, int delta)
+    {
+        if (delta > 0)
+        {
+            await _cart.AddAsync(menuItemId);
+        }
+        else
+        {
+            await _cart.RemoveAsync(menuItemId);
+        }
+
+        _submitError = null;
+    }
+
+    private async Task PlaceOrderAsync()
+    {
+        if (_isSubmitting || _cart.IsEmpty)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+        _submitError = null;
+
+        try
+        {
+            HttpResponseMessage response = await Http.PostAsJsonAsync("/api/order/orders", new CreateOrderRequestDto
+            {
+                TableToken = TableToken,
+                CustomerNote = _customerNote,
+                Lines = _cart.ToLines()
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // The server's message is written for the customer ("we've just run out of
+                // chips"), so it is shown as-is rather than replaced with something generic.
+                ErrorResponse? error = await SafeReadErrorAsync(response);
+
+                _submitError = error?.Error ?? "We couldn't send your order. Please try again.";
+
+                // Whatever went wrong, the menu may have moved on - refresh so the basket the
+                // customer is looking at matches what the kitchen can actually make.
+                await LoadMenuAsync();
+
+                return;
+            }
+
+            CreateOrderResultDto? placed = await response.Content.ReadFromJsonAsync<CreateOrderResultDto>();
+
+            if (placed is null)
+            {
+                _submitError = "We couldn't send your order. Please try again.";
+
+                return;
+            }
+
+            _orderToken = placed.OrderToken;
+            await WriteStoredOrderTokenAsync(placed.OrderToken);
+            await _cart.ClearAsync();
+
+            _customerNote = null;
+            await LoadOrderStatusAsync(placed.OrderToken);
+            _phase = Phase.Placed;
+
+            StartPolling();
+        }
+        catch
+        {
+            _submitError = "We couldn't reach the kitchen. Check your connection and try again.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task StartNewOrderAsync()
+    {
+        await ClearStoredOrderTokenAsync();
+
+        _orderToken = null;
+        _orderStatus = null;
+        _phase = Phase.Browsing;
+
+        await LoadMenuAsync();
+
+        StartPolling();
+    }
+
+    private sealed record ErrorResponse(string? Error);
+
+    private static async Task<ErrorResponse?> SafeReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string OrderStorageKey => $"lanyard.order.{TableToken}";
+
+    private async Task<Guid?> ReadStoredOrderTokenAsync()
+    {
+        try
+        {
+            string? stored = await JS.InvokeAsync<string?>("localStorage.getItem", OrderStorageKey);
+
+            return Guid.TryParse(stored, out Guid token) ? token : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task WriteStoredOrderTokenAsync(Guid token)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", OrderStorageKey, token.ToString());
+        }
+        catch
+        {
+            // Non-fatal: the customer keeps the on-screen tracker for this session either way.
+        }
+    }
+
+    private async Task ClearStoredOrderTokenAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", OrderStorageKey);
+        }
+        catch
+        {
+        }
+    }
+
+    private static string Money(int cents) => $"£{cents / 100m:0.00}";
+
+    private static string StatusHeading(KitchenOrderStatus status) => status switch
+    {
+        KitchenOrderStatus.Received => "Order received",
+        KitchenOrderStatus.Preparing => "We're making it",
+        KitchenOrderStatus.Ready => "Ready to collect",
+        KitchenOrderStatus.Completed => "Enjoy!",
+        KitchenOrderStatus.Cancelled => "Order cancelled",
+        _ => "Order received"
+    };
+
+    private static string StatusSubtitle(KitchenOrderStatus status) => status switch
+    {
+        KitchenOrderStatus.Received => "The kitchen has your order.",
+        KitchenOrderStatus.Preparing => "It won't be long.",
+        KitchenOrderStatus.Ready => "Come to the counter to collect and pay.",
+        KitchenOrderStatus.Completed => "Thanks for ordering with us.",
+        KitchenOrderStatus.Cancelled => "Please speak to a member of staff.",
+        _ => string.Empty
+    };
+
+    private string StepClass(KitchenOrderStatus step)
+    {
+        if (_orderStatus is null)
+        {
+            return string.Empty;
+        }
+
+        if (_orderStatus.Status == KitchenOrderStatus.Cancelled)
+        {
+            return "ordering__step--cancelled";
+        }
+
+        int current = (int)_orderStatus.Status;
+        int thisStep = (int)step;
+
+        if (current > thisStep || _orderStatus.Status == KitchenOrderStatus.Completed)
+        {
+            return "ordering__step--done";
+        }
+
+        return current == thisStep ? "ordering__step--current" : string.Empty;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+
+        return ValueTask.CompletedTask;
+    }
+}

@@ -1,4 +1,7 @@
-﻿<!DOCTYPE html>
+@using Lanyard.Reach.Web.Services
+@inject ITenantContext TenantContext
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -8,15 +11,41 @@
     <ResourcePreloader />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="ordering.css" />
     <link rel="stylesheet" href="Lanyard.Reach.Web.styles.css" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+
+    @*
+        The tenant's colours, written server-side into custom properties on :root.
+
+        Emitted here rather than fetched by the client so there is no flash of default branding,
+        and so the WebAssembly island inherits the tenant's palette through ordinary CSS without
+        an extra API call of its own. The foreground colour is chosen by contrast against the
+        tenant's own brand colour, so a company with a pale brand does not end up with white
+        text nobody can read.
+    *@
+    @if (TenantContext.IsResolved)
+    {
+        <style>
+            :root {
+                --brand-primary: @TenantContext.Tenant.ThemeColorHex;
+                --brand-secondary: @TenantContext.Tenant.SecondaryColorHex;
+                --brand-on-primary: @TenantContext.Tenant.OnPrimaryColorHex;
+            }
+        </style>
+    }
+
+    <HeadOutlet />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
-    <ReconnectModal />
+    @*
+        No global @rendermode. Pages are statically rendered unless they opt in, which keeps the
+        public marketing pages free of a per-visitor server circuit and lets the ordering flow
+        pick WebAssembly independently.
+    *@
+    <Routes />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 

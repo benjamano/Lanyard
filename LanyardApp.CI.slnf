@@ -7,6 +7,7 @@
       "src/Lanyard.Shared/Lanyard.Shared.csproj",
       "src/Lanyard.Tests/Lanyard.Tests.csproj",
       "src\\Lanyard.Reach\\Lanyard.Reach.Web\\Lanyard.Reach.Web.csproj",
+      "src\\Lanyard.Reach\\Lanyard.Reach.Web.Client\\Lanyard.Reach.Web.Client.csproj",
       "src/Lanyard.Server/LanyardAPI/Lanyard.API.csproj",
       "src/Lanyard.Server/LanyardApp/Lanyard.App.csproj",
       "src/Lanyard.Server/LanyardServices/Lanyard.Services.csproj",

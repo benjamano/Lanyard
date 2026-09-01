@@ -1,0 +1,574 @@
+/*
+    Customer ordering flow.
+
+    Hand-written rather than built on the component library the staff app uses: this is the one
+    surface a customer sees, it has to carry each tenant's brand rather than Lanyard's, and it is
+    used one-handed on a phone at a table. Every colour here comes from the custom properties the
+    server writes onto :root per tenant (see App.razor), with the brand default as a fallback for
+    a request that arrives before a tenant is resolved.
+
+    Mobile-first: the base rules are the phone layout, and the only media query widens it.
+*/
+
+:root {
+    --brand-primary: #167a47;
+    --brand-secondary: #167a47;
+    --brand-on-primary: #ffffff;
+
+    --ordering-surface: #ffffff;
+    --ordering-page: #f5f5f4;
+    --ordering-ink: #1c1b1a;
+    --ordering-ink-soft: #6b6a68;
+    --ordering-line: #e3e2e0;
+    --ordering-danger: #b3261e;
+    --ordering-radius: 14px;
+    --ordering-bar-height: 76px;
+}
+
+/* ---------- shell ---------- */
+
+.ordering-shell {
+    min-height: 100dvh;
+    background: var(--ordering-page);
+    color: var(--ordering-ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+}
+
+.ordering-shell__bar {
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 56px;
+}
+
+.ordering-shell__logo {
+    max-height: 34px;
+    max-width: 60%;
+    object-fit: contain;
+}
+
+.ordering-shell__wordmark {
+    font-size: 1.15rem;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+}
+
+.ordering-shell__main {
+    flex: 1;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px 16px calc(var(--ordering-bar-height) + 16px);
+}
+
+/* ---------- header ---------- */
+
+.ordering__header {
+    margin-bottom: 20px;
+}
+
+.ordering__venue {
+    margin: 0;
+    color: var(--ordering-ink-soft);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.ordering__table {
+    margin: 2px 0 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+/* ---------- menu ---------- */
+
+.ordering__category {
+    font-size: 1.05rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ordering-ink-soft);
+    margin: 24px 0 8px;
+}
+
+.ordering__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ordering__item {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Sold-out items stay in place, dimmed, rather than disappearing: a dish vanishing mid-browse
+   reads as a broken menu and reshuffles the list under whoever is looking at it. */
+.ordering__item--sold-out {
+    opacity: 0.55;
+}
+
+.ordering__item-image {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.ordering__item-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ordering__item-name {
+    font-weight: 600;
+}
+
+.ordering__item-desc {
+    font-size: 0.85rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__item-price {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.ordering__sold-out-tag {
+    font-size: 0.75rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ordering-danger);
+    flex-shrink: 0;
+}
+
+/* ---------- controls ---------- */
+
+/* 44px minimum on every tap target: this is used one-handed, often by someone holding a child
+   with the other hand. */
+.ordering__add {
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
+    border: none;
+    border-radius: 999px;
+    padding: 0 18px;
+    height: 44px;
+    font-size: 0.95rem;
+    font-weight: 650;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ordering__stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.ordering__stepper-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1.5px solid var(--brand-primary);
+    background: var(--ordering-surface);
+    color: var(--brand-primary);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ordering__stepper-count {
+    min-width: 28px;
+    text-align: center;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.ordering__button {
+    width: 100%;
+    border: none;
+    border-radius: var(--ordering-radius);
+    padding: 16px;
+    font-size: 1rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.ordering__button--primary {
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.ordering__button--primary:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.ordering__button--ghost {
+    background: transparent;
+    color: var(--brand-primary);
+    border: 1.5px solid var(--brand-primary);
+    margin-top: 20px;
+}
+
+.ordering__back {
+    background: none;
+    border: none;
+    color: var(--brand-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* ---------- sticky basket bar ---------- */
+
+.ordering__bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--ordering-surface);
+    border-top: 1px solid var(--ordering-line);
+}
+
+.ordering__bar > .ordering__button {
+    max-width: 688px;
+    margin: 0 auto;
+}
+
+.ordering__bar-count {
+    background: var(--brand-on-primary);
+    color: var(--brand-primary);
+    border-radius: 999px;
+    min-width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.ordering__bar-total {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- cart ---------- */
+
+.ordering__cart-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.ordering__cart-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.ordering__cart-lines {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ordering__cart-line {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ordering__cart-line-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.ordering__cart-line-name {
+    font-weight: 600;
+}
+
+.ordering__cart-line-unit {
+    font-size: 0.85rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__cart-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 14px 4px;
+    font-size: 1.1rem;
+    border-top: 1px solid var(--ordering-line);
+    margin-bottom: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ordering__note-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.ordering__note {
+    width: 100%;
+    border: 1px solid var(--ordering-line);
+    border-radius: 10px;
+    padding: 10px;
+    font: inherit;
+    resize: vertical;
+    margin-bottom: 12px;
+}
+
+.ordering__pay-note {
+    text-align: center;
+    color: var(--ordering-ink-soft);
+    font-size: 0.9rem;
+    margin: 10px 0 0;
+}
+
+.ordering__pay-note--paid {
+    color: var(--brand-primary);
+    font-weight: 600;
+}
+
+.ordering__empty {
+    color: var(--ordering-ink-soft);
+    text-align: center;
+    padding: 32px 0;
+}
+
+/* ---------- notices ---------- */
+
+.ordering__notice,
+.ordering__error {
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 0.9rem;
+    margin: 0 0 14px;
+}
+
+.ordering__notice {
+    background: #fff4e5;
+    border: 1px solid #f0c68a;
+    color: #7a4a06;
+}
+
+.ordering__error {
+    background: #fdecea;
+    border: 1px solid #f2b8b5;
+    color: var(--ordering-danger);
+}
+
+/* ---------- order tracker ---------- */
+
+.ordering__tracker {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 24px 18px;
+    text-align: center;
+}
+
+.ordering__tracker-heading {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.ordering__tracker-sub {
+    margin: 6px 0 22px;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__steps {
+    list-style: none;
+    margin: 0 0 24px;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+
+/* The connecting rail sits behind the dots rather than between them, so the row keeps working
+   however the labels wrap on a narrow phone. */
+.ordering__steps::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 12%;
+    right: 12%;
+    height: 2px;
+    background: var(--ordering-line);
+}
+
+.ordering__step {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__step-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--ordering-page);
+    border: 2px solid var(--ordering-line);
+    z-index: 1;
+}
+
+.ordering__step--done .ordering__step-dot,
+.ordering__step--current .ordering__step-dot {
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+.ordering__step--current {
+    color: var(--ordering-ink);
+    font-weight: 650;
+}
+
+.ordering__step--current .ordering__step-dot {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+}
+
+.ordering__step--cancelled .ordering__step-dot {
+    background: var(--ordering-line);
+    border-color: var(--ordering-line);
+}
+
+.ordering__receipt {
+    text-align: left;
+    border-top: 1px solid var(--ordering-line);
+    padding-top: 16px;
+}
+
+.ordering__receipt h3 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__receipt-line {
+    display: flex;
+    gap: 10px;
+    padding: 5px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.ordering__receipt-qty {
+    color: var(--ordering-ink-soft);
+    min-width: 28px;
+}
+
+.ordering__receipt-name {
+    flex: 1;
+}
+
+.ordering__receipt-line--total {
+    border-top: 1px solid var(--ordering-line);
+    margin-top: 8px;
+    padding-top: 10px;
+    font-weight: 700;
+}
+
+/* ---------- status panels ---------- */
+
+.ordering__status-panel {
+    background: var(--ordering-surface);
+    border: 1px solid var(--ordering-line);
+    border-radius: var(--ordering-radius);
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__status-panel h1,
+.ordering__status-panel h2 {
+    color: var(--ordering-ink);
+    font-size: 1.3rem;
+    margin: 0 0 8px;
+}
+
+.ordering__status-panel--error {
+    border-color: #f2b8b5;
+}
+
+.ordering__spinner {
+    width: 30px;
+    height: 30px;
+    margin: 0 auto 14px;
+    border: 3px solid var(--ordering-line);
+    border-top-color: var(--brand-primary);
+    border-radius: 999px;
+    animation: ordering-spin 0.8s linear infinite;
+}
+
+@keyframes ordering-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ordering__spinner {
+        animation-duration: 2.4s;
+    }
+}
+
+/* ---------- wider screens ---------- */
+
+@media (min-width: 700px) {
+    .ordering-shell__main {
+        padding-top: 28px;
+    }
+
+    .ordering__items {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .ordering__table {
+        font-size: 2rem;
+    }
+}
