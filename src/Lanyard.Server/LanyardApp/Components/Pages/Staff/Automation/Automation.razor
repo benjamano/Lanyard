@@ -1,6 +1,7 @@
 ﻿@page "/automation"
 @attribute [Authorize(Roles = "Admin")]
 @using Lanyard.Application.Services
+@using Lanyard.Infrastructure.Enum
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.DataAccess
@@ -43,7 +44,9 @@
             <TemplateColumn Title="Trigger Client">
                 @GetClientName(context.TriggerClientId)
             </TemplateColumn>
-            <PropertyColumn Title="Trigger Event" Property="@(r => r.TriggerEvent.ToString())" />
+            <TemplateColumn Title="Trigger">
+                @DescribeTrigger(context)
+            </TemplateColumn>
             <TemplateColumn Title="Enabled">
                 <FluentSwitch Value="@context.IsEnabled"
                               ValueChanged="@((bool isEnabled) => OnRuleEnabledToggleChangedAsync(context, isEnabled))" />
@@ -166,6 +169,28 @@
     private string GetClientName(Guid clientId)
     {
         return _clients.FirstOrDefault(c => c.Id == clientId)?.Name ?? clientId.ToString();
+    }
+
+    private static string DescribeTrigger(AutomationRule rule)
+    {
+        switch (rule.TriggerType)
+        {
+            case AutomationTriggerType.ClientIdle:
+                return $"Idle for {rule.IdleThresholdMinutes} min";
+
+            case AutomationTriggerType.Scheduled:
+                string time = rule.ScheduledTimeOfDay?.ToString("HH:mm") ?? "?";
+                if (!AutomationScheduleDays.TryParse(rule.ScheduledDaysOfWeek, out List<DayOfWeek> days) || days.Count == 7)
+                {
+                    return $"Daily at {time}";
+                }
+
+                string dayList = string.Join(", ", days.OrderBy(d => (int)d).Select(d => d.ToString()[..3]));
+                return $"{dayList} at {time}";
+
+            default:
+                return $"Game status: {rule.TriggerEvent}";
+        }
     }
 
     private async Task OnEngineToggleChangedAsync()

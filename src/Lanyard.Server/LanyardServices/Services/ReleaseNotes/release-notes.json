@@ -217,29 +217,15 @@
   },
   {
     "version": "1.3.16",
-    "releaseDate": "2026-08-31",
-    "summary": "Added Staff Announcements, with a dashboard widget to show them.",
+    "releaseDate": "2026-09-01",
+    "summary": "Added Staff Announcements, with a dashboard widget to show them. Added a Projection Status dashboard widget showing live \"now playing\" progress.",
     "details": [
       "Added an Announcements page where managers can post notices for their location - give someone the new \"CanPostAnnouncements\" role on the Roles page to let them write announcements.",
       "An announcement can be pinned so it always shows at the top, and given an expiry date so it disappears on its own once it's no longer relevant.",
-      "Added an Announcements dashboard widget showing the live announcements for your location. Right-click it while editing a dashboard to choose how many to show."
-    ]
-  },
-  {
-    "version": "1.3.17",
-    "releaseDate": "2026-09-01",
-    "summary": "Added a Projection Status dashboard widget showing live \"now playing\" progress.",
-    "details": [
+      "Added an Announcements dashboard widget showing the live announcements for your location. Right-click it while editing a dashboard to choose how many to show.",
       "Added a \"Projection Status\" dashboard widget that shows what's currently playing on a client's display, live, with the program name and a step-by-step progress bar.",
       "The widget updates instantly as playback advances, pauses or is skipped, with no page refresh needed.",
-      "The widget can optionally show pause, resume, previous, next and stop controls, so it can be used read-only on a public kiosk dashboard, or with controls on a staff one."
-    ]
-  },
-  {
-    "version": "1.3.18",
-    "releaseDate": "2026-09-01",
-    "summary": "Added automation and button controls for pausing, resuming and skipping projection programs.",
-    "details": [
+      "The widget can optionally show pause, resume, previous, next and stop controls, so it can be used read-only on a public kiosk dashboard, or with controls on a staff one.",
       "Automation rules can now use a \"Projection Program Control\" action to start, stop, pause, resume, or skip to the next or previous step of a projection program on a client's display.",
       "Added Pause, Resume, Skip and Stop actions to dashboard Button widgets, alongside the existing Trigger action, so a button can control whatever projection program is already playing rather than only starting a new one.",
       "The Skip button action can be set to skip to either the next or the previous step.",
