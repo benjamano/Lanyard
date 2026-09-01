@@ -45,6 +45,7 @@
                         <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
                         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                         <input type="hidden" name="locationId" value="@LocationId" />
+                        <input type="hidden" name="company" value="@CompanyId" />
                         <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Submit" Class="verify2fa-full-width">
                             Send code to my email
                         </FluentButton>
@@ -56,6 +57,7 @@
                     <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <input type="hidden" name="locationId" value="@LocationId" />
+                    <input type="hidden" name="company" value="@CompanyId" />
 
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="6"
                                  HorizontalAlignment="HorizontalAlignment.Center">
@@ -93,6 +95,9 @@
     [SupplyParameterFromQuery(Name = "locationId")]
     public int? LocationId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "company")]
+    public int? CompanyId { get; set; }
+
     [SupplyParameterFromQuery(Name = "rememberMe")]
     public bool RememberMe { get; set; }
 
@@ -127,7 +132,7 @@
 
             if (pendingUser is null)
             {
-                Navigation.NavigateTo("/login", forceLoad: true);
+                Navigation.NavigateTo(BuildLoginRedirectUrl(null), forceLoad: true);
                 return;
             }
 
@@ -137,7 +142,7 @@
 
             if (!HasAuthenticator && !HasEmail)
             {
-                Navigation.NavigateTo("/login?error=" + Uri.EscapeDataString("Two-factor authentication isn't set up correctly for your account. Contact an administrator."), forceLoad: true);
+                Navigation.NavigateTo(BuildLoginRedirectUrl("Two-factor authentication isn't set up correctly for your account. Contact an administrator."), forceLoad: true);
                 return;
             }
 
@@ -150,5 +155,14 @@
     private void ToggleRecoveryCode()
     {
         useRecoveryCode = !useRecoveryCode;
+    }
+
+    private string BuildLoginRedirectUrl(string? error)
+    {
+        return Navigation.GetUriWithQueryParameters("/login", new Dictionary<string, object?>
+        {
+            ["error"] = error,
+            ["company"] = CompanyId
+        });
     }
 }

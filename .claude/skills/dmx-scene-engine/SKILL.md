@@ -1,6 +1,6 @@
 ---
 name: dmx-scene-engine
-description: How DmxService and DmxSceneRunnerService actually work in this repo — why they're registered as singletons with manual locking instead of scoped services, why DMX scenes step server-side over SignalR (unlike projection programs, which step client-side on the kiosk), how BPM-synced timing avoids drift, and momentary-scene/restart-by-sceneId semantics. Use whenever touching DMX scene playback, the virtual DMX desk, DmxService/DmxSceneRunnerService, or comparing DMX's architecture to the projection-program system.
+description: How DmxService and DmxSceneRunnerService actually work in this repo — why they're registered as singletons with manual locking instead of scoped services, how BPM-synced timing avoids drift, and momentary-scene/restart-by-sceneId semantics. Use whenever touching DMX scene playback, the virtual DMX desk, DmxService/DmxSceneRunnerService, or comparing DMX's architecture to the projection-program system (see the projection-program-engine skill for that side).
 ---
 
 # DMX scene engine
@@ -9,14 +9,14 @@ description: How DmxService and DmxSceneRunnerService actually work in this repo
 
 `DmxService` and `DmxSceneRunnerService` are registered `AddSingleton` in `Program.cs`, not scoped — they hold in-memory `Dictionary<Guid, ...>` state (live channel values, currently-running scenes) across every request and every connected client, protected by a private `object _lock`. This is *why* they must use `IDbContextFactory<ApplicationDbContext>` rather than an injected `DbContext`: a singleton service outlives any single request, so a request-scoped `DbContext` injected into it would be shared across concurrent callers and blow up. If you're adding a new singleton service that needs DB access for periodic/background work, this is the pattern to copy — see the general rule in CLAUDE.md's `IDbContextFactory` section, but the *reason* it's non-negotiable here specifically is the singleton lifetime.
 
-## DMX steps server-side; projection programs step client-side — don't assume symmetry
+## DMX and projection programs both step server-side now — the difference is how the step reaches the screen
 
-This is the single most important thing to know before extending either system, because they look like siblings but aren't:
+This used to be the single biggest gotcha comparing the two systems, and it's worth getting right since old code comments and an earlier version of this skill both said the opposite: projection programs used to step client-side with no server visibility into progress. **That's no longer true** — `ProjectionProgramRunnerService` now owns the full step/hold/pause/skip loop server-side, the same shape as `DmxSceneRunnerService`. See the `projection-program-engine` skill for the full picture; the short version:
 
-- **DMX scenes**: `DmxSceneRunnerService.RunSceneLoopAsync` runs the *entire* step/delay loop on the **server** — one `Task.Run` per running scene, `Task.Delay` as the scheduler — and pushes each individual channel value to clients over SignalR (`DmxService.UpdateChannelValue` → client's `ReceiveDmxChannelValue`). The server always knows exactly which step a scene is on.
-- **Projection programs**: the opposite. `ClientService.TriggerProjectionProgramOnClientAsync` sends one fire-and-forget SignalR message with the whole program id, and `Lanyard.Client` (the kiosk app) steps through `HoldForMilliseconds` itself, locally. The server has no loop, no cancellation token, and no "currently on step N" state for projection programs — once triggered, it has no visibility into playback progress.
+- **DMX scenes**: `DmxSceneRunnerService.RunSceneLoopAsync` runs the step/delay loop on the server and pushes each individual channel value to clients over the custom `SignalRControlHub` (`DmxService.UpdateChannelValue` → client's `ReceiveDmxChannelValue`), because a physical DMX device has no browser to render into.
+- **Projection programs**: `ProjectionProgramRunnerService` also runs the step/hold loop on the server, but the kiosk's WPF client no longer renders anything itself — it just hosts a WebView2 window pointed at a server-rendered Blazor page (`Kiosk.razor`/`KioskDisplay.razor`), which subscribes to the runner's step/pause events as a plain in-process event (same process, no SignalR hop) and calls `StateHasChanged()` on every step. Blazor Server's own circuit pushes that to the WebView2 browser.
 
-**Implication**: if you're asked to add DMX-style features (progress events, pausing mid-run, live-editing a running sequence) to projection programs, that server-side control simply doesn't exist yet and would need to be built — don't assume it's already there just because DMX has it. Conversely, don't "simplify" DMX scenes toward the projection-program model without realizing you'd be giving up server-side control that features may depend on.
+**Don't assume DMX-style features (pause, skip, progress tracking) are missing from projection programs** — they already exist in `ProjectionProgramRunnerService`; see `projection-program-engine` for what's there before building anything new. The one real asymmetry left is the render path: DMX pushes raw channel values over a custom hub because there's no browser on the other end; projection programs push into an actual Blazor page instead.
 
 ## BPM-synced timing recomputes every step, on purpose
 

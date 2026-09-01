@@ -293,6 +293,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingButton.ClientId = incomingButton.ClientId;
                     existingButton.ProjectionProgramId = incomingButton.ProjectionProgramId;
                     existingButton.DisplayIndex = incomingButton.DisplayIndex;
+                    existingButton.SkipToPreviousStep = incomingButton.SkipToPreviousStep;
                     break;
                 case MusicPlaylistSelectorWidget existingPlaylistSelector when widget is MusicPlaylistSelectorWidget incomingPlaylistSelector:
                     existingPlaylistSelector.ClientId = incomingPlaylistSelector.ClientId;
@@ -317,6 +318,14 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 case MyTrainingWidget existingMyTraining when widget is MyTrainingWidget incomingMyTraining:
                     existingMyTraining.IncludeCompleted = incomingMyTraining.IncludeCompleted;
                     existingMyTraining.MaxItems = incomingMyTraining.MaxItems;
+                    break;
+                case ProjectionStatusWidget existingProjectionStatus when widget is ProjectionStatusWidget incomingProjectionStatus:
+                    existingProjectionStatus.ClientId = incomingProjectionStatus.ClientId;
+                    existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
+                    existingProjectionStatus.ShowControls = incomingProjectionStatus.ShowControls;
+                    break;
+                case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
+                    existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
                     break;
             }
 
@@ -637,7 +646,8 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 ActionType = buttonWidget.ActionType,
                 ClientId = buttonWidget.ClientId,
                 ProjectionProgramId = buttonWidget.ProjectionProgramId,
-                DisplayIndex = buttonWidget.DisplayIndex
+                DisplayIndex = buttonWidget.DisplayIndex,
+                SkipToPreviousStep = buttonWidget.SkipToPreviousStep
             },
             MusicPlaylistSelectorWidget playlistSelectorWidget => new MusicPlaylistSelectorWidget
             {
@@ -673,6 +683,16 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             // signed-in user - but the case is still required, or the switch below throws and
             // the whole dashboard save fails.
             GreetingWidget => new GreetingWidget(),
+            ProjectionStatusWidget projectionStatusWidget => new ProjectionStatusWidget
+            {
+                ClientId = projectionStatusWidget.ClientId,
+                DisplayIndex = projectionStatusWidget.DisplayIndex,
+                ShowControls = projectionStatusWidget.ShowControls
+            },
+            AnnouncementsWidget announcementsWidget => new AnnouncementsWidget
+            {
+                MaxItems = announcementsWidget.MaxItems
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -729,6 +749,7 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             targetButton.ClientId = sourceButton.ClientId;
             targetButton.ProjectionProgramId = sourceButton.ProjectionProgramId;
             targetButton.DisplayIndex = sourceButton.DisplayIndex;
+            targetButton.SkipToPreviousStep = sourceButton.SkipToPreviousStep;
         }
 
         if (target is MusicPlaylistSelectorWidget targetPlaylistSelector && source is MusicPlaylistSelectorWidget sourcePlaylistSelector)
@@ -768,6 +789,19 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetMyTraining.IncludeCompleted = sourceMyTraining.IncludeCompleted;
             targetMyTraining.MaxItems = sourceMyTraining.MaxItems;
+            return;
+        }
+
+        if (target is AnnouncementsWidget targetAnnouncements && source is AnnouncementsWidget sourceAnnouncements)
+        {
+            targetAnnouncements.MaxItems = sourceAnnouncements.MaxItems;
+        }
+
+        if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)
+        {
+            targetProjectionStatus.ClientId = sourceProjectionStatus.ClientId;
+            targetProjectionStatus.DisplayIndex = sourceProjectionStatus.DisplayIndex;
+            targetProjectionStatus.ShowControls = sourceProjectionStatus.ShowControls;
         }
     }
 }

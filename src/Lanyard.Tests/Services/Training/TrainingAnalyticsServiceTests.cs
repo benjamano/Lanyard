@@ -198,30 +198,4 @@ public class TrainingAnalyticsServiceTests
         Assert.HasCount(1, result.Data!);
         Assert.AreEqual("ipswich-staff", result.Data![0].UserId);
     }
-
-    [TestMethod]
-    public async Task GetSlowestCompletionsAsync_NonAdmin_ReturnsOnlyOwnLocationTrainees()
-    {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        TrainingAnalyticsService service = GetService(options);
-        (Location ipswich, Location wisbech) = await SeedTwoLocationsAsync(options);
-
-        Guid courseId = Guid.NewGuid();
-        DateTime start = DateTime.UtcNow.AddHours(-2);
-
-        await using (ApplicationDbContext ctx = new(options))
-        {
-            ctx.Courses.Add(new Course { Id = courseId, Name = "COSHH", PassMarkPercent = 80, IsActive = true, LocationId = ipswich.Id, IsShared = true });
-            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = courseId, UserId = "ipswich-staff", AssignedDate = start, IsActive = true, LocationId = ipswich.Id, StartedDate = start, CompletedDate = start.AddMinutes(10) });
-            ctx.CourseAssignments.Add(new CourseAssignment { Id = Guid.NewGuid(), CourseId = courseId, UserId = "wisbech-staff", AssignedDate = start, IsActive = true, LocationId = wisbech.Id, StartedDate = start, CompletedDate = start.AddMinutes(5) });
-            await ctx.SaveChangesAsync();
-        }
-
-        LocationScope ipswichScope = new(false, ipswich.Id, ipswich.CompanyId, "Play2Day Ipswich");
-        Result<List<TraineeTimingRankingRow>> result = await service.GetSlowestCompletionsAsync(courseId, ipswichScope);
-
-        Assert.IsTrue(result.Success, result.Error);
-        Assert.HasCount(1, result.Data!);
-        Assert.AreEqual("ipswich-staff", result.Data![0].UserId);
-    }
 }

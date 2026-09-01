@@ -1,0 +1,172 @@
+﻿@using Lanyard.Application.Services.Announcements
+@using Lanyard.Application.Services.Locations
+@using Lanyard.Infrastructure.Models
+
+@inherits FluentDialogInstance
+
+@inject IAnnouncementService _announcementService
+@inject ICompanyLocationService _companyLocationService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        @(Content is null ? "New Announcement" : "Edit Announcement")
+    </TitleTemplate>
+
+    <ChildContent>
+        <EditForm Model="@_announcement" OnValidSubmit="SubmitAsync">
+            <FluentStack Orientation="@Orientation.Vertical" VerticalGap="10">
+                <FluentTextInput Placeholder="Title" Label="Title" @bind-Value="_announcement.Title"
+                                 Required="true" Maxlength="120" Style="width: 100%;">
+                    <StartTemplate>
+                        <FluentIcon Value="new Icons.Regular.Size20.Megaphone()" Slot="start" />
+                    </StartTemplate>
+                </FluentTextInput>
+
+                <FluentTextArea Placeholder="What do you want staff to know?" Label="Body"
+                                @bind-Value="_announcement.Body" Required="true" Maxlength="2000"
+                                Rows="5" Style="width: 100%;" />
+
+                @* Only an Admin picks a location - everyone else posts to their own, and the
+                   service overrides whatever is sent anyway. *@
+                @if (Scope?.IsAdmin == true)
+                {
+                    <FluentSelect TOption="Location" TValue="int?" Items="@_locations"
+                                  OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                                  OptionValue="@(l => l?.Id)"
+                                  @bind-Value="_announcement.LocationId" Label="Location"
+                                  Required="true" Style="width: 100%;" />
+                }
+
+                <FluentDatePicker TValue="DateTime?" @bind-Value="_expiryDate"
+                                  Label="Expires on (optional)" Width="100%">
+                </FluentDatePicker>
+
+                <FluentSwitch @bind-Value="_announcement.IsPinned"
+                              Label="Pin to the top of the widget" />
+            </FluentStack>
+
+            <DataAnnotationsValidator />
+            <FluentValidationSummary />
+
+            <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="8" Class="mt-3">
+                <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary"
+                              IconStart="@(new Icons.Regular.Size20.Save())" Disabled="@_isSaving">
+                    Save
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default"
+                              OnClick="async () => await DialogInstance.CancelAsync()">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </EditForm>
+    </ChildContent>
+
+    <ActionTemplate></ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    // Null means add mode, non-null means edit - the same contract as AddEditAutomationRuleDialog.
+    [Parameter]
+    public Announcement? Content { get; set; }
+
+    [Parameter]
+    public LocationScope? Scope { get; set; }
+
+    private Announcement _announcement = new();
+    private List<Location> _locations = [];
+
+    // Bound separately so the picker's local date can be converted to UTC exactly once, on save.
+    private DateTime? _expiryDate;
+
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Content is not null)
+        {
+            // Edit a copy: binding straight onto the grid's instance would leave the row showing
+            // half-typed edits if the dialog is cancelled.
+            _announcement = new Announcement
+            {
+                Id = Content.Id,
+                Title = Content.Title,
+                Body = Content.Body,
+                IsPinned = Content.IsPinned,
+                LocationId = Content.LocationId,
+                ExpiryDate = Content.ExpiryDate,
+                IsActive = Content.IsActive,
+                CreateDate = Content.CreateDate,
+                CreatedByUserId = Content.CreatedByUserId
+            };
+
+            // Undo the end-of-day adjustment SubmitAsync applies, so the picker shows the day the
+            // author actually chose. Without this the date reads a day late and every re-save
+            // pushes the expiry out by another day.
+            _expiryDate = Content.ExpiryDate?.ToLocalTime().AddDays(-1).Date;
+        }
+        else
+        {
+            _announcement.LocationId = Scope?.LocationId;
+
+            Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+            if (currentUserResult.IsSuccess)
+            {
+                _announcement.CreatedByUserId = currentUserResult.Data;
+            }
+        }
+
+        if (Scope?.IsAdmin == true)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            if (locationsResult.IsSuccess && locationsResult.Data is not null)
+            {
+                _locations = locationsResult.Data;
+            }
+        }
+    }
+
+    protected override async Task OnActionClickedAsync(bool primary)
+    {
+        if (primary)
+        {
+            await SubmitAsync();
+        }
+        else
+        {
+            await DialogInstance.CancelAsync();
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (Scope is null)
+        {
+            _toastService.ShowError("We couldn't work out which location you're working in.");
+
+            return;
+        }
+
+        _isSaving = true;
+
+        // The picker hands back a local midnight; an announcement should stay live for the whole
+        // of its expiry day, so expire at the end of it rather than the start.
+        _announcement.ExpiryDate = _expiryDate?.Date.AddDays(1).ToUniversalTime();
+
+        Result<Announcement> result = await _announcementService.SaveAnnouncementAsync(_announcement, Scope);
+
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Announcement saved.");
+
+            await DialogInstance.CloseAsync(true);
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to save the announcement.");
+        }
+    }
+}

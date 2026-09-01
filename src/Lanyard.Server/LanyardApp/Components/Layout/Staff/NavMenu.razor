@@ -39,6 +39,14 @@
                 </FluentNavCategory>
             }
 
+            @if (_canPostAnnouncements)
+            {
+                <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
+                               IconActive="@(new Icons.Filled.Size20.Megaphone())">
+                    Announcements
+                </FluentNavItem>
+            }
+
             @if (_isManager)
             {
                 <FluentNavSectionHeader Title="Management" />
@@ -161,6 +169,7 @@
     private bool _canClockIn;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _canPostAnnouncements;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
@@ -177,6 +186,7 @@
         _canClockIn = _isAdmin || user.IsInRole("CanClockIn");
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
+        _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
 
         if (_isAuthenticated)
         {
