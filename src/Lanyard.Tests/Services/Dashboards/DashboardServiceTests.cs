@@ -1540,4 +1540,101 @@ public class DashboardServiceTests
         Assert.IsTrue(dbWidget.IncludeCompleted);
         Assert.AreEqual(3, dbWidget.MaxItems);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewAnnouncementsWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces the CreateWidgetCopy path, whose default arm throws
+        // "Unsupported widget type." and fails the whole dashboard save, not just this widget.
+        dashboard.Widgets =
+        [
+            new AnnouncementsWidget
+            {
+                Id = Guid.Empty,
+                MaxItems = 7,
+                IsActive = true
+            }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AnnouncementsWidget dbWidget = await ctx.DashboardWidgets.OfType<AnnouncementsWidget>().SingleAsync(x => x.DashboardId == dashboard.Id);
+        Assert.AreEqual(WidgetType.Announcements, dbWidget.Type);
+        Assert.AreEqual(7, dbWidget.MaxItems);
+        Assert.IsTrue(dbWidget.IsActive);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingAnnouncementsWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        AnnouncementsWidget announcementsWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            MaxItems = 3,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [announcementsWidget];
+
+        Result<bool> createResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(createResult.Success, createResult.Error);
+
+        announcementsWidget.MaxItems = 10;
+
+        Result<bool> updateResult = await service.SaveDashboardAsync(dashboard);
+        Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AnnouncementsWidget dbWidget = await ctx.DashboardWidgets.OfType<AnnouncementsWidget>().SingleAsync(x => x.Id == announcementsWidget.Id);
+        Assert.AreEqual(10, dbWidget.MaxItems);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesAnnouncementsConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        AnnouncementsWidget existingWidget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            MaxItems = 3,
+            IsActive = true
+        };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(existingWidget);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        AnnouncementsWidget incomingWidget = new()
+        {
+            Id = existingWidget.Id,
+            DashboardId = dashboard.Id,
+            MaxItems = 8,
+            IsActive = true
+        };
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(incomingWidget);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        AnnouncementsWidget dbWidget = await ctx.DashboardWidgets.OfType<AnnouncementsWidget>().SingleAsync(x => x.Id == existingWidget.Id);
+        Assert.AreEqual(8, dbWidget.MaxItems);
+    }
 }

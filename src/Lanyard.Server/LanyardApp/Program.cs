@@ -1,5 +1,6 @@
 ﻿using Lanyard.App.Components;
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Gdpr;
@@ -123,6 +124,8 @@ builder.Services.AddHostedService<AutomationEngineHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
+
+builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
 builder.Services.AddSignalR();
 

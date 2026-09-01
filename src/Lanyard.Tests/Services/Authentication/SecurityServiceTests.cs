@@ -735,6 +735,98 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
+        public async Task UnlockUserAsync_Admin_ClearsLockout()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile user = createResult.Data!.User;
+            await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.UtcNow.AddMinutes(15));
+            await userManager.AccessFailedAsync(user);
+
+            Result<bool> unlockResult = await adminService.UnlockUserAsync(user.Id);
+
+            Assert.IsTrue(unlockResult.IsSuccess, unlockResult.Error);
+
+            UserProfile? updated = await userManager.FindByIdAsync(user.Id);
+            Assert.IsNotNull(updated);
+            Assert.IsFalse(await userManager.IsLockedOutAsync(updated));
+            Assert.AreEqual(0, updated.AccessFailedCount);
+        }
+
+        [TestMethod]
+        public async Task UnlockUserAsync_NonAdminNonManager_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile user = createResult.Data!.User;
+            await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.UtcNow.AddMinutes(15));
+
+            SecurityService staffService = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+            Result<bool> unlockResult = await staffService.UnlockUserAsync(user.Id);
+
+            Assert.IsFalse(unlockResult.IsSuccess);
+            Assert.Contains("administrator", unlockResult.Error);
+        }
+
+        [TestMethod]
+        public async Task UnlockUserAsync_Manager_TargetingAdmin_Fails()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            UserProfile targetAdmin = createResult.Data!.User;
+            await AddUserToRoleAsync(options, userManager, targetAdmin, "Admin");
+            await userManager.SetLockoutEndDateAsync(targetAdmin, DateTimeOffset.UtcNow.AddMinutes(15));
+
+            SecurityService managerService = BuildServiceWithAuthProvider(options, userManager, BuildAuthProviderWithRole("Manager").Object, emailServiceMock.Object);
+            Result<bool> unlockResult = await managerService.UnlockUserAsync(targetAdmin.Id);
+
+            Assert.IsFalse(unlockResult.IsSuccess, "A Manager must not be able to unlock an Admin account.");
+
+            UserProfile? stillLocked = await userManager.FindByIdAsync(targetAdmin.Id);
+            Assert.IsNotNull(stillLocked);
+            Assert.IsTrue(await userManager.IsLockedOutAsync(stillLocked));
+        }
+
+        [TestMethod]
         public async Task SendSetPasswordLinkAsync_Manager_TargetingAdmin_Fails()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

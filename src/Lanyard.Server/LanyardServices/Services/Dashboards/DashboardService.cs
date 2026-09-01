@@ -324,6 +324,9 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
                     existingProjectionStatus.ShowControls = incomingProjectionStatus.ShowControls;
                     break;
+                case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
+                    existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
+                    break;
             }
 
             Dashboard? parentDashboard = await ctx.Dashboards
@@ -686,6 +689,10 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                 DisplayIndex = projectionStatusWidget.DisplayIndex,
                 ShowControls = projectionStatusWidget.ShowControls
             },
+            AnnouncementsWidget announcementsWidget => new AnnouncementsWidget
+            {
+                MaxItems = announcementsWidget.MaxItems
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -782,6 +789,12 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         {
             targetMyTraining.IncludeCompleted = sourceMyTraining.IncludeCompleted;
             targetMyTraining.MaxItems = sourceMyTraining.MaxItems;
+            return;
+        }
+
+        if (target is AnnouncementsWidget targetAnnouncements && source is AnnouncementsWidget sourceAnnouncements)
+        {
+            targetAnnouncements.MaxItems = sourceAnnouncements.MaxItems;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)
