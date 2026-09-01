@@ -1,3 +1,4 @@
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -10,9 +11,11 @@ namespace Lanyard.Application.Services.Kitchen;
 
 public class KitchenOrderService(
     IDbContextFactory<ApplicationDbContext> factory,
+    IKitchenHubNotifier hubNotifier,
     ILogger<KitchenOrderService> logger) : IKitchenOrderService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IKitchenHubNotifier _hubNotifier = hubNotifier;
     private readonly ILogger<KitchenOrderService> _logger = logger;
 
     /// <summary>
@@ -147,6 +150,8 @@ public class KitchenOrderService(
             _logger.LogInformation("Order {OrderId} received for {TableLabel} at location {LocationId} ({LineCount} lines, {TotalCents}p)",
                 order.Id, order.TableLabelSnapshot, order.LocationId, orderItems.Count, order.TotalCents);
 
+            await _hubNotifier.NotifyOrderReceivedAsync(order.LocationId, ToTicket(order));
+
             return Result<CreateOrderResultDto>.Ok(new CreateOrderResultDto
             {
                 OrderToken = order.OrderToken,
@@ -276,6 +281,8 @@ public class KitchenOrderService(
             _logger.LogInformation("Order {OrderId} at location {LocationId} moved from {PreviousStatus} to {NewStatus}",
                 order.Id, order.LocationId, previous, status);
 
+            await _hubNotifier.NotifyOrderStatusChangedAsync(order.LocationId, ToTicket(order));
+
             return Result<KitchenOrder>.Ok(order);
         }
         catch (Exception ex)
@@ -306,6 +313,8 @@ public class KitchenOrderService(
 
             _logger.LogInformation("Order {OrderId} at location {LocationId} marked paid at till ({TotalCents}p)",
                 order.Id, order.LocationId, order.TotalCents);
+
+            await _hubNotifier.NotifyOrderStatusChangedAsync(order.LocationId, ToTicket(order));
 
             return Result<KitchenOrder>.Ok(order);
         }
@@ -348,4 +357,22 @@ public class KitchenOrderService(
             return Result<KitchenOrderSummary>.Fail($"Failed to retrieve order summary: {ex.Message}");
         }
     }
+
+    public static KitchenOrderTicketDto ToTicket(KitchenOrder order) => new()
+    {
+        OrderId = order.Id,
+        LocationId = order.LocationId,
+        TableLabel = order.TableLabelSnapshot,
+        Status = order.Status,
+        PaymentStatus = order.PaymentStatus,
+        TotalCents = order.TotalCents,
+        CustomerNote = order.CustomerNote,
+        CreateDate = order.CreateDate,
+        Lines = [.. order.Items.Select(i => new OrderStatusLineDto
+        {
+            Name = i.MenuItemNameSnapshot,
+            Quantity = i.Quantity,
+            UnitPriceCents = i.UnitPriceCentsSnapshot
+        })]
+    };
 }

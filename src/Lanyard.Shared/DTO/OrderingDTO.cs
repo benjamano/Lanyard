@@ -115,3 +115,23 @@ public class OrderStatusLineDto
     public int Quantity { get; set; }
     public int UnitPriceCents { get; set; }
 }
+
+/// <summary>
+/// A ticket as the kitchen display sees it. Pushed over SignalR when an order arrives or its
+/// status changes, so the display never has to re-query to stay current.
+///
+/// Carries the internal order id, unlike everything the customer sees: this only ever travels
+/// to authenticated staff on a role-gated hub.
+/// </summary>
+public class KitchenOrderTicketDto
+{
+    public int OrderId { get; set; }
+    public int LocationId { get; set; }
+    public required string TableLabel { get; set; }
+    public KitchenOrderStatus Status { get; set; }
+    public KitchenOrderPaymentStatus PaymentStatus { get; set; }
+    public int TotalCents { get; set; }
+    public string? CustomerNote { get; set; }
+    public DateTime CreateDate { get; set; }
+    public List<OrderStatusLineDto> Lines { get; set; } = [];
+}

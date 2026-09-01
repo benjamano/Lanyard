@@ -80,6 +80,7 @@ builder.Services.AddScoped<ITenantDirectoryService, TenantDirectoryService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IQrTableTokenService, QrTableTokenService>();
 builder.Services.AddScoped<IKitchenOrderService, KitchenOrderService>();
+builder.Services.AddSingleton<IKitchenHubNotifier, KitchenHubNotifier>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ApplicationRolesService>();
@@ -407,6 +408,11 @@ app.Use(async (context, next) =>
 
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
+
+// Separate path from /websocket on purpose: that route is gated above by the kiosk shared
+// secret, which is the wrong credential for a kitchen display. This hub authorises by staff
+// role instead (see KitchenHub's [Authorize]).
+app.MapHub<KitchenHub>("/kitchenhub");
 
 app.MapControllers().RequireRateLimiting("ip-fixed");
 

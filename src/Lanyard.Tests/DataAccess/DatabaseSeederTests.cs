@@ -213,7 +213,7 @@ namespace Lanyard.Tests.DataAccess
             int adminRoleAssignmentCount = await context.UserRoles.CountAsync(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId);
 
             Assert.IsTrue(adminExists);
-            Assert.AreEqual(7, roleCount);
+            Assert.AreEqual(8, roleCount);
             Assert.AreEqual(5, adminRoleAssignmentCount);
         }
 
@@ -256,7 +256,7 @@ namespace Lanyard.Tests.DataAccess
             int roleCount = await verifyContext.Roles.CountAsync();
 
             Assert.IsTrue(adminRecreated, "The seed admin should be recreated on the next startup.");
-            Assert.AreEqual(7, roleCount, "Roles must not be duplicated when the admin is recreated.");
+            Assert.AreEqual(8, roleCount, "Roles must not be duplicated when the admin is recreated.");
         }
     }
 }

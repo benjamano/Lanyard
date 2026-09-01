@@ -257,8 +257,19 @@ public class TenantDirectoryService(
         string trimmed = hostname.Trim().ToLowerInvariant();
 
         // Cloudflare forwards the host with a port in some configurations; the table stores none.
-        int colonIndex = trimmed.IndexOf(':');
+        // Only a trailing :digits is stripped. Cutting at the first colon unconditionally would
+        // turn "https://play2day.co.uk/order" into "https", which then looks like a perfectly
+        // valid hostname and would be accepted - so a pasted URL must be left intact and fail
+        // validation instead.
+        int colonIndex = trimmed.LastIndexOf(':');
 
-        return colonIndex >= 0 ? trimmed[..colonIndex] : trimmed;
+        if (colonIndex > 0
+            && colonIndex < trimmed.Length - 1
+            && trimmed[(colonIndex + 1)..].All(char.IsAsciiDigit))
+        {
+            return trimmed[..colonIndex];
+        }
+
+        return trimmed;
     }
 }
