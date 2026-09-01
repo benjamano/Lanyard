@@ -174,18 +174,30 @@ public class StripeOrderPaymentService : IOrderPaymentService
                 return Result<OrderPaymentWebhookResult>.Fail("Stripe:WebhookSecret is not configured.");
             }
 
-            Event stripeEvent = EventUtility.ConstructEvent(payload, signatureHeader, _webhookSecret);
+            // throwOnApiVersionMismatch: false deliberately. The signature is what authenticates
+            // a webhook; the API version only says which shape Stripe serialised it in. Left at
+            // its default, an account or endpoint pinned to a version other than this SDK's
+            // makes every delivery throw - and throw as a StripeException indistinguishable from
+            // a bad signature, so a routine Stripe version change would look like an attack and
+            // silently stop confirming payments. Only the event type and the PaymentIntent id
+            // are read below, and both are stable across versions.
+            Event stripeEvent = EventUtility.ConstructEvent(
+                payload, signatureHeader, _webhookSecret, throwOnApiVersionMismatch: false);
 
+            // Stripe sends charge.succeeded and charge.updated alongside every payment. They are
+            // legitimate, correctly signed events that this app has no use for, so they are
+            // acknowledged rather than rejected - see OrderPaymentWebhookResult.Handled.
             if (stripeEvent.Data.Object is not PaymentIntent intent)
             {
-                return Result<OrderPaymentWebhookResult>.Fail("Webhook did not carry a payment.");
+                return Result<OrderPaymentWebhookResult>.Ok(
+                    new OrderPaymentWebhookResult(null, Succeeded: false, Failed: false, Handled: false));
             }
 
             bool succeeded = stripeEvent.Type == "payment_intent.succeeded";
             bool failed = stripeEvent.Type is "payment_intent.payment_failed" or "payment_intent.canceled";
 
             return Result<OrderPaymentWebhookResult>.Ok(
-                new OrderPaymentWebhookResult(intent.Id, succeeded, failed));
+                new OrderPaymentWebhookResult(intent.Id, succeeded, failed, Handled: true));
         }
         catch (StripeException ex)
         {

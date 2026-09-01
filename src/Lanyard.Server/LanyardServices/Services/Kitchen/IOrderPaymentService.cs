@@ -43,13 +43,23 @@ public interface IOrderPaymentService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Validates a webhook's signature and returns the PaymentIntent id and whether it
-    /// succeeded. Returns a failure when the signature does not verify - an unsigned or
-    /// mis-signed webhook is an attacker claiming an order was paid for.
+    /// Validates a webhook's signature and describes what it carried.
     /// </summary>
+    /// <remarks>
+    /// Only a signature that does not verify is a failure - an unsigned or mis-signed webhook is
+    /// an attacker claiming an order was paid for. An event this app has no interest in is a
+    /// success with <see cref="OrderPaymentWebhookResult.Handled"/> false, so the caller can
+    /// acknowledge it rather than reject it.
+    /// </remarks>
     Result<OrderPaymentWebhookResult> ParseWebhook(string payload, string signatureHeader);
 }
 
 public record OrderPaymentIntent(string PaymentIntentId, string ClientSecret, string PublishableKey, string StripeAccountId);
 
-public record OrderPaymentWebhookResult(string PaymentIntentId, bool Succeeded, bool Failed);
+/// <param name="Handled">
+/// False for a properly signed event this app does not act on - a charge.* event, say, which
+/// Stripe sends alongside every payment. Those must still be acknowledged with a 200: Stripe
+/// treats any other status as a failed delivery and retries with backoff for days, which both
+/// generates noise and makes the endpoint look broken in the dashboard, hiding a real failure.
+/// </param>
+public record OrderPaymentWebhookResult(string? PaymentIntentId, bool Succeeded, bool Failed, bool Handled);

@@ -222,21 +222,26 @@ namespace Lanyard.API.Controllers
             Result<OrderPaymentWebhookResult> parsed = _paymentService.ParseWebhook(
                 payload, Request.Headers["Stripe-Signature"].ToString());
 
+            // Only a bad signature is rejected. Everything else - including events this app has
+            // no interest in - is acknowledged, or Stripe retries it with backoff for days and
+            // the endpoint starts looking broken in the dashboard.
             if (!parsed.Success || parsed.Data is null)
             {
                 return BadRequest();
             }
 
-            if (parsed.Data.Succeeded)
+            if (parsed.Data.Handled && parsed.Data.PaymentIntentId is string paymentIntentId)
             {
-                await _orderService.ConfirmPaymentAsync(parsed.Data.PaymentIntentId);
-            }
-            else if (parsed.Data.Failed)
-            {
-                await _orderService.MarkPaymentFailedAsync(parsed.Data.PaymentIntentId);
+                if (parsed.Data.Succeeded)
+                {
+                    await _orderService.ConfirmPaymentAsync(paymentIntentId);
+                }
+                else if (parsed.Data.Failed)
+                {
+                    await _orderService.MarkPaymentFailedAsync(paymentIntentId);
+                }
             }
 
-            // 200 even for an event we do not act on, so Stripe stops retrying it.
             return Ok();
         }
     }
