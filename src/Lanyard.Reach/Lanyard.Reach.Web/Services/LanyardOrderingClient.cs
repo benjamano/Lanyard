@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 
 namespace Lanyard.Reach.Web.Services;
 
@@ -22,6 +23,16 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
 
     public async Task<TenantLegalDetailsDto?> GetLegalDetailsAsync(int companyId, CancellationToken cancellationToken = default) =>
         await GetOrNullAsync<TenantLegalDetailsDto>($"api/ordering/tenants/{companyId}/legal", cancellationToken);
+
+    /// <summary>
+    /// One of the company's legal documents, already rendered with its own details substituted in.
+    /// Reach never holds the raw template, so it cannot render one company's document against
+    /// another's identity.
+    /// </summary>
+    public async Task<LegalDocumentDto?> GetLegalDocumentAsync(
+        int companyId, LegalDocumentType documentType, CancellationToken cancellationToken = default) =>
+        await GetOrNullAsync<LegalDocumentDto>(
+            $"api/ordering/tenants/{companyId}/documents/{documentType}", cancellationToken);
 
     public async Task<OrderingApiResult<TenantBrandingDto>> GetTenantBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
         await GetAsync<TenantBrandingDto>($"api/ordering/tenants/by-slug/{Uri.EscapeDataString(slug)}", cancellationToken);

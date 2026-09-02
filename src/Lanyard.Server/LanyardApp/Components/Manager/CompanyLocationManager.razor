@@ -228,6 +228,19 @@
                     </FluentCard>
                 }
             </FluentGridItem>
+
+            @* Full width, rather than inside the company column above: these are long-form legal
+               documents, and editing one in a third-width column meant a ~340px line length with
+               the rest of the screen empty. Only shown for a saved company, since the documents
+               are stored against a company id. *@
+            @if (selectedCompany is not null)
+            {
+                <FluentGridItem Xs="12">
+                    <FluentCard>
+                        <LegalDocumentEditor CompanyId="@selectedCompany.Id" />
+                    </FluentCard>
+                </FluentGridItem>
+            }
         </FluentGrid>
     </FluentStack>
 </div>

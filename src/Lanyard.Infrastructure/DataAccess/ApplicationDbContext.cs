@@ -62,6 +62,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<QrTableToken> QrTableTokens { get; set; }
         public DbSet<KitchenOrder> KitchenOrders { get; set; }
         public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; }
+        public DbSet<CompanyLegalDocument> CompanyLegalDocuments { get; set; }
         public DbSet<MenuItemOptionGroup> MenuItemOptionGroups { get; set; }
         public DbSet<MenuItemOption> MenuItemOptions { get; set; }
         public DbSet<KitchenOrderItemOption> KitchenOrderItemOptions { get; set; }
@@ -225,6 +226,19 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CompanyDomain>()
                 .HasOne(x => x.Company)
                 .WithMany(x => x.Domains)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // One document of each type per company, enforced rather than left to the service:
+            // two rows claiming to be the same company's privacy policy would make which one a
+            // customer sees depend on row order.
+            modelBuilder.Entity<CompanyLegalDocument>()
+                .HasIndex(x => new { x.CompanyId, x.DocumentType })
+                .IsUnique();
+
+            modelBuilder.Entity<CompanyLegalDocument>()
+                .HasOne(x => x.Company)
+                .WithMany(x => x.LegalDocuments)
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
 

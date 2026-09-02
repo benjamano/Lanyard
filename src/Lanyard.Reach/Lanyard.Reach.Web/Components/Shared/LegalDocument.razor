@@ -1,0 +1,54 @@
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
+
+@*
+    Renders one of the tenant's legal documents.
+
+    The body is written by venue staff in a rich-text editor and stored sanitised, so it arrives
+    here already safe. It is sanitised again on the way out anyway: this is unescaped HTML on a
+    public page, and the cost of a second pass is nothing next to the cost of being wrong about
+    where the first one happened.
+*@
+
+@if (_html is not null)
+{
+    @((MarkupString)_html)
+}
+
+@code {
+    [Parameter, EditorRequired] public LegalDocumentType DocumentType { get; set; }
+
+    /// <summary>Raised with false when the document could not be loaded, so the page can say so once.</summary>
+    [Parameter] public EventCallback<bool> OnLoaded { get; set; }
+
+    private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
+
+    private string? _html;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            await OnLoaded.InvokeAsync(false);
+
+            return;
+        }
+
+        LegalDocumentDto? document = await OrderingClient.GetLegalDocumentAsync(
+            TenantContext.Tenant.CompanyId, DocumentType);
+
+        if (document is null)
+        {
+            await OnLoaded.InvokeAsync(false);
+
+            return;
+        }
+
+        _html = _sanitizer.Sanitize(document.Html);
+
+        await OnLoaded.InvokeAsync(true);
+    }
+}

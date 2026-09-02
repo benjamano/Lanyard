@@ -1,3 +1,5 @@
+using Lanyard.Shared.Enum;
+
 namespace Lanyard.Infrastructure.Models
 {
     public class Company
@@ -24,6 +26,9 @@ namespace Lanyard.Infrastructure.Models
         /// </summary>
         public Guid? FaviconFileId { get; set; }   // FK -> FileMetadata.Id; null => the Lanyard mark
         public FileMetadata? FaviconFile { get; set; }
+
+        /// <summary>Edited ordering terms, refund policy and privacy policy. Empty means defaults.</summary>
+        public virtual List<CompanyLegalDocument> LegalDocuments { get; set; } = [];
 
         /// <summary>
         /// URL-safe identifier used to reach this company's public site before its real domain
@@ -73,6 +78,34 @@ namespace Lanyard.Infrastructure.Models
     /// Onboarding a new customer domain is therefore a row insert plus DNS - no redeploy and no
     /// code change, which is the whole point of resolving tenants at runtime.
     /// </summary>
+    /// <summary>
+    /// A customer-facing legal document, as edited by the company rather than shipped in markup.
+    ///
+    /// No row means "use Lanyard's default wording", so a company that never opens the editor
+    /// still publishes a complete document and nothing had to be backfilled when this arrived.
+    /// The body may contain placeholders like {{RegisteredAddress}}, substituted at render time
+    /// so that correcting a company's address does not mean re-editing three documents.
+    /// </summary>
+    public class CompanyLegalDocument
+    {
+        public int Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public LegalDocumentType DocumentType { get; set; }
+
+        /// <summary>
+        /// Sanitised on save. This is written by staff and rendered unescaped on a public page,
+        /// so the stored value is the safe one: a compromised staff account must not be able to
+        /// put script on a customer's checkout.
+        /// </summary>
+        public required string BodyHtml { get; set; }
+
+        public DateTime CreateDate { get; set; }
+        public DateTime UpdateDate { get; set; }
+    }
+
     public class CompanyDomain
     {
         public int Id { get; set; }

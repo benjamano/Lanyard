@@ -11,6 +11,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Kitchen;
+using Lanyard.Application.Services.Legal;
 using Lanyard.API;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -99,6 +100,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<ICompanyLegalDocumentService, CompanyLegalDocumentService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();

@@ -1,6 +1,7 @@
 @page "/order/terms"
 @using Lanyard.Reach.Web.Services
 @using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
 @layout OrderingLayout
 @inject ITenantContext TenantContext
 @inject LanyardOrderingClient OrderingClient
@@ -8,23 +9,17 @@
 @*
     Ordering terms and refund policy.
 
-    One template, rendered from whichever company the hostname resolved to - a trader selling to
-    consumers online has to identify itself, and that identity differs per tenant. Nothing here
-    is hardcoded to Play2Day.
+    The wording lives in the database and is edited per company from Companies & Locations, so
+    changing it is no longer a code change. Two documents rather than one, because a venue may
+    revise its refund wording without touching the rest, but rendered together because a single
+    "terms and refunds" page is what a customer expects behind one link.
 
     Statically rendered: it is a document, and there is nothing to interact with.
 *@
 
 <PageTitle>Ordering terms</PageTitle>
 
-@if (_legal is null)
-{
-    <div class="ordering__status-panel ordering__status-panel--error">
-        <h1>Terms unavailable</h1>
-        <p>We couldn't load the ordering terms. Please ask a member of staff.</p>
-    </div>
-}
-else if (!_legal.IsComplete)
+@if (_legal is not null && !_legal.IsComplete)
 {
     @* Said plainly rather than rendering a document full of blanks, which would look like a
        bug and would not identify the trader to anybody. *@
@@ -36,77 +31,8 @@ else if (!_legal.IsComplete)
 else
 {
     <article class="terms">
-        <h1>Ordering food</h1>
-
-        <p>
-            These terms apply when you order food using the QR code at your table. Your contract is
-            with <strong>@_legal.LegalName</strong>@(string.IsNullOrWhiteSpace(_legal.CompanyNumber)
-                ? "" : $", company number {_legal.CompanyNumber}"), registered at
-            @_legal.RegisteredAddress.
-        </p>
-
-        <h2>Prices and payment</h2>
-        <p>
-            Prices are shown on the menu and include VAT. The total you see before you pay is the
-            total you pay. We don't add service or booking fees. Payment is taken when you place
-            your order and is handled by Stripe; we never see or store your card details.
-        </p>
-
-        <h2>When we start cooking</h2>
-        <p>
-            We begin preparing your order as soon as your payment is confirmed. Your order isn't
-            accepted, and nothing is charged, until that happens.
-        </p>
-
-        <h2>Allergies and intolerances</h2>
-        <p>
-            Each dish lists the allergens it contains and any it may contain through
-            cross-contamination. If you have an allergy or intolerance, please also speak to a
-            member of staff before ordering. They can tell you how a dish is prepared and whether
-            we can make it safely for you. Please don't rely on the notes box alone.
-        </p>
-
-        <h2>Collection</h2>
-        <p>
-            Orders are for collection at the counter. We'll hold your order for
-            @_legal.CollectionHoldMinutes minutes after it's ready, after which we may dispose of it
-            for food safety reasons and won't be able to refund it.
-        </p>
-
-        <h2>Changing your mind</h2>
-        <p>
-            Because food is prepared fresh to order, the 14-day right to cancel under the Consumer
-            Contracts Regulations 2013 does not apply. If you need to change or cancel, speak to
-            staff straight away. If we haven't started your order we'll usually be able to help.
-        </p>
-
-        <h1>Refunds</h1>
-
-        <p><strong>We'll refund you in full if:</strong> we cancel your order, we can't make
-        something you've paid for, or your order isn't of satisfactory quality and you tell staff
-        before you leave.</p>
-
-        <p><strong>We may not refund if:</strong> you change your mind after we've started
-        preparing your order, or you don't collect it within @_legal.CollectionHoldMinutes minutes
-        of it being ready.</p>
-
-        <p><strong>How refunds work.</strong> Refunds are made in full to the card you paid with.
-        We can't refund to a different card or in cash. Your bank usually takes 5–10 working days
-        to show it.</p>
-
-        @* Deliberately points at staff rather than promising something the system cannot do:
-           refunds are all-or-nothing in software, so partial ones are handled in person. *@
-        <p><strong>Part of an order.</strong> If only part of your order was wrong, speak to a
-        member of staff at the venue.</p>
-
-        <h2>Contact</h2>
-        <p>
-            @_legal.ContactEmail
-            @if (!string.IsNullOrWhiteSpace(_legal.ContactPhone))
-            {
-                <text> · @_legal.ContactPhone</text>
-            }
-        </p>
+        <LegalDocument DocumentType="LegalDocumentType.OrderingTerms" />
+        <LegalDocument DocumentType="LegalDocumentType.RefundPolicy" />
     </article>
 }
 
@@ -120,6 +46,8 @@ else
             return;
         }
 
+        // Still fetched, only to decide whether this company has published anything at all. The
+        // wording itself now comes from the documents below.
         _legal = await OrderingClient.GetLegalDetailsAsync(TenantContext.Tenant.CompanyId);
     }
 }

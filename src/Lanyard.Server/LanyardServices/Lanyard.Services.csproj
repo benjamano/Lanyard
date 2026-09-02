@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.13.1" />
+    <PackageReference Include="HtmlSanitizer" Version="9.2.995" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.1" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NLayer" Version="2.0.1" />

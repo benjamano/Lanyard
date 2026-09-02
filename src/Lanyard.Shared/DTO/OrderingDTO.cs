@@ -270,3 +270,13 @@ public class KitchenOrderTicketDto
     public DateTime CreateDate { get; set; }
     public List<OrderStatusLineDto> Lines { get; set; } = [];
 }
+
+/// <summary>
+/// A rendered legal document, ready to display. The HTML is sanitised when it is saved, so what
+/// arrives here is already safe to render unescaped; Reach sanitises again on the way out as
+/// defence in depth against a row edited outside the app.
+/// </summary>
+public class LegalDocumentDto
+{
+    public required string Html { get; set; }
+}

@@ -1,6 +1,7 @@
 @page "/privacy"
 @using Lanyard.Reach.Web.Services
 @using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
 @layout MainLayout
 @inject ITenantContext TenantContext
 @inject LanyardOrderingClient OrderingClient
@@ -8,26 +9,15 @@
 @*
     Privacy policy.
 
-    Same shape as the ordering terms: one template rendered from whichever company the hostname
-    resolved to, because the data controller is the venue rather than Lanyard, and that differs
-    per tenant. Nothing here is hardcoded to Play2Day.
-
-    Statically rendered - it is a document with nothing to interact with.
+    Same shape as the ordering terms: the wording is a per-company document edited from Companies
+    & Locations, rendered against whichever company the hostname resolved to. The data controller
+    is the venue rather than Lanyard, so both the identity and the wording have to be theirs.
 *@
 
 <PageTitle>Privacy policy</PageTitle>
 
-@if (_legal is null)
+@if (_legal is not null && !_legal.IsComplete)
 {
-    <div class="ordering__status-panel ordering__status-panel--error">
-        <h1>Privacy policy unavailable</h1>
-        <p>We couldn't load this page. Please try again shortly.</p>
-    </div>
-}
-else if (!_legal.IsComplete)
-{
-    @* Same reasoning as the ordering terms: a policy that cannot name its own data controller
-       identifies nobody, and rendering it full of blanks would look like a bug. *@
     <div class="ordering__status-panel ordering__status-panel--error">
         <h1>Privacy policy not published yet</h1>
         <p>@_legal.CompanyName hasn't finished setting this up. Please ask a member of staff.</p>
@@ -36,90 +26,7 @@ else if (!_legal.IsComplete)
 else
 {
     <article class="terms">
-        <h1>Privacy policy</h1>
-
-        <p>
-            This site is operated by <strong>@_legal.LegalName</strong>@(string.IsNullOrWhiteSpace(_legal.CompanyNumber)
-                ? "" : $", company number {_legal.CompanyNumber}"), registered at
-            @_legal.RegisteredAddress. We are the data controller for the information described
-            below. The site itself is built and hosted for us by Lanyard, which processes that
-            information only on our instructions.
-        </p>
-
-        <h2>What we collect when you order food</h2>
-        <p>
-            Ordering is anonymous. We don't ask for your name, and you don't create an account.
-            When you place an order we record the table you scanned, what you ordered and the
-            price, the allergens declared for those dishes, and anything you type in the notes
-            box. We also keep a reference to the payment so it can be matched up or refunded.
-        </p>
-        <p>
-            The notes box is free text and people often use it to tell us about an allergy or
-            intolerance. That is information about your health, so we keep it only as long as it
-            is useful: <strong>we automatically delete the contents of the notes box 30 days
-            after the order</strong>. The rest of the order is kept as a sales and food-safety
-            record.
-        </p>
-
-        <h2>Card payments</h2>
-        <p>
-            Card payments are handled by Stripe. Your card details are entered directly into
-            Stripe's own payment form and never reach this site or our systems; we only ever see
-            a reference to the payment, the amount and whether it succeeded. Stripe processes that
-            data as a controller in its own right under its own privacy policy, and is required to
-            keep transaction records to meet its legal obligations.
-        </p>
-
-        <h2>Why we're allowed to use it</h2>
-        <p>
-            We use your order to perform the contract you entered into when you bought food. We
-            keep sales records afterwards to comply with our legal obligations, mainly tax and
-            accounting. Where you tell us about an allergy, we use that to protect your vital
-            interests and to meet food-safety obligations.
-        </p>
-        <p>
-            We do not use any of this for marketing, we do not build a profile of you, and we do
-            not sell or share it with anyone except the payment and hosting providers above.
-        </p>
-
-        <h2>How long we keep it</h2>
-        <ul>
-            <li>Notes box: deleted automatically 30 days after the order.</li>
-            <li>
-                The order itself (items, prices, allergens, payment reference): kept for six
-                years, which is the period we're required to retain financial records for.
-            </li>
-        </ul>
-
-        <h2>Cookies</h2>
-        <p>
-            We use only strictly-necessary cookies and equivalent browser storage: enough to keep
-            the site working and secure, and to remember your basket while you're ordering so
-            that closing the page doesn't lose it. There is no advertising or analytics tracking
-            on this site, so there is nothing here to consent to or opt out of.
-        </p>
-
-        <h2>Your rights</h2>
-        <p>
-            You have the right to ask for a copy of the information we hold about you, to have it
-            corrected or deleted, and to object to or restrict how we use it. Because ordering is
-            anonymous we usually cannot link an order to you by name, so please quote your order
-            reference or the card receipt when you get in touch, or we may not be able to find it.
-        </p>
-        <p>
-            If you're unhappy with how we've handled your information you can complain to the
-            Information Commissioner's Office at <a href="https://ico.org.uk" target="_blank"
-            rel="noopener">ico.org.uk</a>.
-        </p>
-
-        <h2>Contact</h2>
-        <p>
-            @_legal.ContactEmail
-            @if (!string.IsNullOrWhiteSpace(_legal.ContactPhone))
-            {
-                <text> &middot; @_legal.ContactPhone</text>
-            }
-        </p>
+        <LegalDocument DocumentType="LegalDocumentType.PrivacyPolicy" />
     </article>
 }
 

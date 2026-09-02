@@ -1,9 +1,11 @@
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Kitchen;
+using Lanyard.Application.Services.Legal;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -43,6 +45,8 @@ namespace Lanyard.API.Controllers
         private readonly IFileService _fileService;
         private readonly IOrderPaymentService _paymentService;
 
+        private readonly ICompanyLegalDocumentService _legalDocuments;
+
         public OrderingController(
             IReachApiCredentialValidator reachCredentialValidator,
             ITenantDirectoryService tenantDirectory,
@@ -50,8 +54,10 @@ namespace Lanyard.API.Controllers
             IMenuService menuService,
             IKitchenOrderService orderService,
             IFileService fileService,
-            IOrderPaymentService paymentService)
+            IOrderPaymentService paymentService,
+            ICompanyLegalDocumentService legalDocuments)
         {
+            _legalDocuments = legalDocuments;
             _reachCredentialValidator = reachCredentialValidator;
             _tenantDirectory = tenantDirectory;
             _tableTokens = tableTokens;
@@ -99,6 +105,27 @@ namespace Lanyard.API.Controllers
             Result<TenantLegalDetailsDto> result = await _tenantDirectory.GetLegalDetailsAsync(companyId);
 
             return result.Success && result.Data is not null ? Ok(result.Data) : NotFound();
+        }
+
+        /// <summary>
+        /// One of a company's customer-facing legal documents, with its placeholders already
+        /// replaced by that company's own details. The public site never sees the raw template
+        /// and never does the substitution itself, so a document can only ever display the
+        /// details of the company it belongs to.
+        /// </summary>
+        [HttpGet("tenants/{companyId:int}/documents/{documentType}")]
+        public async Task<IActionResult> GetLegalDocument(int companyId, LegalDocumentType documentType)
+        {
+            if (!_reachCredentialValidator.IsAuthorized(HttpContext))
+            {
+                return Unauthorized();
+            }
+
+            Result<string> result = await _legalDocuments.GetPublishedAsync(companyId, documentType);
+
+            return result.Success && result.Data is not null
+                ? Ok(new LegalDocumentDto { Html = result.Data })
+                : NotFound();
         }
 
         [HttpGet("tables/{token}")]
