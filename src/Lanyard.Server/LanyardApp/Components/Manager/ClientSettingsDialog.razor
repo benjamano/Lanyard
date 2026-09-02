@@ -22,19 +22,25 @@
                     @* Which venue this machine physically sits in. Kiosks were global before
                        receipt printing, and this is what stops one venue being pointed at
                        another company's printer. *@
-                    <FluentSelect TOption="Location" TValue="string"
-                                  Items="@_locations"
-                                  OptionText="@(l => l?.Name ?? "Not assigned")"
-                                  OptionValue="@(l => l?.Id.ToString() ?? string.Empty)"
-                                  Label="Venue"
-                                  Placeholder="Not assigned"
-                                  @bind-Value="_updateClientModel.LocationId" />
-                    <FluentText Class="mt-1">
-                        Only kiosks assigned to a venue can be chosen as that venue's receipt printer.
-                    </FluentText>
+                    <div class="mt-2">
+                        <FluentSelect TOption="Location" TValue="string"
+                                      Items="@_locations"
+                                      OptionText="@(l => l?.Name ?? "Not assigned")"
+                                      OptionValue="@(l => l?.Id.ToString() ?? string.Empty)"
+                                      Label="Venue"
+                                      Placeholder="Not assigned"
+                                      @bind-Value="_updateClientModel.LocationId" />
+                    </div>
+                    <div class="mt-1">
+                        <FluentText>
+                            Only kiosks assigned to a venue can be chosen as that venue's receipt printer.
+                        </FluentText>
+                    </div>
 
-                    <FluentButton Class="mt-2" Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
-                                  IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
+                    <div class="mt-2">
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
+                    </div>
                 </EditForm>
             </FluentTab>
             <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
