@@ -246,6 +246,7 @@
       "Only an administrator can change a company's Stripe payout account, and doing so now asks for an authentication code first. Managers can edit everything else about their company but not where the money goes.",
       "The customer site now has a privacy policy, linked from a footer on every page including the ordering screens. Like the ordering terms it is published per company from the Legal details section.",
       "The placeholder marketing pages on the customer site have been replaced with a short \"we're building this\" page. QR ordering is unaffected and still works from a printed table code.",
+      "Removing a logo, tab icon or login background is now a Remove button on the upload box itself, rather than a separate row of Clear buttons at the bottom of the form.",
       "Added a browser tab icon (favicon) for the customer ordering site, uploaded separately from the logo in Companies & Locations, since a wide logo is unreadable at that size. Without one, customers see the Lanyard mark.",
       "Dishes can now have choices, so one dish covers several meals - chips and nuggets with either beans or peas, for example. Set them up per dish in Kitchen > Menu & Table Codes.",
       "Each choice carries its own allergen declaration, which is added to the dish's own on the customer menu, the order and the kitchen ticket.",

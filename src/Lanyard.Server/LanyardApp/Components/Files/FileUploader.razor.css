@@ -15,3 +15,10 @@
         height: 140px;
     }
 }
+
+/* Sits under the dropzone text rather than beside the preview: the preview is inside the
+   label that opens the file picker, and a button in there would be a click target inside
+   another click target. */
+::deep .file-uploader-clear {
+    margin-top: 8px;
+}

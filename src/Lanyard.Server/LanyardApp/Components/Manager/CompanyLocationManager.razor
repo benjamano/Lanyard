@@ -65,17 +65,13 @@
 
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
-                                      PreviewUrl="@companyLogoPreviewUrl" />
-                        @if (companyLogoFileId is not null)
-                        {
-                            <FluentText Class="clm-empty-note">
-                                A logo is set. Upload a file to replace it, or clear it.
-                            </FluentText>
-                        }
+                                      PreviewUrl="@companyLogoPreviewUrl"
+                                      OnCleared="ClearLogo" ClearLabel="logo" />
 
                         <FileUploader Id="company-favicon-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnFaviconUploaded" Label="Upload a browser tab icon (optional)"
-                                      MaximumFileCount="1" PreviewUrl="@companyFaviconPreviewUrl" />
+                                      MaximumFileCount="1" PreviewUrl="@companyFaviconPreviewUrl"
+                                      OnCleared="ClearFavicon" ClearLabel="tab icon" />
                         <FluentText Class="clm-empty-note">
                             Shown in the browser tab on this company's ordering site. Use a small square
                             image; the logo above is too wide to read at that size. Without one, customers
@@ -84,13 +80,8 @@
 
                         <FileUploader Id="company-background-image-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnBackgroundImageUploaded" Label="Upload a login background image (optional)"
-                                      MaximumFileCount="1" PreviewUrl="@companyBackgroundImagePreviewUrl" />
-                        @if (companyBackgroundImageFileId is not null)
-                        {
-                            <FluentText Class="clm-empty-note">
-                                A login background image is set. Upload a file to replace it, or clear it.
-                            </FluentText>
-                        }
+                                      MaximumFileCount="1" PreviewUrl="@companyBackgroundImagePreviewUrl"
+                                      OnCleared="ClearBackgroundImage" ClearLabel="login background image" />
 
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
                             @if (selectedCompany is not null)
@@ -105,25 +96,6 @@
                                 }
                             }
 
-                            @if (companyLogoFileId is not null)
-                            {
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearLogo">Clear Logo
-                                </FluentButton>
-                            }
-
-                            @if (companyBackgroundImageFileId is not null)
-                            {
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearBackgroundImage">Clear
-                                    Background Image
-                                </FluentButton>
-                            }
-
-                            @if (companyFaviconFileId is not null)
-                            {
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearFavicon">Clear
-                                    Tab Icon
-                                </FluentButton>
-                            }
                         </FluentStack>
 
                         @* Hidden when there is nothing to choose between: a manager who runs one
