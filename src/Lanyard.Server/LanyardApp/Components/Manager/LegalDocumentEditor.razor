@@ -38,21 +38,24 @@
             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
                          VerticalAlignment="VerticalAlignment.Center">
                 <FluentText Weight="TextWeight.Semibold">@selected.DisplayName()</FluentText>
-                @if (_isCustomised)
+                @if (_state.IsPublished)
                 {
-                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Customised</FluentBadge>
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Published</FluentBadge>
                 }
                 else
                 {
-                    <FluentBadge Appearance="@BadgeAppearance.Outline">Lanyard's wording</FluentBadge>
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Warning">Not published</FluentBadge>
+                }
+                @if (!_state.IsCustomised)
+                {
+                    <FluentBadge Appearance="@BadgeAppearance.Outline">Lanyard's draft</FluentBadge>
                 }
             </FluentStack>
 
-            @* Substituted when the page is rendered for a customer, so a company that corrects
-               its registered address does not have to re-edit three documents to match. *@
             <FluentText Class="clm-empty-note">
-                You can use these anywhere in the text and they'll be filled in automatically:
-                @string.Join(", ", LegalDocumentTemplates.Placeholders)
+                Lanyard's draft leaves blanks in [square brackets] for the parts only you can know.
+                Replace them, save, then publish. Customers see nothing until it's published, and
+                the venue can't take QR orders until all three are.
             </FluentText>
 
             <div class="legal-doc__editor">
@@ -83,8 +86,20 @@
                               IconStart="@(new Icons.Regular.Size20.Save())" OnClick="SaveAsync">
                     Save document
                 </FluentButton>
+                @if (_state.IsPublished)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetPublishedAsync(false))">
+                        Unpublish
+                    </FluentButton>
+                }
+                else
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => SetPublishedAsync(true))">
+                        Publish
+                    </FluentButton>
+                }
                 <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ResetAsync">
-                    Reset to default
+                    Reset to draft
                 </FluentButton>
             </FluentStack>
         </div>
@@ -103,7 +118,7 @@
 
     private LegalDocumentType? _selectedType;
     private BlazoredTextEditor? _editor;
-    private bool _isCustomised;
+    private DocumentState _state = new(false, false);
     private bool _isSaving;
 
     /// <summary>
@@ -126,7 +141,7 @@
         _loadedKey = null;
 
         Result<string> body = await _legalDocumentService.GetForEditingAsync(CompanyId, type);
-        Result<bool> customised = await _legalDocumentService.IsCustomisedAsync(CompanyId, type);
+        Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
 
         if (!body.IsSuccess || body.Data is null)
         {
@@ -137,7 +152,7 @@
         }
 
         _pendingHtml = body.Data;
-        _isCustomised = customised.IsSuccess && customised.Data;
+        _state = state.IsSuccess && state.Data is not null ? state.Data : new DocumentState(false, false);
     }
 
     // BlazoredTextEditor does not accept its content as a bound parameter - it has to be pushed
@@ -182,8 +197,12 @@
 
             if (result.IsSuccess)
             {
-                _isCustomised = true;
-                _toastService.ShowSuccess($"{type.DisplayName()} saved.");
+                Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
+                _state = state.IsSuccess && state.Data is not null ? state.Data : _state;
+
+                _toastService.ShowSuccess(_state.IsPublished
+                    ? $"{type.DisplayName()} saved."
+                    : $"{type.DisplayName()} saved. Publish it when you're ready to show customers.");
             }
             else
             {
@@ -196,6 +215,30 @@
         }
     }
 
+    private async Task SetPublishedAsync(bool isPublished)
+    {
+        if (_selectedType is not LegalDocumentType type)
+        {
+            return;
+        }
+
+        Result<bool> result = await _legalDocumentService.SetPublishedAsync(CompanyId, type, isPublished);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update the document.");
+
+            return;
+        }
+
+        Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
+        _state = state.IsSuccess && state.Data is not null ? state.Data : _state;
+
+        _toastService.ShowSuccess(isPublished
+            ? $"{type.DisplayName()} is now live for customers."
+            : $"{type.DisplayName()} is no longer shown to customers.");
+    }
+
     private async Task ResetAsync()
     {
         if (_selectedType is not LegalDocumentType type)
@@ -204,7 +247,8 @@
         }
 
         DialogResult confirmation = await _dialogService.ShowConfirmationAsync(
-            $"Reset the {type.DisplayName().ToLowerInvariant()} to Lanyard's wording? Your edits will be lost.",
+            $"Reset the {type.DisplayName().ToLowerInvariant()} to Lanyard's draft? Your edits will be lost, "
+            + "and it will stop being shown to customers until you publish it again.",
             "Reset", "Cancel", "Reset document");
 
         if (confirmation.Cancelled)

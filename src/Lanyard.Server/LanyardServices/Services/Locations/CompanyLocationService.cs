@@ -66,18 +66,6 @@ public class CompanyLocationService(
                 return Result<Company>.Fail("Secondary color must be a hex value like #C8102E.");
             }
 
-            string? normalizedStripeAccountId = string.IsNullOrWhiteSpace(company.StripeAccountId)
-                ? null
-                : company.StripeAccountId.Trim();
-
-            // Shape-checked only. Whether the account exists and can accept charges is Stripe's
-            // to answer, and it answers at payment time; rejecting a well-formed id here on a
-            // guess would just block onboarding.
-            if (normalizedStripeAccountId is not null && !normalizedStripeAccountId.StartsWith("acct_", StringComparison.Ordinal))
-            {
-                return Result<Company>.Fail("A Stripe account ID looks like 'acct_1234...'.");
-            }
-
             string? normalizedSlug = string.IsNullOrWhiteSpace(company.Slug) ? null : company.Slug.Trim().ToLowerInvariant();
 
             // Constrained to what can sit in a URL path segment unescaped, since that is the only
@@ -124,13 +112,8 @@ public class CompanyLocationService(
                     ThemeColorHex = normalizedColor,
                     SecondaryColorHex = normalizedSecondaryColor,
                     Slug = normalizedSlug,
-                    StripeAccountId = normalizedStripeAccountId,
-                    LegalName = Trimmed(company.LegalName),
-                    CompanyNumber = Trimmed(company.CompanyNumber),
-                    RegisteredAddress = Trimmed(company.RegisteredAddress),
-                    ContactEmail = Trimmed(company.ContactEmail),
-                    ContactPhone = Trimmed(company.ContactPhone),
-                    CollectionHoldMinutes = company.CollectionHoldMinutes,
+                    // Not settable here even on create - see SetStripeAccountIdAsync.
+                    StripeAccountId = null,
                     LogoFileId = company.LogoFileId,
                     BackgroundImageFileId = company.BackgroundImageFileId,
                     FaviconFileId = company.FaviconFileId
@@ -148,13 +131,6 @@ public class CompanyLocationService(
                 target.ThemeColorHex = normalizedColor;
                 target.SecondaryColorHex = normalizedSecondaryColor;
                 target.Slug = normalizedSlug;
-                target.StripeAccountId = normalizedStripeAccountId;
-                target.LegalName = Trimmed(company.LegalName);
-                target.CompanyNumber = Trimmed(company.CompanyNumber);
-                target.RegisteredAddress = Trimmed(company.RegisteredAddress);
-                target.ContactEmail = Trimmed(company.ContactEmail);
-                target.ContactPhone = Trimmed(company.ContactPhone);
-                target.CollectionHoldMinutes = company.CollectionHoldMinutes;
                 target.LogoFileId = company.LogoFileId;
                 target.BackgroundImageFileId = company.BackgroundImageFileId;
                 target.FaviconFileId = company.FaviconFileId;

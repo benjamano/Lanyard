@@ -100,6 +100,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyAccessService, CompanyAccessService>();
+builder.Services.AddScoped<ICompanyPayoutAccountService, CompanyPayoutAccountService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
 builder.Services.AddScoped<ICompanyLegalDocumentService, CompanyLegalDocumentService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();

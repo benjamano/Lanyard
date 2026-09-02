@@ -5,6 +5,7 @@
 @inject INotificationService ToastService
 @inject ITenantDirectoryService _tenantDirectoryService
 @inject ICompanyAccessService _companyAccess
+@inject ICompanyPayoutAccountService _payoutAccountService
 
 <div class="company-location-manager">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
@@ -34,35 +35,33 @@
                             Used to reach this company's public site before its own domain is pointed at us.
                         </FluentText>
 
-                        <FluentTextInput @bind-Value="companyStripeAccountId" Label="Stripe account ID"
-                                         Placeholder="acct_..." Class="clm-full-width" Margin="@Margin.Bottom0" />
+                        @* Read-only here on purpose. Repointing this sends every future payment
+                           to a different bank account, so it is changed through its own action
+                           that requires an admin and a fresh two-factor code - see
+                           ICompanyPayoutAccountService. *@
+                        <FluentText As="@TextTag.H5">Payout account</FluentText>
                         <FluentText Class="clm-empty-note">
                             The company's own Stripe account. Customer payments go straight to it; Lanyard
                             never holds the money. Until this is set, the venue can't take QR orders.
                         </FluentText>
-
-                        @* Shown on the customer-facing ordering terms. Held per company so one
-                           terms template serves every tenant - a trader selling to consumers
-                           online has to identify itself, and that identity differs per company. *@
-                        <FluentText As="@TextTag.H5">Legal details</FluentText>
-                        <FluentText Class="clm-empty-note">
-                            Published on this company's ordering terms. Customers can't order until
-                            the trading name, registered address and contact email are filled in.
-                        </FluentText>
-
-                        <FluentTextInput @bind-Value="companyLegalName" Label="Registered trading name"
-                                         Placeholder="Play2Day Leisure Ltd" Class="clm-full-width" />
-                        <FluentTextInput @bind-Value="companyNumber" Label="Company number"
-                                         Placeholder="12345678" Class="clm-full-width" />
-                        <FluentTextInput @bind-Value="companyRegisteredAddress" Label="Registered address"
-                                         Placeholder="1 Example Street, Ipswich, IP1 1AA" Class="clm-full-width" />
-                        <FluentTextInput @bind-Value="companyContactEmail" Label="Contact email"
-                                         Placeholder="hello@play2day.co.uk" Class="clm-full-width" />
-                        <FluentTextInput @bind-Value="companyContactPhone" Label="Contact phone"
-                                         Placeholder="01473 000000" Class="clm-full-width" />
-                        <FluentNumberInput @bind-Value="companyCollectionHoldMinutes"
-                                           Label="Hold uncollected orders for (minutes)" Min="5" Max="240"
-                                           Class="clm-full-width" />
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                                     VerticalAlignment="VerticalAlignment.Center">
+                            <FluentText>
+                                @(string.IsNullOrWhiteSpace(companyStripeAccountId) ? "Not set" : companyStripeAccountId)
+                            </FluentText>
+                            @if (_access.IsAdmin && selectedCompany is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ChangePayoutAccountAsync">
+                                    Change
+                                </FluentButton>
+                            }
+                        </FluentStack>
+                        @if (!_access.IsAdmin)
+                        {
+                            <FluentText Class="clm-empty-note">
+                                Only an administrator can change this.
+                            </FluentText>
+                        }
 
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnLogoUploaded" Label="Upload a logo" MaximumFileCount="1"
@@ -274,12 +273,6 @@
     private string companySecondaryColor = string.Empty;
     private string companySlug = string.Empty;
     private string companyStripeAccountId = string.Empty;
-    private string companyLegalName = string.Empty;
-    private string companyNumber = string.Empty;
-    private string companyRegisteredAddress = string.Empty;
-    private string companyContactEmail = string.Empty;
-    private string companyContactPhone = string.Empty;
-    private int companyCollectionHoldMinutes = 30;
     private Guid? companyLogoFileId;
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
@@ -360,6 +353,48 @@
         }
     }
 
+    private async Task ChangePayoutAccountAsync()
+    {
+        if (selectedCompany is null)
+        {
+            return;
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ChangePayoutAccountDialog>(options =>
+        {
+            options.Modal = true;
+            options.Width = "460px";
+            options.Parameters.Add(nameof(ChangePayoutAccountDialog.CompanyName), selectedCompany.Name);
+            options.Parameters.Add(nameof(ChangePayoutAccountDialog.CurrentAccountId), companyStripeAccountId);
+        });
+
+        if (dialogResult.Cancelled || dialogResult.Value is not PayoutAccountChange change)
+        {
+            return;
+        }
+
+        Result<bool> result = await _payoutAccountService.SetStripeAccountIdAsync(
+            selectedCompany.Id, change.AccountId, change.Code);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError(result.Error ?? "Couldn't change the payout account.");
+
+            return;
+        }
+
+        ToastService.ShowSuccess("Payout account updated.");
+
+        await LoadCompaniesAsync();
+
+        Company? refreshed = companies.FirstOrDefault(c => c.Id == selectedCompany.Id);
+
+        if (refreshed is not null)
+        {
+            await SelectCompany(refreshed);
+        }
+    }
+
     private async Task SaveCompany()
     {
         if (string.IsNullOrWhiteSpace(companyName))
@@ -378,13 +413,6 @@
             ThemeColorHex = companyThemeColor,
             SecondaryColorHex = companySecondaryColor,
             Slug = companySlug,
-            StripeAccountId = companyStripeAccountId,
-            LegalName = companyLegalName,
-            CompanyNumber = companyNumber,
-            RegisteredAddress = companyRegisteredAddress,
-            ContactEmail = companyContactEmail,
-            ContactPhone = companyContactPhone,
-            CollectionHoldMinutes = companyCollectionHoldMinutes,
             LogoFileId = companyLogoFileId,
             BackgroundImageFileId = companyBackgroundImageFileId,
             FaviconFileId = companyFaviconFileId
@@ -432,12 +460,6 @@
         companySecondaryColor = string.Empty;
         companySlug = string.Empty;
         companyStripeAccountId = string.Empty;
-        companyLegalName = string.Empty;
-        companyNumber = string.Empty;
-        companyRegisteredAddress = string.Empty;
-        companyContactEmail = string.Empty;
-        companyContactPhone = string.Empty;
-        companyCollectionHoldMinutes = 30;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
         companyBackgroundImageFileId = null;
@@ -451,12 +473,6 @@
         companySecondaryColor = company.SecondaryColorHex ?? string.Empty;
         companySlug = company.Slug ?? string.Empty;
         companyStripeAccountId = company.StripeAccountId ?? string.Empty;
-        companyLegalName = company.LegalName ?? string.Empty;
-        companyNumber = company.CompanyNumber ?? string.Empty;
-        companyRegisteredAddress = company.RegisteredAddress ?? string.Empty;
-        companyContactEmail = company.ContactEmail ?? string.Empty;
-        companyContactPhone = company.ContactPhone ?? string.Empty;
-        companyCollectionHoldMinutes = company.CollectionHoldMinutes;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
         companyFaviconFileId = company.FaviconFileId;

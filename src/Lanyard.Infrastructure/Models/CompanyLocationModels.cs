@@ -54,17 +54,10 @@ namespace Lanyard.Infrastructure.Models
         /// tenant - the E-Commerce Regulations require a trader selling to consumers online to
         /// identify itself, and that identity differs per company by definition.
         /// </summary>
-        public string? LegalName { get; set; }
-        public string? CompanyNumber { get; set; }
-        public string? RegisteredAddress { get; set; }
-        public string? ContactEmail { get; set; }
-        public string? ContactPhone { get; set; }
-
-        /// <summary>
-        /// How long a ready order is held before it may be disposed of. Appears in the terms, so
-        /// it is a number the venue commits to rather than one hardcoded on their behalf.
-        /// </summary>
-        public int CollectionHoldMinutes { get; set; } = 30;
+// Registered name, company number, address, contact details and the collection window
+        // used to live here. They existed only to be printed into the legal documents and to
+        // prove the venue had identified itself; both jobs now belong to the documents
+        // themselves, which staff edit directly.
 
         public virtual List<Location> Locations { get; set; } = [];
         public virtual List<CompanyDomain> Domains { get; set; } = [];
@@ -101,6 +94,17 @@ namespace Lanyard.Infrastructure.Models
         /// put script on a customer's checkout.
         /// </summary>
         public required string BodyHtml { get; set; }
+
+        /// <summary>
+        /// Set when someone has actively confirmed this document is ready to show customers.
+        ///
+        /// This is the readiness signal the ordering path checks, and it replaced a set of
+        /// company fields (registered name, address, contact email) that were only ever used to
+        /// prove the same thing. A document is what the customer actually reads, so publishing it
+        /// is a truer statement of "we have told customers who we are" than a filled-in textbox
+        /// that may or may not appear in the wording.
+        /// </summary>
+        public bool IsPublished { get; set; }
 
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }

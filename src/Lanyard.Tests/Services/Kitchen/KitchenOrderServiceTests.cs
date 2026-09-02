@@ -65,6 +65,26 @@ public class KitchenOrderServiceTests
     /// Places an order and takes the payment, leaving it as the kitchen would see it. Most tests
     /// care about an order that exists on the queue, not about the checkout mechanics.
     /// </summary>
+    /// <summary>
+    /// Publishes every customer-facing document for a company. Ordering is refused until all of
+    /// them are live, so a venue seeded without this cannot take an order at all.
+    /// </summary>
+    private static void PublishAllDocuments(ApplicationDbContext ctx, int companyId)
+    {
+        foreach (LegalDocumentType type in System.Enum.GetValues<LegalDocumentType>())
+        {
+            ctx.CompanyLegalDocuments.Add(new CompanyLegalDocument
+            {
+                CompanyId = companyId,
+                DocumentType = type,
+                BodyHtml = $"<p>{type} for company {companyId}.</p>",
+                IsPublished = true,
+                CreateDate = DateTime.UtcNow,
+                UpdateDate = DateTime.UtcNow
+            });
+        }
+    }
+
     private static async Task<CreateOrderResultDto> PlaceAndPayAsync(
         KitchenOrderService service,
         Fixture fixture,
@@ -102,12 +122,12 @@ public class KitchenOrderServiceTests
         {
             Name = companyName,
             IsActive = true,
-            StripeAccountId = stripeAccountId,
-            LegalName = $"{companyName} Leisure Ltd",
-            RegisteredAddress = "1 Cardinal Park, Ipswich, IP1 1AA",
-            ContactEmail = "hello@example.test"
+            StripeAccountId = stripeAccountId
         };
         ctx.Companies.Add(company);
+        await ctx.SaveChangesAsync();
+
+        PublishAllDocuments(ctx, company.Id);
         await ctx.SaveChangesAsync();
 
         Location location = new()
@@ -148,21 +168,24 @@ public class KitchenOrderServiceTests
     };
 
     /// <summary>
-    /// A company that has not published who it is cannot sell to a consumer at a distance: the
-    /// ordering terms render as "not published yet", so taking the money anyway would charge
-    /// somebody against terms they were never shown. The admin UI already promises this; for a
-    /// while it was the only place the rule existed.
+    /// A company that has not published its customer-facing documents cannot sell to a consumer
+    /// at a distance: those pages render as "not published yet", so taking the money anyway would
+    /// charge somebody against terms they were never shown.
     /// </summary>
     [TestMethod]
-    public async Task CreateOrderAsync_RefusesWhenTheCompanyHasNotPublishedItsLegalDetails()
+    public async Task CreateOrderAsync_RefusesUntilEveryDocumentIsPublished()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Fixture fixture = await SeedVenueAsync(options);
 
         await using (ApplicationDbContext ctx = new(options))
         {
-            Company company = await ctx.Companies.FirstAsync(c => c.Id == fixture.CompanyId);
-            company.RegisteredAddress = null;
+            // One document taken back to draft is enough. Every one of them is linked from the
+            // ordering flow, so a customer would reach a page saying "not published yet".
+            CompanyLegalDocument document = await ctx.CompanyLegalDocuments
+                .FirstAsync(d => d.CompanyId == fixture.CompanyId && d.DocumentType == LegalDocumentType.PrivacyPolicy);
+
+            document.IsPublished = false;
             await ctx.SaveChangesAsync();
         }
 

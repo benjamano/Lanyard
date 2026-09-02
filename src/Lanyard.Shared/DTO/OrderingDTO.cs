@@ -128,22 +128,21 @@ public class MenuItemOptionDto
 }
 
 /// <summary>
-/// A company's legal identity, for the customer-facing ordering terms.
+/// Whether a company is ready to sell, from the customer site's point of view.
+///
+/// Once carried the company's registered name, address and contact details so the ordering terms
+/// could be assembled from them. The documents now contain their own wording, so all that is
+/// left is the question the ordering flow actually asks: has this company published what a
+/// customer must be shown before buying?
 /// </summary>
 public class TenantLegalDetailsDto
 {
     public required string CompanyName { get; set; }
-    public string? LegalName { get; set; }
-    public string? CompanyNumber { get; set; }
-    public string? RegisteredAddress { get; set; }
-    public string? ContactEmail { get; set; }
-    public string? ContactPhone { get; set; }
-    public int CollectionHoldMinutes { get; set; }
 
     /// <summary>
-    /// False when the company has not filled in enough to identify itself. The terms page says
-    /// so plainly rather than rendering a document full of blanks, which would look like a bug
-    /// and satisfy nobody.
+    /// False until the ordering terms, refund policy and privacy policy have all been published.
+    /// The terms and privacy pages say so plainly rather than showing an unfinished draft, and
+    /// ordering is refused entirely.
     /// </summary>
     public bool IsComplete { get; set; }
 }

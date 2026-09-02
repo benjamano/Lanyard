@@ -10,6 +10,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Legal;
 
+/// <summary>Whether a company has saved its own copy of a document, and whether it is live.</summary>
+public record DocumentState(bool IsCustomised, bool IsPublished);
+
 public interface ICompanyLegalDocumentService
 {
     /// <summary>
@@ -25,6 +28,13 @@ public interface ICompanyLegalDocumentService
     Task<Result<string>> GetPublishedAsync(int companyId, LegalDocumentType type);
 
     Task<Result<bool>> SaveAsync(int companyId, LegalDocumentType type, string bodyHtml);
+
+    /// <summary>Whether a company has published every document a customer must be shown.</summary>
+    Task<Result<bool>> AreAllDocumentsPublishedAsync(int companyId);
+
+    Task<Result<DocumentState>> GetStateAsync(int companyId, LegalDocumentType type);
+
+    Task<Result<bool>> SetPublishedAsync(int companyId, LegalDocumentType type, bool isPublished);
 
     /// <summary>Discards the company's copy so the document falls back to Lanyard's wording.</summary>
     Task<Result<bool>> ResetToDefaultAsync(int companyId, LegalDocumentType type);
@@ -86,46 +96,114 @@ public class CompanyLegalDocumentService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            var company = await ctx.Companies
+            var document = await ctx.CompanyLegalDocuments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(c => c.Id == companyId && c.IsActive)
-                .Select(c => new
-                {
-                    c.Name,
-                    c.LegalName,
-                    c.CompanyNumber,
-                    c.RegisteredAddress,
-                    c.ContactEmail,
-                    c.ContactPhone,
-                    c.CollectionHoldMinutes,
-                    Body = c.LegalDocuments
-                        .Where(d => d.DocumentType == type)
-                        .Select(d => d.BodyHtml)
-                        .FirstOrDefault()
-                })
+                .Where(d => d.CompanyId == companyId && d.DocumentType == type)
+                .Select(d => new { d.BodyHtml, d.IsPublished })
                 .FirstOrDefaultAsync();
 
-            if (company is null)
+            // Unpublished, or never written, is withheld rather than shown. The defaults are a
+            // draft containing "[your registered address]", and putting that in front of a
+            // customer is worse than telling them plainly it is not ready.
+            if (document is null || !document.IsPublished)
             {
-                return Result<string>.Fail("Company not found.");
+                return Result<string>.Fail("This document has not been published yet.");
             }
 
-            string body = company.Body ?? LegalDocumentTemplates.Default(type);
-
-            return Result<string>.Ok(LegalDocumentTemplates.ApplyPlaceholders(
-                body,
-                company.Name,
-                company.LegalName,
-                company.CompanyNumber,
-                company.RegisteredAddress,
-                company.ContactEmail,
-                company.ContactPhone,
-                company.CollectionHoldMinutes));
+            return Result<string>.Ok(document.BodyHtml);
         }
         catch (Exception ex)
         {
             return Result<string>.Fail($"Failed to load the document: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Whether this company has published everything a customer has to be shown before buying.
+    /// All three, because all three are linked from the ordering flow.
+    /// </summary>
+    public async Task<Result<bool>> AreAllDocumentsPublishedAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int published = await ctx.CompanyLegalDocuments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .CountAsync(d => d.CompanyId == companyId && d.IsPublished);
+
+            return Result<bool>.Ok(published >= Enum.GetValues<LegalDocumentType>().Length);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to check the company's documents: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<DocumentState>> GetStateAsync(int companyId, LegalDocumentType type)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var document = await ctx.CompanyLegalDocuments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(d => d.CompanyId == companyId && d.DocumentType == type)
+                .Select(d => new { d.IsPublished })
+                .FirstOrDefaultAsync();
+
+            return Result<DocumentState>.Ok(new DocumentState(document is not null, document?.IsPublished ?? false));
+        }
+        catch (Exception ex)
+        {
+            return Result<DocumentState>.Fail($"Failed to check the document: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetPublishedAsync(int companyId, LegalDocumentType type, bool isPublished)
+    {
+        try
+        {
+            if (!await _companyAccess.CanAdministerCompanyAsync(companyId))
+            {
+                return Result<bool>.Fail("You don't have permission to edit this company's documents.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CompanyLegalDocument? document = await ctx.CompanyLegalDocuments
+                .FirstOrDefaultAsync(d => d.CompanyId == companyId && d.DocumentType == type);
+
+            if (document is null)
+            {
+                return Result<bool>.Fail("Save the document before publishing it.");
+            }
+
+            if (isPublished && LegalDocumentTemplates.HasUnfilledPrompt(document.BodyHtml))
+            {
+                // Refused rather than warned: the prompts are square-bracket blanks like
+                // "[your registered address]", and publishing one puts that text in front of a
+                // paying customer as the venue's own legal identity.
+                return Result<bool>.Fail(
+                    "This document still contains a [prompt] to fill in. Replace it before publishing.");
+            }
+
+            document.IsPublished = isPublished;
+            document.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Company {CompanyId} set {DocumentType} published to {IsPublished}",
+                companyId, type, isPublished);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to update the document: {ex.Message}");
         }
     }
 
@@ -187,6 +265,13 @@ public class CompanyLegalDocumentService(
             {
                 existing.BodyHtml = clean;
                 existing.UpdateDate = now;
+
+                // An edit that reintroduces a blank must not stay live. Unpublishing is safer
+                // than trusting the author to notice, and republishing is one click.
+                if (existing.IsPublished && LegalDocumentTemplates.HasUnfilledPrompt(clean))
+                {
+                    existing.IsPublished = false;
+                }
             }
 
             await ctx.SaveChangesAsync();
@@ -226,8 +311,9 @@ public class CompanyLegalDocumentService(
             }
 
             // Genuinely removed rather than flagged inactive: "no row" is what means "use
-            // Lanyard's wording", so a soft delete would leave the document in a third state
-            // that nothing else understands.
+            // Lanyard's draft", so a soft delete would leave the document in a third state that
+            // nothing else understands. Removing the row also unpublishes it, which is correct -
+            // the draft contains [blanks] and must not go back in front of customers.
             ctx.CompanyLegalDocuments.Remove(existing);
             await ctx.SaveChangesAsync();
 

@@ -27,6 +27,12 @@ namespace Lanyard.Application.Services.Authentication
         Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code);
         Task<Result<List<string>>> EnableEmailTwoFactorAsync();
         Task<Result<bool>> DisableTwoFactorAsync(string currentPassword);
+
+        /// <summary>
+        /// Re-checks the signed-in user's second factor before a single sensitive action. Not a
+        /// login: the user is already signed in, and this proves they are still at the keyboard.
+        /// </summary>
+        Task<Result<bool>> VerifySecondFactorAsync(string code);
         Task<Result<List<string>>> RegenerateRecoveryCodesAsync();
     }
 }

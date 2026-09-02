@@ -46,17 +46,7 @@ public class CompanyLegalDocumentServiceTests
     {
         await using ApplicationDbContext ctx = new(options);
 
-        Company company = new()
-        {
-            Name = name,
-            IsActive = true,
-            LegalName = $"{name} Leisure Ltd",
-            CompanyNumber = "09876543",
-            RegisteredAddress = "1 Cardinal Park, Ipswich, IP1 1AA",
-            ContactEmail = "hello@example.test",
-            ContactPhone = "01473 000000",
-            CollectionHoldMinutes = 20
-        };
+        Company company = new() { Name = name, IsActive = true };
 
         ctx.Companies.Add(company);
         await ctx.SaveChangesAsync();
@@ -65,11 +55,12 @@ public class CompanyLegalDocumentServiceTests
     }
 
     /// <summary>
-    /// Nothing was backfilled when documents became editable, so a company with no row has to
-    /// fall through to Lanyard's wording rather than publishing a blank page.
+    /// The defaults are a draft, not a finished document: they contain square-bracket blanks
+    /// only the venue can fill. Nothing is shown to a customer until someone has replaced them
+    /// and published.
     /// </summary>
     [TestMethod]
-    public async Task Published_FallsBackToTheDefaultWordingWhenNothingHasBeenEdited()
+    public async Task Published_RefusesUntilTheDocumentIsPublished()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         int companyId = await SeedCompanyAsync(options);
@@ -77,66 +68,132 @@ public class CompanyLegalDocumentServiceTests
         Result<string> result = await GetService(options)
             .GetPublishedAsync(companyId, LegalDocumentType.PrivacyPolicy);
 
-        Assert.IsTrue(result.IsSuccess, result.Error);
-        StringAssert.Contains(result.Data, "Privacy policy");
+        Assert.IsFalse(result.IsSuccess);
     }
 
     [TestMethod]
-    public async Task Published_SubstitutesTheCompanysOwnDetails()
+    public void EveryDefaultShipsWithABlankToFillIn()
     {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        int companyId = await SeedCompanyAsync(options);
-
-        Result<string> result = await GetService(options)
-            .GetPublishedAsync(companyId, LegalDocumentType.OrderingTerms);
-
-        Assert.IsTrue(result.IsSuccess, result.Error);
-        StringAssert.Contains(result.Data, "Play2Day Leisure Ltd");
-        StringAssert.Contains(result.Data, "1 Cardinal Park, Ipswich, IP1 1AA");
-        StringAssert.Contains(result.Data, "20 minutes");
-
-        // No token should survive into what a customer reads.
-        Assert.IsFalse(LegalDocumentTemplates.HasUnknownPlaceholder(result.Data!),
-            "A placeholder was left unsubstituted in the published document.");
+        foreach (LegalDocumentType type in System.Enum.GetValues<LegalDocumentType>())
+        {
+            Assert.IsTrue(
+                LegalDocumentTemplates.HasUnfilledPrompt(LegalDocumentTemplates.Default(type)),
+                $"{type}'s default has no prompt, so nothing tells the venue what to fill in.");
+        }
     }
 
     /// <summary>
-    /// One company's document must never be able to display another's identity, which is why
-    /// substitution happens server-side against the company that owns the document.
+    /// The whole point of the prompts. Publishing one would tell a paying customer the venue is
+    /// called "[your registered trading name]".
     /// </summary>
     [TestMethod]
-    public async Task Published_UsesEachCompanysOwnDetailsForTheSameTemplate()
-    {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        int play2Day = await SeedCompanyAsync(options, "Play2Day");
-        int partyman = await SeedCompanyAsync(options, "Partyman");
-
-        CompanyLegalDocumentService service = GetService(options);
-
-        Result<string> a = await service.GetPublishedAsync(play2Day, LegalDocumentType.OrderingTerms);
-        Result<string> b = await service.GetPublishedAsync(partyman, LegalDocumentType.OrderingTerms);
-
-        StringAssert.Contains(a.Data, "Play2Day Leisure Ltd");
-        Assert.IsFalse(a.Data!.Contains("Partyman"));
-        StringAssert.Contains(b.Data, "Partyman Leisure Ltd");
-        Assert.IsFalse(b.Data!.Contains("Play2Day"));
-    }
-
-    [TestMethod]
-    public async Task Save_ThenPublished_ReturnsTheEditedWording()
+    public async Task Publish_RefusesWhileABlankRemains()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         int companyId = await SeedCompanyAsync(options);
         CompanyLegalDocumentService service = GetService(options);
 
-        Result<bool> saved = await service.SaveAsync(
-            companyId, LegalDocumentType.RefundPolicy, "<h1>Refunds</h1><p>We refund within {{CollectionHoldMinutes}} minutes.</p>");
+        await service.SaveAsync(companyId, LegalDocumentType.OrderingTerms,
+            LegalDocumentTemplates.Default(LegalDocumentType.OrderingTerms));
 
-        Assert.IsTrue(saved.IsSuccess, saved.Error);
+        Result<bool> result = await service.SetPublishedAsync(companyId, LegalDocumentType.OrderingTerms, true);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "prompt");
+    }
+
+    /// <summary>
+    /// Documents written before substitution was removed still contain {{Tokens}}. Nothing fills
+    /// them in any more, so publishing one would print "{{ContactEmail}}" on a checkout page.
+    /// Caught on the live page during verification, not by a test, which is why there is one now.
+    /// </summary>
+    [TestMethod]
+    public async Task Publish_RefusesADocumentStillHoldingALegacyToken()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int companyId = await SeedCompanyAsync(options);
+        CompanyLegalDocumentService service = GetService(options);
+
+        await service.SaveAsync(companyId, LegalDocumentType.RefundPolicy,
+            "<h1>Refunds</h1><p>Contact us at {{ContactEmail}}.</p>");
+
+        Result<bool> result = await service.SetPublishedAsync(companyId, LegalDocumentType.RefundPolicy, true);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsFalse((await service.GetPublishedAsync(companyId, LegalDocumentType.RefundPolicy)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Publish_ThenPublished_ReturnsTheEditedWording()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int companyId = await SeedCompanyAsync(options);
+        CompanyLegalDocumentService service = GetService(options);
+
+        await service.SaveAsync(companyId, LegalDocumentType.RefundPolicy,
+            "<h1>Refunds</h1><p>We refund within 20 minutes.</p>");
+
+        Assert.IsTrue((await service.SetPublishedAsync(companyId, LegalDocumentType.RefundPolicy, true)).IsSuccess);
 
         Result<string> published = await service.GetPublishedAsync(companyId, LegalDocumentType.RefundPolicy);
 
+        Assert.IsTrue(published.IsSuccess, published.Error);
         StringAssert.Contains(published.Data, "We refund within 20 minutes.");
+    }
+
+    /// <summary>
+    /// An edit that puts a blank back must not stay live. Trusting the author to notice is how a
+    /// published page quietly starts saying "[your registered address]" again.
+    /// </summary>
+    [TestMethod]
+    public async Task Save_UnpublishesWhenAnEditReintroducesABlank()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int companyId = await SeedCompanyAsync(options);
+        CompanyLegalDocumentService service = GetService(options);
+
+        await service.SaveAsync(companyId, LegalDocumentType.PrivacyPolicy, "<p>All filled in.</p>");
+        await service.SetPublishedAsync(companyId, LegalDocumentType.PrivacyPolicy, true);
+
+        await service.SaveAsync(companyId, LegalDocumentType.PrivacyPolicy, "<p>Operated by [your name].</p>");
+
+        Result<DocumentState> state = await service.GetStateAsync(companyId, LegalDocumentType.PrivacyPolicy);
+
+        Assert.IsFalse(state.Data!.IsPublished);
+        Assert.IsFalse((await service.GetPublishedAsync(companyId, LegalDocumentType.PrivacyPolicy)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Publish_RefusesForADocumentThatWasNeverSaved()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int companyId = await SeedCompanyAsync(options);
+
+        Result<bool> result = await GetService(options)
+            .SetPublishedAsync(companyId, LegalDocumentType.OrderingTerms, true);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task AreAllDocumentsPublished_OnlyWhenEveryOneIs()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int companyId = await SeedCompanyAsync(options);
+        CompanyLegalDocumentService service = GetService(options);
+
+        LegalDocumentType[] all = System.Enum.GetValues<LegalDocumentType>();
+
+        foreach (LegalDocumentType type in all)
+        {
+            Assert.IsFalse((await service.AreAllDocumentsPublishedAsync(companyId)).Data,
+                "Reported ready before every document was published.");
+
+            await service.SaveAsync(companyId, type, $"<p>{type}, fully written out.</p>");
+            await service.SetPublishedAsync(companyId, type, true);
+        }
+
+        Assert.IsTrue((await service.AreAllDocumentsPublishedAsync(companyId)).Data);
     }
 
     /// <summary>
@@ -149,9 +206,8 @@ public class CompanyLegalDocumentServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         int companyId = await SeedCompanyAsync(options);
-        CompanyLegalDocumentService service = GetService(options);
 
-        await service.SaveAsync(companyId, LegalDocumentType.PrivacyPolicy,
+        await GetService(options).SaveAsync(companyId, LegalDocumentType.PrivacyPolicy,
             "<p>Hello</p><script>alert('xss')</script><img src=x onerror=\"alert(1)\">");
 
         await using ApplicationDbContext ctx = new(options);
@@ -164,7 +220,7 @@ public class CompanyLegalDocumentServiceTests
 
     /// <summary>
     /// Clearing the box is refused rather than treated as a reset: silently republishing
-    /// Lanyard's wording would put back text the author had just deleted on purpose.
+    /// Lanyard's draft would put back text the author had just deleted on purpose.
     /// </summary>
     [TestMethod]
     public async Task Save_RefusesAnEmptyDocument()
@@ -172,30 +228,32 @@ public class CompanyLegalDocumentServiceTests
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         int companyId = await SeedCompanyAsync(options);
 
-        Result<bool> result = await GetService(options)
-            .SaveAsync(companyId, LegalDocumentType.OrderingTerms, "   ");
-
-        Assert.IsFalse(result.IsSuccess);
+        Assert.IsFalse((await GetService(options)
+            .SaveAsync(companyId, LegalDocumentType.OrderingTerms, "   ")).IsSuccess);
     }
 
+    /// <summary>
+    /// Resetting drops the company's copy, which also takes it off the customer site - the draft
+    /// it falls back to contains blanks and must not be shown.
+    /// </summary>
     [TestMethod]
-    public async Task Reset_RestoresTheDefaultWording()
+    public async Task Reset_RestoresTheDraftAndStopsPublishing()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         int companyId = await SeedCompanyAsync(options);
         CompanyLegalDocumentService service = GetService(options);
 
         await service.SaveAsync(companyId, LegalDocumentType.PrivacyPolicy, "<p>Our own words.</p>");
-        Assert.IsTrue((await service.IsCustomisedAsync(companyId, LegalDocumentType.PrivacyPolicy)).Data);
+        await service.SetPublishedAsync(companyId, LegalDocumentType.PrivacyPolicy, true);
 
-        Result<bool> reset = await service.ResetToDefaultAsync(companyId, LegalDocumentType.PrivacyPolicy);
+        Assert.IsTrue((await service.ResetToDefaultAsync(companyId, LegalDocumentType.PrivacyPolicy)).IsSuccess);
 
-        Assert.IsTrue(reset.IsSuccess, reset.Error);
-        Assert.IsFalse((await service.IsCustomisedAsync(companyId, LegalDocumentType.PrivacyPolicy)).Data);
+        Result<DocumentState> state = await service.GetStateAsync(companyId, LegalDocumentType.PrivacyPolicy);
+        Assert.IsFalse(state.Data!.IsCustomised);
+        Assert.IsFalse(state.Data.IsPublished);
 
-        Result<string> published = await service.GetPublishedAsync(companyId, LegalDocumentType.PrivacyPolicy);
-        Assert.IsFalse(published.Data!.Contains("Our own words."));
-        StringAssert.Contains(published.Data, "data controller");
+        StringAssert.Contains(
+            (await service.GetForEditingAsync(companyId, LegalDocumentType.PrivacyPolicy)).Data, "data controller");
     }
 
     [TestMethod]
@@ -211,27 +269,5 @@ public class CompanyLegalDocumentServiceTests
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(1, await ctx.CompanyLegalDocuments.CountAsync());
         StringAssert.Contains((await ctx.CompanyLegalDocuments.SingleAsync()).BodyHtml, "Second.");
-    }
-
-    /// <summary>
-    /// Every default has to be publishable as shipped - a token nobody substitutes would appear
-    /// verbatim on a customer's screen.
-    /// </summary>
-    [TestMethod]
-    public async Task EveryDefaultDocumentPublishesWithNoLeftoverPlaceholders()
-    {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        int companyId = await SeedCompanyAsync(options);
-        CompanyLegalDocumentService service = GetService(options);
-
-        foreach (LegalDocumentType type in Enum.GetValues<LegalDocumentType>())
-        {
-            Result<string> published = await service.GetPublishedAsync(companyId, type);
-
-            Assert.IsTrue(published.IsSuccess, $"{type}: {published.Error}");
-            Assert.IsFalse(string.IsNullOrWhiteSpace(published.Data), $"{type} published as empty.");
-            Assert.IsFalse(LegalDocumentTemplates.HasUnknownPlaceholder(published.Data!),
-                $"{type} still contains an unsubstituted placeholder.");
-        }
     }
 }

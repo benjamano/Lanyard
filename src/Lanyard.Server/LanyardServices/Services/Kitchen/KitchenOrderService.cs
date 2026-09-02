@@ -148,9 +148,7 @@ public class KitchenOrderService(
                     t.Location.OrderingEnabled,
                     t.Location.CompanyId,
                     StripeAccountId = t.Location.Company!.StripeAccountId,
-                    t.Location.Company.LegalName,
-                    t.Location.Company.RegisteredAddress,
-                    t.Location.Company.ContactEmail
+                    PublishedDocuments = t.Location.Company.LegalDocuments.Count(d => d.IsPublished)
                 })
                 .FirstOrDefaultAsync();
 
@@ -296,16 +294,14 @@ public class KitchenOrderService(
                 return Result<CreateOrderResultDto>.Fail("This venue isn't set up to take payments yet. Please order at the till.");
             }
 
-            // Selling to a consumer at a distance means identifying the trader before they buy,
-            // not afterwards. Without these the ordering terms render as "not published yet", so
-            // taking money anyway would charge somebody against terms they were never shown.
-            // Checked here rather than only in the admin UI, which already promises this.
-            if (string.IsNullOrWhiteSpace(table.LegalName)
-                || string.IsNullOrWhiteSpace(table.RegisteredAddress)
-                || string.IsNullOrWhiteSpace(table.ContactEmail))
+            // Selling to a consumer at a distance means telling them who they are buying from,
+            // and on what terms, before they buy. Until every customer-facing document is
+            // published those pages read "not published yet", so taking money anyway would charge
+            // somebody against terms they were never shown.
+            if (table.PublishedDocuments < System.Enum.GetValues<LegalDocumentType>().Length)
             {
                 _logger.LogWarning(
-                    "Refused an order for location {LocationId}: company {CompanyId} has not published its legal details",
+                    "Refused an order for location {LocationId}: company {CompanyId} has not published all of its customer-facing documents",
                     table.LocationId, table.CompanyId);
 
                 return Result<CreateOrderResultDto>.Fail("This venue isn't quite ready to take orders. Please order at the till.");

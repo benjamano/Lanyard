@@ -69,22 +69,37 @@ public class MenuItemOptionOrderingTests
     /// paid extra. Beans carry an allergen the meal itself does not, which is what makes the
     /// combined declaration worth asserting.
     /// </summary>
+    /// <summary>
+    /// Publishes every customer-facing document for a company. Ordering is refused until all of
+    /// them are live, so a venue seeded without this cannot take an order at all.
+    /// </summary>
+    private static void PublishAllDocuments(ApplicationDbContext ctx, int companyId)
+    {
+        foreach (LegalDocumentType type in System.Enum.GetValues<LegalDocumentType>())
+        {
+            ctx.CompanyLegalDocuments.Add(new CompanyLegalDocument
+            {
+                CompanyId = companyId,
+                DocumentType = type,
+                BodyHtml = $"<p>{type} for company {companyId}.</p>",
+                IsPublished = true,
+                CreateDate = DateTime.UtcNow,
+                UpdateDate = DateTime.UtcNow
+            });
+        }
+    }
+
     private static async Task<Fixture> SeedMealAsync(DbContextOptions<ApplicationDbContext> options)
     {
         await using ApplicationDbContext ctx = new(options);
 
-        Company company = new()
-        {
-            Name = "Play2Day",
-            IsActive = true,
-            StripeAccountId = "acct_test",
-            // Required before a venue may take orders at all - see
-            // KitchenOrderServiceTests.CreateOrderAsync_RefusesWhenTheCompanyHasNotPublishedItsLegalDetails.
-            LegalName = "Play2Day Leisure Ltd",
-            RegisteredAddress = "1 Cardinal Park, Ipswich, IP1 1AA",
-            ContactEmail = "hello@example.test"
-        };
+        Company company = new() { Name = "Play2Day", IsActive = true, StripeAccountId = "acct_test" };
         ctx.Companies.Add(company);
+        await ctx.SaveChangesAsync();
+
+        // Required before a venue may take orders at all - see
+        // KitchenOrderServiceTests.CreateOrderAsync_RefusesUntilEveryDocumentIsPublished.
+        PublishAllDocuments(ctx, company.Id);
         await ctx.SaveChangesAsync();
 
         Location location = new() { CompanyId = company.Id, Name = "Ipswich", IsActive = true, OrderingEnabled = true };

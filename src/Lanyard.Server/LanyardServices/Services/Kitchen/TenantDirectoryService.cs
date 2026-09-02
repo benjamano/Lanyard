@@ -5,6 +5,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -98,10 +99,16 @@ public class TenantDirectoryService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Company? company = await ctx.Companies
+            var company = await ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(c => c.Id == companyId && c.IsActive);
+                .Where(c => c.Id == companyId && c.IsActive)
+                .Select(c => new
+                {
+                    c.Name,
+                    PublishedDocuments = c.LegalDocuments.Count(d => d.IsPublished)
+                })
+                .FirstOrDefaultAsync();
 
             if (company is null)
             {
@@ -111,24 +118,16 @@ public class TenantDirectoryService(
             return Result<TenantLegalDetailsDto>.Ok(new TenantLegalDetailsDto
             {
                 CompanyName = company.Name,
-                LegalName = company.LegalName,
-                CompanyNumber = company.CompanyNumber,
-                RegisteredAddress = company.RegisteredAddress,
-                ContactEmail = company.ContactEmail,
-                ContactPhone = company.ContactPhone,
-                CollectionHoldMinutes = company.CollectionHoldMinutes,
 
-                // Trading identity and a contact route are the parts a consumer-facing trader
-                // has to publish; without them the terms page says so rather than rendering a
-                // document full of blanks.
-                IsComplete = !string.IsNullOrWhiteSpace(company.LegalName)
-                    && !string.IsNullOrWhiteSpace(company.RegisteredAddress)
-                    && !string.IsNullOrWhiteSpace(company.ContactEmail)
+                // Every document, because every one of them is linked from the ordering flow.
+                IsComplete = company.PublishedDocuments >= System.Enum.GetValues<LegalDocumentType>().Length
             });
         }
         catch (Exception ex)
         {
-            return Result<TenantLegalDetailsDto>.Fail($"Failed to retrieve company details: {ex.Message}");
+            _logger.LogError(ex, "Failed to load legal details for company {CompanyId}", companyId);
+
+            return Result<TenantLegalDetailsDto>.Fail($"Failed to load legal details: {ex.Message}");
         }
     }
 
