@@ -150,6 +150,14 @@ namespace Lanyard.API.Controllers
                 return NotFound();
             }
 
+            // The table is real; we just could not establish whether the kitchen is taking
+            // orders. 503 rather than 404 so the customer is offered "try again" instead of
+            // being told their QR code is wrong, or that a venue standing open is shut.
+            if (result.Data.OrderingOpen is null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
             return Ok(result.Data);
         }
 

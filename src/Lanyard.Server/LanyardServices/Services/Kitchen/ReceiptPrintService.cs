@@ -44,12 +44,6 @@ public class ReceiptPrintService(
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<ReceiptPrintService> _logger = logger;
 
-    /// <summary>
-    /// Must match the name the kiosk registers with connection.On - a mismatch drops the event
-    /// silently with no error at either end.
-    /// </summary>
-    public const string PrintCommand = "PrintKitchenReceipt";
-
     public async Task PrintOrderAsync(int orderId)
     {
         try
@@ -71,7 +65,7 @@ public class ReceiptPrintService(
             var venue = await ctx.Locations
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(l => l.Id == order.LocationId)
+                .Where(l => l.Id == order.LocationId && l.IsActive)
                 .Select(l => new { l.Name, l.TimeZoneId, l.FulfilmentMode, l.ReceiptPrinterClientId })
                 .FirstOrDefaultAsync();
 
@@ -81,9 +75,33 @@ public class ReceiptPrintService(
                 return;
             }
 
+            // Checked again at send time, not just when the printer was chosen. A kiosk that is
+            // physically moved to another site keeps its id, so without this the old venue's
+            // tickets would quietly follow the hardware to its new home.
+            bool kioskIsAtThisVenue = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(c => c.Id == printerClientId && c.LocationId == order.LocationId);
+
+            if (!kioskIsAtThisVenue)
+            {
+                _logger.LogWarning(
+                    "Order {OrderId} was not printed: kiosk {ClientId} is no longer assigned to location {LocationId}",
+                    orderId, printerClientId, order.LocationId);
+
+                return;
+            }
+
+            // Asked of the live hub registry, not of the client row. MostRecentConnectionId
+            // survives a disconnect and is served from a cache, so a kiosk that is switched off
+            // still produces a plausible-looking connection id - and sending to a connection id
+            // the hub does not know is a silent no-op, which would have this logging every lost
+            // ticket as a success.
+            Result<bool> isConnected = await _clientService.IsClientConnectedAsync(printerClientId);
             Result<string?> connection = await _clientService.GetClientCurrentConnectionIdAsync(printerClientId);
 
-            if (!connection.Success || string.IsNullOrWhiteSpace(connection.Data))
+            if (!isConnected.IsSuccess || !isConnected.Data
+                || !connection.IsSuccess || string.IsNullOrWhiteSpace(connection.Data))
             {
                 // Warning rather than error: a kiosk that is off or restarting is an ordinary
                 // state, but staff need to know tickets are not coming out.
@@ -94,9 +112,24 @@ public class ReceiptPrintService(
                 return;
             }
 
+            // Claims the print before sending it. A conditional update is atomic in the database,
+            // so of two callers reconciling the same payment at the same moment exactly one sees
+            // a row affected and exactly one ticket reaches the pass.
+            int claimed = await ctx.KitchenOrders
+                .Where(o => o.Id == orderId && o.ReceiptPrintedDate == null)
+                .ExecuteUpdateAsync(o => o.SetProperty(x => x.ReceiptPrintedDate, DateTime.UtcNow));
+
+            if (claimed == 0)
+            {
+                _logger.LogInformation(
+                    "Order {OrderId} already has a printed ticket; not printing a second one", orderId);
+
+                return;
+            }
+
             KitchenReceiptDto receipt = BuildReceipt(order, venue.Name, venue.TimeZoneId, venue.FulfilmentMode);
 
-            await _hubContext.Clients.Client(connection.Data).SendAsync(PrintCommand, receipt);
+            await _hubContext.Clients.Client(connection.Data).SendAsync(KitchenPrinting.PrintCommand, receipt);
 
             _logger.LogInformation("Sent order {OrderId} to the receipt printer for location {LocationId}",
                 orderId, order.LocationId);

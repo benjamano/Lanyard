@@ -267,6 +267,14 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasForeignKey(x => x.ReceiptPrinterClientId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Which venue a kiosk sits in. Retiring the venue leaves the hardware, so the kiosk
+            // survives with no venue rather than being deleted along with it.
+            modelBuilder.Entity<Client>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             modelBuilder.Entity<MenuCategory>()
                 .HasOne(x => x.Location)
                 .WithMany()

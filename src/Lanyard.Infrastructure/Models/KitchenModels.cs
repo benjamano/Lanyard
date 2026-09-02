@@ -236,6 +236,18 @@ namespace Lanyard.Infrastructure.Models
         /// </summary>
         public DateTime? ReadyDate { get; set; }
 
+        /// <summary>
+        /// When a kitchen ticket was printed for this order, and the claim that stops a second
+        /// one being printed.
+        ///
+        /// Payment confirmation can genuinely run twice at once - Stripe's webhook and the
+        /// customer's own status poll can reconcile the same payment in the same instant - and
+        /// the kitchen screen absorbs that because it keys tickets on order id. Paper cannot:
+        /// two tickets on the pass means the order gets cooked twice. Claimed with a conditional
+        /// update so only one caller can win it.
+        /// </summary>
+        public DateTime? ReceiptPrintedDate { get; set; }
+
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
 

@@ -123,6 +123,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             await ctx.SaveChangesAsync();
 
+            // Every connect and disconnect writes MostRecentConnectionId through here, so this is
+            // the one place that can keep the connection-id cache honest. Without it a kiosk that
+            // restarts is addressed at its old connection id for up to ten minutes, and sending
+            // to a connection the hub has never heard of fails silently.
+            _cache.Remove(updatedClient.Id);
+
             return Result<Client?>.Ok(updatedClient);
         }
         catch (Exception ex)
@@ -157,6 +163,44 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             return Result<IEnumerable<Client>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ClientConnectedDTO>>> GetClientsForLocationAsync(int locationId)
+    {
+        try
+        {
+            List<string> ids = GetConnectedConnectionIds().ToList();
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ClientConnectedDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId)
+                .Select(x => new ClientConnectedDTO
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Notes = x.Notes,
+                    LocationId = x.LocationId,
+                    MostRecentIpAddress = x.MostRecentIpAddress,
+                    MostRecentConnectionId = x.MostRecentConnectionId,
+                    LastLogin = x.LastLogin,
+                    LastUpdateDate = x.LastUpdateDate,
+                    LastDisconnectDate = x.LastDisconnectDate,
+                    CreateDate = x.CreateDate,
+                    IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
+                })
+                .ToListAsync();
+
+            return Result<IEnumerable<ClientConnectedDTO>>.Ok(clients);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error getting clients for location {LocationId}: {Message}", locationId, ex.Message);
+
+            return Result<IEnumerable<ClientConnectedDTO>>.Fail(ex.Message);
         }
     }
 

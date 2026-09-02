@@ -67,8 +67,16 @@
                                   ValueChanged="OnReceiptPrinterChangedAsync"
                                   Style="max-width: 360px;" />
                     <FluentText Class="kitchen-admin__hint">
-                        The kiosk that prints tickets for this kitchen. It prints as soon as a
-                        payment clears. Leave it unset to work from the Orders screen alone.
+                        @if (_clients.Count == 0)
+                        {
+                            @:No kiosks are assigned to this venue yet. Assign one on the Clients
+                            @:page first, then pick it here.
+                        }
+                        else
+                        {
+                            @:The kiosk that prints tickets for this kitchen. It prints as soon as
+                            @:a payment clears. Leave it unset to work from the Orders screen alone.
+                        }
                     </FluentText>
 
                     @* The timetable, below the switch it defers to. Windows rather than one pair
@@ -386,17 +394,17 @@
 
         _openingHours = hours.IsSuccess && hours.Data is not null ? hours.Data : [];
 
-        if (_clients.Count == 0)
-        {
-            Result<IEnumerable<ClientConnectedDTO>> clients = await _clientService.GetClientsAsync();
+        // Scoped to this venue, not the whole platform. Reloaded on every venue change rather
+        // than cached, because the list is a different list for each one.
+        Result<IEnumerable<ClientConnectedDTO>> clients =
+            await _clientService.GetClientsForLocationAsync(_selectedLocation.Id);
 
-            // ClientConnectedDTO derives from Client, so the picker binds to the base type and
-            // does not care whether a kiosk happens to be online right now - a printer that is
-            // switched off at configuration time is still the right printer.
-            _clients = clients.IsSuccess && clients.Data is not null
-                ? [.. clients.Data.OrderBy(c => c.Name).Cast<Client>()]
-                : [];
-        }
+        // ClientConnectedDTO derives from Client, so the picker binds to the base type and
+        // does not care whether a kiosk happens to be online right now - a printer that is
+        // switched off at configuration time is still the right printer.
+        _clients = clients.IsSuccess && clients.Data is not null
+            ? [.. clients.Data.OrderBy(c => c.Name).Cast<Client>()]
+            : [];
     }
 
     private async Task OnFulfilmentModeChangedAsync(string? value)

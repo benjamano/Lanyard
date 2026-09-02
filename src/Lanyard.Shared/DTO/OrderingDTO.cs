@@ -50,8 +50,13 @@ public class TableResolutionDto
     /// False when the venue is switched off or outside its opening hours. Distinct from
     /// OrderingEnabled, which is only the switch: a venue can be perfectly well set up for QR
     /// ordering and simply shut at four in the afternoon.
+    ///
+    /// Null means we could not work it out - the availability lookup itself failed. Deliberately
+    /// nullable rather than defaulting to false, because "we could not check" and "we are shut"
+    /// call for completely different things to be said to a customer, and collapsing the first
+    /// into the second tells a queue of people at an open venue that it is closed.
     /// </summary>
-    public bool OrderingOpen { get; set; }
+    public bool? OrderingOpen { get; set; }
 
     /// <summary>Why it is closed and when it opens again, written for the customer.</summary>
     public string? ClosedMessage { get; set; }
@@ -300,6 +305,19 @@ public class KitchenOrderTicketDto
 public class LegalDocumentDto
 {
     public required string Html { get; set; }
+}
+
+/// <summary>
+/// Names the SignalR command that carries a <see cref="KitchenReceiptDto"/> to a kiosk.
+///
+/// One constant referenced from both ends rather than a matching pair of string literals. A
+/// mismatch between a server SendAsync and a client connection.On is dropped silently with no
+/// error at either end, and this repository has already lost a production feature to exactly that
+/// kind of drift once - see ReachApiConstants.
+/// </summary>
+public static class KitchenPrinting
+{
+    public const string PrintCommand = "PrintKitchenReceipt";
 }
 
 /// <summary>

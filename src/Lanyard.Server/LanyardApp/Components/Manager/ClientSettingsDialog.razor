@@ -15,9 +15,24 @@
     <ChildContent>
         <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Small" Height="min(600px, 70dvh)">
             <FluentTab Header="General" IconStart="@(new Icons.Regular.Size16.Person())">
-                <EditForm Model="_updateClientModel" OnValidSubmit="SaveNewClientNameAsync">
+                <EditForm Model="_updateClientModel" OnValidSubmit="SaveGeneralSettingsAsync">
                     <FluentTextInput @bind-Value="_updateClientModel.Name" class="w-100" Label="Client Name"
                                      Placeholder="Enter new client name..." />
+
+                    @* Which venue this machine physically sits in. Kiosks were global before
+                       receipt printing, and this is what stops one venue being pointed at
+                       another company's printer. *@
+                    <FluentSelect TOption="Location" TValue="string"
+                                  Items="@_locations"
+                                  OptionText="@(l => l?.Name ?? "Not assigned")"
+                                  OptionValue="@(l => l?.Id.ToString() ?? string.Empty)"
+                                  Label="Venue"
+                                  Placeholder="Not assigned"
+                                  @bind-Value="_updateClientModel.LocationId" />
+                    <FluentText Class="mt-1">
+                        Only kiosks assigned to a venue can be chosen as that venue's receipt printer.
+                    </FluentText>
+
                     <FluentButton Class="mt-2" Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
                                   IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
                 </EditForm>
@@ -53,19 +68,30 @@
 
     private UpdateClientModel _updateClientModel = new();
     private string? _clientName;
+    private List<Location> _locations = [];
 
     private class UpdateClientModel
     {
         public string Name { get; set; } = string.Empty;
+
+        /// <summary>Bound as a string because that is what FluentSelect round-trips; empty means unassigned.</summary>
+        public string LocationId { get; set; } = string.Empty;
     }
 
     protected override async Task OnInitializedAsync()
     {
+        Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+
+        _locations = locations.IsSuccess && locations.Data is not null
+            ? [.. locations.Data.Where(l => l.IsActive).OrderBy(l => l.Name)]
+            : [];
+
         Result<Client?> result = await _clientService.GetClientFromIdAsync(ClientId);
 
         if (result.IsSuccess && result.Data != null)
         {
             _updateClientModel.Name = result.Data.Name;
+            _updateClientModel.LocationId = result.Data.LocationId?.ToString() ?? string.Empty;
             _clientName = result.Data.Name;
         }
         else
@@ -74,29 +100,30 @@
         }
     }
 
-    private async Task SaveNewClientNameAsync()
+    private async Task SaveGeneralSettingsAsync()
     {
         Result<Client?> getResult = await _clientService.GetClientFromIdAsync(ClientId);
 
         if (!getResult.IsSuccess || getResult.Data == null)
         {
-            _toastService.ShowError($"An error occured when updating the name of this client, {getResult.Error}");
+            _toastService.ShowError($"An error occured when updating this client, {getResult.Error}");
             return;
         }
 
         Client client = getResult.Data;
         client.Name = _updateClientModel.Name;
+        client.LocationId = int.TryParse(_updateClientModel.LocationId, out int locationId) ? locationId : null;
 
         Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
 
         if (updateResult.IsSuccess)
         {
-            _toastService.ShowSuccess("Name updated!");
+            _toastService.ShowSuccess("Saved!");
             _clientName = _updateClientModel.Name;
         }
         else
         {
-            _toastService.ShowError($"An error occured when updating the name of this client, {updateResult.Error}");
+            _toastService.ShowError($"An error occured when updating this client, {updateResult.Error}");
         }
     }
 

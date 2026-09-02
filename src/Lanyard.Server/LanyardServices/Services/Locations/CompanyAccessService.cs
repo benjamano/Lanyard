@@ -25,6 +25,18 @@ public interface ICompanyAccessService
     Task<bool> CanAdministerCompanyAsync(int companyId);
 
     Task<bool> CanAdministerLocationAsync(int locationId);
+
+    /// <summary>
+    /// Whether the current user may change how one venue runs day to day - its ordering switch,
+    /// its opening hours, its fulfilment mode and its receipt printer.
+    ///
+    /// Wider than <see cref="CanAdministerLocationAsync"/> on purpose. Administering a company is
+    /// branding, domains, legal wording; running a venue's service is a kitchen job, and the
+    /// CanManageKitchen role exists for people who do exactly that and nothing else. Without this
+    /// they were handed a fully populated kitchen admin page on which every control failed.
+    /// Still narrower than the page's own role gate: the membership has to be for this venue.
+    /// </summary>
+    Task<bool> CanManageVenueOperationsAsync(int locationId);
 }
 
 /// <summary>
@@ -104,6 +116,52 @@ public class CompanyAccessService(
 
     public async Task<bool> CanAdministerCompanyAsync(int companyId) =>
         (await GetCurrentAsync()).CanAdminister(companyId);
+
+    public async Task<bool> CanManageVenueOperationsAsync(int locationId)
+    {
+        // Admins and the company's own managers get here on the company-level check.
+        if (await CanAdministerLocationAsync(locationId))
+        {
+            return true;
+        }
+
+        try
+        {
+            AuthenticationState state = await _authStateProvider.GetAuthenticationStateAsync();
+            ClaimsPrincipal? user = state.User;
+
+            if (user?.Identity?.IsAuthenticated != true || !user.IsInRole("CanManageKitchen"))
+            {
+                return false;
+            }
+
+            string? userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return false;
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Membership of this venue specifically, not of its company: the role is granted per
+            // kitchen, and someone who works one site should not be running another's hours.
+            return await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(m => m.UserId == userId
+                    && m.LocationId == locationId
+                    && m.Location!.IsActive
+                    && m.Location.Company!.IsActive);
+        }
+        catch (Exception ex)
+        {
+            // Fails closed, for the same reason GetCurrentAsync does.
+            _logger.LogError(ex, "Failed to resolve whether the current user may run venue {LocationId}", locationId);
+
+            return false;
+        }
+    }
 
     public async Task<bool> CanAdministerLocationAsync(int locationId)
     {

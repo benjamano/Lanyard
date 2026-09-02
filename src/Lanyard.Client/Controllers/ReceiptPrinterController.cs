@@ -19,20 +19,19 @@ public class ReceiptPrinterController(
     private readonly IReceiptPrinterService _receiptPrinterService = receiptPrinterService;
     private readonly ILogger<ReceiptPrinterController> _logger = logger;
 
-    /// <summary>
-    /// Must match ReceiptPrintService.PrintCommand on the server exactly. A mismatch drops the
-    /// event silently, with no error at either end.
-    /// </summary>
-    public const string PrintCommand = "PrintKitchenReceipt";
-
     public void Register(HubConnection connection)
     {
-        connection.On<KitchenReceiptDto>(PrintCommand, receipt =>
+        connection.On<KitchenReceiptDto>(KitchenPrinting.PrintCommand, receipt =>
         {
             _logger.LogInformation("Received order {OrderId} to print for {TableLabel}",
                 receipt.OrderId, receipt.TableLabel);
 
-            _receiptPrinterService.Print(receipt);
+            // Detached from the hub's message pump. Print() blocks until the Windows spooler
+            // accepts the job, and SignalR runs a connection's handlers one at a time, so a
+            // printer that is asleep, jammed or out of paper would otherwise hold up every DMX,
+            // music and projection command to this kiosk until it recovered. Same reasoning, and
+            // same shape, as ProjectionProgramController.
+            _ = Task.Run(() => _receiptPrinterService.Print(receipt));
         });
     }
 }

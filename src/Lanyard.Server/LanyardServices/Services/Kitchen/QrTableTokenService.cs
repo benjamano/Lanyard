@@ -63,7 +63,11 @@ public class QrTableTokenService(
                 LocationName = resolved.LocationName,
                 TableLabel = resolved.Label,
                 OrderingEnabled = resolved.OrderingEnabled,
-                OrderingOpen = availability.Success && availability.Data?.IsOpen == true,
+                // Null when the lookup failed, so the caller can answer "try again" instead of
+                // announcing a closure it never actually established.
+                OrderingOpen = availability.Success && availability.Data is not null
+                    ? availability.Data.IsOpen
+                    : null,
                 ClosedMessage = availability.Data?.Message,
                 FulfilmentMode = resolved.FulfilmentMode
             });

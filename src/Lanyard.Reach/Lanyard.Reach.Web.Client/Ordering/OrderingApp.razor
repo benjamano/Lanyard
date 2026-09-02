@@ -22,7 +22,9 @@
     }
     else if (_phase == Phase.Unavailable)
     {
-        <div class="ordering__status-panel ordering__status-panel--error">
+        @* Being shut is not an error, so it does not get the error styling. Everything else
+           reaching this phase is one. *@
+        <div class="ordering__status-panel @(_fatalIsError ? "ordering__status-panel--error" : null)">
             <h2>@_fatalHeading</h2>
             <p>@_fatalMessage</p>
         </div>
@@ -419,6 +421,15 @@
 @code {
     [Parameter, EditorRequired] public string TableToken { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The closed-for-orders wording when the venue is outside its hours, otherwise null.
+    ///
+    /// Being closed does not stop this component rendering, because a customer who paid shortly
+    /// before closing still has an order in flight and this is the only place that can see it.
+    /// It suppresses the menu and basket and shows the closure, but a resumed order still wins.
+    /// </summary>
+    [Parameter] public string? ClosedMessage { get; set; }
+
     private enum Phase { Loading, Browsing, Cart, Paying, Placed, Unavailable }
 
     private Phase _phase = Phase.Loading;
@@ -431,6 +442,7 @@
     private string? _dropNotice;
     private string _fatalHeading = "We can't take orders here just now";
     private string _fatalMessage = "Please order at the till.";
+    private bool _fatalIsError = true;
     private bool _isSubmitting;
     private CancellationTokenSource? _pollCts;
     private IJSObjectReference? _checkout;
@@ -462,6 +474,27 @@
         // tab or lost signal. Resuming straight into the tracker is the whole point of persisting
         // it: without this, a customer who locked their phone loses sight of their food.
         _orderToken = await ReadStoredOrderTokenAsync();
+
+        // Checked before the menu, and before the closure, because an order already placed
+        // outranks both. The menu is not even fetched when closed: there is nothing to be done
+        // with it, and the server may well refuse to serve it outside hours anyway.
+        if (ClosedMessage is not null)
+        {
+            if (_orderToken is Guid placed && await LoadOrderStatusAsync(placed))
+            {
+                _phase = Phase.Placed;
+                StartPolling();
+
+                return;
+            }
+
+            _fatalHeading = "We're closed for orders";
+            _fatalMessage = ClosedMessage;
+            _fatalIsError = false;
+            _phase = Phase.Unavailable;
+
+            return;
+        }
 
         if (!await LoadMenuAsync(isInitialLoad: true))
         {

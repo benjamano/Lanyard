@@ -279,7 +279,7 @@ public class CompanyLocationService(
         {
             // Turning a venue's ordering on or off is a write like any other on this page, and
             // was the one that got missed when the rest were scoped.
-            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            if (!await _companyAccess.CanManageVenueOperationsAsync(locationId))
             {
                 return Result<bool>.Fail("You don't have permission to change this venue.");
             }
@@ -363,7 +363,7 @@ public class CompanyLocationService(
     {
         try
         {
-            if (!await _companyAccess.CanAdministerLocationAsync(hours.LocationId))
+            if (!await _companyAccess.CanManageVenueOperationsAsync(hours.LocationId))
             {
                 return Result<LocationOpeningHours>.Fail("You don't have permission to change this venue.");
             }
@@ -424,7 +424,7 @@ public class CompanyLocationService(
                 return Result<bool>.Ok(true);
             }
 
-            if (!await _companyAccess.CanAdministerLocationAsync(hours.LocationId))
+            if (!await _companyAccess.CanManageVenueOperationsAsync(hours.LocationId))
             {
                 return Result<bool>.Fail("You don't have permission to change this venue.");
             }
@@ -448,7 +448,7 @@ public class CompanyLocationService(
     {
         try
         {
-            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            if (!await _companyAccess.CanManageVenueOperationsAsync(locationId))
             {
                 return Result<bool>.Fail("You don't have permission to change this venue.");
             }
@@ -467,6 +467,23 @@ public class CompanyLocationService(
             if (location is null)
             {
                 return Result<bool>.Fail("Venue not found.");
+            }
+
+            // The kiosk has to be one of this venue's own. Permission on the venue is not enough
+            // on its own: without this check a kitchen manager could name any kiosk on the
+            // platform and have this venue's tickets - table, dishes, allergens and the
+            // customer's free-text note - come out of another company's printer.
+            if (receiptPrinterClientId is Guid printerClientId)
+            {
+                bool kioskIsAtThisVenue = await ctx.Clients
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(c => c.Id == printerClientId && c.LocationId == locationId);
+
+                if (!kioskIsAtThisVenue)
+                {
+                    return Result<bool>.Fail("That kiosk isn't assigned to this venue.");
+                }
             }
 
             location.FulfilmentMode = fulfilmentMode;

@@ -58,16 +58,6 @@ else if (!_table.OrderingEnabled)
         <p>@_table.LocationName isn't taking orders from your phone at the moment. Please order at the till.</p>
     </div>
 }
-else if (!_table.OrderingOpen)
-{
-    @* Distinct from the panel above. That one means the venue does not do this at all; this one
-       means it does, just not right now, and says when it will. Shown before the menu rather
-       than at the checkout, so nobody builds a basket they cannot pay for. *@
-    <div class="ordering__status-panel">
-        <h1>We're closed for orders</h1>
-        <p>@_table.ClosedMessage</p>
-    </div>
-}
 else
 {
     <header class="ordering__header">
@@ -75,10 +65,18 @@ else
         <h1 class="ordering__table">@_table.TableLabel</h1>
     </header>
 
+    @* A closed venue is handed to the island too, rather than replaced with a static panel here.
+       Someone who paid at 16:55 for food arriving at 17:05 still has a live order in this
+       phone's storage, and the tracker that shows it exists only inside the island - closing
+       time must not make a paid order disappear. Only the island can see that storage, so only
+       it can choose between "we're closed" and "your food is on its way". *@
+
     @* Prerendering is off deliberately. The island's first job is to read the basket out of
        localStorage, which does not exist on the server - prerendering would paint an empty
        basket and then visibly correct itself a moment later. *@
-    <OrderingApp TableToken="@TableToken" @rendermode="@(new InteractiveWebAssemblyRenderMode(prerender: false))" />
+    <OrderingApp TableToken="@TableToken"
+                 ClosedMessage="@ClosedMessage"
+                 @rendermode="@(new InteractiveWebAssemblyRenderMode(prerender: false))" />
 }
 
 @code {
@@ -86,6 +84,17 @@ else
 
     private TableResolutionDto? _table;
     private OrderingApiOutcome _outcome = OrderingApiOutcome.NotFound;
+
+    /// <summary>
+    /// The closed-for-orders wording, or null when the venue is taking orders. Never null-but-open:
+    /// a null OrderingOpen means the server could not tell, and the endpoint answers 503 for that
+    /// rather than letting it reach here as a closure.
+    /// </summary>
+    private string? ClosedMessage => _table?.OrderingOpen == false
+        ? string.IsNullOrWhiteSpace(_table.ClosedMessage)
+            ? "We're not taking orders just now."
+            : _table.ClosedMessage
+        : null;
 
     private string PageHeading => _table is null
         ? "Order"

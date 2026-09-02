@@ -33,6 +33,11 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
     /// </summary>
     private const string PrinterNameVariable = "LANYARD_RECEIPT_PRINTER";
 
+    /// <summary>Characters per line on an 80mm roll at this font size.</summary>
+    private const int ReceiptWidth = 32;
+
+    private static readonly string Separator = new('-', ReceiptWidth);
+
     public void Print(KitchenReceiptDto receipt)
     {
         try
@@ -62,6 +67,14 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
 
             document.DocumentName = $"Order {receipt.OrderId} - {receipt.TableLabel}";
 
+            // The default print controller shows a WinForms progress dialog. On a fullscreen kiosk
+            // that appears over the customer-facing display and takes focus off WebView2.
+            document.PrintController = new StandardPrintController();
+
+            // Roll printers report a short page, and the default one-inch margins can swallow all
+            // of it. Small fixed margins leave a printable band on any paper this might meet.
+            document.DefaultPageSettings.Margins = new Margins(20, 20, 20, 20);
+
             // GenericMonospace rather than a named face: columns line up, and it exists on every
             // Windows install without depending on which fonts the venue happens to have.
             using Font font = new(FontFamily.GenericMonospace, 9f);
@@ -73,6 +86,7 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
                     return;
                 }
 
+                int startedAt = lineIndex;
                 float y = e.MarginBounds.Top;
                 float lineHeight = font.GetHeight(e.Graphics);
 
@@ -81,6 +95,20 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
                     e.Graphics.DrawString(lines[lineIndex], font, Brushes.Black, e.MarginBounds.Left, y);
                     y += lineHeight;
                     lineIndex++;
+                }
+
+                // A page with no room for even one line would otherwise leave lineIndex untouched
+                // and ask for another page forever: blank sheets until the roll ran out, with
+                // Print() never returning and this kiosk's hub connection stuck behind it.
+                if (lineIndex == startedAt)
+                {
+                    _logger.LogError(
+                        "Cannot print order {OrderId}: printer '{PrinterName}' reports a printable height smaller than one line",
+                        receipt.OrderId, document.PrinterSettings.PrinterName);
+
+                    e.HasMorePages = false;
+
+                    return;
                 }
 
                 // A long order runs onto a second sheet rather than being silently truncated.
@@ -110,10 +138,10 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
         List<string> lines =
         [
             receipt.VenueName,
-            new string('-', 32),
+            Separator,
             receipt.IsTableService ? $"DELIVER TO: {receipt.TableLabel}" : $"COLLECTION: {receipt.TableLabel}",
             $"Order #{receipt.OrderId}    {receipt.PlacedAt}",
-            new string('-', 32),
+            Separator,
             string.Empty
         ];
 
@@ -136,14 +164,14 @@ public class ReceiptPrinterService(ILogger<ReceiptPrinterService> logger) : IRec
 
         if (!string.IsNullOrWhiteSpace(receipt.CustomerNote))
         {
-            lines.Add(new string('-', 32));
+            lines.Add(Separator);
             lines.Add("NOTE FROM CUSTOMER:");
             lines.Add(receipt.CustomerNote!);
             lines.Add(string.Empty);
         }
 
-        lines.Add(new string('-', 32));
-        lines.Add($"Total  {receipt.TotalCents / 100m:C}");
+        lines.Add(Separator);
+        lines.Add($"Total  £{receipt.TotalCents / 100m:0.00}");
 
         // Trailing blank lines so a roll printer's cutter does not slice through the total.
         lines.AddRange(Enumerable.Repeat(string.Empty, 4));

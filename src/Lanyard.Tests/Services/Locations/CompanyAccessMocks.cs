@@ -35,6 +35,12 @@ public static class CompanyAccessMocks
         // difference set this up themselves.
         mock.Setup(a => a.CanAdministerLocationAsync(It.IsAny<int>())).ReturnsAsync(access.IsAdmin);
 
+        // Running a venue's service settings is wider than administering its company, but every
+        // caller who can do the latter can do the former, so the same answer serves here. Set up
+        // explicitly rather than left to Moq's default of false, which would have quietly failed
+        // every opening-hours and printer test for a reason unrelated to what it was testing.
+        mock.Setup(a => a.CanManageVenueOperationsAsync(It.IsAny<int>())).ReturnsAsync(access.IsAdmin);
+
         return mock.Object;
     }
 }
