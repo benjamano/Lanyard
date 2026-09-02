@@ -95,10 +95,91 @@
                                                 </FluentBadge>
                                             }
                                             <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                          IconStart="@(new Icons.Regular.Size20.Options())"
+                                                          Title="@($"Choices for {item.Name}")"
+                                                          OnClick="@(() => ToggleChoices(item.Id))" />
+                                            <FluentButton Appearance="ButtonAppearance.Transparent"
                                                           IconStart="@(new Icons.Regular.Size20.Delete())"
                                                           Title="@($"Remove {item.Name}")"
                                                           OnClick="@(() => DeactivateItemAsync(item))" />
                                         </div>
+
+                                        @* Collapsed by default. Most dishes have no choices, and an
+                                           always-open editor under every one of them would bury the
+                                           menu it is meant to be part of. *@
+                                        @if (_expandedItemId == item.Id)
+                                        {
+                                            <div class="kitchen-admin__choices">
+                                                <FluentText Class="kitchen-admin__hint">
+                                                    Choices let one dish cover several meals, for example chips
+                                                    and nuggets with either beans or peas.
+                                                </FluentText>
+
+                                                @foreach (MenuItemOptionGroup group in _optionGroups)
+                                                {
+                                                    <div class="kitchen-admin__choice-group">
+                                                        <div class="kitchen-admin__category-head">
+                                                            <FluentText Weight="TextWeight.Semibold">
+                                                                @group.Name
+                                                                <span class="kitchen-admin__choice-rule">
+                                                                    @(group.MinSelections > 0 ? "required" : "optional"),
+                                                                    up to @group.MaxSelections
+                                                                </span>
+                                                            </FluentText>
+                                                            <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                                          IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                                          Title="@($"Remove {group.Name}")"
+                                                                          OnClick="@(() => DeactivateGroupAsync(group))" />
+                                                        </div>
+
+                                                        @foreach (MenuItemOption option in group.Options)
+                                                        {
+                                                            <div class="kitchen-admin__item">
+                                                                <span class="kitchen-admin__item-name">@option.Name</span>
+                                                                @if (option.PriceDeltaCents != 0)
+                                                                {
+                                                                    <span class="kitchen-admin__item-price">
+                                                                        @(option.PriceDeltaCents > 0 ? "+" : "")@Money(option.PriceDeltaCents)
+                                                                    </span>
+                                                                }
+                                                                @if (!option.AllergensConfirmed)
+                                                                {
+                                                                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">
+                                                                        Allergens needed
+                                                                    </FluentBadge>
+                                                                }
+                                                                <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                                              IconStart="@(option.IsAvailable
+                                                                                  ? new Icons.Regular.Size20.EyeOff()
+                                                                                  : (Icon)new Icons.Regular.Size20.Eye())"
+                                                                              Title="@(option.IsAvailable ? $"Mark {option.Name} sold out" : $"Put {option.Name} back on")"
+                                                                              OnClick="@(() => SetOptionAvailabilityAsync(option, !option.IsAvailable))" />
+                                                                <FluentButton Appearance="ButtonAppearance.Transparent"
+                                                                              IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                                              Title="@($"Remove {option.Name}")"
+                                                                              OnClick="@(() => DeactivateOptionAsync(option))" />
+                                                            </div>
+                                                        }
+
+                                                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                                                      IconStart="@(new Icons.Regular.Size20.Add())"
+                                                                      OnClick="@(() => AddOptionAsync(group))">
+                                                            Add choice
+                                                        </FluentButton>
+                                                    </div>
+                                                }
+
+                                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                                                             VerticalAlignment="VerticalAlignment.Bottom">
+                                                    <FluentTextInput @bind-Value="_newGroupName" Label="New choice"
+                                                                     Placeholder="Choose your side" Class="w-100" />
+                                                    <FluentButton Appearance="ButtonAppearance.Primary"
+                                                                  OnClick="@(() => AddGroupAsync(item.Id))">
+                                                        Add
+                                                    </FluentButton>
+                                                </FluentStack>
+                                            </div>
+                                        }
                                     }
 
                                     <FluentButton Appearance="ButtonAppearance.Outline"
@@ -336,6 +417,138 @@
         else
         {
             _toastService.ShowError(result.Error ?? "Couldn't add that dish.");
+        }
+    }
+
+    // Which dish's choices are open. One at a time: two open editors on a phone is unusable.
+    private int? _expandedItemId;
+    private List<MenuItemOptionGroup> _optionGroups = [];
+    private string _newGroupName = string.Empty;
+
+    private async Task ToggleChoices(int itemId)
+    {
+        if (_expandedItemId == itemId)
+        {
+            _expandedItemId = null;
+            _optionGroups = [];
+
+            return;
+        }
+
+        _expandedItemId = itemId;
+        _newGroupName = string.Empty;
+        await LoadOptionGroupsAsync(itemId);
+    }
+
+    private async Task LoadOptionGroupsAsync(int itemId)
+    {
+        Result<List<MenuItemOptionGroup>> result = await _menuService.GetOptionGroupsForItemAsync(itemId);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _optionGroups = result.Data;
+        }
+        else
+        {
+            _optionGroups = [];
+            _toastService.ShowError(result.Error ?? "Couldn't load the choices for that dish.");
+        }
+    }
+
+    private async Task AddGroupAsync(int itemId)
+    {
+        if (string.IsNullOrWhiteSpace(_newGroupName))
+        {
+            return;
+        }
+
+        // Defaults to "choose exactly one", which is what a meal deal side almost always is.
+        Result<MenuItemOptionGroup> result = await _menuService.SaveOptionGroupAsync(new MenuItemOptionGroup
+        {
+            MenuItemId = itemId,
+            Name = _newGroupName.Trim(),
+            MinSelections = 1,
+            MaxSelections = 1,
+            SortOrder = _optionGroups.Count
+        });
+
+        if (result.IsSuccess)
+        {
+            _newGroupName = string.Empty;
+            await LoadOptionGroupsAsync(itemId);
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't add that choice.");
+        }
+    }
+
+    private async Task AddOptionAsync(MenuItemOptionGroup group)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<AddMenuOptionDialog>(options =>
+        {
+            options.Modal = true;
+            options.Width = "480px";
+            options.Parameters.Add(nameof(AddMenuOptionDialog.OptionGroupId), group.Id);
+            options.Parameters.Add(nameof(AddMenuOptionDialog.SortOrder), group.Options.Count);
+        });
+
+        if (dialogResult.Cancelled || dialogResult.Value is not MenuItemOption option)
+        {
+            return;
+        }
+
+        Result<MenuItemOption> result = await _menuService.SaveOptionAsync(option);
+
+        if (result.IsSuccess && _expandedItemId is int itemId)
+        {
+            await LoadOptionGroupsAsync(itemId);
+        }
+        else if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't add that choice.");
+        }
+    }
+
+    private async Task SetOptionAvailabilityAsync(MenuItemOption option, bool isAvailable)
+    {
+        Result<bool> result = await _menuService.SetOptionAvailabilityAsync(option.Id, isAvailable);
+
+        if (result.IsSuccess && _expandedItemId is int itemId)
+        {
+            await LoadOptionGroupsAsync(itemId);
+        }
+        else if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update that choice.");
+        }
+    }
+
+    private async Task DeactivateGroupAsync(MenuItemOptionGroup group)
+    {
+        Result<bool> result = await _menuService.DeactivateOptionGroupAsync(group.Id);
+
+        if (result.IsSuccess && _expandedItemId is int itemId)
+        {
+            await LoadOptionGroupsAsync(itemId);
+        }
+        else if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove that choice.");
+        }
+    }
+
+    private async Task DeactivateOptionAsync(MenuItemOption option)
+    {
+        Result<bool> result = await _menuService.DeactivateOptionAsync(option.Id);
+
+        if (result.IsSuccess && _expandedItemId is int itemId)
+        {
+            await LoadOptionGroupsAsync(itemId);
+        }
+        else if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove that choice.");
         }
     }
 

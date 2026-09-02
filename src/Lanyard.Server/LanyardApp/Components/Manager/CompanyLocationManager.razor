@@ -73,6 +73,15 @@
                             </FluentText>
                         }
 
+                        <FileUploader Id="company-favicon-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
+                                      OnFileUploaded="OnFaviconUploaded" Label="Upload a browser tab icon (optional)"
+                                      MaximumFileCount="1" PreviewUrl="@companyFaviconPreviewUrl" />
+                        <FluentText Class="clm-empty-note">
+                            Shown in the browser tab on this company's ordering site. Use a small square
+                            image; the logo above is too wide to read at that size. Without one, customers
+                            see the Lanyard mark.
+                        </FluentText>
+
                         <FileUploader Id="company-background-image-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
                                       OnFileUploaded="OnBackgroundImageUploaded" Label="Upload a login background image (optional)"
                                       MaximumFileCount="1" PreviewUrl="@companyBackgroundImagePreviewUrl" />
@@ -103,6 +112,13 @@
                             {
                                 <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearBackgroundImage">Clear
                                     Background Image
+                                </FluentButton>
+                            }
+
+                            @if (companyFaviconFileId is not null)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ClearFavicon">Clear
+                                    Tab Icon
                                 </FluentButton>
                             }
                         </FluentStack>
@@ -242,6 +258,8 @@
     private string? companyLogoPreviewUrl;
     private Guid? companyBackgroundImageFileId;
     private string? companyBackgroundImagePreviewUrl;
+    private Guid? companyFaviconFileId;
+    private string? companyFaviconPreviewUrl;
     private string newLocationName = string.Empty;
 
     private List<CompanyDomain> domainsForSelectedCompany = [];
@@ -256,6 +274,8 @@
 
     private void ClearLogo()
     {
+        companyFaviconFileId = null;
+        companyFaviconPreviewUrl = null;
         companyLogoFileId = null;
         companyLogoPreviewUrl = null;
     }
@@ -270,6 +290,18 @@
     {
         companyBackgroundImageFileId = null;
         companyBackgroundImagePreviewUrl = null;
+    }
+
+    private void OnFaviconUploaded(FileMetadata file)
+    {
+        companyFaviconFileId = file.Id;
+        companyFaviconPreviewUrl = $"/api/files/download/{file.Id}";
+    }
+
+    private void ClearFavicon()
+    {
+        companyFaviconFileId = null;
+        companyFaviconPreviewUrl = null;
     }
 
     protected override async Task OnInitializedAsync()
@@ -317,7 +349,8 @@
             ContactPhone = companyContactPhone,
             CollectionHoldMinutes = companyCollectionHoldMinutes,
             LogoFileId = companyLogoFileId,
-            BackgroundImageFileId = companyBackgroundImageFileId
+            BackgroundImageFileId = companyBackgroundImageFileId,
+            FaviconFileId = companyFaviconFileId
         });
 
         if (!result.IsSuccess)
@@ -389,6 +422,9 @@
         companyCollectionHoldMinutes = company.CollectionHoldMinutes;
         companyLogoFileId = company.LogoFileId;
         companyLogoPreviewUrl = company.LogoFileId is Guid logoFileId ? $"/api/files/download/{logoFileId}" : null;
+        companyFaviconFileId = company.FaviconFileId;
+        companyFaviconPreviewUrl = company.FaviconFileId is Guid faviconFileId
+            ? $"/api/files/download/{faviconFileId}" : null;
         companyBackgroundImageFileId = company.BackgroundImageFileId;
         companyBackgroundImagePreviewUrl = company.BackgroundImageFileId is Guid backgroundImageFileId
             ? $"/api/files/download/{backgroundImageFileId}"

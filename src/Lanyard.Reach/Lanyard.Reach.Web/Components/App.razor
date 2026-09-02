@@ -15,14 +15,13 @@
     <link rel="stylesheet" href="Lanyard.Reach.Web.styles.css" />
     <ImportMap />
     @*
-        A tenant's own logo is the right favicon for their site: on a customer's phone this is a
-        Play2Day tab, not a Lanyard one. Falls back to the Lanyard mark on any page where no
-        tenant resolved. /tenant-logo is the same same-origin proxy the header already uses, so
-        this costs no extra round trip to the Lanyard server.
+        The tenant's own tab icon, uploaded separately from their logo: a navbar wordmark is wide,
+        and a browser renders it into a 16px square as an unreadable smudge. Falls back to the
+        Lanyard mark when a tenant has not set one, or when no tenant resolved at all.
     *@
-    @if (TenantContext.IsResolved)
+    @if (TenantContext.IsResolved && TenantContext.Tenant.HasFavicon)
     {
-        <link rel="icon" href="/tenant-logo" />
+        <link rel="icon" href="/tenant-favicon" />
     }
     else
     {

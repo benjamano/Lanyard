@@ -49,6 +49,10 @@ public class LanyardOrderingClient(HttpClient httpClient, ILogger<LanyardOrderin
     public async Task<HttpResponseMessage> GetCompanyLogoAsync(int companyId, CancellationToken cancellationToken = default) =>
         await _httpClient.GetAsync($"api/companies/{companyId}/logo", cancellationToken);
 
+    /// <summary>The tenant's browser-tab icon, which is a different image from the logo.</summary>
+    public async Task<HttpResponseMessage> GetCompanyFaviconAsync(int companyId, CancellationToken cancellationToken = default) =>
+        await _httpClient.GetAsync($"api/companies/{companyId}/favicon", cancellationToken);
+
     /// <summary>
     /// Returns the raw response so the caller can pass the server's customer-facing error text
     /// ("we've just run out of chips") straight through rather than flattening every failure into

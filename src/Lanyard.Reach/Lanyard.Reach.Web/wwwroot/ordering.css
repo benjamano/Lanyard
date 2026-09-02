@@ -668,3 +668,164 @@
     margin: 0 0 10px;
     font-size: 0.92rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Choices on a dish: "chips, nuggets and beans" versus "... and peas".
+
+   A bottom sheet rather than a centred dialog, because this is overwhelmingly a
+   one-handed phone interaction and the controls belong within thumb reach.
+   --------------------------------------------------------------------------- */
+
+.ordering__sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 40;
+}
+
+.ordering__sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    /* Capped so the sheet can never grow past the viewport and push its own
+       "Add to basket" button off-screen - the body scrolls instead. */
+    max-height: 85vh;
+    padding: 16px;
+    gap: 12px;
+    background: var(--ordering-surface);
+    border-radius: var(--ordering-radius) var(--ordering-radius) 0 0;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+}
+
+@media (min-width: 700px) {
+    .ordering__sheet {
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 520px;
+        border-radius: var(--ordering-radius);
+    }
+}
+
+.ordering__sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ordering__sheet-header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--ordering-ink);
+}
+
+.ordering__sheet-close {
+    border: none;
+    background: transparent;
+    font-size: 1.6rem;
+    line-height: 1;
+    /* A comfortable target on a phone; the glyph alone is far too small to hit. */
+    min-width: 44px;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__sheet-body {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ordering__option-group {
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ordering__option-legend {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 0 0 6px;
+    font-weight: 650;
+    color: var(--ordering-ink);
+}
+
+.ordering__option-rule {
+    font-weight: 400;
+    font-size: 0.85rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 4px;
+    border-top: 1px solid var(--ordering-line);
+    cursor: pointer;
+}
+
+.ordering__option--sold-out {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.ordering__option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ordering__option-name {
+    color: var(--ordering-ink);
+}
+
+.ordering__option-allergens {
+    font-size: 0.8rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__option-allergens--trace {
+    font-style: italic;
+}
+
+.ordering__option-price {
+    font-variant-numeric: tabular-nums;
+    color: var(--ordering-ink-soft);
+}
+
+/* The chosen options, echoed under a basket line and on the receipt, so what the
+   customer is buying is legible without reopening the chooser. */
+.ordering__cart-line-options,
+.ordering__receipt-options {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--ordering-ink-soft);
+}
+
+.ordering__item-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.ordering__in-basket {
+    font-size: 0.8rem;
+    color: var(--ordering-ink-soft);
+    white-space: nowrap;
+}

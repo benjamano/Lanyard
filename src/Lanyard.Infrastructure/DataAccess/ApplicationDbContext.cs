@@ -62,6 +62,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<QrTableToken> QrTableTokens { get; set; }
         public DbSet<KitchenOrder> KitchenOrders { get; set; }
         public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; }
+        public DbSet<MenuItemOptionGroup> MenuItemOptionGroups { get; set; }
+        public DbSet<MenuItemOption> MenuItemOptions { get; set; }
+        public DbSet<KitchenOrderItemOption> KitchenOrderItemOptions { get; set; }
         public DbSet<ClientAvailableDmxDevice> ClientAvailableDmxDevices { get; set; }
         public DbSet<DmxScene> DmxScenes { get; set; }
         public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -250,6 +253,39 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasOne(x => x.ImageFile)
                 .WithMany()
                 .HasForeignKey(x => x.ImageFileId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MenuItemOptionGroup>()
+                .HasOne(x => x.MenuItem)
+                .WithMany(x => x.OptionGroups)
+                .HasForeignKey(x => x.MenuItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MenuItemOption>()
+                .HasOne(x => x.OptionGroup)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.OptionGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<KitchenOrderItemOption>()
+                .HasOne(x => x.OrderItem)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.OrderItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Same reasoning as KitchenOrderItem.MenuItem: deleting a choice from the menu must
+            // not erase the orders that chose it. The snapshots keep the ticket readable.
+            modelBuilder.Entity<KitchenOrderItemOption>()
+                .HasOne(x => x.MenuItemOption)
+                .WithMany()
+                .HasForeignKey(x => x.MenuItemOptionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Same reasoning as Company.LogoFile, for the optional browser-tab icon.
+            modelBuilder.Entity<Company>()
+                .HasOne(x => x.FaviconFile)
+                .WithMany()
+                .HasForeignKey(x => x.FaviconFileId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             // Resolved on every scan of a printed code, so indexed; unique because the token is

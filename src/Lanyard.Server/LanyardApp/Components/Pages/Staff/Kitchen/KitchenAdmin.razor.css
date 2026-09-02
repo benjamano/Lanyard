@@ -62,3 +62,26 @@
     max-width: 140px;
     image-rendering: pixelated;
 }
+
+/* The choices editor, opened under a single dish. Indented and ruled so it reads as
+   belonging to the dish above it rather than as another dish in the section. */
+.kitchen-admin__choices {
+    margin: 4px 0 12px 16px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--neutral-stroke-rest);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.kitchen-admin__choice-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.kitchen-admin__choice-rule {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--neutral-foreground-hint);
+}

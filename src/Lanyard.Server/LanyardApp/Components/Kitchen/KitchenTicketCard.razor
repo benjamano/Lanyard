@@ -24,8 +24,20 @@
                 <span class="kitchen-ticket__qty">@line.Quantity&times;</span>
                 <span class="kitchen-ticket__name">
                     @line.Name
+
+                    @* The choices, on their own line and prominent: this is the difference
+                       between plating beans and plating peas, and getting it wrong means the
+                       food comes back. *@
+                    @if (line.Options.Count > 0)
+                    {
+                        <span class="kitchen-ticket__options">
+                            @string.Join(", ", line.Options.Select(o => o.OptionName))
+                        </span>
+                    }
+
                     @* Shown on the ticket so whoever hands the food over can answer an allergy
-                       question without going back to the menu. *@
+                       question without going back to the menu. Already combines the dish's own
+                       allergens with those of every choice on this line. *@
                     @if (line.ContainsAllergens != Allergen.None)
                     {
                         <span class="kitchen-ticket__allergens">@line.ContainsAllergens.ToDisplayList()</span>

@@ -16,6 +16,16 @@ namespace Lanyard.Infrastructure.Models
         public FileMetadata? BackgroundImageFile { get; set; }
 
         /// <summary>
+        /// Square icon for the browser tab on this company's public ordering site.
+        ///
+        /// Separate from <see cref="LogoFileId"/> on purpose: a logo is a wide wordmark sized for
+        /// a navbar, and squeezing one into a 16px square produces an unreadable smudge. They are
+        /// different images for different jobs, so they get different fields.
+        /// </summary>
+        public Guid? FaviconFileId { get; set; }   // FK -> FileMetadata.Id; null => the Lanyard mark
+        public FileMetadata? FaviconFile { get; set; }
+
+        /// <summary>
         /// URL-safe identifier used to reach this company's public site before its real domain
         /// is pointed at us (dev, staging, and the gap between onboarding and DNS propagating).
         /// Production traffic resolves by hostname via <see cref="Domains"/> instead.

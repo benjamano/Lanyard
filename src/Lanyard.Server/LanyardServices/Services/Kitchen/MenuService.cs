@@ -71,7 +71,41 @@ public class MenuService(
                             HasImage = i.ImageFileId != null,
                             SortOrder = i.SortOrder,
                             ContainsAllergens = i.ContainsAllergens,
-                            MayContainAllergens = i.MayContainAllergens
+                            MayContainAllergens = i.MayContainAllergens,
+
+                            // An option whose allergens nobody has confirmed is withheld rather
+                            // than offered with a blank declaration, exactly as an unconfirmed
+                            // dish is - blank must never read as "contains nothing". A group left
+                            // with no confirmed choices is dropped, which the order validator
+                            // then treats as "this dish cannot currently be ordered".
+                            OptionGroups = i.OptionGroups
+                                .Where(g => g.IsActive && g.Options.Any(o => o.IsActive && o.AllergensConfirmed))
+                                .OrderBy(g => g.SortOrder)
+                                .ThenBy(g => g.Name)
+                                .Select(g => new MenuItemOptionGroupDto
+                                {
+                                    Id = g.Id,
+                                    Name = g.Name,
+                                    MinSelections = g.MinSelections,
+                                    MaxSelections = g.MaxSelections,
+                                    SortOrder = g.SortOrder,
+                                    Options = g.Options
+                                        .Where(o => o.IsActive && o.AllergensConfirmed)
+                                        .OrderBy(o => o.SortOrder)
+                                        .ThenBy(o => o.Name)
+                                        .Select(o => new MenuItemOptionDto
+                                        {
+                                            Id = o.Id,
+                                            Name = o.Name,
+                                            PriceDeltaCents = o.PriceDeltaCents,
+                                            IsAvailable = o.IsAvailable,
+                                            SortOrder = o.SortOrder,
+                                            ContainsAllergens = o.ContainsAllergens,
+                                            MayContainAllergens = o.MayContainAllergens
+                                        })
+                                        .ToList()
+                                })
+                                .ToList()
                         })
                         .ToList()
                 })
@@ -417,6 +451,306 @@ public class MenuService(
         catch (Exception ex)
         {
             return Result<Guid>.Fail($"Failed to resolve item image: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<MenuItemOptionGroup>>> GetOptionGroupsForItemAsync(int menuItemId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<MenuItemOptionGroup> groups = await ctx.MenuItemOptionGroups
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(g => g.MenuItemId == menuItemId && g.IsActive)
+                .OrderBy(g => g.SortOrder)
+                .ThenBy(g => g.Name)
+                .Include(g => g.Options.Where(o => o.IsActive).OrderBy(o => o.SortOrder).ThenBy(o => o.Name))
+                .ToListAsync();
+
+            return Result<List<MenuItemOptionGroup>>.Ok(groups);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<MenuItemOptionGroup>>.Fail($"Failed to load choices: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<MenuItemOptionGroup>> SaveOptionGroupAsync(MenuItemOptionGroup group)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(group.Name))
+            {
+                return Result<MenuItemOptionGroup>.Fail("Give the choice a name, for example \"Choose your side\".");
+            }
+
+            if (group.MinSelections < 0 || group.MaxSelections < 1 || group.MinSelections > group.MaxSelections)
+            {
+                return Result<MenuItemOptionGroup>.Fail("The number of choices allowed doesn't make sense.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int? locationId = await ctx.MenuItems
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(i => i.Id == group.MenuItemId)
+                .Select(i => (int?)i.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            if (locationId is null)
+            {
+                return Result<MenuItemOptionGroup>.Fail("Dish not found.");
+            }
+
+            DateTime now = DateTime.UtcNow;
+            MenuItemOptionGroup entity;
+
+            if (group.Id == 0)
+            {
+                entity = new MenuItemOptionGroup
+                {
+                    MenuItemId = group.MenuItemId,
+                    Name = group.Name.Trim(),
+                    MinSelections = group.MinSelections,
+                    MaxSelections = group.MaxSelections,
+                    SortOrder = group.SortOrder,
+                    IsActive = true,
+                    CreateDate = now,
+                    UpdateDate = now
+                };
+
+                await ctx.MenuItemOptionGroups.AddAsync(entity);
+            }
+            else
+            {
+                MenuItemOptionGroup? existing = await ctx.MenuItemOptionGroups.FirstOrDefaultAsync(g => g.Id == group.Id);
+
+                if (existing is null)
+                {
+                    return Result<MenuItemOptionGroup>.Fail("Choice not found.");
+                }
+
+                entity = existing;
+                entity.Name = group.Name.Trim();
+                entity.MinSelections = group.MinSelections;
+                entity.MaxSelections = group.MaxSelections;
+                entity.SortOrder = group.SortOrder;
+                entity.UpdateDate = now;
+            }
+
+            await BumpMenuVersionAsync(ctx, locationId.Value, now);
+            await ctx.SaveChangesAsync();
+
+            return Result<MenuItemOptionGroup>.Ok(entity);
+        }
+        catch (Exception ex)
+        {
+            return Result<MenuItemOptionGroup>.Fail($"Failed to save the choice: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<MenuItemOption>> SaveOptionAsync(MenuItemOption option)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(option.Name))
+            {
+                return Result<MenuItemOption>.Fail("Give the choice a name, for example \"Beans\".");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int? locationId = await ctx.MenuItemOptionGroups
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(g => g.Id == option.OptionGroupId)
+                .Select(g => (int?)g.MenuItem!.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            if (locationId is null)
+            {
+                return Result<MenuItemOption>.Fail("Choice group not found.");
+            }
+
+            DateTime now = DateTime.UtcNow;
+            MenuItemOption entity;
+
+            if (option.Id == 0)
+            {
+                entity = new MenuItemOption
+                {
+                    OptionGroupId = option.OptionGroupId,
+                    Name = option.Name.Trim(),
+                    PriceDeltaCents = option.PriceDeltaCents,
+                    IsAvailable = option.IsAvailable,
+                    SortOrder = option.SortOrder,
+                    ContainsAllergens = option.ContainsAllergens,
+                    MayContainAllergens = option.MayContainAllergens,
+                    AllergensConfirmed = option.AllergensConfirmed,
+                    IsActive = true,
+                    CreateDate = now,
+                    UpdateDate = now
+                };
+
+                await ctx.MenuItemOptions.AddAsync(entity);
+            }
+            else
+            {
+                MenuItemOption? existing = await ctx.MenuItemOptions.FirstOrDefaultAsync(o => o.Id == option.Id);
+
+                if (existing is null)
+                {
+                    return Result<MenuItemOption>.Fail("Choice not found.");
+                }
+
+                entity = existing;
+                entity.Name = option.Name.Trim();
+                entity.PriceDeltaCents = option.PriceDeltaCents;
+                entity.IsAvailable = option.IsAvailable;
+                entity.SortOrder = option.SortOrder;
+                entity.ContainsAllergens = option.ContainsAllergens;
+                entity.MayContainAllergens = option.MayContainAllergens;
+                entity.AllergensConfirmed = option.AllergensConfirmed;
+                entity.UpdateDate = now;
+            }
+
+            await BumpMenuVersionAsync(ctx, locationId.Value, now);
+            await ctx.SaveChangesAsync();
+
+            return Result<MenuItemOption>.Ok(entity);
+        }
+        catch (Exception ex)
+        {
+            return Result<MenuItemOption>.Fail($"Failed to save the choice: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 86's a single choice. Separate from deactivating it so running out of beans for one
+    /// service does not require rebuilding the choice tomorrow.
+    /// </summary>
+    public async Task<Result<bool>> SetOptionAvailabilityAsync(int optionId, bool isAvailable)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            MenuItemOption? option = await ctx.MenuItemOptions.FirstOrDefaultAsync(o => o.Id == optionId);
+
+            if (option is null)
+            {
+                return Result<bool>.Fail("Choice not found.");
+            }
+
+            DateTime now = DateTime.UtcNow;
+            option.IsAvailable = isAvailable;
+            option.UpdateDate = now;
+
+            int? locationId = await ctx.MenuItemOptionGroups
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(g => g.Id == option.OptionGroupId)
+                .Select(g => (int?)g.MenuItem!.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            if (locationId is not null)
+            {
+                // Bumped so a phone already browsing refetches and greys the choice out, the same
+                // way 86'ing a whole dish reaches a customer mid-order.
+                await BumpMenuVersionAsync(ctx, locationId.Value, now);
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to update the choice: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DeactivateOptionGroupAsync(int groupId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            MenuItemOptionGroup? group = await ctx.MenuItemOptionGroups.FirstOrDefaultAsync(g => g.Id == groupId);
+
+            if (group is null)
+            {
+                return Result<bool>.Fail("Choice not found.");
+            }
+
+            DateTime now = DateTime.UtcNow;
+
+            // Soft-deleted, like everything else here: past orders reference these rows, and the
+            // snapshots on them are what keeps an old ticket readable.
+            group.IsActive = false;
+            group.UpdateDate = now;
+
+            int? locationId = await ctx.MenuItems
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(i => i.Id == group.MenuItemId)
+                .Select(i => (int?)i.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            if (locationId is not null)
+            {
+                await BumpMenuVersionAsync(ctx, locationId.Value, now);
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to remove the choice: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> DeactivateOptionAsync(int optionId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            MenuItemOption? option = await ctx.MenuItemOptions.FirstOrDefaultAsync(o => o.Id == optionId);
+
+            if (option is null)
+            {
+                return Result<bool>.Fail("Choice not found.");
+            }
+
+            DateTime now = DateTime.UtcNow;
+            option.IsActive = false;
+            option.UpdateDate = now;
+
+            int? locationId = await ctx.MenuItemOptionGroups
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(g => g.Id == option.OptionGroupId)
+                .Select(g => (int?)g.MenuItem!.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            if (locationId is not null)
+            {
+                await BumpMenuVersionAsync(ctx, locationId.Value, now);
+            }
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to remove the choice: {ex.Message}");
         }
     }
 

@@ -29,6 +29,12 @@ public class TenantBrandingDto
     public required string OnPrimaryColorHex { get; set; }
 
     public bool HasLogo { get; set; }
+
+    /// <summary>
+    /// Whether this company has uploaded its own browser-tab icon. Separate from the logo: a
+    /// navbar wordmark makes a poor favicon, so the two are chosen independently.
+    /// </summary>
+    public bool HasFavicon { get; set; }
 }
 
 /// <summary>Result of scanning a table's printed QR code.</summary>
@@ -79,6 +85,46 @@ public class MenuItemDto
     /// </summary>
     public Allergen ContainsAllergens { get; set; }
     public Allergen MayContainAllergens { get; set; }
+
+    /// <summary>
+    /// Choices the customer makes before this dish can go in the basket - "chips, nuggets and
+    /// beans" versus "chips, nuggets and peas". Empty for a dish that is just itself.
+    /// </summary>
+    public List<MenuItemOptionGroupDto> OptionGroups { get; set; } = [];
+}
+
+public class MenuItemOptionGroupDto
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+
+    /// <summary>Zero means the customer may skip this group entirely.</summary>
+    public int MinSelections { get; set; }
+
+    /// <summary>One renders as radio buttons; more renders as checkboxes with a cap.</summary>
+    public int MaxSelections { get; set; }
+
+    public int SortOrder { get; set; }
+    public List<MenuItemOptionDto> Options { get; set; } = [];
+}
+
+public class MenuItemOptionDto
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+
+    /// <summary>Usually zero. Added to the dish price when chosen.</summary>
+    public int PriceDeltaCents { get; set; }
+
+    public bool IsAvailable { get; set; }
+    public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Declared per choice, because a choice changes what is actually in the meal. Shown to the
+    /// customer at the point they pick it, not buried in the dish's own declaration.
+    /// </summary>
+    public Allergen ContainsAllergens { get; set; }
+    public Allergen MayContainAllergens { get; set; }
 }
 
 /// <summary>
@@ -113,6 +159,14 @@ public class CreateOrderLineDto
 {
     public int MenuItemId { get; set; }
     public int Quantity { get; set; }
+
+    /// <summary>
+    /// Chosen option ids. Re-validated server-side against the item's own groups - that they
+    /// belong to this dish, are still available, and satisfy each group's min/max - because the
+    /// price and the allergen declaration both depend on them and neither may be taken from the
+    /// client's word.
+    /// </summary>
+    public List<int> SelectedOptionIds { get; set; } = [];
 }
 
 public class CreateOrderResultDto
@@ -152,13 +206,29 @@ public class OrderStatusLineDto
 {
     public required string Name { get; set; }
     public int Quantity { get; set; }
+
+    /// <summary>Price of one, options included.</summary>
     public int UnitPriceCents { get; set; }
+
+    /// <summary>
+    /// The choices made on this line, as the customer saw them and as the kitchen must read
+    /// them. Snapshotted names, so a later menu edit cannot rewrite a printed ticket.
+    /// </summary>
+    public List<OrderLineOptionDto> Options { get; set; } = [];
 
     /// <summary>
     /// Allergens as declared when the order was placed, snapshotted alongside name and price for
     /// the same reason: what the customer was told is what the ticket must say, even if the menu
     /// is edited afterwards.
     /// </summary>
+    public Allergen ContainsAllergens { get; set; }
+}
+
+public class OrderLineOptionDto
+{
+    public required string GroupName { get; set; }
+    public required string OptionName { get; set; }
+    public int PriceDeltaCents { get; set; }
     public Allergen ContainsAllergens { get; set; }
 }
 

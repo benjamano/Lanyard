@@ -27,6 +27,91 @@ public class KitchenOrderService(
     /// </summary>
     private const int MaxQuantityPerLine = 50;
 
+    /// <summary>
+    /// A validated choice together with the group it came from. Paired explicitly rather than
+    /// read back through MenuItemOption.OptionGroup, which a no-tracking query is not obliged to
+    /// populate - and the group's name goes on the kitchen ticket, so it cannot be null.
+    /// </summary>
+    private readonly record struct ChosenOption(MenuItemOptionGroup Group, MenuItemOption Option);
+
+    /// <summary>
+    /// One requested line after taps of the identical dish-and-choices have been merged. A class
+    /// rather than a tuple because Quantity accumulates as duplicates are folded in.
+    /// </summary>
+    private sealed class RequestedLine(int menuItemId, List<int> optionIds, int quantity)
+    {
+        public int MenuItemId { get; } = menuItemId;
+
+        /// <summary>Distinct and sorted, so the same choices in a different tap order are one line.</summary>
+        public List<int> OptionIds { get; } = optionIds;
+
+        public int Quantity { get; set; } = quantity;
+    }
+
+    /// <summary>
+    /// Turns the option ids a phone sent into the actual menu rows, refusing anything that does
+    /// not add up.
+    ///
+    /// Everything here is re-checked against the database rather than trusted from the request:
+    /// the ids decide both what the customer is charged and what allergens the ticket declares,
+    /// so a crafted request must not be able to attach a cheaper option to a dish, an option
+    /// belonging to a different dish, or one whose allergens nobody has confirmed.
+    /// </summary>
+    private static Result<List<ChosenOption>> ResolveChosenOptions(MenuItem item, List<int> requestedOptionIds)
+    {
+        List<ChosenOption> chosen = [];
+
+        // Only groups that still have at least one confirmed, active choice count as real. A
+        // required group whose choices have all been withdrawn would otherwise be impossible to
+        // satisfy and would block the dish with a confusing message.
+        List<MenuItemOptionGroup> groups = [.. item.OptionGroups
+            .Where(g => g.Options.Any(o => o.AllergensConfirmed))
+            .OrderBy(g => g.SortOrder)];
+
+        HashSet<int> knownOptionIds = [.. groups.SelectMany(g => g.Options).Select(o => o.Id)];
+
+        // Caught before the per-group checks so an id belonging to another dish is reported as
+        // exactly that, rather than as a confusing "you must choose a side".
+        if (requestedOptionIds.Any(id => !knownOptionIds.Contains(id)))
+        {
+            return Result<List<ChosenOption>>.Fail(
+                $"Some choices for {item.Name} are no longer available. Please review your order.");
+        }
+
+        foreach (MenuItemOptionGroup group in groups)
+        {
+            List<MenuItemOption> selected = [.. group.Options.Where(o => requestedOptionIds.Contains(o.Id))];
+
+            if (selected.Count < group.MinSelections)
+            {
+                return Result<List<ChosenOption>>.Fail(
+                    group.MinSelections == 1
+                        ? $"\"{group.Name}\" is required for {item.Name}."
+                        : $"Please choose at least {group.MinSelections} for \"{group.Name}\" on {item.Name}.");
+            }
+
+            if (selected.Count > group.MaxSelections)
+            {
+                return Result<List<ChosenOption>>.Fail(
+                    $"You can choose at most {group.MaxSelections} for {group.Name} on {item.Name}.");
+            }
+
+            // Availability last, so "you picked too many" is not reported as "we ran out".
+            List<MenuItemOption> soldOut = [.. selected.Where(o => !o.IsAvailable || !o.AllergensConfirmed)];
+
+            if (soldOut.Count > 0)
+            {
+                return Result<List<ChosenOption>>.Fail(
+                    $"Sorry, we've just run out of: {string.Join(", ", soldOut.Select(o => o.Name))}. Please choose something else.");
+            }
+
+            chosen.AddRange(selected.Select(o => new ChosenOption(group, o)));
+        }
+
+        return Result<List<ChosenOption>>.Ok(chosen);
+    }
+
+
     private const int MaxLinesPerOrder = 100;
 
     public async Task<Result<CreateOrderResultDto>> CreateOrderAsync(CreateOrderRequestDto request, int expectedCompanyId)
@@ -87,25 +172,43 @@ public class KitchenOrderService(
                 return Result<CreateOrderResultDto>.Fail("This venue is not taking orders at the moment.");
             }
 
-            // Collapse duplicates so two taps of the same item become quantity 2 on one line
-            // rather than two lines the kitchen has to mentally add together.
-            Dictionary<int, int> requestedQuantities = request.Lines
-                .GroupBy(l => l.MenuItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
+            // Collapse duplicates so two taps of the same thing become quantity 2 on one line
+            // rather than two lines the kitchen has to mentally add together. The identity of a
+            // line is the dish *plus its choices*: chips-with-beans and chips-with-peas are two
+            // different things to cook and must never be merged into one line of two.
+            Dictionary<string, RequestedLine> requestedLines = [];
+
+            foreach (CreateOrderLineDto line in request.Lines)
+            {
+                List<int> optionIds = [.. line.SelectedOptionIds.Distinct().OrderBy(id => id)];
+                string key = $"{line.MenuItemId}:{string.Join(',', optionIds)}";
+
+                if (requestedLines.TryGetValue(key, out RequestedLine? existing))
+                {
+                    existing.Quantity += line.Quantity;
+                }
+                else
+                {
+                    requestedLines[key] = new RequestedLine(line.MenuItemId, optionIds, line.Quantity);
+                }
+            }
 
             // Checked after collapsing, not before: per-line caps are trivially defeated by
             // splitting one item across many lines, which would turn a hundred legal-looking
-            // lines into a single five-thousand-unit ticket.
-            if (requestedQuantities.Values.Any(q => q > MaxQuantityPerLine))
+            // lines into a single five-thousand-unit ticket. Summed across variants too, so
+            // ordering the same dish forty times with a different side each time still counts.
+            if (requestedLines.Values.GroupBy(l => l.MenuItemId).Any(g => g.Sum(l => l.Quantity) > MaxQuantityPerLine))
             {
                 return Result<CreateOrderResultDto>.Fail($"You can order at most {MaxQuantityPerLine} of any one item.");
             }
 
-            List<int> itemIds = [.. requestedQuantities.Keys];
+            List<int> itemIds = [.. requestedLines.Values.Select(l => l.MenuItemId).Distinct()];
 
             List<MenuItem> items = await ctx.MenuItems
                 .AsNoTracking()
                 .TagWithCallSite()
+                .Include(i => i.OptionGroups.Where(g => g.IsActive))
+                    .ThenInclude(g => g.Options.Where(o => o.IsActive))
                 .Where(i => itemIds.Contains(i.Id)
                     && i.IsActive
                     // Same guard as the public menu, repeated here rather than trusted from it:
@@ -139,15 +242,51 @@ public class KitchenOrderService(
 
             DateTime now = DateTime.UtcNow;
 
-            List<KitchenOrderItem> orderItems = [.. items.Select(i => new KitchenOrderItem
+            Dictionary<int, MenuItem> itemsById = items.ToDictionary(i => i.Id);
+            List<KitchenOrderItem> orderItems = [];
+
+            foreach (RequestedLine line in requestedLines.Values)
             {
-                OrderId = 0,
-                MenuItemId = i.Id,
-                MenuItemNameSnapshot = i.Name,
-                UnitPriceCentsSnapshot = i.PriceCents,
-                ContainsAllergensSnapshot = i.ContainsAllergens,
-                Quantity = requestedQuantities[i.Id]
-            })];
+                MenuItem item = itemsById[line.MenuItemId];
+
+                Result<List<ChosenOption>> chosen = ResolveChosenOptions(item, line.OptionIds);
+
+                if (!chosen.Success || chosen.Data is null)
+                {
+                    return Result<CreateOrderResultDto>.Fail(chosen.Error!);
+                }
+
+                // Price and allergens are both computed here from the menu rows, never taken from
+                // anything the phone sent. The client is told what a choice costs so it can show
+                // a total; it is not believed about it.
+                int unitPrice = item.PriceCents + chosen.Data.Sum(c => c.Option.PriceDeltaCents);
+
+                Allergen allergens = item.ContainsAllergens;
+
+                foreach (ChosenOption choice in chosen.Data)
+                {
+                    allergens |= choice.Option.ContainsAllergens;
+                }
+
+                orderItems.Add(new KitchenOrderItem
+                {
+                    OrderId = 0,
+                    MenuItemId = item.Id,
+                    MenuItemNameSnapshot = item.Name,
+                    UnitPriceCentsSnapshot = unitPrice,
+                    ContainsAllergensSnapshot = allergens,
+                    Quantity = line.Quantity,
+                    Options = [.. chosen.Data.Select(c => new KitchenOrderItemOption
+                    {
+                        OrderItemId = 0,
+                        MenuItemOptionId = c.Option.Id,
+                        GroupNameSnapshot = c.Group.Name,
+                        OptionNameSnapshot = c.Option.Name,
+                        PriceDeltaCentsSnapshot = c.Option.PriceDeltaCents,
+                        ContainsAllergensSnapshot = c.Option.ContainsAllergens
+                    })]
+                });
+            }
 
             if (string.IsNullOrWhiteSpace(table.StripeAccountId))
             {
@@ -218,6 +357,7 @@ public class KitchenOrderService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(o => o.Items)
+                    .ThenInclude(i => i.Options)
                 .FirstOrDefaultAsync(o => o.OrderToken == orderToken);
 
             if (order is null)
@@ -254,7 +394,14 @@ public class KitchenOrderService(
                     Name = i.MenuItemNameSnapshot,
                     Quantity = i.Quantity,
                     UnitPriceCents = i.UnitPriceCentsSnapshot,
-                    ContainsAllergens = i.ContainsAllergensSnapshot
+                    ContainsAllergens = i.ContainsAllergensSnapshot,
+                    Options = [.. i.Options.Select(o => new OrderLineOptionDto
+                    {
+                        GroupName = o.GroupNameSnapshot,
+                        OptionName = o.OptionNameSnapshot,
+                        PriceDeltaCents = o.PriceDeltaCentsSnapshot,
+                        ContainsAllergens = o.ContainsAllergensSnapshot
+                    })]
                 })]
             });
         }
@@ -274,6 +421,7 @@ public class KitchenOrderService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(o => o.Items)
+                    .ThenInclude(i => i.Options)
                 // AwaitingPayment is excluded as well as the terminal states: an unpaid order is
                 // not work the kitchen should be looking at, and may never become one.
                 .Where(o => o.LocationId == locationId
@@ -304,6 +452,7 @@ public class KitchenOrderService(
 
             KitchenOrder? order = await ctx.KitchenOrders
                 .Include(o => o.Items)
+                    .ThenInclude(i => i.Options)
                 .FirstOrDefaultAsync(o => o.Id == orderId);
 
             if (order is null)
@@ -374,6 +523,7 @@ public class KitchenOrderService(
 
             KitchenOrder? found = await ctx.KitchenOrders
                 .Include(o => o.Items)
+                    .ThenInclude(i => i.Options)
                 .FirstOrDefaultAsync(o => o.PaymentIntentId == paymentIntentId);
 
             if (found is null)
@@ -525,6 +675,7 @@ public class KitchenOrderService(
 
             KitchenOrder? found = await ctx.KitchenOrders
                 .Include(o => o.Items)
+                    .ThenInclude(i => i.Options)
                 .FirstOrDefaultAsync(o => o.Id == orderId);
 
             if (found is null)
@@ -732,7 +883,14 @@ public class KitchenOrderService(
             Name = i.MenuItemNameSnapshot,
             Quantity = i.Quantity,
             UnitPriceCents = i.UnitPriceCentsSnapshot,
-            ContainsAllergens = i.ContainsAllergensSnapshot
+            ContainsAllergens = i.ContainsAllergensSnapshot,
+            Options = [.. i.Options.Select(o => new OrderLineOptionDto
+            {
+                GroupName = o.GroupNameSnapshot,
+                OptionName = o.OptionNameSnapshot,
+                PriceDeltaCents = o.PriceDeltaCentsSnapshot,
+                ContainsAllergens = o.ContainsAllergensSnapshot
+            })]
         })]
     };
 }

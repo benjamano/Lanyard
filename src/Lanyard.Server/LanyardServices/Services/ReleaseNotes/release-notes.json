@@ -238,7 +238,11 @@
       "Added ordering terms and a refund policy, published per company from the new Legal details section in Companies & Locations and linked from the checkout screen.",
       "Orders started but never paid for are now closed off automatically a few hours later, instead of sitting on the books as unpaid.",
       "If the ordering site gets briefly busy, customers are now told to try again in a moment rather than being told their table code is wrong.",
-      "The customer ordering site now shows the venue's own logo as the browser tab icon.",
+      "Added a browser tab icon (favicon) for the customer ordering site, uploaded separately from the logo in Companies & Locations, since a wide logo is unreadable at that size. Without one, customers see the Lanyard mark.",
+      "Dishes can now have choices, so one dish covers several meals - chips and nuggets with either beans or peas, for example. Set them up per dish in Kitchen > Menu & Table Codes.",
+      "Each choice carries its own allergen declaration, which is added to the dish's own on the customer menu, the order and the kitchen ticket.",
+      "A single choice can be marked sold out on its own, so running out of beans doesn't take the whole meal off the menu.",
+      "The kitchen ticket shows the choices made on each line, so it is clear whether a plate takes beans or peas.",
       "If the ordering site can't reach us at all, customers are now told that and asked to retry, instead of being told their table code is wrong."
     ]
   }

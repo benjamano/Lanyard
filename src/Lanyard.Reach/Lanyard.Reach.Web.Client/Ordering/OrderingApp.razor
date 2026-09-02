@@ -79,7 +79,15 @@
                 {
                     <div class="ordering__receipt-line">
                         <span class="ordering__receipt-qty">@line.Quantity&times;</span>
-                        <span class="ordering__receipt-name">@line.Name</span>
+                        <span class="ordering__receipt-name">
+                            @line.Name
+                            @if (line.Options.Count > 0)
+                            {
+                                <span class="ordering__receipt-options">
+                                    @string.Join(", ", line.Options.Select(o => o.OptionName))
+                                </span>
+                            }
+                        </span>
                         <span class="ordering__receipt-price">@Money(line.UnitPriceCents * line.Quantity)</span>
                     </div>
                 }
@@ -135,21 +143,36 @@
                 else
                 {
                     <ul class="ordering__cart-lines">
-                        @foreach (MenuItemDto item in CartItems)
+                        @foreach (CartLine line in _cart.Lines.Values)
                         {
+                            MenuItemDto? item = FindItem(line.MenuItemId);
+
+                            if (item is null)
+                            {
+                                continue;
+                            }
+
+                            List<string> chosen = CartState.DescribeOptions(item, line.OptionIds);
+
                             <li class="ordering__cart-line">
                                 <div class="ordering__cart-line-text">
                                     <span class="ordering__cart-line-name">@item.Name</span>
-                                    <span class="ordering__cart-line-unit">@Money(item.PriceCents) each</span>
+                                    @if (chosen.Count > 0)
+                                    {
+                                        <span class="ordering__cart-line-options">@string.Join(", ", chosen)</span>
+                                    }
+                                    <span class="ordering__cart-line-unit">
+                                        @Money(CartState.UnitPriceCents(item, line.OptionIds)) each
+                                    </span>
                                 </div>
                                 <div class="ordering__stepper">
                                     <button type="button" class="ordering__stepper-btn"
                                             aria-label="@($"Remove one {item.Name}")"
-                                            @onclick="() => ChangeQuantityAsync(item.Id, -1)">&minus;</button>
-                                    <span class="ordering__stepper-count">@_cart.QuantityOf(item.Id)</span>
+                                            @onclick="() => ChangeLineQuantityAsync(line.Key, -1)">&minus;</button>
+                                    <span class="ordering__stepper-count">@line.Quantity</span>
                                     <button type="button" class="ordering__stepper-btn"
                                             aria-label="@($"Add another {item.Name}")"
-                                            @onclick="() => ChangeQuantityAsync(item.Id, 1)">+</button>
+                                            @onclick="() => ChangeLineQuantityAsync(line.Key, 1)">+</button>
                                 </div>
                             </li>
                         }
@@ -243,22 +266,38 @@
 
                                 @if (item.IsAvailable)
                                 {
-                                    @if (_cart.QuantityOf(item.Id) == 0)
+                                    @* A dish with choices always goes through the chooser, even for a
+                                       second helping: the customer may well want beans this time and
+                                       peas the next, and a bare "+" would silently repeat the first
+                                       choice. Dishes without choices keep the quicker stepper. *@
+                                    @if (item.OptionGroups.Count > 0)
+                                    {
+                                        <div class="ordering__item-actions">
+                                            <button type="button" class="ordering__add"
+                                                    aria-label="@($"Choose options for {item.Name}")"
+                                                    @onclick="() => OpenChooser(item)">Choose</button>
+                                            @if (_cart.QuantityOf(item.Id) > 0)
+                                            {
+                                                <span class="ordering__in-basket">@_cart.QuantityOf(item.Id) in basket</span>
+                                            }
+                                        </div>
+                                    }
+                                    else if (_cart.QuantityOf(item.Id) == 0)
                                     {
                                         <button type="button" class="ordering__add"
                                                 aria-label="@($"Add {item.Name}")"
-                                                @onclick="() => ChangeQuantityAsync(item.Id, 1)">Add</button>
+                                                @onclick="() => AddPlainAsync(item)">Add</button>
                                     }
                                     else
                                     {
                                         <div class="ordering__stepper">
                                             <button type="button" class="ordering__stepper-btn"
                                                     aria-label="@($"Remove one {item.Name}")"
-                                                    @onclick="() => ChangeQuantityAsync(item.Id, -1)">&minus;</button>
+                                                    @onclick="() => ChangeLineQuantityAsync(CartLine.ComposeKey(item.Id, []), -1)">&minus;</button>
                                             <span class="ordering__stepper-count">@_cart.QuantityOf(item.Id)</span>
                                             <button type="button" class="ordering__stepper-btn"
                                                     aria-label="@($"Add another {item.Name}")"
-                                                    @onclick="() => ChangeQuantityAsync(item.Id, 1)">+</button>
+                                                    @onclick="() => AddPlainAsync(item)">+</button>
                                         </div>
                                     }
                                 }
@@ -284,6 +323,90 @@
                 </div>
             }
         }
+    }
+
+    @* The chooser. Rendered last so it stacks above the menu, and only when a dish is actually
+       being configured - a sheet that is always in the DOM would trap focus and be read out by a
+       screen reader even while hidden. *@
+    @if (_chooserItem is not null)
+    {
+        <div class="ordering__sheet-backdrop" @onclick="CloseChooser"></div>
+
+        <div class="ordering__sheet" role="dialog" aria-modal="true" aria-label="@($"Choose options for {_chooserItem.Name}")">
+            <header class="ordering__sheet-header">
+                <h2>@_chooserItem.Name</h2>
+                <button type="button" class="ordering__sheet-close" aria-label="Close" @onclick="CloseChooser">&times;</button>
+            </header>
+
+            <div class="ordering__sheet-body">
+                @foreach (MenuItemOptionGroupDto group in _chooserItem.OptionGroups.OrderBy(g => g.SortOrder))
+                {
+                    <fieldset class="ordering__option-group">
+                        <legend class="ordering__option-legend">
+                            @group.Name
+                            <span class="ordering__option-rule">
+                                @(group.MinSelections > 0
+                                    ? group.MaxSelections == 1 ? "Choose one" : $"Choose {group.MinSelections} to {group.MaxSelections}"
+                                    : group.MaxSelections == 1 ? "Optional" : $"Optional, up to {group.MaxSelections}")
+                            </span>
+                        </legend>
+
+                        @foreach (MenuItemOptionDto option in group.Options.OrderBy(o => o.SortOrder))
+                        {
+                            <label class="ordering__option @(option.IsAvailable ? "" : "ordering__option--sold-out")">
+                                <input type="@(group.MaxSelections == 1 ? "radio" : "checkbox")"
+                                       name="@($"group-{group.Id}")"
+                                       disabled="@(!option.IsAvailable)"
+                                       checked="@_chooserSelection.Contains(option.Id)"
+                                       @onchange="e => ToggleOption(group, option, e)" />
+
+                                <span class="ordering__option-text">
+                                    <span class="ordering__option-name">@option.Name</span>
+
+                                    @* Per choice, at the moment of choosing. Beans and peas do not
+                                       carry the same allergens, so declaring only on the dish would
+                                       either overstate every variant or understate some. *@
+                                    @if (option.ContainsAllergens != Allergen.None)
+                                    {
+                                        <span class="ordering__option-allergens">
+                                            <strong>Contains:</strong> @option.ContainsAllergens.ToDisplayList()
+                                        </span>
+                                    }
+                                    @if (option.MayContainAllergens != Allergen.None)
+                                    {
+                                        <span class="ordering__option-allergens ordering__option-allergens--trace">
+                                            May contain: @option.MayContainAllergens.ToDisplayList()
+                                        </span>
+                                    }
+                                </span>
+
+                                @if (!option.IsAvailable)
+                                {
+                                    <span class="ordering__sold-out-tag">Sold out</span>
+                                }
+                                else if (option.PriceDeltaCents != 0)
+                                {
+                                    <span class="ordering__option-price">
+                                        @(option.PriceDeltaCents > 0 ? "+" : "")@Money(option.PriceDeltaCents)
+                                    </span>
+                                }
+                            </label>
+                        }
+                    </fieldset>
+                }
+
+                @if (_chooserError is not null)
+                {
+                    <p class="ordering__error" role="alert">@_chooserError</p>
+                }
+            </div>
+
+            <button type="button" class="ordering__button ordering__button--primary"
+                    @onclick="ConfirmChooserAsync">
+                Add to basket
+                <span class="ordering__bar-total">@Money(CartState.UnitPriceCents(_chooserItem, _chooserSelection))</span>
+            </button>
+        </div>
     }
 </div>
 
@@ -316,10 +439,13 @@
         (KitchenOrderStatus.Ready, "Ready")
     ];
 
-    private IEnumerable<MenuItemDto> CartItems =>
-        _menu is null
-            ? []
-            : _menu.Categories.SelectMany(c => c.Items).Where(i => _cart.QuantityOf(i.Id) > 0);
+    private MenuItemDto? FindItem(int menuItemId) =>
+        _menu?.Categories.SelectMany(c => c.Items).FirstOrDefault(i => i.Id == menuItemId);
+
+    // The dish currently being configured, if any. Null means the chooser is closed.
+    private MenuItemDto? _chooserItem;
+    private readonly HashSet<int> _chooserSelection = [];
+    private string? _chooserError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -492,18 +618,119 @@
         }, token);
     }
 
-    private async Task ChangeQuantityAsync(int menuItemId, int delta)
+    private async Task AddPlainAsync(MenuItemDto item)
+    {
+        await _cart.AddAsync(item.Id);
+
+        _submitError = null;
+    }
+
+    private async Task ChangeLineQuantityAsync(string key, int delta)
     {
         if (delta > 0)
         {
-            await _cart.AddAsync(menuItemId);
+            // Re-adding an existing line has to reuse that line's own choices, not the dish's
+            // defaults, or pressing "+" on chips-with-beans would quietly add plain chips.
+            if (_cart.Lines.TryGetValue(key, out CartLine? line))
+            {
+                await _cart.AddAsync(line.MenuItemId, line.OptionIds);
+            }
         }
         else
         {
-            await _cart.RemoveAsync(menuItemId);
+            await _cart.RemoveAsync(key);
         }
 
         _submitError = null;
+    }
+
+    private void OpenChooser(MenuItemDto item)
+    {
+        _chooserItem = item;
+        _chooserError = null;
+        _chooserSelection.Clear();
+
+        // Preselect the obvious answer: a required pick-one group with a single available choice
+        // has no decision in it, and making the customer tap it anyway is just friction.
+        foreach (MenuItemOptionGroupDto group in item.OptionGroups.Where(g => g.MinSelections > 0 && g.MaxSelections == 1))
+        {
+            List<MenuItemOptionDto> available = [.. group.Options.Where(o => o.IsAvailable)];
+
+            if (available.Count == 1)
+            {
+                _chooserSelection.Add(available[0].Id);
+            }
+        }
+    }
+
+    private void CloseChooser()
+    {
+        _chooserItem = null;
+        _chooserSelection.Clear();
+        _chooserError = null;
+    }
+
+    private void ToggleOption(MenuItemOptionGroupDto group, MenuItemOptionDto option, ChangeEventArgs e)
+    {
+        bool selected = e.Value is bool value && value;
+
+        if (group.MaxSelections == 1)
+        {
+            // Radio semantics: picking one clears the rest of its own group, and only that group.
+            foreach (MenuItemOptionDto other in group.Options)
+            {
+                _chooserSelection.Remove(other.Id);
+            }
+
+            _chooserSelection.Add(option.Id);
+        }
+        else if (selected)
+        {
+            if (group.Options.Count(o => _chooserSelection.Contains(o.Id)) >= group.MaxSelections)
+            {
+                _chooserError = $"You can choose at most {group.MaxSelections} for {group.Name}.";
+
+                return;
+            }
+
+            _chooserSelection.Add(option.Id);
+        }
+        else
+        {
+            _chooserSelection.Remove(option.Id);
+        }
+
+        _chooserError = null;
+    }
+
+    private async Task ConfirmChooserAsync()
+    {
+        if (_chooserItem is null)
+        {
+            return;
+        }
+
+        // Checked here so the customer is told what is missing before the round trip. The server
+        // checks the same rules again and is the one that decides - this is a courtesy, not the
+        // guarantee.
+        foreach (MenuItemOptionGroupDto group in _chooserItem.OptionGroups.OrderBy(g => g.SortOrder))
+        {
+            int chosen = group.Options.Count(o => _chooserSelection.Contains(o.Id));
+
+            if (chosen < group.MinSelections)
+            {
+                _chooserError = group.MinSelections == 1
+                    ? $"\"{group.Name}\" is required."
+                    : $"Please choose at least {group.MinSelections} for \"{group.Name}\".";
+
+                return;
+            }
+        }
+
+        await _cart.AddAsync(_chooserItem.Id, _chooserSelection);
+
+        _submitError = null;
+        CloseChooser();
     }
 
     private async Task PlaceOrderAsync()

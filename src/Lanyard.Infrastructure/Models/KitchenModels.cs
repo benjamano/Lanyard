@@ -73,6 +73,90 @@ namespace Lanyard.Infrastructure.Models
         /// safety claim, so an unconfirmed item is withheld from the public menu instead.
         /// </summary>
         public bool AllergensConfirmed { get; set; }
+
+        /// <summary>Choices the customer makes when ordering this dish, if any.</summary>
+        public virtual List<MenuItemOptionGroup> OptionGroups { get; set; } = [];
+    }
+
+    /// <summary>
+    /// A set of choices attached to a dish: "Choose your side", "Choose your drink".
+    ///
+    /// Modelled as groups rather than a flat list of extras because the rules that matter are
+    /// per group - a meal deal is "exactly one side" and "exactly one drink", not "any two of
+    /// these six things".
+    /// </summary>
+    public class MenuItemOptionGroup
+    {
+        public int Id { get; set; }
+
+        public required int MenuItemId { get; set; }
+        public MenuItem? MenuItem { get; set; }
+
+        /// <summary>Shown as the question above the choices: "Choose your side".</summary>
+        public required string Name { get; set; }
+
+        /// <summary>
+        /// How many choices the customer must make. Zero makes the group optional; one or more
+        /// makes it required, which is the same thing said once rather than kept in a separate
+        /// IsRequired flag that could contradict it.
+        /// </summary>
+        public int MinSelections { get; set; } = 1;
+
+        /// <summary>
+        /// Most groups are "pick one" and render as radio buttons. Anything higher renders as
+        /// checkboxes and caps how many can be ticked.
+        /// </summary>
+        public int MaxSelections { get; set; } = 1;
+
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreateDate { get; set; }
+        public DateTime UpdateDate { get; set; }
+
+        public virtual List<MenuItemOption> Options { get; set; } = [];
+    }
+
+    /// <summary>
+    /// One choice within a group: "Beans", "Peas", "Chips".
+    /// </summary>
+    public class MenuItemOption
+    {
+        public int Id { get; set; }
+
+        public required int OptionGroupId { get; set; }
+        public MenuItemOptionGroup? OptionGroup { get; set; }
+
+        public required string Name { get; set; }
+
+        /// <summary>
+        /// Added to the dish's price when chosen, in pence, and usually zero - swapping peas for
+        /// beans costs nothing. Signed, so a cheaper choice can discount the dish rather than
+        /// forcing every variant to be priced upward from the cheapest.
+        /// </summary>
+        public int PriceDeltaCents { get; set; }
+
+        /// <summary>Cleared when the kitchen runs out of just this choice, leaving the dish orderable.</summary>
+        public bool IsAvailable { get; set; } = true;
+
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreateDate { get; set; }
+        public DateTime UpdateDate { get; set; }
+
+        /// <summary>
+        /// Allergens for this choice specifically. A choice genuinely changes what is in the
+        /// meal - beans and a brioche bun do not carry the same allergens - so declaring them
+        /// only on the parent dish would either overstate every variant or understate some.
+        /// </summary>
+        public Allergen ContainsAllergens { get; set; } = Allergen.None;
+        public Allergen MayContainAllergens { get; set; } = Allergen.None;
+
+        /// <summary>
+        /// Same meaning, and the same reason, as <see cref="MenuItem.AllergensConfirmed"/>: blank
+        /// must never be read as "contains nothing". An unconfirmed choice is withheld from
+        /// customers rather than offered with an empty declaration.
+        /// </summary>
+        public bool AllergensConfirmed { get; set; }
     }
 
     /// <summary>
@@ -178,6 +262,12 @@ namespace Lanyard.Infrastructure.Models
         /// would disagree with the receipt the customer is holding.
         /// </summary>
         public required string MenuItemNameSnapshot { get; set; }
+
+        /// <summary>
+        /// The price of one of this line, including any option deltas already added in. Stored
+        /// as the effective price rather than the base so that every existing total calculation
+        /// (quantity times unit price) stays correct without knowing options exist.
+        /// </summary>
         public int UnitPriceCentsSnapshot { get; set; }
 
         /// <summary>
@@ -188,5 +278,38 @@ namespace Lanyard.Infrastructure.Models
         public Allergen ContainsAllergensSnapshot { get; set; }
 
         public int Quantity { get; set; }
+
+        public virtual List<KitchenOrderItemOption> Options { get; set; } = [];
+    }
+
+    /// <summary>
+    /// A choice the customer made on one order line, snapshotted.
+    ///
+    /// The kitchen reads this off the ticket to know whether it is plating beans or peas, so it
+    /// carries its own copy of the names rather than joining back to the menu: renaming a choice
+    /// next week must not change what a ticket printed today said.
+    /// </summary>
+    public class KitchenOrderItemOption
+    {
+        public int Id { get; set; }
+
+        public required int OrderItemId { get; set; }
+        public KitchenOrderItem? OrderItem { get; set; }
+
+        /// <summary>Kept for reporting ("how often is beans chosen"), never for display.</summary>
+        public int? MenuItemOptionId { get; set; }
+        public MenuItemOption? MenuItemOption { get; set; }
+
+        public required string GroupNameSnapshot { get; set; }
+        public required string OptionNameSnapshot { get; set; }
+
+        /// <summary>
+        /// The delta as priced at order time. Already included in the line's
+        /// <see cref="KitchenOrderItem.UnitPriceCentsSnapshot"/>; kept separately so a receipt can
+        /// show why the line costs what it does.
+        /// </summary>
+        public int PriceDeltaCentsSnapshot { get; set; }
+
+        public Allergen ContainsAllergensSnapshot { get; set; }
     }
 }

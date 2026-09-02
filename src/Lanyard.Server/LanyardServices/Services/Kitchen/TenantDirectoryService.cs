@@ -307,7 +307,8 @@ public class TenantDirectoryService(
             ThemeColorHex = BrandConstants.ResolveAccentColor(company.ThemeColorHex),
             SecondaryColorHex = BrandConstants.ResolveSecondaryColor(company.SecondaryColorHex, company.ThemeColorHex),
             OnPrimaryColorHex = BrandConstants.ResolveOnPrimaryColor(company.ThemeColorHex),
-            HasLogo = company.LogoFileId is not null
+            HasLogo = company.LogoFileId is not null,
+            HasFavicon = company.FaviconFileId is not null
         };
     }
 

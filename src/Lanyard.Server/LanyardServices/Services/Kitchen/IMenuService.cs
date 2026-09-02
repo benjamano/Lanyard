@@ -38,4 +38,20 @@ public interface IMenuService
 
     /// <summary>Resolves an item's image file id without exposing it to the caller's transport.</summary>
     Task<Result<Guid>> GetItemImageFileIdAsync(int itemId, int expectedCompanyId);
+
+    /// <summary>
+    /// The choice groups on one dish, with their options, for the staff editor. Includes
+    /// unconfirmed and unavailable choices, which the public menu deliberately hides.
+    /// </summary>
+    Task<Result<List<MenuItemOptionGroup>>> GetOptionGroupsForItemAsync(int menuItemId);
+
+    Task<Result<MenuItemOptionGroup>> SaveOptionGroupAsync(MenuItemOptionGroup group);
+
+    Task<Result<MenuItemOption>> SaveOptionAsync(MenuItemOption option);
+
+    Task<Result<bool>> SetOptionAvailabilityAsync(int optionId, bool isAvailable);
+
+    Task<Result<bool>> DeactivateOptionGroupAsync(int groupId);
+
+    Task<Result<bool>> DeactivateOptionAsync(int optionId);
 }

@@ -201,6 +201,33 @@ public static class OrderingBffEndpoints
             return Results.Stream(await response.Content.ReadAsStreamAsync(cancellationToken), contentType);
         });
 
+        // The tenant's browser-tab icon. Proxied like the logo, and for the same reason.
+        app.MapGet("/tenant-favicon", async (
+            ITenantContext tenantContext,
+            LanyardOrderingClient client,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            if (TenantGate(tenantContext) is IResult gate)
+            {
+                return gate;
+            }
+
+            HttpResponseMessage response = await client.GetCompanyFaviconAsync(
+                tenantContext.Tenant.CompanyId, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return Results.NotFound();
+            }
+
+            string contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+            httpContext.Response.Headers.CacheControl = "public, max-age=3600";
+
+            return Results.Stream(await response.Content.ReadAsStreamAsync(cancellationToken), contentType);
+        });
+
         // The tenant's logo, proxied for the same same-origin reason as menu photos. Reuses the
         // Lanyard server's existing CompanyBrandingController endpoint rather than adding one.
         app.MapGet("/tenant-logo", async (
