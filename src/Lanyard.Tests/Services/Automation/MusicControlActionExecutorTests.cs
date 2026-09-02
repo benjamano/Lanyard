@@ -7,6 +7,8 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -64,9 +66,29 @@ public class MusicControlActionExecutorTests
         MusicPlayerService player = new(
             hubMock.Object,
             factory,
+            BuildClientServiceScopeFactory(factory, hubMock.Object),
             NullLogger<MusicPlayerService>.Instance);
 
         return (player, proxyMock);
+    }
+
+    // MusicPlayerService resolves IClientService (scoped) per call via IServiceScopeFactory since
+    // MusicPlayerService itself is a singleton in production - build a real minimal container here
+    // so GetClientConnectionIdAsync exercises the same ClientService/cache lookup production does,
+    // backed by the same InMemory context factory as the rest of the test.
+    private static IServiceScopeFactory BuildClientServiceScopeFactory(
+        IDbContextFactory<ApplicationDbContext> factory,
+        IHubContext<SignalRControlHub> hubContext)
+    {
+        ServiceCollection services = new();
+
+        services.AddSingleton(factory);
+        services.AddSingleton(hubContext);
+        services.AddSingleton<ILogger<ClientService>>(NullLogger<ClientService>.Instance);
+        services.AddMemoryCache();
+        services.AddScoped<IClientService, ClientService>();
+
+        return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
     private static MusicControlActionExecutor GetExecutor(

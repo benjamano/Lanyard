@@ -13,6 +13,7 @@ public interface IGameStateService
 
     void HandleGameStarted();
     void HandleGameEnded();
+    void HandleGameGetReady();
     void HandlePlayerHit(int shotGunId, int shotByGunId);
 
     void UpdateTimeRemaining(TimeSpan timeRemaining);

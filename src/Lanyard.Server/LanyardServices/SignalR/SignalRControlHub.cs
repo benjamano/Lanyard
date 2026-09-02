@@ -159,7 +159,14 @@ public class SignalRControlHub(
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (getClientResult.IsSuccess)
         {
-            _laserGameStatusStore.RemoveStatus(getClientResult.Data);
+            // Only clear the live game status while this is still the client's current
+            // connection - a kiosk that has already reconnected on a newer connection before
+            // this stale socket's disconnect event fires would otherwise have the newer
+            // connection's just-published status wiped out by the old connection's disconnect.
+            if (await IsCurrentConnectionForClientAsync(getClientResult.Data))
+            {
+                _laserGameStatusStore.RemoveStatus(getClientResult.Data);
+            }
 
             await RecordClientDisconnectAsync(getClientResult.Data);
         }
@@ -167,6 +174,13 @@ public class SignalRControlHub(
         _connections.TryRemove(Context.ConnectionId, out _);
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    private async Task<bool> IsCurrentConnectionForClientAsync(Guid clientId)
+    {
+        Result<Client?> clientResult = await _clientService.GetClientFromIdAsync(clientId);
+
+        return clientResult.IsSuccess && clientResult.Data?.MostRecentConnectionId == Context.ConnectionId;
     }
 
     // Stamps the client row so a dashboard can show how long a kiosk has been down. Only

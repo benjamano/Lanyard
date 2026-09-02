@@ -19,6 +19,15 @@ public class MusicControlHandler : IDisposable
     private readonly Timer _positionReportTimer;
     private HubConnection? _connection;
 
+    // Guards against overlapping position-report ticks: InvokeAsync waits for a server
+    // ack, and the server's default MaximumParallelInvocationsPerClient (1) processes a
+    // connection's invocations strictly FIFO. If one tick's InvokeAsync ever takes longer
+    // than the 1s timer interval, firing another invocation on top queues up behind it
+    // instead of replacing it - the backlog only grows, never drains, until a full
+    // reconnect discards the stuck HubConnection. Skipping an overlapping tick instead of
+    // queuing it keeps the backlog from ever forming.
+    private int _isReportingPosition;
+
     public MusicControlHandler(
         IMusicPlayer musicPlayer,
         ISongCacheService cacheService,
@@ -35,8 +44,28 @@ public class MusicControlHandler : IDisposable
         _musicPlayer.QueueChanged += OnQueueChanged;
         _musicPlayer.SongEnded += OnSongEnded;
 
-        _positionReportTimer = new Timer(_ => _ = ReportPlaybackPositionAsync(onlyWhilePlaying: true),
+        _positionReportTimer = new Timer(_ => TryReportPlaybackPositionOnTick(),
             null, _positionReportInterval, _positionReportInterval);
+    }
+
+    private void TryReportPlaybackPositionOnTick()
+    {
+        if (Interlocked.CompareExchange(ref _isReportingPosition, 1, 0) != 0)
+        {
+            // Previous tick hasn't completed yet - skip this tick rather than queuing
+            // another SignalR invocation behind it.
+            return;
+        }
+
+        _ = ReportPlaybackPositionAsync(onlyWhilePlaying: true).ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+            {
+                _logger.LogDebug(t.Exception, "Position report tick faulted");
+            }
+
+            Interlocked.Exchange(ref _isReportingPosition, 0);
+        }, TaskScheduler.Default);
     }
 
     public void Dispose()

@@ -44,9 +44,18 @@ public class DmxController
 
             SendFrame();
 
-            ISignalRClient _signalRClient = _serviceScopeFactory.CreateScope().ServiceProvider.GetRequiredService<ISignalRClient>();
-            
-            _signalRClient.SendDmxChannelValueAsync(channel, value);
+            // ISignalRClient is a singleton, so the scope can be disposed immediately after
+            // resolving it - it doesn't need to outlive the fire-and-forget send below.
+            using IServiceScope scope = _serviceScopeFactory.CreateScope();
+            ISignalRClient signalRClient = scope.ServiceProvider.GetRequiredService<ISignalRClient>();
+
+            _ = signalRClient.SendDmxChannelValueAsync(channel, value).ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    _logger.LogWarning(t.Exception, "Failed to send DMX channel value to server. Channel: {Channel}, Value: {Value}", channel, value);
+                }
+            }, TaskScheduler.Default);
         }
         catch (Exception ex)
         {

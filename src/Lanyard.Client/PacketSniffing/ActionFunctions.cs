@@ -95,13 +95,26 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
 
     public async Task HandleGameStatusPacketAsync(string[] packetData)
     {
-        if (packetData[1].Split("@").Count() == 4)
+        string[] parts = packetData[1].Split("@");
+
+        // A settings-changed packet's parts each start with one of these known prefixes. Checking
+        // the count alone previously misrouted any real status-change packet that happened to also
+        // split into 4 parts, silently skipping HandleGameStarted() - detection then only happened
+        // one cycle later via the timing packet's countdown-moving heuristic.
+        bool looksLikeSettingsPacket = parts.Length == 4
+            && parts.All(p => p.StartsWith("016") || p.StartsWith("017") || p.StartsWith("00"));
+
+        if (parts.Length == 4 && !looksLikeSettingsPacket)
+        {
+            _logger.LogWarning("Game status packet had 4 '@'-delimited parts but didn't match known settings-packet prefixes; treating as a status packet. Raw: {RawValue}", packetData[1]);
+        }
+
+        if (looksLikeSettingsPacket)
         {
             // THIS MEANS THE GAME'S SETTINGS HAVE CHANGED, NOT THE STATUS
+            _logger.LogInformation("Game settings packet received. Raw: {RawValue}", packetData[1]);
 
-            string[] values = packetData[1].ToString()!.Split("@");
-
-            foreach (string value in values)
+            foreach (string value in parts)
             {
                 if (value.StartsWith("016"))
                 {
@@ -133,9 +146,17 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
                     }
 
                     break;
+                case GameStatus.GetReady:
+                    _logger.LogInformation("Game status updated to Get Ready");
+                    if (_gameStateService.GetGameStatus() != GameStatus.GetReady)
+                    {
+                        _gameStateService.HandleGameGetReady();
+                    }
+
+                    break;
                 case GameStatus.InGame:
                     _logger.LogInformation("Game status updated to In Progress");
-                    if (_gameStateService.GetGameStatus() != GameStatus.InGame && _gameStateService.GetGameStatus() != GameStatus.GetReady)
+                    if (_gameStateService.GetGameStatus() != GameStatus.InGame)
                     {
                         _gameStateService.HandleGameStarted();
                     }
@@ -148,7 +169,7 @@ public class Actions(ILogger<Actions> logger, IGameStateService _gameStateServic
         }
         else
         {
-            _logger.LogError("Invalid data parsed for the Game Status figure! Value: {gameStatusValue}", gameStatusValue);
+            _logger.LogError("Invalid data parsed for the Game Status figure! Value: {rawValue}", packetData[1]);
         }
 
     }

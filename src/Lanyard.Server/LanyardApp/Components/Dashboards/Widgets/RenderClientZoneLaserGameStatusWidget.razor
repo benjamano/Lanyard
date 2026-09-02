@@ -47,7 +47,7 @@
                             </FluentStack>
                         </FluentBadge>
                     </FluentStack>
-                    @if (Widget.ShowTimeLeft == true)
+                    @if (Widget.ShowTimeLeft == true && _gameStatus.Status == GameStatus.InGame)
                     {
                         <FluentStack Margin="@Margin.TopAuto" Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Width="100%" VerticalGap="3">
                             <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
