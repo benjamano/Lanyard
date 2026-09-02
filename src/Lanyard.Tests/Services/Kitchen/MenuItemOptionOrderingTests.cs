@@ -73,7 +73,17 @@ public class MenuItemOptionOrderingTests
     {
         await using ApplicationDbContext ctx = new(options);
 
-        Company company = new() { Name = "Play2Day", IsActive = true, StripeAccountId = "acct_test" };
+        Company company = new()
+        {
+            Name = "Play2Day",
+            IsActive = true,
+            StripeAccountId = "acct_test",
+            // Required before a venue may take orders at all - see
+            // KitchenOrderServiceTests.CreateOrderAsync_RefusesWhenTheCompanyHasNotPublishedItsLegalDetails.
+            LegalName = "Play2Day Leisure Ltd",
+            RegisteredAddress = "1 Cardinal Park, Ipswich, IP1 1AA",
+            ContactEmail = "hello@example.test"
+        };
         ctx.Companies.Add(company);
         await ctx.SaveChangesAsync();
 

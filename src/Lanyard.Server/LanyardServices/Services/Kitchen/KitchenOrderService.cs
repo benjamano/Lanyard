@@ -147,7 +147,10 @@ public class KitchenOrderService(
                     LocationActive = t.Location!.IsActive,
                     t.Location.OrderingEnabled,
                     t.Location.CompanyId,
-                    StripeAccountId = t.Location.Company!.StripeAccountId
+                    StripeAccountId = t.Location.Company!.StripeAccountId,
+                    t.Location.Company.LegalName,
+                    t.Location.Company.RegisteredAddress,
+                    t.Location.Company.ContactEmail
                 })
                 .FirstOrDefaultAsync();
 
@@ -291,6 +294,21 @@ public class KitchenOrderService(
             if (string.IsNullOrWhiteSpace(table.StripeAccountId))
             {
                 return Result<CreateOrderResultDto>.Fail("This venue isn't set up to take payments yet. Please order at the till.");
+            }
+
+            // Selling to a consumer at a distance means identifying the trader before they buy,
+            // not afterwards. Without these the ordering terms render as "not published yet", so
+            // taking money anyway would charge somebody against terms they were never shown.
+            // Checked here rather than only in the admin UI, which already promises this.
+            if (string.IsNullOrWhiteSpace(table.LegalName)
+                || string.IsNullOrWhiteSpace(table.RegisteredAddress)
+                || string.IsNullOrWhiteSpace(table.ContactEmail))
+            {
+                _logger.LogWarning(
+                    "Refused an order for location {LocationId}: company {CompanyId} has not published its legal details",
+                    table.LocationId, table.CompanyId);
+
+                return Result<CreateOrderResultDto>.Fail("This venue isn't quite ready to take orders. Please order at the till.");
             }
 
             KitchenOrder order = new()

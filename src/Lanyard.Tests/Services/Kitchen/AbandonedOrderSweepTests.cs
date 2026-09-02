@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Kitchen;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,10 @@ public class AbandonedOrderSweepTests
     /// Runs one sweep. The service is a BackgroundService with a one-hour loop, so it is driven
     /// through StartAsync/StopAsync rather than waiting on the timer.
     /// </summary>
-    private static async Task SweepAsync(DbContextOptions<ApplicationDbContext> options)
+    private static async Task SweepAsync(
+        DbContextOptions<ApplicationDbContext> options,
+        Mock<IOrderPaymentService>? payments = null,
+        Mock<IKitchenOrderService>? orders = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -36,6 +40,8 @@ public class AbandonedOrderSweepTests
 
         ServiceCollection services = new();
         services.AddSingleton(factoryMock.Object);
+        services.AddSingleton((payments ?? UnpaidPaymentService()).Object);
+        services.AddSingleton((orders ?? new Mock<IKitchenOrderService>()).Object);
 
         await using ServiceProvider provider = services.BuildServiceProvider();
 
@@ -48,6 +54,17 @@ public class AbandonedOrderSweepTests
         await sweep.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>A Stripe that answers "no, that was never paid" - the ordinary abandoned case.</summary>
+    private static Mock<IOrderPaymentService> UnpaidPaymentService()
+    {
+        Mock<IOrderPaymentService> mock = new();
+        mock.SetupGet(p => p.IsConfigured).Returns(true);
+        mock.Setup(p => p.IsPaymentSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Ok(false));
+
+        return mock;
+    }
+
     private static async Task<int> SeedOrderAsync(
         DbContextOptions<ApplicationDbContext> options,
         KitchenOrderStatus status,
@@ -56,7 +73,7 @@ public class AbandonedOrderSweepTests
     {
         await using ApplicationDbContext ctx = new(options);
 
-        Company company = new() { Name = "Play2Day", IsActive = true };
+        Company company = new() { Name = "Play2Day", IsActive = true, StripeAccountId = "acct_test" };
         ctx.Companies.Add(company);
         await ctx.SaveChangesAsync();
 
@@ -72,6 +89,7 @@ public class AbandonedOrderSweepTests
             Status = status,
             PaymentStatus = paymentStatus,
             TotalCents = 850,
+            PaymentIntentId = $"pi_{Guid.NewGuid():N}",
             CreateDate = DateTime.UtcNow - age,
             UpdateDate = DateTime.UtcNow - age
         };
@@ -141,6 +159,56 @@ public class AbandonedOrderSweepTests
     /// Records are closed off, never removed - an abandoned order is still evidence a customer
     /// tried to buy something.
     /// </summary>
+    /// <summary>
+    /// The one that costs real money. Stripe took the payment, the webhook never arrived, and the
+    /// customer closed the tab so no status poll ever reconciled it. Writing the order off here
+    /// would charge somebody and give them nothing - and leave a row reading "payment failed" to
+    /// whoever later investigated.
+    /// </summary>
+    [TestMethod]
+    public async Task Sweep_RecoversAnOrderThatWasPaidButNeverConfirmed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int id = await SeedOrderAsync(options, KitchenOrderStatus.AwaitingPayment,
+            KitchenOrderPaymentStatus.Pending, TimeSpan.FromHours(5));
+
+        Mock<IOrderPaymentService> paid = new();
+        paid.SetupGet(p => p.IsConfigured).Returns(true);
+        paid.Setup(p => p.IsPaymentSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        Mock<IKitchenOrderService> orders = new();
+        orders.Setup(o => o.ConfirmPaymentAsync(It.IsAny<string>()))
+            .ReturnsAsync(Result<KitchenOrder>.Ok(new KitchenOrder { LocationId = 1, TableLabelSnapshot = "Table 1" }));
+
+        await SweepAsync(options, paid, orders);
+
+        // Confirmed rather than cancelled, and the confirmation went through the normal path.
+        orders.Verify(o => o.ConfirmPaymentAsync(It.IsAny<string>()), Times.Once);
+        Assert.AreNotEqual(KitchenOrderStatus.Cancelled, (await GetAsync(options, id)).Status);
+    }
+
+    /// <summary>
+    /// If Stripe cannot be reached, the order is left for the next sweep. An unreachable payment
+    /// provider is not evidence that nobody paid.
+    /// </summary>
+    [TestMethod]
+    public async Task Sweep_LeavesAnOrderAloneWhenStripeCannotBeReached()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int id = await SeedOrderAsync(options, KitchenOrderStatus.AwaitingPayment,
+            KitchenOrderPaymentStatus.Pending, TimeSpan.FromHours(5));
+
+        Mock<IOrderPaymentService> unreachable = new();
+        unreachable.SetupGet(p => p.IsConfigured).Returns(true);
+        unreachable.Setup(p => p.IsPaymentSucceededAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Fail("Stripe unreachable"));
+
+        await SweepAsync(options, unreachable);
+
+        Assert.AreEqual(KitchenOrderStatus.AwaitingPayment, (await GetAsync(options, id)).Status);
+    }
+
     [TestMethod]
     public async Task Sweep_DoesNotDeleteRows()
     {

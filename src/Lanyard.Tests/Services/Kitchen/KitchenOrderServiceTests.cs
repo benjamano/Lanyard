@@ -98,7 +98,15 @@ public class KitchenOrderServiceTests
     {
         await using ApplicationDbContext ctx = new(options);
 
-        Company company = new() { Name = companyName, IsActive = true, StripeAccountId = stripeAccountId };
+        Company company = new()
+        {
+            Name = companyName,
+            IsActive = true,
+            StripeAccountId = stripeAccountId,
+            LegalName = $"{companyName} Leisure Ltd",
+            RegisteredAddress = "1 Cardinal Park, Ipswich, IP1 1AA",
+            ContactEmail = "hello@example.test"
+        };
         ctx.Companies.Add(company);
         await ctx.SaveChangesAsync();
 
@@ -138,6 +146,35 @@ public class KitchenOrderServiceTests
         TableToken = fixture.TableToken,
         Lines = [.. lines.Select(l => new CreateOrderLineDto { MenuItemId = l.ItemId, Quantity = l.Quantity })]
     };
+
+    /// <summary>
+    /// A company that has not published who it is cannot sell to a consumer at a distance: the
+    /// ordering terms render as "not published yet", so taking the money anyway would charge
+    /// somebody against terms they were never shown. The admin UI already promises this; for a
+    /// while it was the only place the rule existed.
+    /// </summary>
+    [TestMethod]
+    public async Task CreateOrderAsync_RefusesWhenTheCompanyHasNotPublishedItsLegalDetails()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Fixture fixture = await SeedVenueAsync(options);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Company company = await ctx.Companies.FirstAsync(c => c.Id == fixture.CompanyId);
+            company.RegisteredAddress = null;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<CreateOrderResultDto> result = await GetService(options)
+            .CreateOrderAsync(OrderFor(fixture, (fixture.BurgerId, 1)), fixture.CompanyId);
+
+        Assert.IsFalse(result.IsSuccess);
+
+        // And nothing was written: a refused order must not leave a row behind.
+        await using ApplicationDbContext check = new(options);
+        Assert.AreEqual(0, await check.KitchenOrders.CountAsync());
+    }
 
     [TestMethod]
     public async Task CreateOrderAsync_TotalsFromPricesAtOrderTime()

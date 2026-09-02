@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
@@ -74,32 +75,107 @@ public class AbandonedOrderSweepHostedService(
 
             DateTime cutoff = DateTime.UtcNow - _abandonedAfter;
 
-            // PaymentStatus is checked as well as Status: an order that was paid for but whose
-            // webhook has not landed yet must never be swept, and Pending is the only state this
-            // sweep has any business touching.
-            List<KitchenOrder> abandoned = await ctx.KitchenOrders
+            // Pending is the only state this sweep has any business touching - but it is also
+            // the state an order sits in when the customer *did* pay and the webhook never
+            // arrived. Those two are indistinguishable from the database alone, which is why
+            // each candidate is checked against Stripe below before anything is written off.
+            var candidates = await ctx.KitchenOrders
                 .Where(o => o.Status == KitchenOrderStatus.AwaitingPayment
                     && o.PaymentStatus == KitchenOrderPaymentStatus.Pending
                     && o.CreateDate < cutoff)
+                .Select(o => new
+                {
+                    o.Id,
+                    o.PaymentIntentId,
+                    StripeAccountId = o.Location!.Company!.StripeAccountId
+                })
                 .ToListAsync(stoppingToken);
 
-            if (abandoned.Count == 0)
+            if (candidates.Count == 0)
             {
                 return;
             }
 
-            DateTime now = DateTime.UtcNow;
+            IOrderPaymentService payments = scope.ServiceProvider.GetRequiredService<IOrderPaymentService>();
+            IKitchenOrderService orders = scope.ServiceProvider.GetRequiredService<IKitchenOrderService>();
 
-            foreach (KitchenOrder order in abandoned)
+            List<int> toClose = [];
+            int rescued = 0;
+
+            foreach (var candidate in candidates)
             {
-                order.Status = KitchenOrderStatus.Cancelled;
-                order.PaymentStatus = KitchenOrderPaymentStatus.Failed;
-                order.UpdateDate = now;
+                // No PaymentIntent means checkout never reached Stripe, so there is nothing that
+                // could have been charged and nothing to ask about.
+                if (!string.IsNullOrWhiteSpace(candidate.PaymentIntentId)
+                    && !string.IsNullOrWhiteSpace(candidate.StripeAccountId)
+                    && payments.IsConfigured)
+                {
+                    Result<bool> succeeded = await payments.IsPaymentSucceededAsync(
+                        candidate.StripeAccountId, candidate.PaymentIntentId, stoppingToken);
+
+                    // Only a definite "no" is grounds for writing an order off. If Stripe cannot
+                    // be reached, leave it for the next sweep: cancelling an order somebody has
+                    // actually paid for takes their money and gives them nothing, and the row
+                    // would then read "payment failed" to anyone investigating.
+                    if (!succeeded.IsSuccess)
+                    {
+                        _logger.LogWarning(
+                            "Left order {OrderId} alone: could not confirm with Stripe whether it was paid ({Error})",
+                            candidate.Id, succeeded.Error);
+
+                        continue;
+                    }
+
+                    if (succeeded.Data)
+                    {
+                        // Paid, and the webhook never landed. Put it through as a payment
+                        // confirmation rather than cancelling it - the kitchen still owes this
+                        // customer their food.
+                        Result<KitchenOrder> confirmed = await orders.ConfirmPaymentAsync(candidate.PaymentIntentId);
+
+                        if (confirmed.IsSuccess)
+                        {
+                            rescued++;
+
+                            _logger.LogWarning(
+                                "Order {OrderId} was paid but never confirmed by webhook; recovered by the sweep. "
+                                + "Check the Stripe webhook endpoint is delivering.", candidate.Id);
+                        }
+                        else
+                        {
+                            _logger.LogError(
+                                "Order {OrderId} is paid at Stripe but could not be confirmed: {Error}",
+                                candidate.Id, confirmed.Error);
+                        }
+
+                        continue;
+                    }
+                }
+
+                toClose.Add(candidate.Id);
             }
 
-            await ctx.SaveChangesAsync(stoppingToken);
+            if (toClose.Count > 0)
+            {
+                DateTime now = DateTime.UtcNow;
 
-            _logger.LogInformation("Closed {Count} order(s) abandoned before payment", abandoned.Count);
+                List<KitchenOrder> abandoned = await ctx.KitchenOrders
+                    .Where(o => toClose.Contains(o.Id))
+                    .ToListAsync(stoppingToken);
+
+                foreach (KitchenOrder order in abandoned)
+                {
+                    order.Status = KitchenOrderStatus.Cancelled;
+                    order.PaymentStatus = KitchenOrderPaymentStatus.Failed;
+                    order.UpdateDate = now;
+                }
+
+                await ctx.SaveChangesAsync(stoppingToken);
+            }
+
+            _logger.LogInformation(
+                "Closed {Closed} order(s) abandoned before payment; recovered {Rescued} that were paid but unconfirmed",
+                toClose.Count, rescued);
         }
         catch (OperationCanceledException)
         {
