@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830142612_AddProjectionStatusWidget")]
+    partial class AddProjectionStatusWidget
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,52 +92,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ClientId");
 
                     b.ToTable("ZoneScoreboardSettings");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Announcement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExpiryDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPinned")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastUpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("LocationId");
-
-                    b.ToTable("Announcements");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AppSetting", b =>
@@ -221,12 +178,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<string>("ScheduledDaysOfWeek")
-                        .HasColumnType("text");
-
-                    b.Property<TimeOnly?>("ScheduledTimeOfDay")
-                        .HasColumnType("time without time zone");
 
                     b.Property<Guid>("TriggerClientId")
                         .HasColumnType("uuid");
@@ -364,9 +315,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("LastUpdateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("MostRecentConnectionId")
                         .HasColumnType("text");
 
@@ -385,8 +333,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("LocationId");
 
                     b.ToTable("Clients");
                 });
@@ -514,9 +460,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("FaviconFileId")
-                        .HasColumnType("uuid");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -525,15 +468,6 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SecondaryColorHex")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Slug")
-                        .HasColumnType("text");
-
-                    b.Property<string>("StripeAccountId")
                         .HasColumnType("text");
 
                     b.Property<string>("ThemeColorHex")
@@ -546,87 +480,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("BackgroundImageFileId");
 
-                    b.HasIndex("FaviconFileId");
-
                     b.HasIndex("LogoFileId");
 
-                    b.HasIndex("Slug")
-                        .IsUnique()
-                        .HasFilter("\"Slug\" IS NOT NULL");
-
                     b.ToTable("Companies");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyDomain", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Hostname")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("Hostname")
-                        .IsUnique();
-
-                    b.ToTable("CompanyDomains");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyLegalDocument", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BodyHtml")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DocumentType")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsPublished")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "DocumentType")
-                        .IsUnique();
-
-                    b.ToTable("CompanyLegalDocuments");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
@@ -1248,149 +1104,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("GameResultPlayerScores");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrder", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CustomerNote")
-                        .HasColumnType("text");
-
-                    b.Property<int>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("OrderToken")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("PaidDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PaymentIntentId")
-                        .HasColumnType("text");
-
-                    b.Property<int>("PaymentStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("QrTableTokenId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("ReadyDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ReceiptPrintedDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("RefundedDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TableLabelSnapshot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("TotalCents")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrderToken")
-                        .IsUnique();
-
-                    b.HasIndex("PaymentIntentId")
-                        .IsUnique()
-                        .HasFilter("\"PaymentIntentId\" IS NOT NULL");
-
-                    b.HasIndex("QrTableTokenId");
-
-                    b.HasIndex("LocationId", "Status", "CreateDate");
-
-                    b.ToTable("KitchenOrders");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ContainsAllergensSnapshot")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MenuItemId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MenuItemNameSnapshot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("OrderId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UnitPriceCentsSnapshot")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MenuItemId");
-
-                    b.HasIndex("OrderId");
-
-                    b.ToTable("KitchenOrderItems");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderItemOption", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ContainsAllergensSnapshot")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("GroupNameSnapshot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int?>("MenuItemOptionId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("OptionNameSnapshot")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("OrderItemId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PriceDeltaCentsSnapshot")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MenuItemOptionId");
-
-                    b.HasIndex("OrderItemId");
-
-                    b.ToTable("KitchenOrderItemOptions");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.Property<int>("Id")
@@ -1405,26 +1118,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("FulfilmentMode")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime>("MenuVersion")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("OrderingEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("ReceiptPrinterClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1432,223 +1129,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ReceiptPrinterClientId");
 
                     b.HasIndex("CompanyId", "Name")
                         .IsUnique();
 
                     b.ToTable("Locations");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<TimeOnly>("ClosesAt")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DayOfWeek")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<TimeOnly>("OpensAt")
-                        .HasColumnType("time without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LocationId", "DayOfWeek");
-
-                    b.ToTable("LocationOpeningHours");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuCategory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LocationId");
-
-                    b.ToTable("MenuCategories");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("AllergensConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ContainsAllergens")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("ImageFileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MayContainAllergens")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("PriceCents")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CategoryId");
-
-                    b.HasIndex("ImageFileId");
-
-                    b.ToTable("MenuItems");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItemOption", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("AllergensConfirmed")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ContainsAllergens")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsAvailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MayContainAllergens")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("OptionGroupId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PriceDeltaCents")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OptionGroupId");
-
-                    b.ToTable("MenuItemOptions");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItemOptionGroup", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MaxSelections")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MenuItemId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MinSelections")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MenuItemId");
-
-                    b.ToTable("MenuItemOptionGroups");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
@@ -1844,44 +1329,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("TemplateId");
 
                     b.ToTable("ProjectionProgramStepTemplateParameters");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.QrTableToken", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LocationId");
-
-                    b.HasIndex("Token")
-                        .IsUnique();
-
-                    b.ToTable("QrTableTokens");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
@@ -2205,17 +1652,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.AnnouncementsWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<int>("MaxItems")
-                        .HasColumnType("integer")
-                        .HasColumnName("AnnouncementsWidget_MaxItems");
-
-                    b.HasDiscriminator().HasValue(13);
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleStatusWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -2248,9 +1684,6 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<Guid?>("ProjectionProgramId")
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("SkipToPreviousStep")
-                        .HasColumnType("boolean");
 
                     b.HasDiscriminator().HasValue(5);
                 });
@@ -2339,54 +1772,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(9);
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderQueueWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<bool>("AllowStatusChanges")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("KitchenLocationId")
-                        .ValueGeneratedOnUpdateSometimes()
-                        .HasColumnType("integer")
-                        .HasColumnName("KitchenLocationId");
-
-                    b.Property<int>("MaxTickets")
-                        .HasColumnType("integer");
-
-                    b.HasDiscriminator().HasValue(14);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrdersWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<int?>("KitchenLocationId")
-                        .ValueGeneratedOnUpdateSometimes()
-                        .HasColumnType("integer")
-                        .HasColumnName("KitchenLocationId");
-
-                    b.HasDiscriminator().HasValue(13);
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenStatsWidget", b =>
-                {
-                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
-
-                    b.Property<int?>("KitchenLocationId")
-                        .ValueGeneratedOnUpdateSometimes()
-                        .HasColumnType("integer")
-                        .HasColumnName("KitchenLocationId");
-
-                    b.Property<bool>("ShowTakings")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("StatsPeriod")
-                        .HasColumnType("integer");
-
-                    b.HasDiscriminator().HasValue(15);
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicPlaylistSelectorWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -2420,8 +1805,7 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int>("MaxItems")
-                        .HasColumnType("integer")
-                        .HasColumnName("MaxItems");
+                        .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue(11);
                 });
@@ -2481,21 +1865,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Announcement", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ApplicationRole", b =>
@@ -2561,16 +1930,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("AutomationRule");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.Client", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Location");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
@@ -2619,11 +1978,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("BackgroundImageFileId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FaviconFile")
-                        .WithMany()
-                        .HasForeignKey("FaviconFileId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "LogoFile")
                         .WithMany()
                         .HasForeignKey("LogoFileId")
@@ -2631,31 +1985,7 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Navigation("BackgroundImageFile");
 
-                    b.Navigation("FaviconFile");
-
                     b.Navigation("LogoFile");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyDomain", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany("Domains")
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyLegalDocument", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany("LegalDocuments")
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
@@ -2895,60 +2225,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("GameResult");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrder", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.QrTableToken", "QrTableToken")
-                        .WithMany()
-                        .HasForeignKey("QrTableTokenId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Location");
-
-                    b.Navigation("QrTableToken");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderItem", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.MenuItem", "MenuItem")
-                        .WithMany()
-                        .HasForeignKey("MenuItemId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Lanyard.Infrastructure.Models.KitchenOrder", "Order")
-                        .WithMany("Items")
-                        .HasForeignKey("OrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MenuItem");
-
-                    b.Navigation("Order");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderItemOption", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.MenuItemOption", "MenuItemOption")
-                        .WithMany()
-                        .HasForeignKey("MenuItemOptionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Lanyard.Infrastructure.Models.KitchenOrderItem", "OrderItem")
-                        .WithMany("Options")
-                        .HasForeignKey("OrderItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MenuItemOption");
-
-                    b.Navigation("OrderItem");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
@@ -2957,76 +2233,7 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Lanyard.Infrastructure.Models.Client", "ReceiptPrinterClient")
-                        .WithMany()
-                        .HasForeignKey("ReceiptPrinterClientId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Company");
-
-                    b.Navigation("ReceiptPrinterClient");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany("OpeningHours")
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Location");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuCategory", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Location");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItem", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.MenuCategory", "Category")
-                        .WithMany("Items")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "ImageFile")
-                        .WithMany()
-                        .HasForeignKey("ImageFileId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Category");
-
-                    b.Navigation("ImageFile");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItemOption", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.MenuItemOptionGroup", "OptionGroup")
-                        .WithMany("Options")
-                        .HasForeignKey("OptionGroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("OptionGroup");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItemOptionGroup", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.MenuItem", "MenuItem")
-                        .WithMany("OptionGroups")
-                        .HasForeignKey("MenuItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MenuItem");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>
@@ -3124,17 +2331,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Template");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.QrTableToken", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Location");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
@@ -3229,10 +2425,6 @@ namespace Lanyard.Infrastructure.Migrations
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
                 {
-                    b.Navigation("Domains");
-
-                    b.Navigation("LegalDocuments");
-
                     b.Navigation("Locations");
                 });
 
@@ -3285,36 +2477,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("PlayerScores");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrder", b =>
-                {
-                    b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.KitchenOrderItem", b =>
-                {
-                    b.Navigation("Options");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.Navigation("Memberships");
-
-                    b.Navigation("OpeningHours");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuCategory", b =>
-                {
-                    b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItem", b =>
-                {
-                    b.Navigation("OptionGroups");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.MenuItemOptionGroup", b =>
-                {
-                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>

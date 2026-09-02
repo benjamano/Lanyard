@@ -1,0 +1,239 @@
+﻿@using Lanyard.Application.Services.Announcements
+@using Lanyard.Application.Services.Locations
+
+@inject IAnnouncementService _announcementService
+
+@implements IDisposable
+
+@* Per-viewer, not per-dashboard: the announcements shown are those for the viewer's own location,
+   so the same shared dashboard shows each site its own notices. Dashboards also render on a kiosk
+   projection step (RenderDashboardTemplate) with no signed-in user and therefore no location -
+   hence the explicit "no location" state rather than silently falling back to every site's
+   notices on a wall-mounted screen. *@
+
+<FluentCard Height="100%">
+    <div class="announcements-body">
+        <div class="announcements-header">
+            <span class="announcements-title">@(Widget.Title ?? "Announcements")</span>
+            @if (!_isLoading && !_loadFailed && !_notSignedIn && !_noLocation && _totalCount > _displayed.Count)
+            {
+                <span class="announcements-count">+@(_totalCount - _displayed.Count) more</span>
+            }
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="announcements-empty">
+                <FluentSpinner />
+            </div>
+        }
+        else if (_loadFailed)
+        {
+            @* Deliberately distinct from the empty state: telling staff there are no announcements
+               when there might be an urgent one is worse than admitting the load failed. *@
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">
+                    Couldn't load announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_notSignedIn)
+        {
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Sign in to see announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_noLocation)
+        {
+            @* Reachable while signed in: an Admin need not pick a location at login, and one whose
+               chosen location was since deactivated lands here too. Telling them to sign in would
+               be nonsense - they already are. *@
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    Pick a location to see its announcements
+                </FluentBadge>
+            </div>
+        }
+        else if (_displayed.Count == 0)
+        {
+            <div class="announcements-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    No announcements
+                </FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="announcements-list">
+                @foreach (Announcement announcement in _displayed)
+                {
+                    <div class="announcements-row">
+                        <div class="announcements-row-header">
+                            @if (announcement.IsPinned)
+                            {
+                                <span class="announcements-pin" title="Pinned">
+                                    <FluentIcon Value="@(new Icons.Filled.Size16.Pin())" Color="Color.Primary" />
+                                </span>
+                            }
+                            <span class="announcements-name" title="@announcement.Title">@announcement.Title</span>
+                            <span class="announcements-date">@DescribePostedDate(announcement)</span>
+                        </div>
+                        <span class="announcements-text">@announcement.Body</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required AnnouncementsWidget Widget { get; set; }
+
+    // Kept for consistency with the other widgets even though nothing here is clickable yet -
+    // DashboardGrid passes it to every widget it renders.
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    // A kiosk is left running for days. Without this it would keep showing announcements that have
+    // since expired and never pick up newly posted ones. Same reasoning as GreetingCard's timer.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+
+    private List<Announcement> _all = [];
+    private List<Announcement> _displayed = [];
+
+    private int _totalCount;
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private bool _notSignedIn;
+    private bool _noLocation;
+
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        _isLoading = false;
+
+        // Only worth polling once there is a location to poll for; the anonymous kiosk and the
+        // no-location admin have nothing that can change without a fresh sign-in.
+        if (_notSignedIn || _noLocation)
+        {
+            return;
+        }
+
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await LoadAsync();
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the component is disposed.
+            }
+        });
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        // A failed scope means nobody is signed in - the anonymous kiosk case. That is expected,
+        // not an error, so it gets its own state rather than a red failure badge on a wall display.
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            _notSignedIn = true;
+
+            return;
+        }
+
+        // Signed in, but with no location to scope to. Distinct from the above: an Admin can hold
+        // no location claim at all, or one that has since been deactivated.
+        if (scopeResult.Data.LocationId is null)
+        {
+            _noLocation = true;
+
+            return;
+        }
+
+        _notSignedIn = false;
+        _noLocation = false;
+
+        Result<List<Announcement>> result =
+            await _announcementService.GetActiveAnnouncementsAsync(scopeResult.Data, AnnouncementsWidget.MaxSupportedItems);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _all = result.Data;
+            _loadFailed = false;
+        }
+        else
+        {
+            // Distinct from the empty state on purpose: telling staff there are no announcements
+            // when there may be an urgent one is worse than admitting the load failed.
+            _loadFailed = true;
+        }
+
+        ApplyFilter();
+    }
+
+    // MaxItems can change while the dashboard is open via the config dialog, and it does not
+    // affect which rows were fetched - so re-slice rather than re-query.
+    protected override void OnParametersSet()
+    {
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _totalCount = _all.Count;
+
+        _displayed = _all
+            .Take(Math.Clamp(Widget.MaxItems, 1, AnnouncementsWidget.MaxSupportedItems))
+            .ToList();
+    }
+
+    public void Dispose()
+    {
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
+    }
+
+    private static string DescribePostedDate(Announcement announcement)
+    {
+        TimeSpan age = DateTime.UtcNow - announcement.CreateDate;
+
+        if (age.TotalMinutes < 60)
+        {
+            return "just now";
+        }
+
+        if (age.TotalHours < 24)
+        {
+            return $"{(int)age.TotalHours}h ago";
+        }
+
+        if (age.TotalDays < 7)
+        {
+            return $"{(int)age.TotalDays}d ago";
+        }
+
+        return announcement.CreateDate.ToLocalTime().ToString("d MMM");
+    }
+}

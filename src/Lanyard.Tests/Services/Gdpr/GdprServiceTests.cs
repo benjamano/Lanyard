@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Gdpr;
@@ -197,6 +197,7 @@ public class GdprServiceTests
         Guid playlistId = Guid.NewGuid();
         Guid courseId = Guid.NewGuid();
         Guid assignmentId = Guid.NewGuid();
+        Guid announcementId = Guid.NewGuid();
 
         await using (ApplicationDbContext ctx = new(options))
         {
@@ -208,6 +209,17 @@ public class GdprServiceTests
                 DeleteByUserId = target.Id,
                 CreateDate = DateTime.UtcNow,
                 DeleteDate = DateTime.UtcNow
+            });
+
+            ctx.Announcements.Add(new Announcement
+            {
+                Id = announcementId,
+                Title = "Fire drill",
+                Body = "Thursday at 10am.",
+                LocationId = null,
+                CreatedByUserId = target.Id,
+                CreateDate = DateTime.UtcNow,
+                IsActive = true
             });
 
             ctx.Courses.Add(new Course { Id = courseId, Name = "Induction", IsActive = true });
@@ -242,6 +254,13 @@ public class GdprServiceTests
         CourseAssignment? assignment = await verifyCtx.CourseAssignments.FindAsync(assignmentId);
         Assert.IsNotNull(assignment);
         Assert.IsNull(assignment.AssignedByUserId);
+
+        // The announcement itself is kept - only the attribution is scrubbed. Missing this left a
+        // NO ACTION FK pointing at the deleted user, failing the whole erase with a Postgres 23503.
+        Announcement? announcement = await verifyCtx.Announcements.FindAsync(announcementId);
+        Assert.IsNotNull(announcement);
+        Assert.IsNull(announcement.CreatedByUserId);
+        Assert.AreEqual("Fire drill", announcement.Title);
     }
 
     [TestMethod]

@@ -164,25 +164,54 @@ public class AutomationRuleService(
         }
     }
 
-    // An idle rule with no threshold can never fire, and nothing downstream would report that -
-    // ProcessIdleRulesAsync simply skips it - so reject it at the point of saving instead.
+    // A rule with a misconfigured trigger can never fire, and nothing downstream would report
+    // that - ProcessIdleRulesAsync/ProcessScheduledRulesAsync simply skip it - so reject it at the
+    // point of saving instead.
     private static string? ValidateRule(AutomationRule rule)
     {
-        if (rule.TriggerType != AutomationTriggerType.ClientIdle)
-        {
-            return null;
-        }
+        return ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek);
+    }
 
-        if (!rule.IdleThresholdMinutes.HasValue)
+    /// <summary>
+    /// Public so AddEditAutomationRuleDialog can gate its wizard's "Next" step against the exact
+    /// same rule CreateRuleAsync/UpdateRuleAsync will apply, instead of hand-mirroring it.
+    /// </summary>
+    public static string? ValidateTrigger(
+        AutomationTriggerType triggerType,
+        int? idleThresholdMinutes,
+        TimeOnly? scheduledTimeOfDay,
+        string? scheduledDaysOfWeek)
+    {
+        switch (triggerType)
         {
-            return "An idle rule needs an idle threshold in minutes.";
-        }
+            case AutomationTriggerType.ClientIdle:
+                if (!idleThresholdMinutes.HasValue)
+                {
+                    return "An idle rule needs an idle threshold in minutes.";
+                }
 
-        if (rule.IdleThresholdMinutes.Value <= 0)
-        {
-            return "An idle rule's threshold must be greater than zero minutes.";
-        }
+                if (idleThresholdMinutes.Value <= 0)
+                {
+                    return "An idle rule's threshold must be greater than zero minutes.";
+                }
 
-        return null;
+                return null;
+
+            case AutomationTriggerType.Scheduled:
+                if (!scheduledTimeOfDay.HasValue)
+                {
+                    return "A scheduled rule needs a time of day.";
+                }
+
+                if (!AutomationScheduleDays.TryParse(scheduledDaysOfWeek, out _))
+                {
+                    return "A scheduled rule's days of week are not valid.";
+                }
+
+                return null;
+
+            default:
+                return null;
+        }
     }
 }

@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.DataAccess;
+﻿using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +22,7 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedCanManageDmxSystemsRoleId, "CanManageDmxSystems", "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS"),
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
         (ApplicationDbContext.SeedCanManageKitchenRoleId, "CanManageKitchen", "SEED-ROLE-CAN-MANAGE-KITCHEN-CS"),
+        (ApplicationDbContext.SeedCanPostAnnouncementsRoleId, "CanPostAnnouncements", "SEED-ROLE-CAN-POST-ANNOUNCEMENTS-CS"),
     ];
 
     public static async Task SeedAsync(IServiceProvider services)

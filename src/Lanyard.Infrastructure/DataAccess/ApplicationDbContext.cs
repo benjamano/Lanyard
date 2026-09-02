@@ -21,6 +21,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanManageKitchenRoleId = "dev-role-can-manage-kitchen";
+        public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
         public const int SeedIpswichLocationId = 1;
@@ -86,6 +87,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<UserErasureRecord> UserErasureRecords { get; set; }
         public DbSet<GameResult> GameResults { get; set; }
         public DbSet<GameResultPlayerScore> GameResultPlayerScores { get; set; }
+        public DbSet<Announcement> Announcements { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -133,6 +135,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<HallOfFameWidget>(WidgetType.HallOfFame)
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
+                .HasValue<AnnouncementsWidget>(WidgetType.Announcements)
+                .HasValue<ProjectionStatusWidget>(WidgetType.ProjectionStatus)
                 .HasValue<KitchenOrdersWidget>(WidgetType.KitchenOrders)
                 .HasValue<KitchenOrderQueueWidget>(WidgetType.KitchenOrderQueue)
                 .HasValue<KitchenStatsWidget>(WidgetType.KitchenStats);
@@ -177,6 +181,17 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<HallOfFameWidget>()
                 .Property(x => x.ClientId)
                 .HasColumnName("HallOfFameWidget_ClientId");
+
+            // Same hazard as ClientId above, but for MaxItems: MyTrainingWidget got there first
+            // and owns the plain column name, so pin both. Left unpinned, EF uniquifies them and
+            // the generated migration renames the existing column out from under stored data.
+            modelBuilder.Entity<MyTrainingWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("MaxItems");
+
+            modelBuilder.Entity<AnnouncementsWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("AnnouncementsWidget_MaxItems");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).

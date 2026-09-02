@@ -200,6 +200,20 @@
                                     <RenderMyTrainingWidget Widget="myTrainingWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
+                            case WidgetType.Announcements:
+                                AnnouncementsWidget? announcementsWidget = widget as AnnouncementsWidget;
+
+                                if (announcementsWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderAnnouncementsWidget Widget="announcementsWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
                             case WidgetType.Greeting:
                                 @* Nothing to configure, so no right-click config dialog here. *@
                                 <div class="dashboard-widget-host">
@@ -246,6 +260,20 @@
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
                                     <RenderKitchenStatsWidget Widget="kitchenStatsWidget" />
+                                </div>
+                                break;
+                            case WidgetType.ProjectionStatus:
+                                ProjectionStatusWidget? projectionStatusWidget = widget as ProjectionStatusWidget;
+
+                                if (projectionStatusWidget == null)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderProjectionStatusWidget Widget="projectionStatusWidget" />
                                 </div>
                                 break;
                         }
@@ -434,6 +462,12 @@
                 break;
             case MyTrainingWidget myTrainingWidget:
                 await ShowConfigureMyTrainingDialog(myTrainingWidget);
+                break;
+            case AnnouncementsWidget announcementsWidget:
+                await ShowConfigureAnnouncementsDialog(announcementsWidget);
+                break;
+            case ProjectionStatusWidget projectionStatusWidget:
+                await ShowConfigureProjectionStatusDialog(projectionStatusWidget);
                 break;
             case KitchenOrdersWidget kitchenOrdersWidget:
                 await ShowConfigureKitchenOrdersDialog(kitchenOrdersWidget);
@@ -670,6 +704,20 @@
         }
     }
 
+    private async Task ShowConfigureAnnouncementsDialog(AnnouncementsWidget announcementsWidget)
+    {
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureAnnouncementsDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureAnnouncementsDialog.Widget), announcementsWidget);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
     private async Task ShowConfigureDigitalClockDialog(DigitalClockWidget clockWidget)
     {
         DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureDigitalClockDialog>(options =>
@@ -753,6 +801,35 @@
             options.Parameters.Add(nameof(ConfigureButtonDialog.Widget), buttonWidget);
             options.Parameters.Add(nameof(ConfigureButtonDialog.Clients), clients);
             options.Parameters.Add(nameof(ConfigureButtonDialog.Programs), programs);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureProjectionStatusDialog(ProjectionStatusWidget projectionStatusWidget)
+    {
+        IEnumerable<Client> clients = [];
+
+        Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> clientResult = await ClientService.GetClientsWithCapabilitiesAsync();
+
+        if (clientResult.IsSuccess && clientResult.Data != null)
+        {
+            clients = clientResult.Data
+                .Cast<Client>();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load clients, {clientResult.Error}");
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureProjectionStatusDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureProjectionStatusDialog.Widget), projectionStatusWidget);
+            options.Parameters.Add(nameof(ConfigureProjectionStatusDialog.Clients), clients);
         });
 
         if (!dialogResult.Cancelled)

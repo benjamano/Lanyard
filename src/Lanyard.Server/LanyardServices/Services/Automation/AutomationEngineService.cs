@@ -40,6 +40,22 @@ public class AutomationEngineService(
     // (e.g. the kiosk was offline) to one per threshold window, instead of one per 60s tick
     // writing an execution-log row each time.
     private readonly ConcurrentDictionary<Guid, DateTime> _idleLastAttemptUtc = new();
+
+    // The local calendar date a scheduled rule last fired successfully. Keyed by RULE, same
+    // reasoning as the idle dictionaries above - two schedule rules could share a trigger client.
+    private readonly ConcurrentDictionary<Guid, DateOnly> _scheduledFiredForLocalDate = new();
+
+    // Tracks which scheduled rules have already been reseeded from AutomationRuleExecutions, so
+    // EnsureScheduledRuleSeededAsync only queries once per rule per process lifetime rather than
+    // on every tick.
+    private readonly ConcurrentDictionary<Guid, byte> _scheduledSeeded = new();
+
+    // A 60s tick rarely lands on the exact scheduled second, and an unbounded "fire if we're past
+    // it" would replay hours-old rules after a restart (a server booting at 22:00 must not turn
+    // the venue lights back on for a 09:00 rule). This window bounds both how late a tick can
+    // still catch a fire and how many times a failed attempt retries (~5 tries at 60s cadence).
+    private static readonly TimeSpan ScheduleCatchUpWindow = TimeSpan.FromMinutes(5);
+
     private volatile bool _isEnabled = false;
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
@@ -278,6 +294,140 @@ public class AutomationEngineService(
         }
 
         return nowUtc - lastTransitionUtc >= TimeSpan.FromMinutes(thresholdMinutes);
+    }
+
+    /// <summary>
+    /// Fires any Scheduled rule whose time of day and day of week are due for the local calendar
+    /// day.
+    /// </summary>
+    /// <remarks>
+    /// Called on a timer by ScheduledTriggerHostedService, mirroring how ClientIdle is evaluated by
+    /// IdleTriggerHostedService. nowLocal is server-local wall-clock time, not UTC - this matches
+    /// HallOfFamePeriodExtensions.ToUtcLowerBound and Client.AutoRestartTimeOfDay, the two other
+    /// implicitly-server-local values in the app, since there is no venue timezone concept.
+    /// </remarks>
+    public async Task ProcessScheduledRulesAsync(DateTime nowLocal, CancellationToken ct)
+    {
+        EnsureEnabledInitialized(ct);
+
+        if (!_isEnabled)
+        {
+            return;
+        }
+
+        if (_ruleCacheDirty)
+        {
+            await ReloadRuleCacheAsync(ct);
+        }
+
+        List<AutomationRule> scheduledRules = _ruleCache
+            .Where(r => r.TriggerType == AutomationTriggerType.Scheduled && r.ScheduledTimeOfDay.HasValue)
+            .ToList();
+
+        if (scheduledRules.Count == 0)
+        {
+            return;
+        }
+
+        DateOnly today = DateOnly.FromDateTime(nowLocal);
+
+        foreach (AutomationRule rule in scheduledRules)
+        {
+            if (!IsScheduledDayMatched(rule.ScheduledDaysOfWeek, nowLocal.DayOfWeek))
+            {
+                continue;
+            }
+
+            if (!IsScheduledTimeReached(rule.ScheduledTimeOfDay!.Value, nowLocal, ScheduleCatchUpWindow))
+            {
+                continue;
+            }
+
+            await EnsureScheduledRuleSeededAsync(rule.Id, ct);
+
+            if (_scheduledFiredForLocalDate.TryGetValue(rule.Id, out DateOnly firedForDate) && firedForDate == today)
+            {
+                continue;
+            }
+
+            _logger.LogInformation("Scheduled rule {RuleId} due at {ScheduledTimeOfDay} - firing", rule.Id, rule.ScheduledTimeOfDay);
+
+            bool succeeded = await ExecuteRuleAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.Scheduled), ct);
+
+            if (succeeded)
+            {
+                _scheduledFiredForLocalDate[rule.Id] = today;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pure so schedule-time comparison can be unit tested at fixed instants rather than by
+    /// waiting on the hosted service's real timer.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not wrap around midnight: a rule scheduled for 23:58 with a 5-minute
+    /// window does not catch up into the next calendar day - that's a different dedupe key, and
+    /// letting it fire there would be surprising.
+    /// </remarks>
+    public static bool IsScheduledTimeReached(TimeOnly scheduledTimeOfDay, DateTime nowLocal, TimeSpan catchUpWindow)
+    {
+        TimeSpan elapsed = nowLocal.TimeOfDay - scheduledTimeOfDay.ToTimeSpan();
+        return elapsed >= TimeSpan.Zero && elapsed <= catchUpWindow;
+    }
+
+    /// <summary>
+    /// Pure wrapper around <see cref="AutomationScheduleDays.Matches"/> kept alongside the other
+    /// schedule-trigger pure helpers for symmetry with <see cref="IsIdleThresholdReached"/>.
+    /// </summary>
+    public static bool IsScheduledDayMatched(string? scheduledDaysOfWeek, DayOfWeek day)
+    {
+        return AutomationScheduleDays.Matches(scheduledDaysOfWeek, day);
+    }
+
+    /// <summary>
+    /// Reseeds "last fired" from the execution log the first time a scheduled rule is evaluated in
+    /// this process, so a server restart shortly after a rule fired doesn't forget that and re-fire
+    /// it later the same day.
+    /// </summary>
+    /// <remarks>
+    /// Queries AutomationRuleExecutions directly rather than going through IAutomationLogService:
+    /// AutomationEngineService is a singleton but that service is scoped, so injecting it would be
+    /// a captive dependency. Only successful executions count - reseeding from a failed row would
+    /// suppress the catch-up retry a mid-window restart is supposed to allow.
+    /// </remarks>
+    private async Task EnsureScheduledRuleSeededAsync(Guid ruleId, CancellationToken ct)
+    {
+        if (_scheduledSeeded.ContainsKey(ruleId))
+        {
+            return;
+        }
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+            AutomationRuleExecution? lastSuccess = await ctx.AutomationRuleExecutions
+                .Where(e => e.AutomationRuleId == ruleId && e.OverallSuccess)
+                .OrderByDescending(e => e.ExecutedAt)
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(ct);
+
+            if (lastSuccess != null)
+            {
+                DateOnly lastSuccessLocalDate = DateOnly.FromDateTime(lastSuccess.ExecutedAt.ToLocalTime());
+                _scheduledFiredForLocalDate[ruleId] = lastSuccessLocalDate;
+            }
+
+            // Only mark as seeded once the query has actually succeeded - marking it earlier would
+            // let a transient failure here (e.g. a DB blip right after a restart) permanently skip
+            // the reseed for the rest of the process's lifetime instead of retrying next tick.
+            _scheduledSeeded.TryAdd(ruleId, 0);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reseed last-fired date for scheduled rule {RuleId}", ruleId);
+        }
     }
 
     /// <summary>Returns whether every action in the rule succeeded.</summary>

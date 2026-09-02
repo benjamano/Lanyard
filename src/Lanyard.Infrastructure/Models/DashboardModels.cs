@@ -146,6 +146,10 @@ public class ButtonWidget : DashboardWidget
 
     // Which monitor the projection opens on; null uses the client's default display.
     public int? DisplayIndex { get; set; }
+
+    // Only meaningful for ActionType == SkipProjectionProgramStep. False (the default) skips
+    // forward, matching the runner's SkipToNextStep being the more common transport action.
+    public bool SkipToPreviousStep { get; set; }
 }
 
 public class MusicPlaylistSelectorWidget : DashboardWidget
@@ -352,4 +356,53 @@ public class KitchenStatsWidget : DashboardWidget
     public KitchenStatsPeriod StatsPeriod { get; set; } = KitchenStatsPeriod.Today;
 
     public bool ShowTakings { get; set; } = true;
+}
+
+// A live "now playing" view of ProjectionProgramRunnerService for one client/display, reusing the
+// same progress-bar/step-label markup and runner events as the manager's Live Projection Control
+// panel. ShowControls off gives a read-only view suitable for a public kiosk dashboard; on, it adds
+// the same pause/skip/stop transport buttons that panel has.
+public class ProjectionStatusWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public ProjectionStatusWidget()
+    {
+        Type = WidgetType.ProjectionStatus;
+
+        GridW = 4;
+        GridH = 2;
+
+        ShowControls = false;
+    }
+
+    public Guid? ClientId { get; set; }
+
+    // Which monitor to watch; null uses the client's default display, matching ButtonWidget.
+    public int? DisplayIndex { get; set; }
+
+    public bool ShowControls { get; set; }
+}
+
+// Surfaces the live Staff Announcements for the viewer's own location. Per-viewer rather than
+// per-dashboard, like MyTrainingWidget: the location comes from whoever is looking, so one shared
+// dashboard shows each site its own notices.
+public class AnnouncementsWidget : DashboardWidget
+{
+    // Single source of truth for the cap. The config dialog's Max, its save-time clamp, the
+    // widget's fetch size and AnnouncementService's own clamp all have to agree - when the fetch
+    // size alone was lower, a widget configured above it silently rendered a truncated list.
+    public const int MaxSupportedItems = 50;
+
+    [SetsRequiredMembers]
+    public AnnouncementsWidget()
+    {
+        Type = WidgetType.Announcements;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 3;
+    }
+
+    public int MaxItems { get; set; }
 }
