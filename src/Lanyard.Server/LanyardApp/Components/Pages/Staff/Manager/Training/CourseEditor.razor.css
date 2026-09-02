@@ -10,19 +10,10 @@
    height and let flexbox split it between the toolbar (auto) and the editor
    (fills the rest). That's immune to whatever was miscounting content height. */
 .quill-editor-host {
-    display: flex;
-    flex-direction: column;
+    /* Layout and colours come from the global quill-theme.css; only the height is this
+       editor's own decision. */
     height: 480px;
     flex-shrink: 0;
-    width: 100%;
-}
-
-.quill-editor-host ::deep .ql-toolbar.ql-snow {
-    flex: 0 0 auto;
-    border-color: var(--colorNeutralStroke1);
-    background-color: var(--colorNeutralBackground3);
-    border-top-left-radius: var(--borderRadiusMedium);
-    border-top-right-radius: var(--borderRadiusMedium);
 }
 
 /* A plain, Quill-unrecognized class (not "ql-image") so Quill's toolbar module
@@ -46,81 +37,11 @@
     color: var(--colorCompoundBrandStroke);
 }
 
-.quill-editor-host ::deep .ql-container.ql-snow {
-    flex: 1 1 auto;
-    min-height: 0;
-    border-color: var(--colorNeutralStroke1);
-    background-color: var(--colorNeutralBackground1);
-    border-bottom-left-radius: var(--borderRadiusMedium);
-    border-bottom-right-radius: var(--borderRadiusMedium);
-}
+/* Everything else that used to be here - toolbar and editor colours, the SVG icon
+   stroke/fill, the picker dropdown - moved to wwwroot/css/quill-theme.css. It was
+   duplicated per component because Quill's DOM never receives a scope attribute, and
+   the second editor to need it simply went without. */
 
-.quill-editor-host ::deep .ql-editor {
-    color: var(--colorNeutralForeground1);
-    height: 100%;
-    overflow-y: auto;
-}
-
-/* Content pasted into Quill (e.g. from Word) frequently carries its source's
-   own inline `style="color: ..."` on the pasted spans, and inline styles beat
-   any stylesheet rule regardless of selector specificity, so the plain
-   .ql-editor color rule above silently loses to a pasted-in black/near-black
-   color, leaving typed-over-paste text unreadable in dark mode. !important
-   on a rule that also matches every descendant is the only way to force the
-   theme color to win over an arbitrary inline style we don't control. */
-.quill-editor-host ::deep .ql-editor,
-.quill-editor-host ::deep .ql-editor * {
-    color: var(--colorNeutralForeground1) !important;
-}
-
-.quill-editor-host ::deep .ql-editor.ql-blank::before {
-    color: var(--colorNeutralForeground3);
-    font-style: normal;
-}
-
-.quill-editor-host ::deep .ql-snow .ql-stroke {
-    stroke: var(--colorNeutralForeground2);
-}
-
-.quill-editor-host ::deep .ql-snow .ql-fill {
-    fill: var(--colorNeutralForeground2);
-}
-
-.quill-editor-host ::deep .ql-snow .ql-picker {
-    color: var(--colorNeutralForeground2);
-}
-
-/* The picker's closed-state label picks up the theme color above, but Quill's
-   snow theme hardcodes the OPEN dropdown panel to a plain white background
-   with dark grey text regardless of surrounding page theme - in dark mode
-   that's a jarring bright-white popup with barely-readable grey text. */
-.quill-editor-host ::deep .ql-snow .ql-picker-options {
-    background-color: var(--colorNeutralBackground1);
-    border-color: var(--colorNeutralStroke1) !important;
-}
-
-.quill-editor-host ::deep .ql-snow .ql-picker-item {
-    color: var(--colorNeutralForeground1);
-}
-
-.quill-editor-host ::deep .ql-snow .ql-picker-item:hover,
-.quill-editor-host ::deep .ql-snow .ql-picker-item.ql-selected {
-    color: var(--colorCompoundBrandStroke);
-}
-
-.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
-.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
-    stroke: var(--colorCompoundBrandStroke);
-}
-
-.quill-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
-.quill-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
-    fill: var(--colorCompoundBrandStroke);
-}
-
-.recurrence-field-host {
-    width: 40%;
-}
 
 .reorder-item {
     display: flex;

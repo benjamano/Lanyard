@@ -1,0 +1,98 @@
+/* Theming for the Quill rich-text editor.
+
+   Global rather than a component's scoped stylesheet, on purpose. Quill builds its own DOM in
+   JavaScript, so it never receives Blazor's scope attribute - every component embedding an editor
+   would otherwise need its own ::deep copy of all of this, and the second one to do so simply
+   forgot, leaving a toolbar of dark-grey icons on a dark background.
+
+   Loaded after quill.snow.css in App.razor. Quill's own rules are .ql-snow .ql-stroke and the
+   like; adding the .quill-editor-host ancestor here outranks them without needing !important,
+   except where noted.
+
+   Any component with an editor gives its wrapper class="quill-editor-host" and sets its own
+   height; everything below is shared. */
+
+.quill-editor-host {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.quill-editor-host .ql-toolbar.ql-snow {
+    flex: 0 0 auto;
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host .ql-container.ql-snow {
+    flex: 1 1 auto;
+    min-height: 0;
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
+}
+
+.quill-editor-host .ql-editor {
+    color: var(--colorNeutralForeground1);
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Content pasted into Quill (e.g. from Word) frequently carries its source's own inline
+   `style="color: ..."` on the pasted spans, and inline styles beat any stylesheet rule regardless
+   of selector specificity, so the plain .ql-editor colour rule above silently loses to a pasted-in
+   black colour, leaving typed-over-paste text unreadable in dark mode. !important on a rule that
+   also matches every descendant is the only way to beat an inline style we do not control. */
+.quill-editor-host .ql-editor,
+.quill-editor-host .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.quill-editor-host .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+/* The toolbar icons are SVG paths Quill colours with a hardcoded dark grey, which is invisible
+   against a dark theme. Stroke and fill are separate because Quill uses each for different icons. */
+.quill-editor-host .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground2);
+}
+
+.quill-editor-host .ql-snow .ql-picker {
+    color: var(--colorNeutralForeground2);
+}
+
+/* The picker's closed-state label picks up the colour above, but Quill's snow theme hardcodes the
+   OPEN dropdown panel to a white background with dark grey text regardless of the surrounding
+   page - in dark mode that is a bright white popup with barely readable text. */
+.quill-editor-host .ql-snow .ql-picker-options {
+    background-color: var(--colorNeutralBackground1);
+    border-color: var(--colorNeutralStroke1) !important;
+}
+
+.quill-editor-host .ql-snow .ql-picker-item {
+    color: var(--colorNeutralForeground1);
+}
+
+.quill-editor-host .ql-snow .ql-picker-item:hover,
+.quill-editor-host .ql-snow .ql-picker-item.ql-selected {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.quill-editor-host .ql-snow.ql-toolbar button:hover .ql-stroke,
+.quill-editor-host .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.quill-editor-host .ql-snow.ql-toolbar button:hover .ql-fill,
+.quill-editor-host .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}

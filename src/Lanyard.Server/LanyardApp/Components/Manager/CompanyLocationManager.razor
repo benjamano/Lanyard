@@ -1,6 +1,7 @@
 @using Lanyard.Application.Services.Kitchen
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Files
+@using Lanyard.Shared.DTO
 
 @inject INotificationService ToastService
 @inject ITenantDirectoryService _tenantDirectoryService
@@ -51,7 +52,8 @@
                             </FluentText>
                             @if (_access.IsAdmin && selectedCompany is not null)
                             {
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ChangePayoutAccountAsync">
+                                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@(!_hasTwoFactor)"
+                                              OnClick="ChangePayoutAccountAsync">
                                     Change
                                 </FluentButton>
                             }
@@ -61,6 +63,18 @@
                             <FluentText Class="clm-empty-note">
                                 Only an administrator can change this.
                             </FluentText>
+                        }
+                        else if (!_hasTwoFactor)
+                        {
+                            @* Said here rather than only when the change is submitted. Changing
+                               this sends every future payment somewhere else, so an admin should
+                               find out that it needs a second factor before they have typed an
+                               account number in, not after. *@
+                            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                                Two-factor authentication is not enabled on your account. Changing the
+                                payout account needs a code from your authenticator, so set it up on
+                                <a href="/account/manage">your account page</a> first.
+                            </FluentMessageBar>
                         }
 
                         <FileUploader Id="company-logo-uploader" Accept=" image/*" MaximumFileSize="@(5 * 1024 * 1024)"
@@ -236,6 +250,13 @@
     /// <summary>What the signed-in user may administer. Admins get everything; a Manager gets
     /// only the companies they belong to.</summary>
     private CompanyAccess _access = CompanyAccess.None;
+
+    /// <summary>
+    /// Whether the signed-in user has a second factor. Drives both the warning and the disabled
+    /// Change button; the service refuses without one regardless, so this only decides how early
+    /// the person finds out.
+    /// </summary>
+    private bool _hasTwoFactor;
     private List<Location> locationsForSelectedCompany = [];
     private Company? selectedCompany;
 
@@ -304,6 +325,9 @@
     {
         _access = await _companyAccess.GetCurrentAsync();
 
+        Result<TwoFactorStatusDto> twoFactor = await _securityService.GetTwoFactorStatusAsync();
+        _hasTwoFactor = twoFactor.IsSuccess && twoFactor.Data?.IsEnabled == true;
+
         Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
 
         if (!result.IsSuccess)
@@ -330,6 +354,14 @@
     {
         if (selectedCompany is null)
         {
+            return;
+        }
+
+        if (!_hasTwoFactor)
+        {
+            ToastService.ShowError(
+                "Enable two-factor authentication on your account before changing the payout account.");
+
             return;
         }
 

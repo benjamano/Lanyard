@@ -15,15 +15,11 @@
 /* Quill sizes itself from its content and consistently under-measures its own toolbar,
    which is what made the course editor overlap the buttons beneath it. Giving the host an
    authoritative height and letting the editor fill what's left sidesteps the measurement
-   entirely - the same fix, and the same reason, as .quill-editor-host in CourseEditor. */
-.legal-doc__editor {
-    display: flex;
-    flex-direction: column;
-    height: 420px;
-}
+   entirely.
 
-.legal-doc__editor ::deep .ql-container {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
+   Everything else - the flex layout and all the theme colours, including the toolbar icons
+   that are otherwise dark grey on a dark background - comes from the global
+   wwwroot/css/quill-theme.css via the quill-editor-host class on this div. */
+.legal-doc__editor {
+    height: 420px;
 }
