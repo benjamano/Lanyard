@@ -276,6 +276,13 @@ public class CompanyLocationService(
     {
         try
         {
+            // Turning a venue's ordering on or off is a write like any other on this page, and
+            // was the one that got missed when the rest were scoped.
+            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Location? location = await ctx.Locations.FirstOrDefaultAsync(x => x.Id == locationId);

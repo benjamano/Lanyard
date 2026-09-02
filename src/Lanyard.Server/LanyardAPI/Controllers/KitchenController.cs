@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Kitchen;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -18,10 +19,20 @@ namespace Lanyard.API.Controllers
     /// from the same services, so a custom client cannot end up disagreeing with the staff
     /// screens about what the kitchen is doing.
     ///
-    /// Authorised the same way the kiosk-facing endpoints already are
-    /// (<see cref="ClientRequestAuthorization"/>): a signed-in staff cookie, or the kiosk shared
-    /// secret for a device with no user to log in. Deliberately not the Reach credential - that
-    /// belongs to the anonymous customer site and has no business reading a venue's takings.
+    /// Two ways in, and both are scoped to one venue.
+    ///
+    /// A device presents the kiosk shared secret, exactly as the other kiosk endpoints do. A
+    /// person presents their staff cookie and must additionally hold Admin or CanManageKitchen
+    /// and be a member of the venue they are asking about - the same bar the kitchen hub and the
+    /// /kitchen page enforce.
+    ///
+    /// The membership check is the important half. This once accepted any authenticated cookie,
+    /// which let a signed-in member of staff at one company read another company's live tickets,
+    /// customer notes and takings, and change their order statuses, just by putting a different
+    /// locationId in the URL.
+    ///
+    /// Deliberately not the Reach credential - that belongs to the anonymous customer site and
+    /// has no business reading a venue's takings.
     /// </summary>
     [ApiController]
     [Route("api/kitchen")]
@@ -32,22 +43,74 @@ namespace Lanyard.API.Controllers
         private readonly IKitchenOrderService _orderService;
         private readonly IMenuService _menuService;
         private readonly IClientSecretValidator _clientSecretValidator;
+        private readonly ICompanyLocationService _companyLocationService;
 
         public KitchenController(
             IKitchenOrderService orderService,
             IMenuService menuService,
-            IClientSecretValidator clientSecretValidator)
+            IClientSecretValidator clientSecretValidator,
+            ICompanyLocationService companyLocationService)
         {
             _orderService = orderService;
             _menuService = menuService;
             _clientSecretValidator = clientSecretValidator;
+            _companyLocationService = companyLocationService;
+        }
+
+        /// <summary>
+        /// Whether this caller may act on this venue. Fails closed: anything it cannot establish
+        /// is a refusal, never a default of "allowed".
+        /// </summary>
+        private async Task<bool> IsAuthorizedForLocationAsync(int locationId)
+        {
+            // A kiosk device authenticates as the installation, not as a person, and is already
+            // trusted with the venue floor by the same secret. Read from the header or the query
+            // exactly as ClientRequestAuthorization does, so the two cannot disagree.
+            string? providedSecret = HttpContext.Request.Headers[ClientRequestAuthorization.SecretHeaderName].ToString();
+
+            if (string.IsNullOrEmpty(providedSecret))
+            {
+                providedSecret = HttpContext.Request.Query[ClientRequestAuthorization.SecretQueryName].ToString();
+            }
+
+            if (!string.IsNullOrEmpty(providedSecret) && _clientSecretValidator.IsValid(providedSecret))
+            {
+                return true;
+            }
+
+            if (HttpContext.User?.Identity?.IsAuthenticated != true)
+            {
+                return false;
+            }
+
+            if (!HttpContext.User.IsInRole("Admin") && !HttpContext.User.IsInRole("CanManageKitchen"))
+            {
+                return false;
+            }
+
+            // An admin is not restricted to a venue; anyone else must belong to this one.
+            if (HttpContext.User.IsInRole("Admin"))
+            {
+                return true;
+            }
+
+            string? userId = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return false;
+            }
+
+            Result<bool> membership = await _companyLocationService.IsUserMemberOfLocationAsync(userId, locationId);
+
+            return membership.Success && membership.Data;
         }
 
         /// <summary>Open tickets for one venue, oldest first - the kitchen display's working set.</summary>
         [HttpGet("{locationId:int}/queue")]
         public async Task<IActionResult> GetQueue(int locationId)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            if (!await IsAuthorizedForLocationAsync(locationId))
             {
                 return Unauthorized();
             }
@@ -65,7 +128,7 @@ namespace Lanyard.API.Controllers
         [HttpGet("{locationId:int}/stats")]
         public async Task<IActionResult> GetStats(int locationId, [FromQuery] KitchenStatsPeriod period = KitchenStatsPeriod.Today)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            if (!await IsAuthorizedForLocationAsync(locationId))
             {
                 return Unauthorized();
             }
@@ -93,7 +156,7 @@ namespace Lanyard.API.Controllers
         [HttpGet("{locationId:int}/menu-items")]
         public async Task<IActionResult> GetMenuItems(int locationId)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            if (!await IsAuthorizedForLocationAsync(locationId))
             {
                 return Unauthorized();
             }
@@ -125,7 +188,11 @@ namespace Lanyard.API.Controllers
         [HttpPost("orders/{orderId:int}/status")]
         public async Task<IActionResult> SetStatus(int orderId, [FromBody] SetKitchenOrderStatusRequest request)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            Result<int> orderLocation = await _orderService.GetLocationIdForOrderAsync(orderId);
+
+            // Same "not found" whether the order does not exist or belongs to another venue, so
+            // this cannot be walked to discover which order ids exist elsewhere.
+            if (!orderLocation.Success || !await IsAuthorizedForLocationAsync(orderLocation.Data))
             {
                 return Unauthorized();
             }
@@ -145,7 +212,9 @@ namespace Lanyard.API.Controllers
         [HttpPost("menu-items/{itemId:int}/availability")]
         public async Task<IActionResult> SetAvailability(int itemId, [FromBody] SetMenuItemAvailabilityRequest request)
         {
-            if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
+            Result<int> itemLocation = await _menuService.GetLocationIdForItemAsync(itemId);
+
+            if (!itemLocation.Success || !await IsAuthorizedForLocationAsync(itemLocation.Data))
             {
                 return Unauthorized();
             }

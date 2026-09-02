@@ -228,5 +228,15 @@ public class StripeOrderPaymentService : IOrderPaymentService
 
             return Result<OrderPaymentWebhookResult>.Fail("Invalid webhook signature.");
         }
+        catch (Exception ex)
+        {
+            // Anything else - a truncated body, malformed JSON, an event shape we cannot read.
+            // Caught so the anonymous webhook route answers with a status rather than throwing an
+            // unhandled 500, which would leak a stack trace and tell Stripe to keep retrying
+            // something that will never parse.
+            _logger.LogWarning(ex, "Rejected a malformed Stripe webhook payload");
+
+            return Result<OrderPaymentWebhookResult>.Fail("Malformed webhook payload.");
+        }
     }
 }

@@ -226,6 +226,15 @@
 
         _ = InvokeAsync(() =>
         {
+            // Keyed on the order, not appended blindly. The server's confirm-payment guard is a
+            // read-then-write, so a Stripe retry racing the customer's reconcile poll can emit
+            // this event twice for one order - and two identical tickets on the rail is food
+            // cooked twice.
+            if (_orders.Any(o => o.OrderId == ticket.OrderId))
+            {
+                return;
+            }
+
             _orders.Add(ticket);
             StateHasChanged();
         });

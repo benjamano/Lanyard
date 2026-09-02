@@ -540,10 +540,15 @@
 
             if (!response.IsSuccessStatusCode)
             {
-                // The order is gone or belongs to a different venue - clear it rather than
-                // leaving the phone polling something it will never get an answer for.
-                await ClearStoredOrderTokenAsync();
-                _orderToken = null;
+                // Only a 404 means the order is genuinely gone. A 429 or 502 says "ask again in a
+                // moment", and throwing the token away on one of those would permanently lose a
+                // paying customer's tracker because the site was briefly busy - which is exactly
+                // what the BFF distinguishes those statuses for.
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    await ClearStoredOrderTokenAsync();
+                    _orderToken = null;
+                }
 
                 return false;
             }
@@ -980,7 +985,7 @@
         KitchenOrderStatus.AwaitingPayment => "This takes a few seconds. No need to pay again.",
         KitchenOrderStatus.Received => "The kitchen has your order.",
         KitchenOrderStatus.Preparing => "It won't be long.",
-        KitchenOrderStatus.Ready => "Come to the counter to collect and pay.",
+        KitchenOrderStatus.Ready => "Come to the counter to collect it.",
         KitchenOrderStatus.Completed => "Thanks for ordering with us.",
         KitchenOrderStatus.Cancelled => "Please speak to a member of staff.",
         _ => string.Empty

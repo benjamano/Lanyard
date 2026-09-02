@@ -23,6 +23,12 @@ public interface IKitchenOrderService
     /// <summary>Status for the customer holding this order's token.</summary>
     Task<Result<OrderStatusDto>> GetOrderStatusAsync(Guid orderToken, int expectedCompanyId);
 
+    /// <summary>
+    /// Which venue an order belongs to. Used to authorise a caller against that venue before
+    /// letting them see or change it.
+    /// </summary>
+    Task<Result<int>> GetLocationIdForOrderAsync(int orderId);
+
     /// <summary>Kitchen display queue: everything not yet completed or cancelled, oldest first.</summary>
     Task<Result<List<KitchenOrder>>> GetOpenOrdersForLocationAsync(int locationId);
 

@@ -545,9 +545,17 @@ public class KitchenOrderService(
                 return Result<KitchenOrder>.Fail("No order matches that payment.");
             }
 
-            // Stripe retries webhooks, and the customer's poll can reconcile the same payment
-            // at the same moment. Confirming twice would put a second ticket in front of the
-            // kitchen for one order, so the second caller returns the order untouched.
+            // Stripe retries webhooks, and the customer's poll can reconcile the same payment at
+            // the same moment. Confirming twice would announce one order to the kitchen twice.
+            //
+            // This read-then-write leaves a narrow window in which both callers see "not yet
+            // paid" and both announce. A conditional UPDATE would close it, but ExecuteUpdate is
+            // unsupported by the EF InMemory provider the whole test suite runs on, so it would
+            // trade a rare duplicate notification for untestable payment code. The duplicate is
+            // instead absorbed where it would do harm: KitchenDisplay keys arriving tickets on
+            // OrderId, so a second announcement of the same order changes nothing on the rail.
+            //
+            // Setting Paid twice is harmless in itself - the money and the row end up identical.
             alreadyConfirmed = found.PaymentStatus == KitchenOrderPaymentStatus.Paid;
 
             if (!alreadyConfirmed)
@@ -881,6 +889,29 @@ public class KitchenOrderService(
         KitchenStatsPeriod.ThisWeek => DateTime.Today.AddDays(-(int)DateTime.Today.DayOfWeek).ToUniversalTime(),
         _ => DateTime.Today.ToUniversalTime()
     };
+
+    public async Task<Result<int>> GetLocationIdForOrderAsync(int orderId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int? locationId = await ctx.KitchenOrders
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(o => o.Id == orderId)
+                .Select(o => (int?)o.LocationId)
+                .FirstOrDefaultAsync();
+
+            return locationId is null
+                ? Result<int>.Fail("Order not found.")
+                : Result<int>.Ok(locationId.Value);
+        }
+        catch (Exception ex)
+        {
+            return Result<int>.Fail($"Failed to resolve the order's venue: {ex.Message}");
+        }
+    }
 
     public static KitchenOrderTicketDto ToTicket(KitchenOrder order) => new()
     {

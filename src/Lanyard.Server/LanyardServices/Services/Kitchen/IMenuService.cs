@@ -39,6 +39,9 @@ public interface IMenuService
     /// <summary>Resolves an item's image file id without exposing it to the caller's transport.</summary>
     Task<Result<Guid>> GetItemImageFileIdAsync(int itemId, int expectedCompanyId);
 
+    /// <summary>Which venue a dish belongs to, for authorising a caller against that venue.</summary>
+    Task<Result<int>> GetLocationIdForItemAsync(int itemId);
+
     /// <summary>
     /// The choice groups on one dish, with their options, for the staff editor. Includes
     /// unconfirmed and unavailable choices, which the public menu deliberately hides.

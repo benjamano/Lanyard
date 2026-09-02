@@ -17,6 +17,15 @@
 {
     @((MarkupString)_html)
 }
+else if (_failed)
+{
+    @* Says so rather than rendering nothing. A blank page where a customer expected the terms
+       looks like the venue has none, which is worse than admitting we could not load them. *@
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h2>We couldn't load this</h2>
+        <p>Please try again shortly, or ask a member of staff.</p>
+    </div>
+}
 
 @code {
     [Parameter, EditorRequired] public LegalDocumentType DocumentType { get; set; }
@@ -27,11 +36,13 @@
     private static readonly Ganss.Xss.HtmlSanitizer _sanitizer = new();
 
     private string? _html;
+    private bool _failed;
 
     protected override async Task OnInitializedAsync()
     {
         if (!TenantContext.IsResolved)
         {
+            _failed = true;
             await OnLoaded.InvokeAsync(false);
 
             return;
@@ -42,6 +53,7 @@
 
         if (document is null)
         {
+            _failed = true;
             await OnLoaded.InvokeAsync(false);
 
             return;

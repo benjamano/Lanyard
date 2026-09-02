@@ -754,6 +754,29 @@ public class MenuService(
         }
     }
 
+    public async Task<Result<int>> GetLocationIdForItemAsync(int itemId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int? locationId = await ctx.MenuItems
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(i => i.Id == itemId)
+                .Select(i => (int?)i.Category!.LocationId)
+                .FirstOrDefaultAsync();
+
+            return locationId is null
+                ? Result<int>.Fail("Dish not found.")
+                : Result<int>.Ok(locationId.Value);
+        }
+        catch (Exception ex)
+        {
+            return Result<int>.Fail($"Failed to resolve the dish's venue: {ex.Message}");
+        }
+    }
+
     // Tracked (not AsNoTracking) on purpose: the caller saves this alongside its own change so
     // the menu edit and the version bump land in one transaction. A version that could be
     // written without the change it describes would let a phone cache a menu it never saw.

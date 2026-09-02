@@ -1,3 +1,7 @@
+using Lanyard.Application.Services.Authentication;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Lanyard.API
 {
     /// <summary>
@@ -54,12 +58,29 @@ namespace Lanyard.API
         {
             string forwarded = httpContext.Request.Headers[ClientIdHeaderName].ToString();
 
-            if (!string.IsNullOrWhiteSpace(forwarded))
+            // The forwarded id is only honoured from Reach itself. Rate limiting runs as
+            // middleware, before the controller checks the Reach credential, so an unauthenticated
+            // caller hitting this API directly could otherwise send a different client id on every
+            // request and never be limited at all - each one landing in its own fresh partition.
+            //
+            // Checked here rather than trusted, and the fallback is the connection's own address,
+            // which the caller cannot choose.
+            if (!string.IsNullOrWhiteSpace(forwarded) && IsFromReach(httpContext))
             {
                 return forwarded;
             }
 
             return httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        }
+
+        private static bool IsFromReach(HttpContext httpContext)
+        {
+            IReachApiCredentialValidator? validator = httpContext.RequestServices
+                .GetService<IReachApiCredentialValidator>();
+
+            // No validator registered means this is not a configured ordering deployment; fall
+            // back to the address rather than trusting the header by default.
+            return validator is not null && validator.IsAuthorized(httpContext);
         }
     }
 }

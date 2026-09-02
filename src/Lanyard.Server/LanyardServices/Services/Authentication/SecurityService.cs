@@ -607,6 +607,13 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found");
             }
 
+            // Checked before verifying anything: a locked-out account must not get another guess,
+            // which is what makes counting failures below actually mean something.
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                return Result<bool>.Fail("Too many attempts. Try again later.");
+            }
+
             if (!await _userManager.GetTwoFactorEnabledAsync(user))
             {
                 // Said plainly rather than waved through. Letting an account with no second
