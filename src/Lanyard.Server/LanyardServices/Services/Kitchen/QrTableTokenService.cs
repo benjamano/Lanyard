@@ -11,9 +11,11 @@ namespace Lanyard.Application.Services.Kitchen;
 
 public class QrTableTokenService(
     IDbContextFactory<ApplicationDbContext> factory,
+    IOrderingAvailabilityService availability,
     ILogger<QrTableTokenService> logger) : IQrTableTokenService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IOrderingAvailabilityService _availability = availability;
     private readonly ILogger<QrTableTokenService> _logger = logger;
 
     public async Task<Result<TableResolutionDto>> ResolveAsync(string token)
@@ -38,6 +40,7 @@ public class QrTableTokenService(
                     LocationName = t.Location!.Name,
                     LocationActive = t.Location.IsActive,
                     t.Location.OrderingEnabled,
+                    t.Location.FulfilmentMode,
                     t.Location.CompanyId
                 })
                 .FirstOrDefaultAsync();
@@ -49,13 +52,20 @@ public class QrTableTokenService(
                 return Result<TableResolutionDto>.Fail("Table not found.");
             }
 
+            // Asked here so the customer is told the kitchen is shut when they scan, rather than
+            // after they have built a basket and reached the checkout.
+            Result<OrderingAvailability> availability = await _availability.GetAsync(resolved.LocationId);
+
             return Result<TableResolutionDto>.Ok(new TableResolutionDto
             {
                 CompanyId = resolved.CompanyId,
                 LocationId = resolved.LocationId,
                 LocationName = resolved.LocationName,
                 TableLabel = resolved.Label,
-                OrderingEnabled = resolved.OrderingEnabled
+                OrderingEnabled = resolved.OrderingEnabled,
+                OrderingOpen = availability.Success && availability.Data?.IsOpen == true,
+                ClosedMessage = availability.Data?.Message,
+                FulfilmentMode = resolved.FulfilmentMode
             });
         }
         catch (Exception ex)

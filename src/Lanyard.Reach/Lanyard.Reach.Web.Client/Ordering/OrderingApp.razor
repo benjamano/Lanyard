@@ -60,18 +60,24 @@
     else if (_phase == Phase.Placed && _orderStatus is not null)
     {
         <section class="ordering__tracker" aria-live="polite">
-            <h2 class="ordering__tracker-heading">@StatusHeading(_orderStatus.Status)</h2>
-            <p class="ordering__tracker-sub">@StatusSubtitle(_orderStatus.Status)</p>
+            <h2 class="ordering__tracker-heading">@StatusHeading(_orderStatus.Status, _orderStatus.FulfilmentMode)</h2>
+            <p class="ordering__tracker-sub">@StatusSubtitle(_orderStatus.Status, _orderStatus.FulfilmentMode)</p>
 
-            <ol class="ordering__steps">
-                @foreach ((KitchenOrderStatus step, string label) in TrackerSteps)
-                {
-                    <li class="ordering__step @(StepClass(step))">
-                        <span class="ordering__step-dot" aria-hidden="true"></span>
-                        <span class="ordering__step-label">@label</span>
-                    </li>
-                }
-            </ol>
+            @* No progress steps when staff bring the food out. The steps exist to tell a customer
+               when to get up and fetch it; where nobody is fetching anything, a tracker ending in
+               "Ready" is an instruction to ignore. *@
+            @if (_orderStatus.FulfilmentMode == OrderFulfilmentMode.CollectAtCounter)
+            {
+                <ol class="ordering__steps">
+                    @foreach ((KitchenOrderStatus step, string label) in TrackerSteps)
+                    {
+                        <li class="ordering__step @(StepClass(step))">
+                            <span class="ordering__step-dot" aria-hidden="true"></span>
+                            <span class="ordering__step-label">@label</span>
+                        </li>
+                    }
+                </ol>
+            }
 
             <div class="ordering__receipt">
                 <h3>@_orderStatus.TableLabel</h3>
@@ -967,29 +973,50 @@
 
     private static string Money(int cents) => $"£{cents / 100m:0.00}";
 
-    private static string StatusHeading(KitchenOrderStatus status) => status switch
+    private static string StatusHeading(KitchenOrderStatus status, OrderFulfilmentMode mode)
     {
-        KitchenOrderStatus.AwaitingPayment => "Confirming your payment",
-        KitchenOrderStatus.Received => "Order received",
-        KitchenOrderStatus.Preparing => "We're making it",
-        KitchenOrderStatus.Ready => "Ready to collect",
-        KitchenOrderStatus.Completed => "Enjoy!",
-        KitchenOrderStatus.Cancelled => "Order cancelled",
-        _ => "Order received"
-    };
+        // Where staff carry the food out there is nothing for the customer to watch for, so every
+        // stage after the order lands says the same calm thing rather than counting down to a
+        // collection that is never going to be theirs to make.
+        if (mode == OrderFulfilmentMode.TableService
+            && status is KitchenOrderStatus.Received or KitchenOrderStatus.Preparing or KitchenOrderStatus.Ready)
+        {
+            return "Order received";
+        }
 
-    private static string StatusSubtitle(KitchenOrderStatus status) => status switch
+        return status switch
+        {
+            KitchenOrderStatus.AwaitingPayment => "Confirming your payment",
+            KitchenOrderStatus.Received => "Order received",
+            KitchenOrderStatus.Preparing => "We're making it",
+            KitchenOrderStatus.Ready => "Ready to collect",
+            KitchenOrderStatus.Completed => "Enjoy!",
+            KitchenOrderStatus.Cancelled => "Order cancelled",
+            _ => "Order received"
+        };
+    }
+
+    private static string StatusSubtitle(KitchenOrderStatus status, OrderFulfilmentMode mode)
     {
-        // Shown in the seconds between paying and the webhook landing. Deliberately not phrased
-        // as a problem: the money has left, and the kitchen is about to be told.
-        KitchenOrderStatus.AwaitingPayment => "This takes a few seconds. No need to pay again.",
-        KitchenOrderStatus.Received => "The kitchen has your order.",
-        KitchenOrderStatus.Preparing => "It won't be long.",
-        KitchenOrderStatus.Ready => "Come to the counter to collect it.",
-        KitchenOrderStatus.Completed => "Thanks for ordering with us.",
-        KitchenOrderStatus.Cancelled => "Please speak to a member of staff.",
-        _ => string.Empty
-    };
+        if (mode == OrderFulfilmentMode.TableService
+            && status is KitchenOrderStatus.Received or KitchenOrderStatus.Preparing or KitchenOrderStatus.Ready)
+        {
+            return "Sit tight. We'll bring it over to your table when it's ready.";
+        }
+
+        return status switch
+        {
+            // Shown in the seconds between paying and the webhook landing. Deliberately not
+            // phrased as a problem: the money has left, and the kitchen is about to be told.
+            KitchenOrderStatus.AwaitingPayment => "This takes a few seconds. No need to pay again.",
+            KitchenOrderStatus.Received => "The kitchen has your order.",
+            KitchenOrderStatus.Preparing => "It won't be long.",
+            KitchenOrderStatus.Ready => "Come to the counter to collect it.",
+            KitchenOrderStatus.Completed => "Thanks for ordering with us.",
+            KitchenOrderStatus.Cancelled => "Please speak to a member of staff.",
+            _ => string.Empty
+        };
+    }
 
     private string StepClass(KitchenOrderStatus step)
     {

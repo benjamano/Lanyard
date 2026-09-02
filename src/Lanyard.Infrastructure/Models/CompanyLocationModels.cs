@@ -154,6 +154,33 @@ namespace Lanyard.Infrastructure.Models
         public bool OrderingEnabled { get; set; }
 
         /// <summary>
+        /// The manual switch above is "are we taking orders at all". This is the timetable: a
+        /// venue with hours set only accepts orders inside them. No rows means no timetable, and
+        /// the venue relies on the switch alone.
+        /// </summary>
+        public virtual List<LocationOpeningHours> OpeningHours { get; set; } = [];
+
+        /// <summary>
+        /// Which time zone this venue's opening hours are read in. Everything else in the app
+        /// stores UTC, but "we open at nine" means nine o'clock where the venue is, and it keeps
+        /// meaning that when the clocks change.
+        /// </summary>
+        public string TimeZoneId { get; set; } = "Europe/London";
+
+        /// <summary>How the food reaches the customer, which decides what their phone tells them.</summary>
+        public OrderFulfilmentMode FulfilmentMode { get; set; } = OrderFulfilmentMode.CollectAtCounter;
+
+        /// <summary>
+        /// The kiosk client that prints this venue's kitchen receipts, if any.
+        ///
+        /// Pointed at from the venue rather than stamping a location onto Client, because a
+        /// kiosk is a machine that may do several jobs and this is the one job that belongs to a
+        /// venue. Null means no printing; the kitchen screen is the only ticket.
+        /// </summary>
+        public Guid? ReceiptPrinterClientId { get; set; }
+        public Client? ReceiptPrinterClient { get; set; }
+
+        /// <summary>
         /// Bumped whenever this location's menu changes, including an item being marked
         /// unavailable mid-service. Customers already poll their order status, so echoing this
         /// value back on that poll lets a phone notice a stale menu and refetch, without opening
@@ -164,6 +191,33 @@ namespace Lanyard.Infrastructure.Models
         public virtual List<UserLocationMembership> Memberships { get; set; } = [];
 
         public string GetDisplayName() => $"{Company?.Name} {Name}".Trim();
+    }
+
+    /// <summary>
+    /// One opening window for one day of the week at one venue.
+    ///
+    /// A row per window rather than a single open/close pair per day, so a venue that shuts
+    /// between lunch and dinner can say so instead of appearing open all afternoon.
+    /// </summary>
+    public class LocationOpeningHours
+    {
+        public int Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public DayOfWeek DayOfWeek { get; set; }
+
+        /// <summary>Local to the venue's own time zone, not UTC - see <see cref="Location.TimeZoneId"/>.</summary>
+        public TimeOnly OpensAt { get; set; }
+
+        /// <summary>
+        /// Exclusive: an order placed exactly at closing time is refused. Kitchens stop taking
+        /// orders at the advertised time rather than one second after it.
+        /// </summary>
+        public TimeOnly ClosesAt { get; set; }
+
+        public DateTime CreateDate { get; set; }
     }
 
     public class UserLocationMembership

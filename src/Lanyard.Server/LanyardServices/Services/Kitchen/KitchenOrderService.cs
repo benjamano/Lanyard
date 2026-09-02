@@ -11,11 +11,15 @@ namespace Lanyard.Application.Services.Kitchen;
 
 public class KitchenOrderService(
     IDbContextFactory<ApplicationDbContext> factory,
+    IOrderingAvailabilityService availability,
+    IReceiptPrintService receiptPrintService,
     IKitchenHubNotifier hubNotifier,
     IOrderPaymentService paymentService,
     ILogger<KitchenOrderService> logger) : IKitchenOrderService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IOrderingAvailabilityService _availability = availability;
+    private readonly IReceiptPrintService _receiptPrintService = receiptPrintService;
     private readonly IKitchenHubNotifier _hubNotifier = hubNotifier;
     private readonly IOrderPaymentService _paymentService = paymentService;
     private readonly ILogger<KitchenOrderService> _logger = logger;
@@ -168,9 +172,14 @@ public class KitchenOrderService(
                 return Result<CreateOrderResultDto>.Fail("Table not found.");
             }
 
-            if (!table.OrderingEnabled)
+            // Covers the manual switch and the opening hours together. Re-checked here rather
+            // than trusted from the scan: a basket built at 4:59 must not be payable at 5:01.
+            Result<OrderingAvailability> availability = await _availability.GetAsync(table.LocationId);
+
+            if (!availability.Success || availability.Data is null || !availability.Data.IsOpen)
             {
-                return Result<CreateOrderResultDto>.Fail("This venue is not taking orders at the moment.");
+                return Result<CreateOrderResultDto>.Fail(
+                    availability.Data?.Message ?? "This venue is not taking orders at the moment.");
             }
 
             // Collapse duplicates so two taps of the same thing become quantity 2 on one line
@@ -383,7 +392,7 @@ public class KitchenOrderService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(l => l.Id == order.LocationId)
-                .Select(l => new { l.CompanyId, l.MenuVersion })
+                .Select(l => new { l.CompanyId, l.MenuVersion, l.FulfilmentMode })
                 .FirstOrDefaultAsync();
 
             // Same tenant check as order creation, for the same reason - and the same
@@ -403,6 +412,7 @@ public class KitchenOrderService(
                 TotalCents = order.TotalCents,
                 CreateDate = order.CreateDate,
                 MenuVersion = location.MenuVersion,
+                FulfilmentMode = location.FulfilmentMode,
                 Lines = [.. order.Items.Select(i => new OrderStatusLineDto
                 {
                     Name = i.MenuItemNameSnapshot,
@@ -594,6 +604,11 @@ public class KitchenOrderService(
             await NotifySafelyAsync(
                 () => _hubNotifier.NotifyOrderReceivedAsync(order.LocationId, ToTicket(order)),
                 order.Id);
+
+            // Printed only once the money is confirmed, and only from the branch that actually
+            // moved the order to Received - a Stripe retry must not produce a second ticket for
+            // the kitchen to cook. Swallows its own failures for the same reason as above.
+            await _receiptPrintService.PrintOrderAsync(order.Id);
         }
 
         return Result<KitchenOrder>.Ok(order);

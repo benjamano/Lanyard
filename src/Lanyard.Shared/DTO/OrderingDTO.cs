@@ -45,6 +45,22 @@ public class TableResolutionDto
     public required string LocationName { get; set; }
     public required string TableLabel { get; set; }
     public bool OrderingEnabled { get; set; }
+
+    /// <summary>
+    /// False when the venue is switched off or outside its opening hours. Distinct from
+    /// OrderingEnabled, which is only the switch: a venue can be perfectly well set up for QR
+    /// ordering and simply shut at four in the afternoon.
+    /// </summary>
+    public bool OrderingOpen { get; set; }
+
+    /// <summary>Why it is closed and when it opens again, written for the customer.</summary>
+    public string? ClosedMessage { get; set; }
+
+    /// <summary>
+    /// Decides what the phone says after payment: watch for it to be ready and collect it, or
+    /// sit tight because someone is bringing it over.
+    /// </summary>
+    public OrderFulfilmentMode FulfilmentMode { get; set; }
 }
 
 public class MenuDto
@@ -198,6 +214,12 @@ public class OrderStatusDto
     /// <summary>Current menu version for this order's location - see <see cref="MenuDto.MenuVersion"/>.</summary>
     public DateTime MenuVersion { get; set; }
 
+    /// <summary>
+    /// Carried on the status poll as well as on table resolution, so a phone that resumes an
+    /// order after being closed and reopened still renders the right ending.
+    /// </summary>
+    public OrderFulfilmentMode FulfilmentMode { get; set; }
+
     public List<OrderStatusLineDto> Lines { get; set; } = [];
 }
 
@@ -278,4 +300,42 @@ public class KitchenOrderTicketDto
 public class LegalDocumentDto
 {
     public required string Html { get; set; }
+}
+
+/// <summary>
+/// A kitchen receipt, as sent to the on-site kiosk that prints it.
+///
+/// Everything the ticket needs is on here as plain text. The kiosk does no lookups and holds no
+/// database connection, so a printer that is offline or a kiosk that is restarting can never
+/// hold up the payment that produced this.
+/// </summary>
+public class KitchenReceiptDto
+{
+    public int OrderId { get; set; }
+    public int LocationId { get; set; }
+    public required string VenueName { get; set; }
+    public required string TableLabel { get; set; }
+
+    /// <summary>Placed time in the venue's own time zone, already formatted for printing.</summary>
+    public required string PlacedAt { get; set; }
+
+    /// <summary>True when staff carry the food out, which the ticket says so the kitchen knows.</summary>
+    public bool IsTableService { get; set; }
+
+    public string? CustomerNote { get; set; }
+    public int TotalCents { get; set; }
+
+    public List<KitchenReceiptLineDto> Lines { get; set; } = [];
+}
+
+public class KitchenReceiptLineDto
+{
+    public int Quantity { get; set; }
+    public required string Name { get; set; }
+
+    /// <summary>The choices made on this line, already flattened - "Beans", "Extra cheese".</summary>
+    public List<string> Options { get; set; } = [];
+
+    /// <summary>Allergens as declared at order time, already named. Empty when there are none.</summary>
+    public List<string> Allergens { get; set; } = [];
 }

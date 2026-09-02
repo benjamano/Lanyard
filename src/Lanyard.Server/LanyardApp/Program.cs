@@ -79,6 +79,8 @@ builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 // customers, so sharing one secret would let a compromise of the public site drive the light rig.
 builder.Services.AddSingleton<IReachApiCredentialValidator, ReachApiCredentialValidator>();
 builder.Services.AddScoped<ITenantDirectoryService, TenantDirectoryService>();
+builder.Services.AddScoped<IOrderingAvailabilityService, OrderingAvailabilityService>();
+builder.Services.AddScoped<IReceiptPrintService, ReceiptPrintService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IQrTableTokenService, QrTableTokenService>();
 builder.Services.AddScoped<IKitchenOrderService, KitchenOrderService>();

@@ -58,6 +58,16 @@ else if (!_table.OrderingEnabled)
         <p>@_table.LocationName isn't taking orders from your phone at the moment. Please order at the till.</p>
     </div>
 }
+else if (!_table.OrderingOpen)
+{
+    @* Distinct from the panel above. That one means the venue does not do this at all; this one
+       means it does, just not right now, and says when it will. Shown before the menu rather
+       than at the checkout, so nobody builds a basket they cannot pay for. *@
+    <div class="ordering__status-panel">
+        <h1>We're closed for orders</h1>
+        <p>@_table.ClosedMessage</p>
+    </div>
+}
 else
 {
     <header class="ordering__header">

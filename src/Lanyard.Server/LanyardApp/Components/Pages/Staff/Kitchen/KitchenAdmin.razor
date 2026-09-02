@@ -2,11 +2,16 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, CanManageKitchen")]
 
 @using Lanyard.Application.Services.Kitchen
+@using Lanyard.Application.Services.Clients
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Shared.Enum
 @using Lanyard.App.Components.Dialogs
 @using Lanyard.App.Components.Files
 
 @inject IMenuService _menuService
 @inject IQrTableTokenService _tableTokenService
+@inject IClientService _clientService
 
 <PageTitle>Kitchen Setup</PageTitle>
 
@@ -34,8 +39,74 @@
                                   Label="Accept QR orders at this venue" />
                     <FluentText Class="kitchen-admin__hint">
                         With this off, scanning a table code shows a "please order at the till"
-                        message instead of the menu.
+                        message instead of the menu. It closes the venue immediately, whatever the
+                        opening hours below say.
                     </FluentText>
+
+                    <FluentSelect TOption="OrderFulfilmentMode" TValue="string"
+                                  Items="@_fulfilmentModes"
+                                  OptionText="@(m => m == OrderFulfilmentMode.TableService ? "We bring it to the table" : "Customer collects from the counter")"
+                                  OptionValue="@(m => ((int)m).ToString())"
+                                  Label="How food reaches the customer"
+                                  Value="@(((int)_fulfilmentMode).ToString())"
+                                  ValueChanged="OnFulfilmentModeChangedAsync"
+                                  Style="max-width: 360px;" />
+                    <FluentText Class="kitchen-admin__hint">
+                        Table service hides the "ready to collect" tracker on the customer's phone
+                        and tells them to wait instead, so nobody gets up for food that is being
+                        carried over.
+                    </FluentText>
+
+                    <FluentSelect TOption="Client" TValue="string"
+                                  Items="@_clients"
+                                  OptionText="@(c => c?.Name ?? "No printer")"
+                                  OptionValue="@(c => c?.Id.ToString() ?? string.Empty)"
+                                  Label="Receipt printer"
+                                  Placeholder="No printer"
+                                  Value="@(_receiptPrinterClientId?.ToString() ?? string.Empty)"
+                                  ValueChanged="OnReceiptPrinterChangedAsync"
+                                  Style="max-width: 360px;" />
+                    <FluentText Class="kitchen-admin__hint">
+                        The kiosk that prints tickets for this kitchen. It prints as soon as a
+                        payment clears. Leave it unset to work from the Orders screen alone.
+                    </FluentText>
+
+                    @* The timetable, below the switch it defers to. Windows rather than one pair
+                       per day so a kitchen that shuts between lunch and dinner can say so. *@
+                    <FluentText As="@TextTag.H5">Ordering hours</FluentText>
+                    <FluentText Class="kitchen-admin__hint">
+                        Times are @_selectedLocation.TimeZoneId. With no hours set, the switch above
+                        is the only thing that closes ordering.
+                    </FluentText>
+
+                    @foreach (LocationOpeningHours window in _openingHours)
+                    {
+                        <div class="kitchen-admin__item">
+                            <span class="kitchen-admin__item-name">@window.DayOfWeek</span>
+                            <span>@window.OpensAt.ToString("HH:mm") to @window.ClosesAt.ToString("HH:mm")</span>
+                            <FluentButton Appearance="ButtonAppearance.Transparent"
+                                          IconStart="@(new Icons.Regular.Size20.Delete())"
+                                          Title="@($"Remove {window.DayOfWeek} {window.OpensAt.ToString("HH:mm")}")"
+                                          OnClick="@(() => RemoveOpeningHoursAsync(window))" />
+                        </div>
+                    }
+
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                                 VerticalAlignment="VerticalAlignment.Bottom" Wrap="true">
+                        <FluentSelect TOption="DayOfWeek" TValue="string"
+                                      Items="@_daysOfWeek"
+                                      OptionText="@(d => d.ToString())"
+                                      OptionValue="@(d => ((int)d).ToString())"
+                                      Label="Day"
+                                      Value="@(((int)_newDay).ToString())"
+                                      ValueChanged="@((string v) => _newDay = (DayOfWeek)int.Parse(v))"
+                                      Style="width: 140px;" />
+                        <FluentTextInput @bind-Value="_newOpensAt" Label="Opens" Placeholder="09:00" Style="width: 100px;" />
+                        <FluentTextInput @bind-Value="_newClosesAt" Label="Closes" Placeholder="17:00" Style="width: 100px;" />
+                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="AddOpeningHoursAsync">
+                            Add hours
+                        </FluentButton>
+                    </FluentStack>
                 }
             </FluentStack>
         </FluentCard>
@@ -282,6 +353,147 @@
         }
     }
 
+    private static readonly OrderFulfilmentMode[] _fulfilmentModes =
+        [OrderFulfilmentMode.CollectAtCounter, OrderFulfilmentMode.TableService];
+
+    private static readonly DayOfWeek[] _daysOfWeek =
+        [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+         DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
+
+    private List<LocationOpeningHours> _openingHours = [];
+    private List<Client> _clients = [];
+    private OrderFulfilmentMode _fulfilmentMode = OrderFulfilmentMode.CollectAtCounter;
+    private Guid? _receiptPrinterClientId;
+
+    private DayOfWeek _newDay = DayOfWeek.Monday;
+    private string _newOpensAt = string.Empty;
+    private string _newClosesAt = string.Empty;
+
+    private async Task LoadServiceSettingsAsync()
+    {
+        if (_selectedLocation is null)
+        {
+            _openingHours = [];
+
+            return;
+        }
+
+        _fulfilmentMode = _selectedLocation.FulfilmentMode;
+        _receiptPrinterClientId = _selectedLocation.ReceiptPrinterClientId;
+
+        Result<List<LocationOpeningHours>> hours =
+            await _companyLocationService.GetOpeningHoursAsync(_selectedLocation.Id);
+
+        _openingHours = hours.IsSuccess && hours.Data is not null ? hours.Data : [];
+
+        if (_clients.Count == 0)
+        {
+            Result<IEnumerable<ClientConnectedDTO>> clients = await _clientService.GetClientsAsync();
+
+            // ClientConnectedDTO derives from Client, so the picker binds to the base type and
+            // does not care whether a kiosk happens to be online right now - a printer that is
+            // switched off at configuration time is still the right printer.
+            _clients = clients.IsSuccess && clients.Data is not null
+                ? [.. clients.Data.OrderBy(c => c.Name).Cast<Client>()]
+                : [];
+        }
+    }
+
+    private async Task OnFulfilmentModeChangedAsync(string? value)
+    {
+        if (_selectedLocation is null || !int.TryParse(value, out int mode))
+        {
+            return;
+        }
+
+        _fulfilmentMode = (OrderFulfilmentMode)mode;
+        await SaveServiceSettingsAsync();
+    }
+
+    private async Task OnReceiptPrinterChangedAsync(string? value)
+    {
+        if (_selectedLocation is null)
+        {
+            return;
+        }
+
+        _receiptPrinterClientId = Guid.TryParse(value, out Guid clientId) ? clientId : null;
+        await SaveServiceSettingsAsync();
+    }
+
+    private async Task SaveServiceSettingsAsync()
+    {
+        if (_selectedLocation is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _companyLocationService.SetLocationServiceSettingsAsync(
+            _selectedLocation.Id, _fulfilmentMode, _receiptPrinterClientId, _selectedLocation.TimeZoneId);
+
+        if (result.IsSuccess)
+        {
+            _selectedLocation.FulfilmentMode = _fulfilmentMode;
+            _selectedLocation.ReceiptPrinterClientId = _receiptPrinterClientId;
+            _toastService.ShowSuccess("Saved.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't save that.");
+        }
+    }
+
+    private async Task AddOpeningHoursAsync()
+    {
+        if (_selectedLocation is null)
+        {
+            return;
+        }
+
+        // Parsed rather than bound to a time picker, because Fluent's time input round-trips a
+        // DateTime and these are wall-clock times with no date attached.
+        if (!TimeOnly.TryParse(_newOpensAt, out TimeOnly opens) || !TimeOnly.TryParse(_newClosesAt, out TimeOnly closes))
+        {
+            _toastService.ShowError("Enter times as HH:mm, for example 09:00.");
+
+            return;
+        }
+
+        Result<LocationOpeningHours> result = await _companyLocationService.AddOpeningHoursAsync(
+            new LocationOpeningHours
+            {
+                LocationId = _selectedLocation.Id,
+                DayOfWeek = _newDay,
+                OpensAt = opens,
+                ClosesAt = closes
+            });
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't add those hours.");
+
+            return;
+        }
+
+        _newOpensAt = string.Empty;
+        _newClosesAt = string.Empty;
+        await LoadServiceSettingsAsync();
+    }
+
+    private async Task RemoveOpeningHoursAsync(LocationOpeningHours window)
+    {
+        Result<bool> result = await _companyLocationService.RemoveOpeningHoursAsync(window.Id);
+
+        if (result.IsSuccess)
+        {
+            await LoadServiceSettingsAsync();
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove those hours.");
+        }
+    }
+
     private async Task OnLocationChangedAsync(string? newValue)
     {
         _locationValue = newValue ?? string.Empty;
@@ -296,6 +508,8 @@
     {
         _qrCodes.Clear();
         _qrErrors.Clear();
+
+        await LoadServiceSettingsAsync();
 
         if (_selectedLocation is null)
         {

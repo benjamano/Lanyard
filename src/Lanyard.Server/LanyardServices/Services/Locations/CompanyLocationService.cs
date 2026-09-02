@@ -1,6 +1,7 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 
@@ -333,6 +334,167 @@ public class CompanyLocationService(
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to deactivate location: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<LocationOpeningHours>>> GetOpeningHoursAsync(int locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<LocationOpeningHours> hours = await ctx.LocationOpeningHours
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(h => h.LocationId == locationId)
+                .OrderBy(h => h.DayOfWeek)
+                .ThenBy(h => h.OpensAt)
+                .ToListAsync();
+
+            return Result<List<LocationOpeningHours>>.Ok(hours);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<LocationOpeningHours>>.Fail($"Failed to load opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<LocationOpeningHours>> AddOpeningHoursAsync(LocationOpeningHours hours)
+    {
+        try
+        {
+            if (!await _companyAccess.CanAdministerLocationAsync(hours.LocationId))
+            {
+                return Result<LocationOpeningHours>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Equal would mean a window with no time in it, which reads as "open" in the editor
+            // and accepts nothing in practice.
+            if (hours.ClosesAt <= hours.OpensAt)
+            {
+                return Result<LocationOpeningHours>.Fail("The closing time has to be after the opening time.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool overlaps = await ctx.LocationOpeningHours.AnyAsync(h =>
+                h.LocationId == hours.LocationId
+                && h.DayOfWeek == hours.DayOfWeek
+                && hours.OpensAt < h.ClosesAt
+                && h.OpensAt < hours.ClosesAt);
+
+            if (overlaps)
+            {
+                // Refused rather than merged: two overlapping windows are almost always a typo,
+                // and silently combining them hides which one was wrong.
+                return Result<LocationOpeningHours>.Fail("That overlaps a window already set for this day.");
+            }
+
+            LocationOpeningHours entity = new()
+            {
+                LocationId = hours.LocationId,
+                DayOfWeek = hours.DayOfWeek,
+                OpensAt = hours.OpensAt,
+                ClosesAt = hours.ClosesAt,
+                CreateDate = DateTime.UtcNow
+            };
+
+            await ctx.LocationOpeningHours.AddAsync(entity);
+            await ctx.SaveChangesAsync();
+
+            return Result<LocationOpeningHours>.Ok(entity);
+        }
+        catch (Exception ex)
+        {
+            return Result<LocationOpeningHours>.Fail($"Failed to add opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RemoveOpeningHoursAsync(int openingHoursId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            LocationOpeningHours? hours = await ctx.LocationOpeningHours
+                .FirstOrDefaultAsync(h => h.Id == openingHoursId);
+
+            if (hours is null)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            if (!await _companyAccess.CanAdministerLocationAsync(hours.LocationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Hard-deleted, unlike most things here: an opening window is a setting, not a
+            // record of anything that happened, and a soft-deleted one would still have to be
+            // filtered out of the overlap check above.
+            ctx.LocationOpeningHours.Remove(hours);
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to remove opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetLocationServiceSettingsAsync(
+        int locationId, OrderFulfilmentMode fulfilmentMode, Guid? receiptPrinterClientId, string timeZoneId)
+    {
+        try
+        {
+            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Validated before saving: an unusable zone would silently push every opening window
+            // onto UTC, which in British summer is an hour out in the direction of staying open.
+            if (string.IsNullOrWhiteSpace(timeZoneId) || !IsKnownTimeZone(timeZoneId))
+            {
+                return Result<bool>.Fail("That time zone isn't one this server recognises.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Location? location = await ctx.Locations.FirstOrDefaultAsync(l => l.Id == locationId);
+
+            if (location is null)
+            {
+                return Result<bool>.Fail("Venue not found.");
+            }
+
+            location.FulfilmentMode = fulfilmentMode;
+            location.ReceiptPrinterClientId = receiptPrinterClientId;
+            location.TimeZoneId = timeZoneId;
+            location.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to save the venue's service settings: {ex.Message}");
+        }
+    }
+
+    private static bool IsKnownTimeZone(string timeZoneId)
+    {
+        try
+        {
+            TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+
+            return true;
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return false;
         }
     }
 

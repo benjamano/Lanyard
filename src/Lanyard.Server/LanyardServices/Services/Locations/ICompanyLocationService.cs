@@ -1,5 +1,6 @@
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Enum;
 
 namespace Lanyard.Application.Services.Locations;
 
@@ -27,6 +28,17 @@ public interface ICompanyLocationService
     /// venue as a side effect of renaming it.
     /// </remarks>
     Task<Result<bool>> SetLocationOrderingEnabledAsync(int locationId, bool orderingEnabled);
+
+    /// <summary>The venue's weekly ordering timetable, ordered for display.</summary>
+    Task<Result<List<LocationOpeningHours>>> GetOpeningHoursAsync(int locationId);
+
+    Task<Result<LocationOpeningHours>> AddOpeningHoursAsync(LocationOpeningHours hours);
+
+    Task<Result<bool>> RemoveOpeningHoursAsync(int openingHoursId);
+
+    /// <summary>How the food reaches the customer, and which kiosk prints this venue's tickets.</summary>
+    Task<Result<bool>> SetLocationServiceSettingsAsync(
+        int locationId, OrderFulfilmentMode fulfilmentMode, Guid? receiptPrinterClientId, string timeZoneId);
 
     Task<Result<List<Location>>> GetLocationsForUserAsync(string userId);
     Task<Result<List<UserProfile>>> GetUsersInLocationAsync(int locationId);

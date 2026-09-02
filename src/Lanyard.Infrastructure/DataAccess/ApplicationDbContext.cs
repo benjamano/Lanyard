@@ -63,6 +63,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<KitchenOrder> KitchenOrders { get; set; }
         public DbSet<KitchenOrderItem> KitchenOrderItems { get; set; }
         public DbSet<CompanyLegalDocument> CompanyLegalDocuments { get; set; }
+        public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
         public DbSet<MenuItemOptionGroup> MenuItemOptionGroups { get; set; }
         public DbSet<MenuItemOption> MenuItemOptions { get; set; }
         public DbSet<KitchenOrderItemOption> KitchenOrderItemOptions { get; set; }
@@ -248,6 +249,23 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => x.Slug)
                 .IsUnique()
                 .HasFilter("\"Slug\" IS NOT NULL");
+
+            modelBuilder.Entity<LocationOpeningHours>()
+                .HasOne(x => x.Location)
+                .WithMany(x => x.OpeningHours)
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Read on every table scan and every order, always for one venue and one weekday.
+            modelBuilder.Entity<LocationOpeningHours>()
+                .HasIndex(x => new { x.LocationId, x.DayOfWeek });
+
+            // Retiring a kiosk must not take the venue with it - it just stops printing.
+            modelBuilder.Entity<Location>()
+                .HasOne(x => x.ReceiptPrinterClient)
+                .WithMany()
+                .HasForeignKey(x => x.ReceiptPrinterClientId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<MenuCategory>()
                 .HasOne(x => x.Location)

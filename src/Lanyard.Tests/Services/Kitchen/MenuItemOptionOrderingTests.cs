@@ -47,8 +47,17 @@ public class MenuItemOptionOrderingTests
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
+        // The real availability service, not a mock. None of these venues set opening hours, so
+        // it comes down to the venue's own switch - which is exactly what
+        // CreateOrderAsync_RejectsOrderWhenVenueHasOrderingDisabled is asserting. A mock that
+        // always said "open" would have quietly made that test pass no matter what.
+        OrderingAvailabilityService availability = new(
+            factoryMock.Object, new Mock<ILogger<OrderingAvailabilityService>>().Object);
+
         return new KitchenOrderService(
             factoryMock.Object,
+            availability,
+            new Mock<IReceiptPrintService>().Object,
             new Mock<IKitchenHubNotifier>().Object,
             GetPaymentServiceMock().Object,
             new Mock<ILogger<KitchenOrderService>>().Object);
