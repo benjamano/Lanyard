@@ -1,52 +1,31 @@
-﻿@inherits LayoutComponentBase
+@using Lanyard.Reach.Web.Services
+@inherits LayoutComponentBase
+@inject ITenantContext TenantContext
 
-<div class="page" style="display: flex; flex-direction: column; height: 100vh;">
-    <div class="top-bar">
-        <NavMenu />
-    </div>
+@*
+    The shell for everything that is not the ordering flow: the placeholder home page, the
+    privacy policy, and the not-found page.
 
-    <main style="flex: 1; overflow-y: auto;">
-        <article class="content position-relative h-100 p-0 m-0">
-            @Body
+    Deliberately the same brand bar and footer as OrderingLayout. There is no marketing site yet,
+    so a customer following the privacy link out of the checkout should not land somewhere that
+    looks like a different website.
+*@
 
-            <Footer></Footer>
-        </article>
+<div class="ordering-shell">
+    <header class="ordering-shell__bar">
+        @if (TenantContext.IsResolved && TenantContext.Tenant.HasLogo)
+        {
+            <img class="ordering-shell__logo" src="/tenant-logo" alt="@TenantContext.Tenant.CompanyName" />
+        }
+        else if (TenantContext.IsResolved)
+        {
+            <span class="ordering-shell__wordmark">@TenantContext.Tenant.CompanyName</span>
+        }
+    </header>
+
+    <main class="ordering-shell__main">
+        @Body
     </main>
-</div>
 
-@* Cookie notice. We use only strictly-necessary cookies, so this is an informational notice
-   (dismissible), not a consent gate. Hidden by default and revealed by script only when the
-   visitor has not already dismissed it, to avoid a flash for returning visitors. *@
-<div id="cookie-notice" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:1000;
-    background:#1f1f1f; color:#fff; padding:16px 20px; box-shadow:0 -2px 8px rgba(0,0,0,0.3);
-    align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
-    <span style="max-width:700px;">
-        We use only strictly-necessary cookies to keep the site working and secure. See our
-        <a href="/cookies" style="color:#9ecbff;">Cookie Policy</a> and
-        <a href="/privacy" style="color:#9ecbff;">Privacy Policy</a>.
-    </span>
-    <button id="cookie-notice-dismiss" type="button"
-            style="background:#e63946; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">
-        Got it
-    </button>
+    <Footer />
 </div>
-
-<script>
-    (function () {
-        try {
-            var key = 'lanyard_cookie_notice_dismissed';
-            var el = document.getElementById('cookie-notice');
-            if (!el) return;
-            if (localStorage.getItem(key) !== '1') {
-                el.style.display = 'flex';
-            }
-            var btn = document.getElementById('cookie-notice-dismiss');
-            if (btn) {
-                btn.addEventListener('click', function () {
-                    localStorage.setItem(key, '1');
-                    el.style.display = 'none';
-                });
-            }
-        } catch (e) { /* localStorage unavailable, so the notice simply won't persist */ }
-    })();
-</script>

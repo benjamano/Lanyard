@@ -63,7 +63,10 @@
     width: 100%;
     max-width: 720px;
     margin: 0 auto;
-    padding: 16px 16px calc(var(--ordering-bar-height) + 16px);
+    /* The fixed basket bar's clearance lives on the footer below, not here: the footer is now
+       the last thing on the page, so padding main instead would leave the footer underneath the
+       bar - and the privacy link unreachable at exactly the moment someone is about to pay. */
+    padding: 16px 16px 16px;
 }
 
 /* ---------- header ---------- */
@@ -669,6 +672,17 @@
     font-size: 0.92rem;
 }
 
+/* The privacy policy's retention list; the ordering terms are all prose. */
+.terms ul {
+    margin: 0 0 10px;
+    padding-left: 20px;
+}
+
+.terms li {
+    font-size: 0.92rem;
+    margin-bottom: 4px;
+}
+
 /* ---------------------------------------------------------------------------
    Choices on a dish: "chips, nuggets and beans" versus "... and peas".
 
@@ -828,4 +842,44 @@
     font-size: 0.8rem;
     color: var(--ordering-ink-soft);
     white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Site footer, on every page including the ordering flow. Kept quiet: on a
+   checkout screen it is a legal necessity rather than something to draw the
+   eye away from the pay button.
+   --------------------------------------------------------------------------- */
+
+.site-footer {
+    margin-top: auto;
+    padding: 20px 16px calc(var(--ordering-bar-height) + 28px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ordering-ink-soft);
+}
+
+.site-footer__legal {
+    margin: 0;
+}
+
+.site-footer__links a {
+    color: var(--ordering-ink-soft);
+    text-decoration: underline;
+}
+
+.site-footer__sep {
+    margin: 0 6px;
+}
+
+/* The shell is a flex column so the footer's margin-top: auto holds it to the
+   bottom on a short page (the placeholder home page) without pinning it over
+   the content on a long one (the privacy policy). */
+.ordering-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }

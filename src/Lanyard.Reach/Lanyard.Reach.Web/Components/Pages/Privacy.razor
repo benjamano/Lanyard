@@ -1,53 +1,138 @@
 @page "/privacy"
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
 @layout MainLayout
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
 
-<PageTitle>Privacy Policy - Play2Day</PageTitle>
+@*
+    Privacy policy.
 
-<section class="legal-page">
-    <div class="container" style="max-width: 800px; margin: 0 auto; padding: 40px 20px;">
-        <h1>Privacy Policy</h1>
-        <p><em>Last updated: @DateTime.UtcNow.ToString("d MMMM yyyy")</em></p>
+    Same shape as the ordering terms: one template rendered from whichever company the hostname
+    resolved to, because the data controller is the venue rather than Lanyard, and that differs
+    per tenant. Nothing here is hardcoded to Play2Day.
+
+    Statically rendered - it is a document with nothing to interact with.
+*@
+
+<PageTitle>Privacy policy</PageTitle>
+
+@if (_legal is null)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Privacy policy unavailable</h1>
+        <p>We couldn't load this page. Please try again shortly.</p>
+    </div>
+}
+else if (!_legal.IsComplete)
+{
+    @* Same reasoning as the ordering terms: a policy that cannot name its own data controller
+       identifies nobody, and rendering it full of blanks would look like a bug. *@
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Privacy policy not published yet</h1>
+        <p>@_legal.CompanyName hasn't finished setting this up. Please ask a member of staff.</p>
+    </div>
+}
+else
+{
+    <article class="terms">
+        <h1>Privacy policy</h1>
 
         <p>
-            This notice explains how Play2Day handles your personal data when you use our website
-            and services. The data controller is Play2Day. For any privacy questions or to
-            exercise your rights, contact us at
-            <a href="mailto:privacy@play2day.com">privacy@play2day.com</a>.
+            This site is operated by <strong>@_legal.LegalName</strong>@(string.IsNullOrWhiteSpace(_legal.CompanyNumber)
+                ? "" : $", company number {_legal.CompanyNumber}"), registered at
+            @_legal.RegisteredAddress. We are the data controller for the information described
+            below. The site itself is built and hosted for us by Lanyard, which processes that
+            information only on our instructions.
         </p>
 
-        <h2>What we collect</h2>
+        <h2>What we collect when you order food</h2>
         <p>
-            When you make a booking or contact us, we may collect your name, contact details, and
-            booking information. When you use our staff systems, we process your account and
-            attendance information. Our servers also record technical data such as IP addresses for
-            security purposes.
+            Ordering is anonymous. We don't ask for your name, and you don't create an account.
+            When you place an order we record the table you scanned, what you ordered and the
+            price, the allergens declared for those dishes, and anything you type in the notes
+            box. We also keep a reference to the payment so it can be matched up or refunded.
+        </p>
+        <p>
+            The notes box is free text and people often use it to tell us about an allergy or
+            intolerance. That is information about your health, so we keep it only as long as it
+            is useful: <strong>we automatically delete the contents of the notes box 30 days
+            after the order</strong>. The rest of the order is kept as a sales and food-safety
+            record.
         </p>
 
-        <h2>Why we use it</h2>
+        <h2>Card payments</h2>
         <p>
-            We use your data to provide and manage our services (bookings, accounts), to meet our
-            legal obligations, and to keep our systems secure. These rely on the legal bases of
-            contract, legal obligation, and our legitimate interests.
+            Card payments are handled by Stripe. Your card details are entered directly into
+            Stripe's own payment form and never reach this site or our systems; we only ever see
+            a reference to the payment, the amount and whether it succeeded. Stripe processes that
+            data as a controller in its own right under its own privacy policy, and is required to
+            keep transaction records to meet its legal obligations.
+        </p>
+
+        <h2>Why we're allowed to use it</h2>
+        <p>
+            We use your order to perform the contract you entered into when you bought food. We
+            keep sales records afterwards to comply with our legal obligations, mainly tax and
+            accounting. Where you tell us about an allergy, we use that to protect your vital
+            interests and to meet food-safety obligations.
+        </p>
+        <p>
+            We do not use any of this for marketing, we do not build a profile of you, and we do
+            not sell or share it with anyone except the payment and hosting providers above.
         </p>
 
         <h2>How long we keep it</h2>
+        <ul>
+            <li>Notes box: deleted automatically 30 days after the order.</li>
+            <li>
+                The order itself (items, prices, allergens, payment reference): kept for six
+                years, which is the period we're required to retain financial records for.
+            </li>
+        </ul>
+
+        <h2>Cookies</h2>
         <p>
-            We keep personal data only for as long as necessary for the purposes above and to meet
-            our legal obligations, after which it is deleted or anonymised.
+            We use only strictly-necessary cookies and equivalent browser storage: enough to keep
+            the site working and secure, and to remember your basket while you're ordering so
+            that closing the page doesn't lose it. There is no advertising or analytics tracking
+            on this site, so there is nothing here to consent to or opt out of.
         </p>
 
         <h2>Your rights</h2>
         <p>
-            You have the right to access, correct, delete, or restrict the use of your personal
-            data, and to object to processing. To exercise any of these, email
-            <a href="mailto:privacy@play2day.com">privacy@play2day.com</a>. You may also complain
-            to the Information Commissioner's Office (ICO).
+            You have the right to ask for a copy of the information we hold about you, to have it
+            corrected or deleted, and to object to or restrict how we use it. Because ordering is
+            anonymous we usually cannot link an order to you by name, so please quote your order
+            reference or the card receipt when you get in touch, or we may not be able to find it.
+        </p>
+        <p>
+            If you're unhappy with how we've handled your information you can complain to the
+            Information Commissioner's Office at <a href="https://ico.org.uk" target="_blank"
+            rel="noopener">ico.org.uk</a>.
         </p>
 
-        <h2>Cookies</h2>
+        <h2>Contact</h2>
         <p>
-            We use only strictly-necessary cookies. See our <a href="/cookies">Cookie Policy</a>
-            for details.
+            @_legal.ContactEmail
+            @if (!string.IsNullOrWhiteSpace(_legal.ContactPhone))
+            {
+                <text> &middot; @_legal.ContactPhone</text>
+            }
         </p>
-    </div>
-</section>
+    </article>
+}
+
+@code {
+    private TenantLegalDetailsDto? _legal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            return;
+        }
+
+        _legal = await OrderingClient.GetLegalDetailsAsync(TenantContext.Tenant.CompanyId);
+    }
+}
