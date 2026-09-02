@@ -98,9 +98,11 @@
 
                         </FluentStack>
 
-                        @* Hidden when there is nothing to choose between: a manager who runs one
-                           company does not need a one-row "pick a company" grid. *@
-                        @if (companies.Count > 1)
+                        @* Hidden only when there is genuinely nothing to choose between and the
+                           one company is already selected. The condition used to be "more than
+                           one company", which on a single-company install left an admin with no
+                           grid, no selection and therefore no Save button - an inert page. *@
+                        @if (companies.Count > 1 || selectedCompany is null)
                         {
                         <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr"
                                         Class="clm-full-width" RowSize="@DataGridRowSize.Medium">
@@ -315,9 +317,10 @@
         // because hiding a row is not a permission boundary.
         companies = [.. result.Data!.Where(c => _access.CanAdminister(c.Id))];
 
-        // A manager who runs exactly one company has no choice to make, and landing on a
-        // "select your company" list of one is just an extra click before any real work.
-        if (!_access.IsAdmin && selectedCompany is null && companies.Count == 1)
+        // Exactly one company is no choice at all, so it is selected for you. Not restricted to
+        // managers: an admin on a single-company install had no grid to pick from either, which
+        // left the whole page inert with no Save button and no way to select anything.
+        if (selectedCompany is null && companies.Count == 1)
         {
             await SelectCompany(companies[0]);
         }
