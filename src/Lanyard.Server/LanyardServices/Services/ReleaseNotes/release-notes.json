@@ -237,6 +237,7 @@
       "A dish stays off the customer menu until someone confirms its allergens - a blank declaration means \"not filled in yet\", never \"contains nothing\". Dishes needing one are flagged in Kitchen > Menu & Table Codes.",
       "Added ordering terms and a refund policy, published per company from the new Legal details section in Companies & Locations and linked from the checkout screen.",
       "Orders started but never paid for are now closed off automatically a few hours later, instead of sitting on the books as unpaid. If the payment actually did go through and we simply never heard back from Stripe, the order is recovered and sent to the kitchen rather than cancelled.",
+      "The free-text note a customer leaves with an order (\"severe nut allergy\", \"no onions\") is now automatically cleared 30 days after the order. The order itself, its items, prices and allergen declarations are kept as normal.",
       "A venue can't take QR orders until its trading name, registered address and contact email are filled in, since those have to appear on the ordering terms before a customer buys.",
       "If the ordering site gets briefly busy, customers are now told to try again in a moment rather than being told their table code is wrong.",
       "Added a browser tab icon (favicon) for the customer ordering site, uploaded separately from the logo in Companies & Locations, since a wide logo is unreadable at that size. Without one, customers see the Lanyard mark.",
