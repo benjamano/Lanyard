@@ -1,4 +1,5 @@
 using Ganss.Xss;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -42,9 +43,11 @@ public interface ICompanyLegalDocumentService
 /// </summary>
 public class CompanyLegalDocumentService(
     IDbContextFactory<ApplicationDbContext> factory,
+    ICompanyAccessService companyAccess,
     ILogger<CompanyLegalDocumentService> logger) : ICompanyLegalDocumentService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ICompanyAccessService _companyAccess = companyAccess;
     private readonly ILogger<CompanyLegalDocumentService> _logger = logger;
 
     /// <summary>
@@ -130,6 +133,11 @@ public class CompanyLegalDocumentService(
     {
         try
         {
+            if (!await _companyAccess.CanAdministerCompanyAsync(companyId))
+            {
+                return Result<bool>.Fail("You don't have permission to edit this company's documents.");
+            }
+
             if (string.IsNullOrWhiteSpace(bodyHtml))
             {
                 // Refused rather than treated as "reset": silently falling back to Lanyard's
@@ -201,6 +209,11 @@ public class CompanyLegalDocumentService(
     {
         try
         {
+            if (!await _companyAccess.CanAdministerCompanyAsync(companyId))
+            {
+                return Result<bool>.Fail("You don't have permission to edit this company's documents.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             CompanyLegalDocument? existing = await ctx.CompanyLegalDocuments

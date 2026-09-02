@@ -240,6 +240,7 @@
       "The free-text note a customer leaves with an order (\"severe nut allergy\", \"no onions\") is now automatically cleared 30 days after the order. The order itself, its items, prices and allergen declarations are kept as normal.",
       "A venue can't take QR orders until its trading name, registered address and contact email are filled in, since those have to appear on the ordering terms before a customer buys.",
       "If the ordering site gets briefly busy, customers are now told to try again in a moment rather than being told their table code is wrong.",
+      "Managers can now be given the Companies & Locations page. They see and edit only their own company - its colours, logo, legal details, documents, venues and domains - and cannot see, let alone change, another company's. Creating and removing whole companies stays with admins.",
       "The ordering terms, refund policy and privacy policy are now edited from Companies & Locations rather than being fixed in the app, so wording changes no longer need a release. Each company can keep Lanyard's wording, edit it, or reset back to it at any time.",
       "Legal documents can include placeholders like {{RegisteredAddress}} and {{CollectionHoldMinutes}}, filled in automatically, so correcting a company detail updates every document that mentions it.",
       "The customer site now has a privacy policy, linked from a footer on every page including the ordering screens. Like the ordering terms it is published per company from the Legal details section.",

@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Kitchen;
 using Lanyard.Infrastructure.Branding;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -7,6 +8,7 @@ using Lanyard.Shared.DTO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Lanyard.Tests.Services.Locations;
 using Moq;
 
 namespace Lanyard.Tests.Services.Kitchen;
@@ -19,13 +21,15 @@ public class TenantDirectoryServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-    private static TenantDirectoryService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static TenantDirectoryService GetService(
+        DbContextOptions<ApplicationDbContext> options, ICompanyAccessService? access = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new TenantDirectoryService(factoryMock.Object, new Mock<ILogger<TenantDirectoryService>>().Object);
+        return new TenantDirectoryService(factoryMock.Object, access ?? CompanyAccessMocks.Admin(),
+            new Mock<ILogger<TenantDirectoryService>>().Object);
     }
 
     private static async Task<int> SeedCompanyAsync(

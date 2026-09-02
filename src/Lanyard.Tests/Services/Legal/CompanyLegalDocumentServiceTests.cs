@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Legal;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -7,6 +8,7 @@ using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Lanyard.Tests.Services.Locations;
 using Moq;
 
 namespace Lanyard.Tests.Services.Legal;
@@ -26,7 +28,8 @@ public class CompanyLegalDocumentServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-    private static CompanyLegalDocumentService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static CompanyLegalDocumentService GetService(
+        DbContextOptions<ApplicationDbContext> options, ICompanyAccessService? access = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -34,6 +37,7 @@ public class CompanyLegalDocumentServiceTests
 
         return new CompanyLegalDocumentService(
             factoryMock.Object,
+            access ?? CompanyAccessMocks.Admin(),
             new Mock<ILogger<CompanyLegalDocumentService>>().Object);
     }
 

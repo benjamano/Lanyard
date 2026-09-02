@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Lanyard.Infrastructure.Branding;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -11,9 +12,14 @@ namespace Lanyard.Application.Services.Kitchen;
 
 public class TenantDirectoryService(
     IDbContextFactory<ApplicationDbContext> factory,
+    ICompanyAccessService companyAccess,
     ILogger<TenantDirectoryService> logger) : ITenantDirectoryService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+
+    // Only the write paths consult this. The read paths are called by the public ordering site
+    // with no signed-in user at all, and gating those would take every customer's menu offline.
+    private readonly ICompanyAccessService _companyAccess = companyAccess;
     private readonly ILogger<TenantDirectoryService> _logger = logger;
 
     // Hostnames only: no scheme, no port, no path. Rejecting anything else on write is what
@@ -152,6 +158,13 @@ public class TenantDirectoryService(
     {
         try
         {
+            // A hostname decides which tenant a visitor sees, so pointing one at a company is a
+            // change only someone with rights over that company may make.
+            if (!await _companyAccess.CanAdministerCompanyAsync(domain.CompanyId))
+            {
+                return Result<CompanyDomain>.Fail("You don't have permission to manage this company's domains.");
+            }
+
             string normalized = NormalizeHostname(domain.Hostname ?? string.Empty);
 
             if (!HostnamePattern.IsMatch(normalized))
@@ -244,6 +257,21 @@ public class TenantDirectoryService(
     {
         try
         {
+            await using (ApplicationDbContext check = await _factory.CreateDbContextAsync())
+            {
+                int? ownerCompanyId = await check.CompanyDomains
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Where(d => d.Id == domainId)
+                    .Select(d => (int?)d.CompanyId)
+                    .FirstOrDefaultAsync();
+
+                if (ownerCompanyId is null || !await _companyAccess.CanAdministerCompanyAsync(ownerCompanyId.Value))
+                {
+                    return Result<bool>.Fail("You don't have permission to manage this company's domains.");
+                }
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             CompanyDomain? domain = await ctx.CompanyDomains.FirstOrDefaultAsync(d => d.Id == domainId);

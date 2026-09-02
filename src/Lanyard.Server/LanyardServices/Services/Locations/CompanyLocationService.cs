@@ -6,9 +6,16 @@ using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
 
-public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory) : ICompanyLocationService
+public class CompanyLocationService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    ICompanyAccessService companyAccess) : ICompanyLocationService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+
+    // Checked here rather than only in the page. A Manager can be given the Companies &
+    // Locations screen to run their own venue, and hiding another tenant's company from a list
+    // is presentation, not a boundary - the boundary has to be where the write happens.
+    private readonly ICompanyAccessService _companyAccess = companyAccess;
 
     /// <summary>Blank and whitespace both mean "not set", so both are stored as null.</summary>
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -90,6 +97,18 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Company>.Fail($"The slug '{normalizedSlug}' is already used by another company.");
             }
 
+            CompanyAccess access = await _companyAccess.GetCurrentAsync();
+
+            if (company.Id == 0 && !access.CanCreateCompanies)
+            {
+                return Result<Company>.Fail("You don't have permission to create a company.");
+            }
+
+            if (company.Id != 0 && !access.CanAdminister(company.Id))
+            {
+                return Result<Company>.Fail("You don't have permission to edit this company.");
+            }
+
             Company? existing = company.Id == 0 ? null : await ctx.Companies.FirstOrDefaultAsync(x => x.Id == company.Id);
 
             Company target;
@@ -155,6 +174,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
+            // Admin only, even for a manager's own company: taking a whole tenant offline is not
+            // something the tenant should be able to do to itself by accident.
+            if (!(await _companyAccess.GetCurrentAsync()).CanCreateCompanies)
+            {
+                return Result<bool>.Fail("You don't have permission to remove a company.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Company? company = await ctx.Companies.FirstOrDefaultAsync(x => x.Id == companyId);
@@ -220,6 +246,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             if (!companyExists)
             {
                 return Result<Location>.Fail("Company not found.");
+            }
+
+            // Checked against the company the location is being saved *into*, so a manager
+            // cannot move or add a venue under a company they have no rights over.
+            if (!await _companyAccess.CanAdministerCompanyAsync(location.CompanyId))
+            {
+                return Result<Location>.Fail("You don't have permission to manage this company's venues.");
             }
 
             bool nameTaken = await ctx.Locations.AnyAsync(x =>
@@ -293,6 +326,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
+            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to remove this venue.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Location? location = await ctx.Locations.FirstOrDefaultAsync(x => x.Id == locationId);

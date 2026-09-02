@@ -4,6 +4,7 @@
 
 @inject INotificationService ToastService
 @inject ITenantDirectoryService _tenantDirectoryService
+@inject ICompanyAccessService _companyAccess
 
 <div class="company-location-manager">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
@@ -97,9 +98,12 @@
                             {
                                 <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany">Save Changes
                                 </FluentButton>
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New
-                                    Company
-                                </FluentButton>
+                                @if (_access.CanCreateCompanies)
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New
+                                        Company
+                                    </FluentButton>
+                                }
                             }
 
                             @if (companyLogoFileId is not null)
@@ -123,6 +127,10 @@
                             }
                         </FluentStack>
 
+                        @* Hidden when there is nothing to choose between: a manager who runs one
+                           company does not need a one-row "pick a company" grid. *@
+                        @if (companies.Count > 1)
+                        {
                         <FluentDataGrid Items="@companies.AsQueryable()" GridTemplateColumns="2fr 1fr"
                                         Class="clm-full-width" RowSize="@DataGridRowSize.Medium">
                             <TemplateColumn Title="Name">
@@ -136,6 +144,7 @@
                                 </FluentButton>
                             </TemplateColumn>
                         </FluentDataGrid>
+                        }
                     </FluentStack>
                 </FluentCard>
             </FluentGridItem>
@@ -250,6 +259,10 @@
     public EventCallback OnLocationsChanged { get; set; }
 
     private List<Company> companies = [];
+
+    /// <summary>What the signed-in user may administer. Admins get everything; a Manager gets
+    /// only the companies they belong to.</summary>
+    private CompanyAccess _access = CompanyAccess.None;
     private List<Location> locationsForSelectedCompany = [];
     private Company? selectedCompany;
 
@@ -324,15 +337,26 @@
 
     private async Task LoadCompaniesAsync()
     {
+        _access = await _companyAccess.GetCurrentAsync();
+
         Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
 
-        if (result.IsSuccess)
-        {
-            companies = result.Data!;
-        }
-        else
+        if (!result.IsSuccess)
         {
             ToastService.ShowError($"Failed to load companies: {result.Error}");
+
+            return;
+        }
+
+        // Filtered for presentation only. The services check the same thing on every write,
+        // because hiding a row is not a permission boundary.
+        companies = [.. result.Data!.Where(c => _access.CanAdminister(c.Id))];
+
+        // A manager who runs exactly one company has no choice to make, and landing on a
+        // "select your company" list of one is just an extra click before any real work.
+        if (!_access.IsAdmin && selectedCompany is null && companies.Count == 1)
+        {
+            await SelectCompany(companies[0]);
         }
     }
 

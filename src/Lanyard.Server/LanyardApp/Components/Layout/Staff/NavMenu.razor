@@ -64,7 +64,10 @@
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
-                    @if (_isAdmin)
+                    @* Managers too, not just admins: the page scopes itself to the companies the
+                       user may administer, so a venue manager gets their own company's branding,
+                       wording and domains and nothing else. *@
+                    @if (_isManager)
                     {
                         <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
                     }

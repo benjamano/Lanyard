@@ -16,13 +16,14 @@ public class CompanyLocationServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-    private static CompanyLocationService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static CompanyLocationService GetService(
+        DbContextOptions<ApplicationDbContext> options, ICompanyAccessService? access = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new CompanyLocationService(factoryMock.Object);
+        return new CompanyLocationService(factoryMock.Object, access ?? CompanyAccessMocks.Admin());
     }
 
     private static async Task<(Company company, Location location)> SeedCompanyAndLocationAsync(
