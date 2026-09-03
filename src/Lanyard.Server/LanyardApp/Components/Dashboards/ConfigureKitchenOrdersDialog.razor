@@ -1,0 +1,74 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Food())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Kitchen Orders
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            @* No "all venues" option, unlike the kiosk-scoped widgets. A combined count across
+               two kitchens is not actionable to anybody - each kitchen is worked separately. *@
+            <FluentSelect TOption="Location"
+                          TValue="string"
+                          Items="@Locations"
+                          OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                          OptionValue="@(l => l?.Id.ToString())"
+                          Label="Venue"
+                          Placeholder="Choose a venue"
+                          Value="@_locationValue"
+                          ValueChanged="OnLocationChanged"
+                          Style="width: 100%;" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required KitchenOrdersWidget Widget { get; set; }
+
+    [Parameter]
+    public required IEnumerable<Location> Locations { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string _locationValue = string.Empty;
+
+    // Snapshot so Cancel can revert the live-edited widget.
+    private int? _originalLocationId;
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.KitchenLocationId;
+        _locationValue = Widget.KitchenLocationId?.ToString() ?? string.Empty;
+    }
+
+    private void OnLocationChanged(string? newValue)
+    {
+        Widget.KitchenLocationId = int.TryParse(newValue, out int locationId) ? locationId : null;
+        _locationValue = newValue ?? string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.KitchenLocationId = _originalLocationId;
+
+        await Dialog.CancelAsync();
+    }
+}

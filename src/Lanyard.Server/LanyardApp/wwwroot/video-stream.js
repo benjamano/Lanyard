@@ -33,7 +33,7 @@ function attachIceDiagnostics(pc, report) {
 window.videoPublisher = (() => {
     let dotNetRef = null;
     const sessions = new Map(); // sessionId -> { pc, deviceKey, pendingCandidates, remoteDescSet }
-    const streams = new Map();  // deviceKey -> { stream, refCount } — one camera open shared by N viewers
+    const streams = new Map();  // deviceKey -> { stream, refCount }, one camera open shared by N viewers
 
     async function acquireShared(deviceKey, deviceName, enableAudio, idealWidth, idealHeight) {
         const existing = streams.get(deviceKey);

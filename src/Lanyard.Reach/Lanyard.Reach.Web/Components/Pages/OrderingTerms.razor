@@ -1,0 +1,53 @@
+@page "/order/terms"
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@layout OrderingLayout
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
+
+@*
+    Ordering terms and refund policy.
+
+    The wording lives in the database and is edited per company from Companies & Locations, so
+    changing it is no longer a code change. Two documents rather than one, because a venue may
+    revise its refund wording without touching the rest, but rendered together because a single
+    "terms and refunds" page is what a customer expects behind one link.
+
+    Statically rendered: it is a document, and there is nothing to interact with.
+*@
+
+<PageTitle>Ordering terms</PageTitle>
+
+@if (_legal is not null && !_legal.IsComplete)
+{
+    @* Said plainly rather than rendering a document full of blanks, which would look like a
+       bug and would not identify the trader to anybody. *@
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Terms not published yet</h1>
+        <p>@_legal.CompanyName hasn't finished setting up its ordering terms. Please ask a member of staff.</p>
+    </div>
+}
+else
+{
+    <article class="terms">
+        <LegalDocument DocumentType="LegalDocumentType.OrderingTerms" />
+        <LegalDocument DocumentType="LegalDocumentType.RefundPolicy" />
+    </article>
+}
+
+@code {
+    private TenantLegalDetailsDto? _legal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            return;
+        }
+
+        // Still fetched, only to decide whether this company has published anything at all. The
+        // wording itself now comes from the documents below.
+        _legal = await OrderingClient.GetLegalDetailsAsync(TenantContext.Tenant.CompanyId);
+    }
+}

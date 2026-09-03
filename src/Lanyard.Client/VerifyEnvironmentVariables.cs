@@ -12,7 +12,11 @@ public class VerifyEnvironmentVariables
             ("LANYARD_CLIENT_SKIP_ADDING_WATCHDOG_STARTUP_TASK", "false"),
             ("LANYARD_CLIENT_SHARED_SECRET", "changeme"),
             ("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-            ("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+            ("OTEL_EXPORTER_OTLP_PROTOCOL", ""),
+
+            // Blank means "use this machine's default printer", which is the usual case. Set it to
+            // a printer's exact Windows name when the kitchen printer is not the default.
+            ("LANYARD_RECEIPT_PRINTER", "")
         };
 
         string configPath = Path.Combine(
@@ -66,7 +70,7 @@ public class VerifyEnvironmentVariables
 
             config[envVar] = variable;
 
-            // Some vars (e.g. the OTLP ones) are genuinely optional — leave the process
+            // Some vars (e.g. the OTLP ones) are genuinely optional, so leave the process
             // environment untouched rather than setting it to an empty string, which would
             // override a real value already set at the OS/session level.
             if (!string.IsNullOrWhiteSpace(variable))

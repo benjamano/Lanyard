@@ -1,0 +1,32 @@
+# Lanyard.Reach - the public, customer-facing site (marketing pages and QR food ordering).
+#
+# Separate image from the Lanyard server on purpose. Reach is internet-facing and serves
+# anonymous customers on tenant vanity domains; the server holds staff auth, the database and
+# the kiosk hub. Deploying them as one artefact would mean a customer-facing traffic spike and
+# a staff-app deploy sharing a blast radius they have no reason to share.
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Lanyard.Shared carries the ordering wire contracts. Deliberately no Lanyard.Infrastructure:
+# Reach talks to the server over HTTP and must not be able to reach the database.
+COPY src/Lanyard.Shared/                              Lanyard.Shared/
+COPY src/Lanyard.Reach/Lanyard.Reach.Web.Client/      Lanyard.Reach/Lanyard.Reach.Web.Client/
+COPY src/Lanyard.Reach/Lanyard.Reach.Web/             Lanyard.Reach/Lanyard.Reach.Web/
+
+WORKDIR /src/Lanyard.Reach/Lanyard.Reach.Web
+RUN dotnet publish Lanyard.Reach.Web.csproj -c Release -o /app/publish --no-self-contained
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+
+# Required at runtime, and the app refuses to start without Lanyard__ServerUrl:
+#   Lanyard__ServerUrl    base address of the Lanyard server's API
+#   Lanyard__ReachSecret  shared secret the server checks (mandatory outside Development)
+#   Reach__TrustedProxies optional; forwarded headers are trusted from any proxy when unset,
+#                         which is only safe while the origin is reachable solely via the CDN
+ENTRYPOINT ["dotnet", "Lanyard.Reach.Web.dll"]

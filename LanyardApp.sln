@@ -2,27 +2,29 @@
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Client", "src/Lanyard.Client/Lanyard.Client.csproj", "{9B897D2E-C2EA-A8E0-EE79-399534FFA886}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Client", "src\Lanyard.Client\Lanyard.Client.csproj", "{9B897D2E-C2EA-A8E0-EE79-399534FFA886}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanyardClient.Watchdog", "src/Lanyard.Client.Watchdog/LanyardClient.Watchdog.csproj", "{DFF2F438-587F-407A-409B-16DF04887458}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanyardClient.Watchdog", "src\Lanyard.Client.Watchdog\LanyardClient.Watchdog.csproj", "{DFF2F438-587F-407A-409B-16DF04887458}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Shared", "src/Lanyard.Shared/Lanyard.Shared.csproj", "{4B05BA0D-197A-6895-FD82-DE6E03EE24F5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Shared", "src\Lanyard.Shared\Lanyard.Shared.csproj", "{4B05BA0D-197A-6895-FD82-DE6E03EE24F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Tests", "src/Lanyard.Tests/Lanyard.Tests.csproj", "{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach", "src\Lanyard.Reach\Lanyard.Reach\Lanyard.Reach.csproj", "{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Shared", "src\Lanyard.Reach\Lanyard.Reach.Shared\Lanyard.Reach.Shared.csproj", "{545F5492-D4C5-0DF1-FC90-3DB2838430BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Tests", "src\Lanyard.Tests\Lanyard.Tests.csproj", "{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Web", "src\Lanyard.Reach\Lanyard.Reach.Web\Lanyard.Reach.Web.csproj", "{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.API", "src/Lanyard.Server/LanyardAPI/Lanyard.API.csproj", "{3FECAE9D-5B48-7038-1A3A-5B4D421E0EF1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.API", "src\Lanyard.Server\LanyardAPI\Lanyard.API.csproj", "{3FECAE9D-5B48-7038-1A3A-5B4D421E0EF1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.App", "src/Lanyard.Server/LanyardApp/Lanyard.App.csproj", "{9BA112D8-14F7-93CE-2382-7DA3546EF82E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.App", "src\Lanyard.Server\LanyardApp\Lanyard.App.csproj", "{9BA112D8-14F7-93CE-2382-7DA3546EF82E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Application", "src/Lanyard.Server/LanyardServices/Lanyard.Services.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Services", "src\Lanyard.Server\LanyardServices\Lanyard.Services.csproj", "{99D7B8CD-84CC-2E67-2492-D22C7BAD3C6E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src/Lanyard.Infrastructure/Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Infrastructure", "src\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj", "{AE030D02-F260-4310-BDE9-CBD5CEDE0228}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lanyard.Reach", "Lanyard.Reach", "{F5084326-307E-4835-5EA0-4FD8E1067E7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lanyard.Reach.Web.Client", "src\Lanyard.Reach\Lanyard.Reach.Web.Client\Lanyard.Reach.Web.Client.csproj", "{177C521D-0FFD-498B-A237-A13676AF3497}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -82,30 +84,6 @@ Global
 		{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}.Release|x64.Build.0 = Release|Any CPU
 		{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}.Release|x86.ActiveCfg = Release|Any CPU
 		{0EFF70F4-A84E-7071-5FE9-52F2B90C7660}.Release|x86.Build.0 = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|x64.Build.0 = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Debug|x86.Build.0 = Debug|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|x64.ActiveCfg = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|x64.Build.0 = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|x86.ActiveCfg = Release|Any CPU
-		{A38B6BD3-C1A3-A593-1CD1-3BD889BBDB92}.Release|x86.Build.0 = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|x64.Build.0 = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Debug|x86.Build.0 = Debug|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|x64.ActiveCfg = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|x64.Build.0 = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|x86.ActiveCfg = Release|Any CPU
-		{545F5492-D4C5-0DF1-FC90-3DB2838430BC}.Release|x86.Build.0 = Release|Any CPU
 		{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8244B75-C0CF-8AD5-B95D-8954EFA4C14F}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -166,9 +144,25 @@ Global
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x64.Build.0 = Release|Any CPU
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x86.ActiveCfg = Release|Any CPU
 		{AE030D02-F260-4310-BDE9-CBD5CEDE0228}.Release|x86.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x64.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Debug|x86.Build.0 = Debug|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|Any CPU.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x64.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x64.Build.0 = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x86.ActiveCfg = Release|Any CPU
+		{177C521D-0FFD-498B-A237-A13676AF3497}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F5084326-307E-4835-5EA0-4FD8E1067E7E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{177C521D-0FFD-498B-A237-A13676AF3497} = {F5084326-307E-4835-5EA0-4FD8E1067E7E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {85BB633E-F82D-4FA8-BA47-44765A2C07CF}

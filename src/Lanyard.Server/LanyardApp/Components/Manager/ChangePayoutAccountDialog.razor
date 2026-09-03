@@ -1,0 +1,74 @@
+@using Lanyard.Shared.Enum
+
+@*
+    Changing where a company's takings land.
+
+    Asks for a second-factor code in the same breath as the new account id, because that is the
+    point of a step-up check: it proves the person making the change is still the person who
+    signed in, at the moment of the change rather than hours earlier.
+*@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ShieldKeyhole())" />
+            <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Change payout account</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="10">
+            <FluentText>
+                Every future payment for <strong>@CompanyName</strong> will go to this Stripe account.
+                Existing payments and refunds are unaffected.
+            </FluentText>
+
+            <FluentTextInput @bind-Value="AccountId" Label="Stripe account ID"
+                             Placeholder="acct_..." Class="w-100" />
+            <FluentText Class="payout-dialog__note">
+                Leave blank to clear it, which stops this company taking QR orders.
+            </FluentText>
+
+            <FluentTextInput @bind-Value="Code" Label="Authentication code" Placeholder="123456" Class="w-100" />
+            <FluentText Class="payout-dialog__note">
+                From your authenticator app. A recovery code works too.
+            </FluentText>
+
+            @if (_error is not null)
+            {
+                <FluentText Color="Color.Error">@_error</FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Change account</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public string CompanyName { get; set; } = string.Empty;
+
+    [Parameter] public string? CurrentAccountId { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private string AccountId { get; set; } = string.Empty;
+    private string Code { get; set; } = string.Empty;
+    private string? _error;
+
+    protected override void OnInitialized() => AccountId = CurrentAccountId ?? string.Empty;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Code))
+        {
+            _error = "Enter your authentication code.";
+
+            return;
+        }
+
+        await Dialog.CloseAsync(new PayoutAccountChange(AccountId, Code));
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

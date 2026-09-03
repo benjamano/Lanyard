@@ -1,0 +1,31 @@
+@using Lanyard.Reach.Web.Services
+@inherits LayoutComponentBase
+@inject ITenantContext TenantContext
+
+@*
+    The shell for everything that is not the ordering flow: the placeholder home page, the
+    privacy policy, and the not-found page.
+
+    Deliberately the same brand bar and footer as OrderingLayout. There is no marketing site yet,
+    so a customer following the privacy link out of the checkout should not land somewhere that
+    looks like a different website.
+*@
+
+<div class="ordering-shell">
+    <header class="ordering-shell__bar">
+        @if (TenantContext.IsResolved && TenantContext.Tenant.HasLogo)
+        {
+            <img class="ordering-shell__logo" src="/tenant-logo" alt="@TenantContext.Tenant.CompanyName" />
+        }
+        else if (TenantContext.IsResolved)
+        {
+            <span class="ordering-shell__wordmark">@TenantContext.Tenant.CompanyName</span>
+        }
+    </header>
+
+    <main class="ordering-shell__main">
+        @Body
+    </main>
+
+    <Footer />
+</div>

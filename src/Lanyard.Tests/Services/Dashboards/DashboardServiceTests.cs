@@ -1541,6 +1541,100 @@ public class DashboardServiceTests
         Assert.AreEqual(3, dbWidget.MaxItems);
     }
 
+    /// <summary>
+    /// Every concrete widget type must round-trip through a dashboard save.
+    ///
+    /// This exists because widget dispatch is hand-written switches with no compile-time link
+    /// to WidgetType, and CreateWidgetCopy's default arm throws - so a type missing there does
+    /// not break only that widget, it fails the save of any dashboard containing it. That is
+    /// exactly what happened when KitchenOrdersWidget was added.
+    ///
+    /// Driven by reflection rather than a hand-written list so it starts failing the moment a
+    /// new widget subclass is added, without anyone remembering to update this test.
+    /// </summary>
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_SupportsEveryWidgetType()
+    {
+        List<Type> widgetTypes = [.. typeof(DashboardWidget).Assembly
+            .GetTypes()
+            .Where(t => t.IsSubclassOf(typeof(DashboardWidget)) && !t.IsAbstract)
+            .OrderBy(t => t.Name)];
+
+        Assert.IsTrue(widgetTypes.Count > 1, "Expected to discover the concrete widget subclasses by reflection.");
+
+        List<string> failures = [];
+
+        foreach (Type widgetType in widgetTypes)
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            DashboardService service = GetService(options);
+            Dashboard dashboard = await SeedDashboardAsync(options);
+
+            DashboardWidget widget = (DashboardWidget)Activator.CreateInstance(widgetType)!;
+            widget.Id = Guid.NewGuid();
+            widget.DashboardId = dashboard.Id;
+            widget.IsActive = true;
+
+            dashboard.Widgets = [widget];
+
+            Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+            if (!result.Success)
+            {
+                failures.Add($"{widgetType.Name}: {result.Error}");
+
+                continue;
+            }
+
+            await using ApplicationDbContext ctx = new(options);
+
+            if (!await ctx.DashboardWidgets.AnyAsync(w => w.Id == widget.Id))
+            {
+                failures.Add($"{widgetType.Name}: saved without error but no row was written.");
+            }
+        }
+
+        Assert.IsTrue(
+            failures.Count == 0,
+            "Every widget type must survive a dashboard save. Add the missing type to "
+            + $"DashboardService.CreateWidgetCopy and UpdateTypeSpecificWidgetProperties.{Environment.NewLine}"
+            + string.Join(Environment.NewLine, failures));
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsKitchenOrdersVenue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        KitchenOrdersWidget widget = new()
+        {
+            Id = Guid.NewGuid(),
+            DashboardId = dashboard.Id,
+            KitchenLocationId = 7,
+            IsActive = true
+        };
+
+        dashboard.Widgets = [widget];
+
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        // Re-saving is what exercises UpdateTypeSpecificWidgetProperties rather than the
+        // create path, and that is the switch a new widget type is most easily missed from.
+        widget.KitchenLocationId = 9;
+        Result<bool> resaved = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(resaved.Success, resaved.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        KitchenOrdersWidget dbWidget = await ctx.DashboardWidgets
+            .OfType<KitchenOrdersWidget>()
+            .SingleAsync(x => x.Id == widget.Id);
+
+        Assert.AreEqual(9, dbWidget.KitchenLocationId);
+    }
+
     [TestMethod]
     public async Task DashboardService_SaveDashboard_PersistsNewAnnouncementsWidgetConfiguration()
     {

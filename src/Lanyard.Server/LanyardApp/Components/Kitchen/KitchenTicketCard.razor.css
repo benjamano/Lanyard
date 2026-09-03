@@ -1,0 +1,137 @@
+/* Ticket styling lives with the ticket component rather than with either screen that shows it,
+   so the kitchen display and the dashboard widget cannot end up looking different. */
+
+.kitchen-ticket {
+    border: 1px solid var(--neutral-stroke-rest, #d9d9d9);
+    border-left-width: 6px;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--neutral-layer-1, #fff);
+}
+
+/* Status is carried by the left edge rather than a badge: it survives being read at a distance
+   and does not compete with the table number for attention. */
+.kitchen-ticket--received {
+    border-left-color: #2a78d6;
+}
+
+.kitchen-ticket--preparing {
+    border-left-color: #eda100;
+}
+
+.kitchen-ticket--ready {
+    border-left-color: #167a47;
+}
+
+.kitchen-ticket--late {
+    background: #fff7ed;
+}
+
+.kitchen-ticket__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.kitchen-ticket__table {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.kitchen-ticket__age {
+    font-size: 0.85rem;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+}
+
+.kitchen-ticket--late .kitchen-ticket__age {
+    color: #b3261e;
+    font-weight: 650;
+    opacity: 1;
+}
+
+.kitchen-ticket__lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kitchen-ticket__line {
+    display: flex;
+    gap: 8px;
+    font-size: 1.05rem;
+}
+
+.kitchen-ticket__qty {
+    font-weight: 700;
+    min-width: 30px;
+    font-variant-numeric: tabular-nums;
+}
+
+.kitchen-ticket__note {
+    margin: 0;
+    padding: 8px;
+    border-radius: 6px;
+    background: #fff4e5;
+    color: #7a4a06;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.kitchen-ticket__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    flex-wrap: wrap;
+}
+
+/* Compact is for the dashboard widget, where a ticket shares the screen with everything else
+   and the reading distance is the same but the space is not. */
+.kitchen-ticket--compact {
+    padding: 8px 10px;
+    gap: 6px;
+    border-left-width: 5px;
+}
+
+.kitchen-ticket--compact .kitchen-ticket__table {
+    font-size: 1.05rem;
+}
+
+.kitchen-ticket--compact .kitchen-ticket__line {
+    font-size: 0.9rem;
+}
+
+.kitchen-ticket--compact .kitchen-ticket__note {
+    font-size: 0.8rem;
+    padding: 6px;
+}
+
+/* Quiet enough not to compete with the dish name, present enough to answer "does this have
+   nuts in" without anyone leaving the pass. */
+.kitchen-ticket__allergens {
+    display: block;
+    font-size: 0.75rem;
+    color: #7a4a06;
+    line-height: 1.3;
+}
+
+/* The choices made on a line. Weighted more heavily than the allergen note below
+   it because it is a cooking instruction, not a reference detail: the difference
+   between beans and peas decides what goes on the plate. */
+.kitchen-ticket__options {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--neutral-foreground-rest);
+    line-height: 1.3;
+}

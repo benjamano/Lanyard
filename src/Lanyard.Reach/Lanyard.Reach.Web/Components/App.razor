@@ -1,4 +1,7 @@
-﻿<!DOCTYPE html>
+@using Lanyard.Reach.Web.Services
+@inject ITenantContext TenantContext
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -6,17 +9,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="_content/Lanyard.Reach.Shared/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="_content/Lanyard.Reach.Shared/app.css" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="ordering.css" />
     <link rel="stylesheet" href="Lanyard.Reach.Web.styles.css" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="_content/Lanyard.Reach.Shared/favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    @*
+        The tenant's own tab icon, uploaded separately from their logo: a navbar wordmark is wide,
+        and a browser renders it into a 16px square as an unreadable smudge. Falls back to the
+        Lanyard mark when a tenant has not set one, or when no tenant resolved at all.
+    *@
+    @if (TenantContext.IsResolved && TenantContext.Tenant.HasFavicon)
+    {
+        <link rel="icon" href="/tenant-favicon" />
+    }
+    else
+    {
+        <link rel="icon" type="image/png" href="favicon.png" />
+    }
+
+    @*
+        The tenant's colours, written server-side into custom properties on :root.
+
+        Emitted here rather than fetched by the client so there is no flash of default branding,
+        and so the WebAssembly island inherits the tenant's palette through ordinary CSS without
+        an extra API call of its own. The foreground colour is chosen by contrast against the
+        tenant's own brand colour, so a company with a pale brand does not end up with white
+        text nobody can read.
+    *@
+    @if (TenantContext.IsResolved)
+    {
+        <style>
+            :root {
+                --brand-primary: @TenantContext.Tenant.ThemeColorHex;
+                --brand-secondary: @TenantContext.Tenant.SecondaryColorHex;
+                --brand-on-primary: @TenantContext.Tenant.OnPrimaryColorHex;
+            }
+        </style>
+    }
+
+    @* Stripe requires its script be loaded from their domain rather than bundled - it is how
+       they ship PCI-relevant fixes without every site redeploying. *@
+    <script src="https://js.stripe.com/v3/"></script>
+
+    <HeadOutlet />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
-    <ReconnectModal />
+    @*
+        No global @rendermode. Pages are statically rendered unless they opt in, which keeps the
+        public marketing pages free of a per-visitor server circuit and lets the ordering flow
+        pick WebAssembly independently.
+    *@
+    <Routes />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 

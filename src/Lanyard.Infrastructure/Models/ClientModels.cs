@@ -21,6 +21,19 @@ public class Client
 
     public DateTime CreateDate { get; set; }
 
+    /// <summary>
+    /// The venue this kiosk physically sits in, when it has been said.
+    ///
+    /// Kiosks were global until receipt printing arrived, which was fine while everything they
+    /// did was driven by an admin. It is not fine for a printer: without this there is nothing to
+    /// compare a venue against, so a manager at one company could point their venue at another
+    /// company's kiosk and print their tickets - table, dishes, allergens and the customer's own
+    /// note - on someone else's paper. Nullable because an unassigned kiosk is a normal state;
+    /// it simply cannot be chosen as anyone's printer.
+    /// </summary>
+    public int? LocationId { get; set; }
+    public Location? Location { get; set; }
+
     public int MusicCacheLimitMb { get; set; } = 500;
 
     public bool AutoRestartEnabled { get; set; } = false;

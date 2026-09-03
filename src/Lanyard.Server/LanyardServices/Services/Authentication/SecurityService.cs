@@ -188,7 +188,7 @@ public class SecurityService : ISecurityService
             user.EmailConfirmed = true;
             user.InvitedDate = DateTime.UtcNow;
 
-            // No password is set here — the invitee sets their own via the emailed link.
+            // No password is set here; the invitee sets their own via the emailed link.
             IdentityResult result = await _userManager.CreateAsync(user);
 
             if (!result.Succeeded)
@@ -423,7 +423,7 @@ public class SecurityService : ISecurityService
             }
             catch (Exception ex)
             {
-                // The user is already deleted at this point — this is best-effort
+                // The user is already deleted at this point, so this is best-effort
                 // cleanup of their now-orphaned CourseAssignments rows and must
                 // never undo or fail the deletion that already succeeded.
                 _logger.LogWarning(ex, "Failed to clean up CourseAssignments for deleted user {UserId}", userId);
@@ -579,6 +579,82 @@ public class SecurityService : ISecurityService
         catch (Exception ex)
         {
             return Result<AuthenticatorEnrollmentDto>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Re-checks the signed-in user's second factor for a single sensitive action.
+    ///
+    /// This is a step-up check, not a login: the user is already authenticated, and the point is
+    /// to prove the person at the keyboard is still them before something irreversible happens.
+    /// Accepts an authenticator code, an emailed code, or a recovery code, matching what login
+    /// accepts - somebody who has lost their phone should not also be locked out of changing
+    /// where their takings land.
+    /// </summary>
+    public async Task<Result<bool>> VerifySecondFactorAsync(string code)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return Result<bool>.Fail("Enter your authentication code.");
+            }
+
+            UserProfile? user = await GetCurrentUserForTwoFactorAsync();
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found");
+            }
+
+            // Checked before verifying anything: a locked-out account must not get another guess,
+            // which is what makes counting failures below actually mean something.
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                return Result<bool>.Fail("Too many attempts. Try again later.");
+            }
+
+            if (!await _userManager.GetTwoFactorEnabledAsync(user))
+            {
+                // Said plainly rather than waved through. Letting an account with no second
+                // factor skip the check would make the whole requirement optional in practice.
+                return Result<bool>.Fail(
+                    "Set up two-factor authentication on your account before making this change.");
+            }
+
+            string trimmed = code.Trim();
+
+            bool isValid = await _userManager.VerifyTwoFactorTokenAsync(
+                user, TokenOptions.DefaultAuthenticatorProvider, trimmed);
+
+            if (!isValid)
+            {
+                isValid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultEmailProvider, trimmed);
+            }
+
+            if (!isValid)
+            {
+                isValid = (await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, trimmed)).Succeeded;
+            }
+
+            if (!isValid)
+            {
+                // Counted against lockout for the same reason login does: this endpoint would
+                // otherwise be an unlimited oracle for guessing a six-digit code.
+                await _userManager.AccessFailedAsync(user);
+
+                _logger.LogWarning("User {UserId} failed a step-up two-factor check", user.Id);
+
+                return Result<bool>.Fail("Invalid or expired code.");
+            }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail(ex.Message);
         }
     }
 

@@ -1,0 +1,204 @@
+@using Lanyard.Application.Services.Kitchen
+@using Lanyard.Application.SignalR.Events
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@implements IDisposable
+
+@inject IKitchenOrderService _kitchenOrderService
+@inject KitchenOrderEvents _kitchenOrderEvents
+
+@*
+    The live kitchen queue as a dashboard widget.
+
+    Renders the same KitchenTicketCard as /kitchen, so a screen showing this and a screen showing
+    the kitchen page cannot end up displaying tickets differently.
+
+    Updates arrive over the in-process KitchenOrderEvents, the same push the kitchen page uses -
+    not a poll - so a wall display is as current as the working screen. See KitchenOrderEvents
+    for why that rather than a SignalR client connection back into the same process.
+*@
+
+<FluentCard Height="100%">
+    <div class="kitchen-queue">
+        <div class="kitchen-queue__header">
+            <span class="kitchen-queue__title">@(Widget.Title ?? "Kitchen orders")</span>
+            @if (Widget.KitchenLocationId is not null)
+            {
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    @_orders.Count open
+                </FluentBadge>
+            }
+        </div>
+
+        @if (Widget.KitchenLocationId is null)
+        {
+            <div class="kitchen-queue__empty">
+                <FluentText Class="kitchen-queue__hint">
+                    Right-click to choose which venue's kitchen to show.
+                </FluentText>
+            </div>
+        }
+        else if (_loadError is not null)
+        {
+            <div class="kitchen-queue__empty">
+                <FluentText Class="kitchen-queue__hint">@_loadError</FluentText>
+            </div>
+        }
+        else if (_orders.Count == 0)
+        {
+            <div class="kitchen-queue__empty">
+                <FluentIcon Value="@(new Icons.Regular.Size24.CheckmarkCircle())" Color="Color.Success" />
+                <FluentText Class="kitchen-queue__hint">All caught up</FluentText>
+            </div>
+        }
+        else
+        {
+            <div class="kitchen-queue__tickets">
+                @foreach (KitchenOrderTicketDto ticket in Visible)
+                {
+                    <KitchenTicketCard Ticket="ticket" Compact="true">
+                        <Actions>
+                            @if (Widget.AllowStatusChanges && NextStatus(ticket.Status) is KitchenOrderStatus next)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary"
+                                              OnClick="@(() => AdvanceAsync(ticket, next))">
+                                    @NextActionLabel(next)
+                                </FluentButton>
+                            }
+                        </Actions>
+                    </KitchenTicketCard>
+                }
+            </div>
+
+            @if (Hidden > 0)
+            {
+                @* Saying how many are not shown, rather than letting the tile clip silently -
+                   a kitchen reading "3 open" while seeing two tickets would not trust it. *@
+                <FluentText Class="kitchen-queue__hint">and @Hidden more</FluentText>
+            }
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required KitchenOrderQueueWidget Widget { get; set; }
+
+    private List<KitchenOrderTicketDto> _orders = [];
+    private string? _loadError;
+    private Timer? _ageTimer;
+
+    private IEnumerable<KitchenOrderTicketDto> Visible =>
+        _orders.OrderBy(o => o.CreateDate).Take(Math.Max(1, Widget.MaxTickets));
+
+    private int Hidden => Math.Max(0, _orders.Count - Math.Max(1, Widget.MaxTickets));
+
+    protected override void OnInitialized()
+    {
+        _kitchenOrderEvents.OnOrderReceived += HandleOrderReceived;
+        _kitchenOrderEvents.OnOrderStatusChanged += HandleOrderStatusChanged;
+
+        // Tickets carry a "how long ago" that would otherwise sit frozen between pushes; a wall
+        // display showing "2 minutes" for half an hour is worse than no timing at all.
+        _ageTimer = new Timer(async _ => await InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (Widget.KitchenLocationId is not int locationId)
+        {
+            _orders = [];
+
+            return;
+        }
+
+        Result<List<KitchenOrder>> result = await _kitchenOrderService.GetOpenOrdersForLocationAsync(locationId);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _orders = [.. result.Data.Select(KitchenOrderService.ToTicket)];
+            _loadError = null;
+        }
+        else
+        {
+            _loadError = "Couldn't load kitchen orders.";
+        }
+    }
+
+    // Events arrive on a background thread, so every handler hops back onto the circuit before
+    // touching component state.
+    private void HandleOrderReceived(KitchenOrderTicketDto ticket)
+    {
+        if (ticket.LocationId != Widget.KitchenLocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _orders.Add(ticket);
+            StateHasChanged();
+        });
+    }
+
+    private void HandleOrderStatusChanged(KitchenOrderTicketDto ticket)
+    {
+        if (ticket.LocationId != Widget.KitchenLocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _orders.RemoveAll(o => o.OrderId == ticket.OrderId);
+
+            if (ticket.Status is not (KitchenOrderStatus.Completed or KitchenOrderStatus.Cancelled))
+            {
+                _orders.Add(ticket);
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private async Task AdvanceAsync(KitchenOrderTicketDto ticket, KitchenOrderStatus status)
+    {
+        Result<KitchenOrder> result = await _kitchenOrderService.SetOrderStatusAsync(ticket.OrderId, status);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update that order.");
+
+            await ReloadAsync();
+        }
+    }
+
+    private static KitchenOrderStatus? NextStatus(KitchenOrderStatus status) => status switch
+    {
+        KitchenOrderStatus.Received => KitchenOrderStatus.Preparing,
+        KitchenOrderStatus.Preparing => KitchenOrderStatus.Ready,
+        KitchenOrderStatus.Ready => KitchenOrderStatus.Completed,
+        _ => null
+    };
+
+    private static string NextActionLabel(KitchenOrderStatus next) => next switch
+    {
+        KitchenOrderStatus.Preparing => "Start",
+        KitchenOrderStatus.Ready => "Ready",
+        KitchenOrderStatus.Completed => "Collected",
+        _ => "Next"
+    };
+
+    public void Dispose()
+    {
+        _kitchenOrderEvents.OnOrderReceived -= HandleOrderReceived;
+        _kitchenOrderEvents.OnOrderStatusChanged -= HandleOrderStatusChanged;
+        _ageTimer?.Dispose();
+    }
+}

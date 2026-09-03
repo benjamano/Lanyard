@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The ordering wire contracts only. Deliberately no reference to Lanyard.Infrastructure:
+         nothing about the server's EF model should be downloadable by a customer's phone. -->
+    <ProjectReference Include="..\..\Lanyard.Shared\Lanyard.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

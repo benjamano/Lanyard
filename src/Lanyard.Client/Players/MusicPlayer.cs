@@ -31,7 +31,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
     }
 
     /// <summary>
-    /// Fires when the NAudio playback thread exits — either because Stop was called or because
+    /// Fires when the NAudio playback thread exits, either because Stop was called or because
     /// the stream ran out. Without this the server is never told a track finished, so it keeps
     /// reporting Playing and estimating the position past the end of the song.
     /// </summary>
@@ -208,7 +208,7 @@ public class MusicPlayer : IMusicPlayer, IDisposable
         _reader?.Dispose();
         _reader = null;
 
-        // Report after stopping — reading the state first sends the server the outgoing
+        // Report after stopping; reading the state first sends the server the outgoing
         // state (Playing), leaving it convinced the track is still running.
         if (notify)
         {

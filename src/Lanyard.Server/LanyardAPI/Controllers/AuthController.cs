@@ -14,6 +14,10 @@ namespace Lanyard.App.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    // Opted in explicitly rather than inherited from MapControllers - see Program.cs. This is
+    // the controller the per-IP limit matters most for, since it is what throttles repeated
+    // sign-in attempts.
+    [EnableRateLimiting("ip-fixed")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<UserProfile> _userManager;

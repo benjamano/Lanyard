@@ -1,0 +1,62 @@
+/* Sized for a screen in a kitchen: tickets are cards on a wrapping grid rather than a table,
+   so a glance from a few feet away reads the table number and the items.
+
+   The ticket cards themselves are styled by KitchenTicketCard, which the dashboard queue widget
+   also uses - that is what keeps the two screens looking the same. */
+
+.kitchen-display {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.kitchen-display__bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.kitchen-display__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 64px 16px;
+    opacity: 0.8;
+}
+
+.kitchen-display__tickets {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.kitchen-display__eightysix {
+    border-top: 1px solid var(--neutral-stroke-rest, #d9d9d9);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.kitchen-display__eightysix-hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}
+
+.kitchen-display__eightysix-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.kitchen-display__eightysix-tag {
+    margin-left: 6px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+}

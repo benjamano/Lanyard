@@ -5,6 +5,7 @@ using Lanyard.Infrastructure.DTO;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +16,7 @@ namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("ip-fixed")]
     public class FilesController : ControllerBase
     {
         private readonly IFileService _fileService;

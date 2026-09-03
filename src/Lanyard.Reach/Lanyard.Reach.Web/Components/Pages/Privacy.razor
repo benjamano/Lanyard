@@ -1,0 +1,45 @@
+@page "/privacy"
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@layout MainLayout
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
+
+@*
+    Privacy policy.
+
+    Same shape as the ordering terms: the wording is a per-company document edited from Companies
+    & Locations, rendered against whichever company the hostname resolved to. The data controller
+    is the venue rather than Lanyard, so both the identity and the wording have to be theirs.
+*@
+
+<PageTitle>Privacy policy</PageTitle>
+
+@if (_legal is not null && !_legal.IsComplete)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Privacy policy not published yet</h1>
+        <p>@_legal.CompanyName hasn't finished setting this up. Please ask a member of staff.</p>
+    </div>
+}
+else
+{
+    <article class="terms">
+        <LegalDocument DocumentType="LegalDocumentType.PrivacyPolicy" />
+    </article>
+}
+
+@code {
+    private TenantLegalDetailsDto? _legal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            return;
+        }
+
+        _legal = await OrderingClient.GetLegalDetailsAsync(TenantContext.Tenant.CompanyId);
+    }
+}

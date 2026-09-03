@@ -319,6 +319,19 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     existingMyTraining.IncludeCompleted = incomingMyTraining.IncludeCompleted;
                     existingMyTraining.MaxItems = incomingMyTraining.MaxItems;
                     break;
+                case KitchenOrdersWidget existingKitchenOrders when widget is KitchenOrdersWidget incomingKitchenOrders:
+                    existingKitchenOrders.KitchenLocationId = incomingKitchenOrders.KitchenLocationId;
+                    break;
+                case KitchenOrderQueueWidget existingKitchenQueue when widget is KitchenOrderQueueWidget incomingKitchenQueue:
+                    existingKitchenQueue.KitchenLocationId = incomingKitchenQueue.KitchenLocationId;
+                    existingKitchenQueue.MaxTickets = incomingKitchenQueue.MaxTickets;
+                    existingKitchenQueue.AllowStatusChanges = incomingKitchenQueue.AllowStatusChanges;
+                    break;
+                case KitchenStatsWidget existingKitchenStats when widget is KitchenStatsWidget incomingKitchenStats:
+                    existingKitchenStats.KitchenLocationId = incomingKitchenStats.KitchenLocationId;
+                    existingKitchenStats.StatsPeriod = incomingKitchenStats.StatsPeriod;
+                    existingKitchenStats.ShowTakings = incomingKitchenStats.ShowTakings;
+                    break;
                 case ProjectionStatusWidget existingProjectionStatus when widget is ProjectionStatusWidget incomingProjectionStatus:
                     existingProjectionStatus.ClientId = incomingProjectionStatus.ClientId;
                     existingProjectionStatus.DisplayIndex = incomingProjectionStatus.DisplayIndex;
@@ -683,6 +696,22 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             // signed-in user - but the case is still required, or the switch below throws and
             // the whole dashboard save fails.
             GreetingWidget => new GreetingWidget(),
+            KitchenOrdersWidget kitchenOrdersWidget => new KitchenOrdersWidget
+            {
+                KitchenLocationId = kitchenOrdersWidget.KitchenLocationId
+            },
+            KitchenOrderQueueWidget kitchenQueueWidget => new KitchenOrderQueueWidget
+            {
+                KitchenLocationId = kitchenQueueWidget.KitchenLocationId,
+                MaxTickets = kitchenQueueWidget.MaxTickets,
+                AllowStatusChanges = kitchenQueueWidget.AllowStatusChanges
+            },
+            KitchenStatsWidget kitchenStatsWidget => new KitchenStatsWidget
+            {
+                KitchenLocationId = kitchenStatsWidget.KitchenLocationId,
+                StatsPeriod = kitchenStatsWidget.StatsPeriod,
+                ShowTakings = kitchenStatsWidget.ShowTakings
+            },
             ProjectionStatusWidget projectionStatusWidget => new ProjectionStatusWidget
             {
                 ClientId = projectionStatusWidget.ClientId,
@@ -792,9 +821,32 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             return;
         }
 
+        if (target is KitchenOrdersWidget targetKitchenOrders && source is KitchenOrdersWidget sourceKitchenOrders)
+        {
+            targetKitchenOrders.KitchenLocationId = sourceKitchenOrders.KitchenLocationId;
+            return;
+        }
+
+        if (target is KitchenOrderQueueWidget targetKitchenQueue && source is KitchenOrderQueueWidget sourceKitchenQueue)
+        {
+            targetKitchenQueue.KitchenLocationId = sourceKitchenQueue.KitchenLocationId;
+            targetKitchenQueue.MaxTickets = sourceKitchenQueue.MaxTickets;
+            targetKitchenQueue.AllowStatusChanges = sourceKitchenQueue.AllowStatusChanges;
+            return;
+        }
+
+        if (target is KitchenStatsWidget targetKitchenStats && source is KitchenStatsWidget sourceKitchenStats)
+        {
+            targetKitchenStats.KitchenLocationId = sourceKitchenStats.KitchenLocationId;
+            targetKitchenStats.StatsPeriod = sourceKitchenStats.StatsPeriod;
+            targetKitchenStats.ShowTakings = sourceKitchenStats.ShowTakings;
+            return;
+        }
+
         if (target is AnnouncementsWidget targetAnnouncements && source is AnnouncementsWidget sourceAnnouncements)
         {
             targetAnnouncements.MaxItems = sourceAnnouncements.MaxItems;
+            return;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

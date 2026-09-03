@@ -1,0 +1,25 @@
+@using Lanyard.Reach.Web.Services
+@inject ITenantContext TenantContext
+
+@*
+    The site-wide footer, on every page including the ordering flow.
+
+    It exists mainly to carry the privacy link. That link has to be reachable from wherever
+    personal data is collected, and on this site that is the ordering pages - so this is rendered
+    by both layouts rather than only the marketing one.
+
+    Nothing here is hardcoded to a company. The previous footer carried Play2Day's addresses and
+    phone numbers in markup, which would have been shown to every other tenant.
+*@
+
+<footer class="site-footer">
+    <p class="site-footer__legal">
+        &copy; @DateTime.UtcNow.Year @(TenantContext.IsResolved ? TenantContext.Tenant.CompanyName : "Lanyard")
+    </p>
+
+    <nav class="site-footer__links" aria-label="Legal">
+        <a href="/privacy">Privacy</a>
+        <span class="site-footer__sep" aria-hidden="true">&middot;</span>
+        <a href="/order/terms">Ordering terms</a>
+    </nav>
+</footer>

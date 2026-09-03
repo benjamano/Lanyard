@@ -1,0 +1,108 @@
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@using Humanizer
+
+@*
+    One order ticket, as the kitchen sees it.
+
+    Shared by the full kitchen display and the dashboard queue widget so the two cannot drift:
+    the whole point of the widget is that a screen showing it sees the same thing as a screen
+    showing /kitchen. Actions are optional, because a dashboard on a wall is usually something
+    to read rather than something to tap.
+*@
+
+<article class="kitchen-ticket kitchen-ticket--@(Ticket.Status.ToString().ToLowerInvariant()) @(IsLate ? "kitchen-ticket--late" : "") @(Compact ? "kitchen-ticket--compact" : "")">
+    <header class="kitchen-ticket__header">
+        <span class="kitchen-ticket__table">@Ticket.TableLabel</span>
+        <span class="kitchen-ticket__age">@Age</span>
+    </header>
+
+    <ul class="kitchen-ticket__lines">
+        @foreach (OrderStatusLineDto line in Ticket.Lines)
+        {
+            <li class="kitchen-ticket__line">
+                <span class="kitchen-ticket__qty">@line.Quantity&times;</span>
+                <span class="kitchen-ticket__name">
+                    @line.Name
+
+                    @* The choices, on their own line and prominent: this is the difference
+                       between plating beans and plating peas, and getting it wrong means the
+                       food comes back. *@
+                    @if (line.Options.Count > 0)
+                    {
+                        <span class="kitchen-ticket__options">
+                            @string.Join(", ", line.Options.Select(o => o.OptionName))
+                        </span>
+                    }
+
+                    @* Shown on the ticket so whoever hands the food over can answer an allergy
+                       question without going back to the menu. Already combines the dish's own
+                       allergens with those of every choice on this line. *@
+                    @if (line.ContainsAllergens != Allergen.None)
+                    {
+                        <span class="kitchen-ticket__allergens">@line.ContainsAllergens.ToDisplayList()</span>
+                    }
+                </span>
+            </li>
+        }
+    </ul>
+
+    @if (!string.IsNullOrWhiteSpace(Ticket.CustomerNote))
+    {
+        <p class="kitchen-ticket__note">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Comment())" />
+            @Ticket.CustomerNote
+        </p>
+    }
+
+    @if (Actions is not null || ShowStatusLabel)
+    {
+        <footer class="kitchen-ticket__actions">
+            @* A surface without buttons still needs to say where a ticket is, since the
+               left-edge colour is otherwise the only cue. Callers that render their own status
+               (the kitchen page shows payment state alongside its buttons) turn this off. *@
+            @if (ShowStatusLabel)
+            {
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                    @StatusLabel(Ticket.Status)
+                </FluentBadge>
+            }
+
+            @Actions
+        </footer>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public required KitchenOrderTicketDto Ticket { get; set; }
+
+    /// <summary>
+    /// Rendered in the footer. Omit for a read-only surface such as a wall display.
+    /// Non-generic on purpose - every caller renders these inside a loop and already has the
+    /// ticket in scope, so passing it back through a context parameter buys nothing.
+    /// </summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public bool ShowStatusLabel { get; set; } = true;
+
+    /// <summary>Tightens spacing for a widget, where a ticket shares a screen with everything else.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>
+    /// How long a ticket may sit before it is highlighted. Chosen to be noticeable rather than
+    /// alarming - a busy kitchen with everything flagged red tells staff nothing.
+    /// </summary>
+    public static readonly TimeSpan LateThreshold = TimeSpan.FromMinutes(12);
+
+    private bool IsLate => DateTime.UtcNow - Ticket.CreateDate > LateThreshold;
+
+    private string Age => (DateTime.UtcNow - Ticket.CreateDate).Humanize(precision: 1);
+
+    private static string StatusLabel(KitchenOrderStatus status) => status switch
+    {
+        KitchenOrderStatus.Received => "New",
+        KitchenOrderStatus.Preparing => "Cooking",
+        KitchenOrderStatus.Ready => "Ready",
+        _ => status.ToString()
+    };
+}

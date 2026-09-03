@@ -1,0 +1,65 @@
+/* Plain elements rather than FluentStack so the three figures stay on one row and shrink
+   together when the widget is dragged narrow, instead of wrapping one per line. */
+
+.kitchen-orders-body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 8px;
+}
+
+.kitchen-orders-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.kitchen-orders-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kitchen-orders-figures {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-around;
+    flex: 1;
+    gap: 4px;
+}
+
+.kitchen-orders-figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+}
+
+.kitchen-orders-number {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.kitchen-orders-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+
+.kitchen-orders-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.kitchen-orders-hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}

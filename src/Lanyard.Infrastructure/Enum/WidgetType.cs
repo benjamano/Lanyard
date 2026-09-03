@@ -16,5 +16,12 @@ public enum WidgetType
     MyTraining = 11,
     Greeting = 12,
     Announcements = 13,
-    ProjectionStatus = 14
+    ProjectionStatus = 14,
+
+    // 15 onwards because dev shipped Announcements and ProjectionStatus on 13 and 14 first.
+    // These numbers are the EF discriminator written into every DashboardWidgets row, so
+    // reusing one would silently reinterpret existing widgets as a different type.
+    KitchenOrders = 15,
+    KitchenOrderQueue = 16,
+    KitchenStats = 17
 }

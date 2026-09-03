@@ -1,0 +1,372 @@
+@page "/kitchen"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin, CanManageKitchen")]
+
+@using Lanyard.Application.Services.Kitchen
+@using Lanyard.Application.SignalR.Events
+@using Lanyard.Shared.DTO
+@using Lanyard.Shared.Enum
+@using Humanizer
+@implements IDisposable
+@rendermode InteractiveServer
+
+@inject IKitchenOrderService _kitchenOrderService
+@inject IMenuService _menuService
+@inject KitchenOrderEvents _kitchenOrderEvents
+
+<PageTitle>Kitchen</PageTitle>
+
+@*
+    The kitchen's working queue. Designed to be usable full-screen in a browser on a display in
+    the kitchen: large touch targets, tickets ordered oldest-first, and no navigation chrome
+    competing for the screen.
+
+    Updates arrive over the in-process KitchenOrderEvents rather than by polling, so a ticket
+    appears the moment a customer places it (see KitchenOrderEvents for why that, and not a
+    SignalR client connection back into this same process).
+*@
+
+<div class="kitchen-display">
+    <header class="kitchen-display__bar">
+        <FluentSelect TOption="Location"
+                      TValue="string"
+                      Items="@_locations"
+                      OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
+                      OptionValue="@(l => l?.Id.ToString())"
+                      Label="Venue"
+                      Placeholder="Choose a venue"
+                      Value="@_locationValue"
+                      ValueChanged="OnLocationChangedAsync" />
+
+        @if (_locationId is not null)
+        {
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                @_orders.Count open
+            </FluentBadge>
+        }
+    </header>
+
+    @if (_locationId is null)
+    {
+        <div class="kitchen-display__empty">
+            <FluentText>Choose a venue to see its orders.</FluentText>
+        </div>
+    }
+    else if (_orders.Count == 0)
+    {
+        <div class="kitchen-display__empty">
+            <FluentIcon Value="@(new Icons.Regular.Size32.CheckmarkCircle())" Color="Color.Success" />
+            <FluentText>All caught up. No open orders.</FluentText>
+        </div>
+    }
+    else
+    {
+        <div class="kitchen-display__tickets">
+            @foreach (KitchenOrderTicketDto ticket in _orders.OrderBy(o => o.CreateDate))
+            {
+                @* ShowStatusLabel off: this screen already shows payment state next to its
+                   buttons, and two badges competing for the same corner reads as noise. *@
+                <KitchenTicketCard Ticket="ticket" ShowStatusLabel="false">
+                    <Actions>
+                        @if (NextStatus(ticket.Status) is KitchenOrderStatus next)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Primary"
+                                          OnClick="@(() => AdvanceAsync(ticket, next))">
+                                @NextActionLabel(next)
+                            </FluentButton>
+                        }
+
+                        @* Every ticket on this screen has already been paid for online - an
+                           unpaid order never reaches the kitchen - so this is a statement of
+                           fact rather than something staff have to act on. Orders taken before
+                           online payment still show their historical till status. *@
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@PaymentBadgeColor(ticket.PaymentStatus)">
+                            @PaymentLabel(ticket.PaymentStatus)
+                        </FluentBadge>
+
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                      Title="Cancel this order"
+                                      OnClick="@(() => CancelAsync(ticket))" />
+                    </Actions>
+                </KitchenTicketCard>
+            }
+        </div>
+
+        <section class="kitchen-display__eightysix">
+            <FluentText As="@TextTag.H4">Run out of something?</FluentText>
+            <FluentText Class="kitchen-display__eightysix-hint">
+                Marking an item unavailable hides it from phones already browsing the menu.
+            </FluentText>
+
+            <div class="kitchen-display__eightysix-items">
+                @foreach (MenuItemDto item in _menuItems)
+                {
+                    <FluentButton Appearance="@(item.IsAvailable ? ButtonAppearance.Outline : ButtonAppearance.Primary)"
+                                  OnClick="@(() => ToggleAvailabilityAsync(item))">
+                        @item.Name
+                        @if (!item.IsAvailable)
+                        {
+                            <span class="kitchen-display__eightysix-tag">off</span>
+                        }
+                    </FluentButton>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private List<Location> _locations = [];
+    private List<KitchenOrderTicketDto> _orders = [];
+    private List<MenuItemDto> _menuItems = [];
+    private int? _locationId;
+    private string _locationValue = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _kitchenOrderEvents.OnOrderReceived += HandleOrderReceived;
+        _kitchenOrderEvents.OnOrderStatusChanged += HandleOrderStatusChanged;
+
+        Result<List<Location>> locations = await VisibleLocations
+            .GetForCurrentUserAsync(_companyLocationService, _currentLocationContext);
+
+        if (locations.IsSuccess && locations.Data is not null)
+        {
+            _locations = locations.Data;
+
+            // One venue means there is nothing to choose - preselecting saves a tap on a display
+            // that is likely mounted on a wall.
+            if (_locations.Count == 1)
+            {
+                await SelectLocationAsync(_locations[0].Id);
+            }
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load venues, {locations.Error}");
+        }
+    }
+
+    private async Task OnLocationChangedAsync(string? newValue)
+    {
+        _locationValue = newValue ?? string.Empty;
+
+        if (int.TryParse(newValue, out int locationId))
+        {
+            await SelectLocationAsync(locationId);
+        }
+        else
+        {
+            _locationId = null;
+            _orders = [];
+            _menuItems = [];
+        }
+    }
+
+    private async Task SelectLocationAsync(int locationId)
+    {
+        _locationId = locationId;
+        _locationValue = locationId.ToString();
+
+        await ReloadOrdersAsync();
+        await ReloadMenuAsync();
+    }
+
+    private async Task ReloadOrdersAsync()
+    {
+        if (_locationId is not int locationId)
+        {
+            return;
+        }
+
+        Result<List<KitchenOrder>> result = await _kitchenOrderService.GetOpenOrdersForLocationAsync(locationId);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _orders = [.. result.Data.Select(KitchenOrderService.ToTicket)];
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load orders, {result.Error}");
+        }
+    }
+
+    private async Task ReloadMenuAsync()
+    {
+        if (_locationId is not int locationId)
+        {
+            return;
+        }
+
+        Result<List<MenuItem>> result = await _menuService.GetItemsForLocationAsync(locationId, includeInactive: false);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _menuItems = [.. result.Data.Select(i => new MenuItemDto
+            {
+                Id = i.Id,
+                Name = i.Name,
+                Description = i.Description,
+                PriceCents = i.PriceCents,
+                IsAvailable = i.IsAvailable,
+                HasImage = i.ImageFileId is not null,
+                SortOrder = i.SortOrder
+            })];
+        }
+    }
+
+    // Events arrive on a background thread, so every handler hops back onto the circuit via
+    // InvokeAsync before touching component state.
+    private void HandleOrderReceived(KitchenOrderTicketDto ticket)
+    {
+        if (ticket.LocationId != _locationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            // Keyed on the order, not appended blindly. The server's confirm-payment guard is a
+            // read-then-write, so a Stripe retry racing the customer's reconcile poll can emit
+            // this event twice for one order - and two identical tickets on the rail is food
+            // cooked twice.
+            if (_orders.Any(o => o.OrderId == ticket.OrderId))
+            {
+                return;
+            }
+
+            _orders.Add(ticket);
+            StateHasChanged();
+        });
+    }
+
+    private void HandleOrderStatusChanged(KitchenOrderTicketDto ticket)
+    {
+        if (ticket.LocationId != _locationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            _orders.RemoveAll(o => o.OrderId == ticket.OrderId);
+
+            // Completed and cancelled tickets leave the queue rather than lingering greyed out:
+            // this display is a worklist, and finished work is noise on it.
+            if (ticket.Status is not (KitchenOrderStatus.Completed or KitchenOrderStatus.Cancelled))
+            {
+                _orders.Add(ticket);
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private async Task AdvanceAsync(KitchenOrderTicketDto ticket, KitchenOrderStatus status)
+    {
+        Result<KitchenOrder> result = await _kitchenOrderService.SetOrderStatusAsync(ticket.OrderId, status);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update that order.");
+
+            // Something else moved this ticket - resync rather than leaving a stale card on
+            // screen that will keep failing every time it is tapped.
+            await ReloadOrdersAsync();
+        }
+    }
+
+    private async Task CancelAsync(KitchenOrderTicketDto ticket)
+    {
+        bool wasPaid = ticket.PaymentStatus == KitchenOrderPaymentStatus.Paid;
+
+        // Confirmed, and the refund is a deliberate choice rather than automatic: a cancel that
+        // is really a correction should not silently move the customer's money, and an
+        // accidental tap should not either.
+        DialogResult confirmation = await _dialogService.ShowDialogAsync<CancelOrderDialog>(options =>
+        {
+            options.Header.Title = "Cancel order";
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(CancelOrderDialog.TableLabel), ticket.TableLabel);
+            options.Parameters.Add(nameof(CancelOrderDialog.TotalCents), ticket.TotalCents);
+            options.Parameters.Add(nameof(CancelOrderDialog.CanRefund), wasPaid);
+        });
+
+        if (confirmation.Cancelled || confirmation.Value is not bool refund)
+        {
+            return;
+        }
+
+        Result<KitchenOrder> result = await _kitchenOrderService.CancelOrderAsync(ticket.OrderId, refund);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(refund
+                ? $"{ticket.TableLabel} cancelled and refunded."
+                : $"{ticket.TableLabel} cancelled.");
+        }
+        else
+        {
+            // Covers the "cancelled but the refund failed" case too, which is a warning rather
+            // than a plain failure - the ticket is gone, but the money still needs attention.
+            _toastService.ShowError(result.Error ?? "Couldn't cancel that order.");
+            await ReloadOrdersAsync();
+        }
+    }
+
+    private static BadgeColor PaymentBadgeColor(KitchenOrderPaymentStatus status) => status switch
+    {
+        KitchenOrderPaymentStatus.Paid => BadgeColor.Success,
+        KitchenOrderPaymentStatus.PaidAtTill => BadgeColor.Success,
+        KitchenOrderPaymentStatus.Refunded => BadgeColor.Warning,
+        KitchenOrderPaymentStatus.Failed => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+
+    private static string PaymentLabel(KitchenOrderPaymentStatus status) => status switch
+    {
+        KitchenOrderPaymentStatus.Paid => "Paid",
+        KitchenOrderPaymentStatus.PaidAtTill => "Paid at till",
+        KitchenOrderPaymentStatus.Refunded => "Refunded",
+        KitchenOrderPaymentStatus.Failed => "Payment failed",
+        KitchenOrderPaymentStatus.Unpaid => "Unpaid",
+        _ => "Pending"
+    };
+
+    private async Task ToggleAvailabilityAsync(MenuItemDto item)
+    {
+        Result<bool> result = await _menuService.SetItemAvailabilityAsync(item.Id, !item.IsAvailable);
+
+        if (result.IsSuccess)
+        {
+            item.IsAvailable = !item.IsAvailable;
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update that item.");
+        }
+    }
+
+    private static KitchenOrderStatus? NextStatus(KitchenOrderStatus status) => status switch
+    {
+        KitchenOrderStatus.Received => KitchenOrderStatus.Preparing,
+        KitchenOrderStatus.Preparing => KitchenOrderStatus.Ready,
+        KitchenOrderStatus.Ready => KitchenOrderStatus.Completed,
+        _ => null
+    };
+
+    private static string NextActionLabel(KitchenOrderStatus next) => next switch
+    {
+        KitchenOrderStatus.Preparing => "Start",
+        KitchenOrderStatus.Ready => "Ready",
+        KitchenOrderStatus.Completed => "Collected",
+        _ => "Next"
+    };
+
+    public void Dispose()
+    {
+        _kitchenOrderEvents.OnOrderReceived -= HandleOrderReceived;
+        _kitchenOrderEvents.OnOrderStatusChanged -= HandleOrderStatusChanged;
+    }
+}

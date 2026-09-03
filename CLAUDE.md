@@ -137,6 +137,7 @@ The topics below used to live in this file as long-form sections. They moved to 
 | `client-build-troubleshooting` | Client "No frameworks were found" — stray host DLLs in `build\`, not a missing runtime |
 | `client-release-pipeline` | `release.yml` auto-publishes whatever `<Version>` is in `Lanyard.Client.csproj` on every client-touching push to `main`, with no increment check; how kiosks auto-update on next restart |
 | `kiosk-client-dev-stack` | Launching the full server+client exe stack for SignalR/DMX end-to-end testing |
+| `kitchen-ordering-dev-stack` | Running QR ordering locally — server, the public Reach site, and Stripe test payments including the webhook forwarding that orders depend on |
 | `verify` | Lighter Playwright-driven UI verification loop (server only, no kiosk client) |
 | `dashboard-widgets` | 6-touchpoint checklist for adding a new dashboard widget type; failure modes when a step is missed |
 | `location-scoping` | What `ICurrentLocationContext`/`LocationScope` actually cover (Training/Course only, not app-wide) and a known cross-location gap in `CourseService` |

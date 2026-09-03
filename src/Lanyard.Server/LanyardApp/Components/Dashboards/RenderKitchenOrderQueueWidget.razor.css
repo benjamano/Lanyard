@@ -1,0 +1,47 @@
+.kitchen-queue {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 8px;
+    min-height: 0;
+}
+
+.kitchen-queue__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.kitchen-queue__title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Scrolls rather than clipping, and min-height:0 above is what actually lets it - without it a
+   flex child refuses to shrink below its content and the tile grows past its grid cell. */
+.kitchen-queue__tickets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.kitchen-queue__empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.kitchen-queue__hint {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}

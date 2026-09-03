@@ -1,0 +1,130 @@
+@using Lanyard.Application.Services.Kitchen
+@using Humanizer
+@implements IDisposable
+
+@inject IKitchenOrderService _kitchenOrderService
+
+@*
+    Glanceable kitchen load for one venue. The working queue is the kitchen display at /kitchen;
+    this answers only "is the kitchen keeping up" for a dashboard that is already showing music
+    and kiosk health.
+
+    Polls rather than joining KitchenHub: this widget often sits on a kiosk screen alongside
+    several others, and one timer reading four aggregated numbers is cheaper than another live
+    connection per screen. Staleness of a few seconds does not matter for a number you glance at.
+*@
+
+<FluentCard Height="100%">
+    <div class="kitchen-orders-body">
+        <div class="kitchen-orders-header">
+            <span class="kitchen-orders-title">@(Widget.Title ?? "Kitchen")</span>
+            @if (_oldestAge is TimeSpan age)
+            {
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@OldestBadgeColor(age)">
+                    @age.Humanize(precision: 1)
+                </FluentBadge>
+            }
+        </div>
+
+        @if (Widget.KitchenLocationId is null)
+        {
+            <div class="kitchen-orders-empty">
+                <FluentText Class="kitchen-orders-hint">
+                    Right-click to choose which venue's kitchen to watch.
+                </FluentText>
+            </div>
+        }
+        else if (_loadError is not null)
+        {
+            <div class="kitchen-orders-empty">
+                <FluentText Class="kitchen-orders-hint">@_loadError</FluentText>
+            </div>
+        }
+        else if (_summary is null)
+        {
+            <div class="kitchen-orders-empty">
+                <FluentText Class="kitchen-orders-hint">Loading…</FluentText>
+            </div>
+        }
+        else
+        {
+            <div class="kitchen-orders-figures">
+                <div class="kitchen-orders-figure">
+                    <span class="kitchen-orders-number">@_summary.OpenOrderCount</span>
+                    <span class="kitchen-orders-label">open</span>
+                </div>
+                <div class="kitchen-orders-figure">
+                    <span class="kitchen-orders-number">@_summary.PreparingCount</span>
+                    <span class="kitchen-orders-label">cooking</span>
+                </div>
+                <div class="kitchen-orders-figure">
+                    <span class="kitchen-orders-number">@_summary.ReadyCount</span>
+                    <span class="kitchen-orders-label">ready</span>
+                </div>
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required KitchenOrdersWidget Widget { get; set; }
+
+    private KitchenOrderSummary? _summary;
+    private string? _loadError;
+    private Timer? _timer;
+
+    private TimeSpan? _oldestAge => _summary?.OldestOrderCreateDate is DateTime oldest
+        ? DateTime.UtcNow - oldest
+        : null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(async _ =>
+        {
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Widget.KitchenLocationId is not int locationId)
+        {
+            _summary = null;
+
+            return;
+        }
+
+        Result<KitchenOrderSummary> result = await _kitchenOrderService.GetOpenOrderSummaryAsync(locationId);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _summary = result.Data;
+            _loadError = null;
+        }
+        else
+        {
+            _loadError = "Couldn't load kitchen orders.";
+        }
+    }
+
+    // Colour by how long the oldest ticket has waited, since that is the number that actually
+    // signals a kitchen falling behind - a large queue that is all seconds old is fine.
+    private static BadgeColor OldestBadgeColor(TimeSpan age) => age.TotalMinutes switch
+    {
+        >= 20 => BadgeColor.Danger,
+        >= 10 => BadgeColor.Warning,
+        _ => BadgeColor.Subtle
+    };
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

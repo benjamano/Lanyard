@@ -4,12 +4,14 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("ip-fixed")]
     public class MusicController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService, IClientSecretValidator clientSecretValidator) : ControllerBase
     {
         private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;

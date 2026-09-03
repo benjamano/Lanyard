@@ -39,6 +39,17 @@
                 </FluentNavCategory>
             }
 
+            @* Outside the Management section: kitchen staff working the queue are not managers,
+               and the display needs to be one tap away on a screen in the kitchen. *@
+            @if (_canManageKitchen)
+            {
+                <FluentNavCategory Title="Kitchen" IconRest="@(new Icons.Regular.Size20.Food())"
+                                   IconActive="@(new Icons.Filled.Size20.Food())">
+                    <FluentNavItem Href="/kitchen">Orders</FluentNavItem>
+                    <FluentNavItem Href="/manage/kitchen">Menu &amp; Table Codes</FluentNavItem>
+                </FluentNavCategory>
+            }
+
             @if (_canPostAnnouncements)
             {
                 <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
@@ -61,7 +72,10 @@
 
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
-                    @if (_isAdmin)
+                    @* Managers too, not just admins: the page scopes itself to the companies the
+                       user may administer, so a venue manager gets their own company's branding,
+                       wording and domains and nothing else. *@
+                    @if (_isManager)
                     {
                         <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
                     }
@@ -169,6 +183,7 @@
     private bool _canClockIn;
     private bool _canManageDmx;
     private bool _canManageFiles;
+    private bool _canManageKitchen;
     private bool _canPostAnnouncements;
     private string? _displayName;
     private ReleaseNote? _latestRelease;
@@ -186,6 +201,7 @@
         _canClockIn = _isAdmin || user.IsInRole("CanClockIn");
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");
         _canManageFiles = _isAdmin || user.IsInRole("CanManageFiles");
+        _canManageKitchen = _isAdmin || user.IsInRole("CanManageKitchen");
         _canPostAnnouncements = _isAdmin || user.IsInRole("CanPostAnnouncements");
 
         if (_isAuthenticated)

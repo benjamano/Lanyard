@@ -1,14 +1,25 @@
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
 
-public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory) : ICompanyLocationService
+public class CompanyLocationService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    ICompanyAccessService companyAccess) : ICompanyLocationService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+
+    // Checked here rather than only in the page. A Manager can be given the Companies &
+    // Locations screen to run their own venue, and hiding another tenant's company from a list
+    // is presentation, not a boundary - the boundary has to be where the write happens.
+    private readonly ICompanyAccessService _companyAccess = companyAccess;
+
+    /// <summary>Blank and whitespace both mean "not set", so both are stored as null.</summary>
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public async Task<Result<List<Company>>> GetCompaniesAsync()
     {
@@ -47,7 +58,45 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Company>.Fail("Theme color must be a hex value like #C8102E.");
             }
 
+            string? normalizedSecondaryColor = string.IsNullOrWhiteSpace(company.SecondaryColorHex)
+                ? null
+                : company.SecondaryColorHex.Trim();
+
+            if (normalizedSecondaryColor is not null && !Regex.IsMatch(normalizedSecondaryColor, "^#[0-9A-Fa-f]{6}$"))
+            {
+                return Result<Company>.Fail("Secondary color must be a hex value like #C8102E.");
+            }
+
+            string? normalizedSlug = string.IsNullOrWhiteSpace(company.Slug) ? null : company.Slug.Trim().ToLowerInvariant();
+
+            // Constrained to what can sit in a URL path segment unescaped, since that is the only
+            // thing a slug is ever used for.
+            if (normalizedSlug is not null && !Regex.IsMatch(normalizedSlug, "^[a-z0-9]+(-[a-z0-9]+)*$"))
+            {
+                return Result<Company>.Fail("Slug may only contain lowercase letters, numbers and hyphens, for example 'play2day'.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (normalizedSlug is not null
+                && await ctx.Companies.AnyAsync(x => x.Slug == normalizedSlug && x.Id != company.Id))
+            {
+                // Checked rather than left to the unique index so the admin gets a sentence
+                // instead of a constraint violation.
+                return Result<Company>.Fail($"The slug '{normalizedSlug}' is already used by another company.");
+            }
+
+            CompanyAccess access = await _companyAccess.GetCurrentAsync();
+
+            if (company.Id == 0 && !access.CanCreateCompanies)
+            {
+                return Result<Company>.Fail("You don't have permission to create a company.");
+            }
+
+            if (company.Id != 0 && !access.CanAdminister(company.Id))
+            {
+                return Result<Company>.Fail("You don't have permission to edit this company.");
+            }
 
             Company? existing = company.Id == 0 ? null : await ctx.Companies.FirstOrDefaultAsync(x => x.Id == company.Id);
 
@@ -62,8 +111,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                     CreateDate = DateTime.UtcNow,
                     UpdateDate = DateTime.UtcNow,
                     ThemeColorHex = normalizedColor,
+                    SecondaryColorHex = normalizedSecondaryColor,
+                    Slug = normalizedSlug,
+                    // Not settable here even on create - see SetStripeAccountIdAsync.
+                    StripeAccountId = null,
                     LogoFileId = company.LogoFileId,
-                    BackgroundImageFileId = company.BackgroundImageFileId
+                    BackgroundImageFileId = company.BackgroundImageFileId,
+                    FaviconFileId = company.FaviconFileId
                 };
                 ctx.Companies.Add(target);
             }
@@ -76,8 +130,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 // current branding into its fields before a save, so a null/blank arriving here
                 // means "the admin cleared it", not "the caller omitted it".
                 target.ThemeColorHex = normalizedColor;
+                target.SecondaryColorHex = normalizedSecondaryColor;
+                target.Slug = normalizedSlug;
                 target.LogoFileId = company.LogoFileId;
                 target.BackgroundImageFileId = company.BackgroundImageFileId;
+                target.FaviconFileId = company.FaviconFileId;
             }
 
             await ctx.SaveChangesAsync();
@@ -94,6 +151,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
+            // Admin only, even for a manager's own company: taking a whole tenant offline is not
+            // something the tenant should be able to do to itself by accident.
+            if (!(await _companyAccess.GetCurrentAsync()).CanCreateCompanies)
+            {
+                return Result<bool>.Fail("You don't have permission to remove a company.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Company? company = await ctx.Companies.FirstOrDefaultAsync(x => x.Id == companyId);
@@ -161,6 +225,13 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<Location>.Fail("Company not found.");
             }
 
+            // Checked against the company the location is being saved *into*, so a manager
+            // cannot move or add a venue under a company they have no rights over.
+            if (!await _companyAccess.CanAdministerCompanyAsync(location.CompanyId))
+            {
+                return Result<Location>.Fail("You don't have permission to manage this company's venues.");
+            }
+
             bool nameTaken = await ctx.Locations.AnyAsync(x =>
                 x.CompanyId == location.CompanyId && x.Id != location.Id && x.Name == location.Name.Trim());
 
@@ -202,10 +273,48 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         }
     }
 
+    public async Task<Result<bool>> SetLocationOrderingEnabledAsync(int locationId, bool orderingEnabled)
+    {
+        try
+        {
+            // Turning a venue's ordering on or off is a write like any other on this page, and
+            // was the one that got missed when the rest were scoped.
+            if (!await _companyAccess.CanManageVenueOperationsAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Location? location = await ctx.Locations.FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (location is null)
+            {
+                return Result<bool>.Fail("Location not found.");
+            }
+
+            location.OrderingEnabled = orderingEnabled;
+            location.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to update ordering for location: {ex.Message}");
+        }
+    }
+
     public async Task<Result<bool>> DeactivateLocationAsync(int locationId)
     {
         try
         {
+            if (!await _companyAccess.CanAdministerLocationAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to remove this venue.");
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Location? location = await ctx.Locations.FirstOrDefaultAsync(x => x.Id == locationId);
@@ -225,6 +334,184 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to deactivate location: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<LocationOpeningHours>>> GetOpeningHoursAsync(int locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<LocationOpeningHours> hours = await ctx.LocationOpeningHours
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(h => h.LocationId == locationId)
+                .OrderBy(h => h.DayOfWeek)
+                .ThenBy(h => h.OpensAt)
+                .ToListAsync();
+
+            return Result<List<LocationOpeningHours>>.Ok(hours);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<LocationOpeningHours>>.Fail($"Failed to load opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<LocationOpeningHours>> AddOpeningHoursAsync(LocationOpeningHours hours)
+    {
+        try
+        {
+            if (!await _companyAccess.CanManageVenueOperationsAsync(hours.LocationId))
+            {
+                return Result<LocationOpeningHours>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Equal would mean a window with no time in it, which reads as "open" in the editor
+            // and accepts nothing in practice.
+            if (hours.ClosesAt <= hours.OpensAt)
+            {
+                return Result<LocationOpeningHours>.Fail("The closing time has to be after the opening time.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool overlaps = await ctx.LocationOpeningHours.AnyAsync(h =>
+                h.LocationId == hours.LocationId
+                && h.DayOfWeek == hours.DayOfWeek
+                && hours.OpensAt < h.ClosesAt
+                && h.OpensAt < hours.ClosesAt);
+
+            if (overlaps)
+            {
+                // Refused rather than merged: two overlapping windows are almost always a typo,
+                // and silently combining them hides which one was wrong.
+                return Result<LocationOpeningHours>.Fail("That overlaps a window already set for this day.");
+            }
+
+            LocationOpeningHours entity = new()
+            {
+                LocationId = hours.LocationId,
+                DayOfWeek = hours.DayOfWeek,
+                OpensAt = hours.OpensAt,
+                ClosesAt = hours.ClosesAt,
+                CreateDate = DateTime.UtcNow
+            };
+
+            await ctx.LocationOpeningHours.AddAsync(entity);
+            await ctx.SaveChangesAsync();
+
+            return Result<LocationOpeningHours>.Ok(entity);
+        }
+        catch (Exception ex)
+        {
+            return Result<LocationOpeningHours>.Fail($"Failed to add opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RemoveOpeningHoursAsync(int openingHoursId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            LocationOpeningHours? hours = await ctx.LocationOpeningHours
+                .FirstOrDefaultAsync(h => h.Id == openingHoursId);
+
+            if (hours is null)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            if (!await _companyAccess.CanManageVenueOperationsAsync(hours.LocationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Hard-deleted, unlike most things here: an opening window is a setting, not a
+            // record of anything that happened, and a soft-deleted one would still have to be
+            // filtered out of the overlap check above.
+            ctx.LocationOpeningHours.Remove(hours);
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to remove opening hours: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetLocationServiceSettingsAsync(
+        int locationId, OrderFulfilmentMode fulfilmentMode, Guid? receiptPrinterClientId, string timeZoneId)
+    {
+        try
+        {
+            if (!await _companyAccess.CanManageVenueOperationsAsync(locationId))
+            {
+                return Result<bool>.Fail("You don't have permission to change this venue.");
+            }
+
+            // Validated before saving: an unusable zone would silently push every opening window
+            // onto UTC, which in British summer is an hour out in the direction of staying open.
+            if (string.IsNullOrWhiteSpace(timeZoneId) || !IsKnownTimeZone(timeZoneId))
+            {
+                return Result<bool>.Fail("That time zone isn't one this server recognises.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Location? location = await ctx.Locations.FirstOrDefaultAsync(l => l.Id == locationId);
+
+            if (location is null)
+            {
+                return Result<bool>.Fail("Venue not found.");
+            }
+
+            // The kiosk has to be one of this venue's own. Permission on the venue is not enough
+            // on its own: without this check a kitchen manager could name any kiosk on the
+            // platform and have this venue's tickets - table, dishes, allergens and the
+            // customer's free-text note - come out of another company's printer.
+            if (receiptPrinterClientId is Guid printerClientId)
+            {
+                bool kioskIsAtThisVenue = await ctx.Clients
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(c => c.Id == printerClientId && c.LocationId == locationId);
+
+                if (!kioskIsAtThisVenue)
+                {
+                    return Result<bool>.Fail("That kiosk isn't assigned to this venue.");
+                }
+            }
+
+            location.FulfilmentMode = fulfilmentMode;
+            location.ReceiptPrinterClientId = receiptPrinterClientId;
+            location.TimeZoneId = timeZoneId;
+            location.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to save the venue's service settings: {ex.Message}");
+        }
+    }
+
+    private static bool IsKnownTimeZone(string timeZoneId)
+    {
+        try
+        {
+            TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+
+            return true;
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return false;
         }
     }
 
@@ -378,7 +665,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId, company.FaviconFileId));
         }
         catch (Exception ex)
         {
@@ -415,7 +702,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             Company company = companies[0];
 
             return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(
-                company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+                company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId, company.FaviconFileId));
         }
         catch (Exception ex)
         {
@@ -440,7 +727,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId, location.Company.FaviconFileId));
         }
         catch (Exception ex)
         {

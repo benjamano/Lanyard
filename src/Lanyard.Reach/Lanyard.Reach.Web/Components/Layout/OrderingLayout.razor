@@ -1,0 +1,31 @@
+@using Lanyard.Reach.Web.Services
+@inherits LayoutComponentBase
+@inject ITenantContext TenantContext
+
+@*
+    Deliberately not MainLayout: the marketing site's nav and footer are noise on a phone that
+    someone is holding at a table trying to order chips. This layout is the tenant's brand bar
+    and nothing else.
+*@
+
+<div class="ordering-shell">
+    <header class="ordering-shell__bar">
+        @if (TenantContext.IsResolved && TenantContext.Tenant.HasLogo)
+        {
+            <img class="ordering-shell__logo" src="/tenant-logo" alt="@TenantContext.Tenant.CompanyName" />
+        }
+        else if (TenantContext.IsResolved)
+        {
+            <span class="ordering-shell__wordmark">@TenantContext.Tenant.CompanyName</span>
+        }
+    </header>
+
+    <main class="ordering-shell__main">
+        @Body
+    </main>
+
+    @* Carried here as well as on MainLayout: the privacy link has to be reachable from where
+       personal data is actually collected, which is these pages rather than the placeholder
+       home page. *@
+    <Footer />
+</div>

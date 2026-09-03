@@ -17,7 +17,7 @@ public class TrainingBrandingResolverTests
         new(companyLocationServiceMock.Object, NullLogger<TrainingBrandingResolver>.Instance);
 
     private static Result<CompanyBrandingInfo> Branding(int companyId, string hex) =>
-        Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(companyId, hex, CompanyLogoId, null));
+        Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(companyId, hex, CompanyLogoId, null, null));
 
     [TestMethod]
     public async Task ResolveAsync_PrefersTheLearnersOwnCompany()

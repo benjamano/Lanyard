@@ -1,0 +1,33 @@
+/* Lives with the dialog, not with KitchenAdmin: Blazor scoped CSS is per-component, so rules
+   for this markup placed in the page's stylesheet would silently never apply. */
+
+/* Fourteen checkboxes, twice over - wrapped into columns rather than a 28-line list that
+   pushes the save button off the bottom of the dialog. */
+.menu-item-allergens {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 2px 10px;
+    width: 100%;
+}
+
+.menu-item-allergens-heading {
+    margin-top: 6px;
+}
+
+.menu-item-allergens-note {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+/* Both allergen grids scroll together inside a fixed height. Without this the dialog grew to
+   ~1400px - taller than a laptop viewport - and the confirm checkbox and Save button sat below
+   the fold, which matters more than usual here because nothing can be published without them. */
+.menu-item-allergens-scroll {
+    max-height: 230px;
+    overflow-y: auto;
+    width: 100%;
+    padding-right: 4px;
+    border: 1px solid var(--neutral-stroke-rest, #d9d9d9);
+    border-radius: 6px;
+    padding: 8px;
+}

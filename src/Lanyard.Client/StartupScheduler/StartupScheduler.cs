@@ -30,7 +30,7 @@ public static class StartupScheduler
         if (existingTask != null)
         {
             // The task already exists. Only keep it if it points at the watchdog exe we
-            // actually ship — older installs registered a stale path and silently failed
+            // actually ship. Older installs registered a stale path and silently failed
             // with "file not found" on logon. If it's stale, recreate it below.
             bool pointsAtCurrentWatchdog = existingTask.Definition.Actions
                 .OfType<ExecAction>()

@@ -1,0 +1,129 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Shared.Enum
+
+@*
+    One choice within a group: "Beans", "Peas", "Extra cheese".
+
+    Shown through IDialogService for the same reason AddMenuItemDialog is - an inline
+    <FluentDialog Hidden="false"> renders into the page but never becomes visible in Fluent v5.
+
+    It carries a full allergen declaration rather than inheriting the dish's, because a choice
+    genuinely changes what is in the meal. Declaring only on the parent would either overstate
+    every variant or understate some, and understating one is how somebody gets hurt.
+*@
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Options())" />
+            <FluentText Weight="TextWeight.Semibold" Size="@TextSize.Size700">Add a choice</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentTextInput @bind-Value="Name" Label="Name" Placeholder="Beans" Class="w-100" />
+
+            @* Almost always zero: swapping peas for beans costs nothing. Signed, so a cheaper
+               choice can discount rather than forcing every variant to price upward. *@
+            <FluentNumberInput @bind-Value="PriceDelta" Label="Extra cost (£, may be 0 or negative)"
+                               Step="0.10M" Class="w-100" />
+
+            <FluentText As="@TextTag.H5" Class="menu-item-allergens-heading">Allergens</FluentText>
+            <FluentText Class="menu-item-allergens-note">
+                Tick everything this choice contains. These are added to the dish's own allergens
+                on the customer's menu and on the kitchen ticket.
+            </FluentText>
+
+            <div class="menu-item-allergens-scroll">
+                <div class="menu-item-allergens">
+                    @foreach (Allergen allergen in AllergenExtensions.All)
+                    {
+                        <FluentCheckbox Value="@Contains(allergen)"
+                                        ValueChanged="@((bool v) => SetContains(allergen, v))"
+                                        Label="@allergen.DisplayName()" />
+                    }
+                </div>
+
+                <FluentText Class="menu-item-allergens-note">
+                    May contain (cross-contamination), a different claim from "contains", so kept separate.
+                </FluentText>
+
+                <div class="menu-item-allergens">
+                    @foreach (Allergen allergen in AllergenExtensions.All)
+                    {
+                        <FluentCheckbox Value="@MayContain(allergen)"
+                                        ValueChanged="@((bool v) => SetMayContain(allergen, v))"
+                                        Label="@allergen.DisplayName()" />
+                    }
+                </div>
+            </div>
+
+            <FluentCheckbox @bind-Value="AllergensConfirmed"
+                            Label="I confirm this choice's allergens are correct" />
+            <FluentText Class="menu-item-allergens-note">
+                Until this is ticked the choice is hidden from customers, exactly as an
+                unconfirmed dish is.
+            </FluentText>
+
+            @if (_error is not null)
+            {
+                <FluentText Color="Color.Error">@_error</FluentText>
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter] public int OptionGroupId { get; set; }
+
+    [Parameter] public int SortOrder { get; set; }
+
+    [CascadingParameter] public required IDialogInstance Dialog { get; set; }
+
+    private string Name { get; set; } = string.Empty;
+    private decimal PriceDelta { get; set; }
+    private Allergen ContainsAllergens { get; set; } = Allergen.None;
+    private Allergen MayContainAllergens { get; set; } = Allergen.None;
+    private bool AllergensConfirmed { get; set; }
+    private string? _error;
+
+    private bool Contains(Allergen allergen) => ContainsAllergens.HasFlag(allergen);
+
+    private bool MayContain(Allergen allergen) => MayContainAllergens.HasFlag(allergen);
+
+    private void SetContains(Allergen allergen, bool selected) =>
+        ContainsAllergens = selected ? ContainsAllergens | allergen : ContainsAllergens & ~allergen;
+
+    private void SetMayContain(Allergen allergen, bool selected) =>
+        MayContainAllergens = selected ? MayContainAllergens | allergen : MayContainAllergens & ~allergen;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            _error = "Give the choice a name.";
+
+            return;
+        }
+
+        // Entered in pounds, stored as integer pence, converted once here so nothing downstream
+        // ever holds a fractional price.
+        await Dialog.CloseAsync(new MenuItemOption
+        {
+            OptionGroupId = OptionGroupId,
+            Name = Name.Trim(),
+            PriceDeltaCents = (int)Math.Round(PriceDelta * 100, MidpointRounding.AwayFromZero),
+            IsAvailable = true,
+            SortOrder = SortOrder,
+            ContainsAllergens = ContainsAllergens,
+            MayContainAllergens = MayContainAllergens,
+            AllergensConfirmed = AllergensConfirmed
+        });
+    }
+
+    private async Task CancelAsync() => await Dialog.CancelAsync();
+}

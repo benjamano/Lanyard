@@ -1,0 +1,25 @@
+/* Lives with the component, not with CompanyLocationManager: Blazor scoped CSS is
+   per-component, so these rules placed in the page's stylesheet would silently never
+   apply - the same trap that left the allergen dialog unstyled. */
+
+.legal-doc {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 6px;
+}
+
+/* Quill sizes itself from its content and consistently under-measures its own toolbar,
+   which is what made the course editor overlap the buttons beneath it. Giving the host an
+   authoritative height and letting the editor fill what's left sidesteps the measurement
+   entirely.
+
+   Everything else - the flex layout and all the theme colours, including the toolbar icons
+   that are otherwise dark grey on a dark background - comes from the global
+   wwwroot/css/quill-theme.css via the quill-editor-host class on this div. */
+.legal-doc__editor {
+    height: 420px;
+}

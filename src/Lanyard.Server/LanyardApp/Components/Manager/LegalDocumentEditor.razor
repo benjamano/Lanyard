@@ -1,0 +1,274 @@
+@using Blazored.TextEditor
+@using Lanyard.Application.Services.Legal
+@using Lanyard.Infrastructure.DTO
+@using Lanyard.Shared
+@using Lanyard.Shared.Enum
+@using Microsoft.JSInterop
+@inject ICompanyLegalDocumentService _legalDocumentService
+
+@*
+    Edits the customer-facing legal documents for one company.
+
+    These used to live in Razor markup, so changing a refund window meant a deployment and every
+    company necessarily said the same thing. A company with no saved copy shows Lanyard's default
+    wording, which is also what "Reset to default" goes back to - so nothing had to be migrated
+    when this arrived, and a company that never edits still picks up improvements to the default.
+*@
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+    <FluentText As="@TextTag.H5">Customer-facing documents</FluentText>
+    <FluentText Class="clm-empty-note">
+        Published on this company's ordering site. Leave them alone to use Lanyard's wording,
+        or edit to make them your own.
+    </FluentText>
+
+    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
+        @foreach (LegalDocumentType type in _types)
+        {
+            <FluentButton Appearance="@(_selectedType == type ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                          OnClick="@(() => SelectAsync(type))">
+                @type.DisplayName()
+            </FluentButton>
+        }
+    </FluentStack>
+
+    @if (_selectedType is LegalDocumentType selected)
+    {
+        <div class="legal-doc">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8"
+                         VerticalAlignment="VerticalAlignment.Center">
+                <FluentText Weight="TextWeight.Semibold">@selected.DisplayName()</FluentText>
+                @if (_state.IsPublished)
+                {
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Published</FluentBadge>
+                }
+                else
+                {
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Warning">Not published</FluentBadge>
+                }
+                @if (!_state.IsCustomised)
+                {
+                    <FluentBadge Appearance="@BadgeAppearance.Outline">Lanyard's draft</FluentBadge>
+                }
+            </FluentStack>
+
+            <FluentText Class="clm-empty-note">
+                Lanyard's draft leaves blanks in [square brackets] for the parts only you can know.
+                Replace them, save, then publish. Customers see nothing until it's published, and
+                the venue can't take QR orders until all three are.
+            </FluentText>
+
+            <div class="legal-doc__editor quill-editor-host">
+                <BlazoredTextEditor @ref="_editor" Placeholder="Document text...">
+                    <ToolbarContent>
+                        <span class="ql-formats">
+                            <select class="ql-header">
+                                <option value="1"></option>
+                                <option value="2"></option>
+                                <option selected></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-bold"></button>
+                            <button class="ql-italic"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-list" value="ordered"></button>
+                            <button class="ql-list" value="bullet"></button>
+                        </span>
+                    </ToolbarContent>
+                    <EditorContent></EditorContent>
+                </BlazoredTextEditor>
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+                <FluentButton Appearance="ButtonAppearance.Primary" Loading="@_isSaving"
+                              IconStart="@(new Icons.Regular.Size20.Save())" OnClick="SaveAsync">
+                    Save document
+                </FluentButton>
+                @if (_state.IsPublished)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => SetPublishedAsync(false))">
+                        Unpublish
+                    </FluentButton>
+                }
+                else
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => SetPublishedAsync(true))">
+                        Publish
+                    </FluentButton>
+                }
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ResetAsync">
+                    Reset to draft
+                </FluentButton>
+            </FluentStack>
+        </div>
+    }
+</FluentStack>
+
+@code {
+    [Parameter, EditorRequired] public int CompanyId { get; set; }
+
+    private static readonly LegalDocumentType[] _types =
+    [
+        LegalDocumentType.OrderingTerms,
+        LegalDocumentType.RefundPolicy,
+        LegalDocumentType.PrivacyPolicy
+    ];
+
+    private LegalDocumentType? _selectedType;
+    private BlazoredTextEditor? _editor;
+    private DocumentState _state = new(false, false);
+    private bool _isSaving;
+
+    /// <summary>
+    /// What has actually been pushed into Quill, so the editor is loaded once per document
+    /// rather than on every render. Null means "the next render should load".
+    /// </summary>
+    private string? _loadedKey;
+    private string _pendingHtml = string.Empty;
+
+    private async Task SelectAsync(LegalDocumentType type)
+    {
+        if (_selectedType == type)
+        {
+            _selectedType = null;
+
+            return;
+        }
+
+        _selectedType = type;
+        _loadedKey = null;
+
+        Result<string> body = await _legalDocumentService.GetForEditingAsync(CompanyId, type);
+        Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
+
+        if (!body.IsSuccess || body.Data is null)
+        {
+            _toastService.ShowError(body.Error ?? "Couldn't load that document.");
+            _selectedType = null;
+
+            return;
+        }
+
+        _pendingHtml = body.Data;
+        _state = state.IsSuccess && state.Data is not null ? state.Data : new DocumentState(false, false);
+    }
+
+    // BlazoredTextEditor does not accept its content as a bound parameter - it has to be pushed
+    // in with LoadHTMLContent after the component has mounted. Same handling as CourseEditor,
+    // including the retry: Quill's JS side is not necessarily registered on the render pass
+    // straight after it mounts, and marking it loaded too early leaves a blank editor that then
+    // saves over the real document.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_selectedType is null || _editor is null || _loadedKey == BuildKey())
+        {
+            return;
+        }
+
+        try
+        {
+            await _editor.LoadHTMLContent(_pendingHtml);
+            _loadedKey = BuildKey();
+        }
+        catch (JSException)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private string BuildKey() => $"{CompanyId}:{_selectedType}";
+
+    private async Task SaveAsync()
+    {
+        if (_selectedType is not LegalDocumentType type || _editor is null)
+        {
+            return;
+        }
+
+        _isSaving = true;
+
+        try
+        {
+            string html = await _editor.GetHTML();
+
+            Result<bool> result = await _legalDocumentService.SaveAsync(CompanyId, type, html);
+
+            if (result.IsSuccess)
+            {
+                Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
+                _state = state.IsSuccess && state.Data is not null ? state.Data : _state;
+
+                _toastService.ShowSuccess(_state.IsPublished
+                    ? $"{type.DisplayName()} saved."
+                    : $"{type.DisplayName()} saved. Publish it when you're ready to show customers.");
+            }
+            else
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save that document.");
+            }
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task SetPublishedAsync(bool isPublished)
+    {
+        if (_selectedType is not LegalDocumentType type)
+        {
+            return;
+        }
+
+        Result<bool> result = await _legalDocumentService.SetPublishedAsync(CompanyId, type, isPublished);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't update the document.");
+
+            return;
+        }
+
+        Result<DocumentState> state = await _legalDocumentService.GetStateAsync(CompanyId, type);
+        _state = state.IsSuccess && state.Data is not null ? state.Data : _state;
+
+        _toastService.ShowSuccess(isPublished
+            ? $"{type.DisplayName()} is now live for customers."
+            : $"{type.DisplayName()} is no longer shown to customers.");
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_selectedType is not LegalDocumentType type)
+        {
+            return;
+        }
+
+        DialogResult confirmation = await _dialogService.ShowConfirmationAsync(
+            $"Reset the {type.DisplayName().ToLowerInvariant()} to Lanyard's draft? Your edits will be lost, "
+            + "and it will stop being shown to customers until you publish it again.",
+            "Reset", "Cancel", "Reset document");
+
+        if (confirmation.Cancelled)
+        {
+            return;
+        }
+
+        Result<bool> result = await _legalDocumentService.ResetToDefaultAsync(CompanyId, type);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't reset that document.");
+
+            return;
+        }
+
+        // Reloaded rather than assumed: the default wording is the source of truth for what the
+        // customer will now see, and pushing it back into the editor shows exactly that.
+        LegalDocumentType current = type;
+        _selectedType = null;
+        await SelectAsync(current);
+    }
+}

@@ -1,0 +1,140 @@
+@using Lanyard.Application.Services.Kitchen
+@using Lanyard.Shared.Enum
+@using Humanizer
+@implements IDisposable
+
+@inject IKitchenOrderService _kitchenOrderService
+
+@*
+    How the kitchen has done over a window, rather than what it is doing right now.
+
+    Polls rather than joining the live event stream: these figures move on completion, not on
+    every keystroke of activity, and a minute of staleness on a "served today" count is
+    invisible. The live queue widget next door is the one that needs pushes.
+*@
+
+<FluentCard Height="100%">
+    <div class="kitchen-stats">
+        <div class="kitchen-stats__header">
+            <span class="kitchen-stats__title">@(Widget.Title ?? "Kitchen")</span>
+            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
+                @PeriodLabel(Widget.StatsPeriod)
+            </FluentBadge>
+        </div>
+
+        @if (Widget.KitchenLocationId is null)
+        {
+            <div class="kitchen-stats__empty">
+                <FluentText Class="kitchen-stats__hint">
+                    Right-click to choose which venue's kitchen to report on.
+                </FluentText>
+            </div>
+        }
+        else if (_loadError is not null)
+        {
+            <div class="kitchen-stats__empty">
+                <FluentText Class="kitchen-stats__hint">@_loadError</FluentText>
+            </div>
+        }
+        else if (_stats is null)
+        {
+            <div class="kitchen-stats__empty">
+                <FluentText Class="kitchen-stats__hint">Loading…</FluentText>
+            </div>
+        }
+        else
+        {
+            <div class="kitchen-stats__figures">
+                <div class="kitchen-stats__figure">
+                    <span class="kitchen-stats__number">@_stats.ServedCount</span>
+                    <span class="kitchen-stats__label">served</span>
+                </div>
+
+                <div class="kitchen-stats__figure">
+                    @* Null is not zero. A kitchen that has served nothing yet has no average,
+                       and showing "0 min" would read as impossibly fast rather than as no data. *@
+                    <span class="kitchen-stats__number">@AverageLabel</span>
+                    <span class="kitchen-stats__label">avg wait</span>
+                </div>
+
+                @if (Widget.ShowTakings)
+                {
+                    <div class="kitchen-stats__figure">
+                        <span class="kitchen-stats__number">@Money(_stats.TakingsCents)</span>
+                        <span class="kitchen-stats__label">taken</span>
+                    </div>
+                }
+            </div>
+
+            @if (_stats.CancelledCount > 0 || _stats.RefundedCount > 0)
+            {
+                <div class="kitchen-stats__footnote">
+                    @_stats.CancelledCount cancelled@(_stats.RefundedCount > 0 ? $", {_stats.RefundedCount} refunded" : "")
+                </div>
+            }
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required KitchenStatsWidget Widget { get; set; }
+
+    private KitchenStats? _stats;
+    private string? _loadError;
+    private Timer? _timer;
+
+    private string AverageLabel => _stats?.AverageSecondsToReady is double seconds
+        ? TimeSpan.FromSeconds(seconds).Humanize(precision: 1)
+        : "N/A";
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(async _ =>
+        {
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Widget.KitchenLocationId is not int locationId)
+        {
+            _stats = null;
+
+            return;
+        }
+
+        Result<KitchenStats> result = await _kitchenOrderService.GetStatsAsync(locationId, Widget.StatsPeriod);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _stats = result.Data;
+            _loadError = null;
+        }
+        else
+        {
+            _loadError = "Couldn't load kitchen stats.";
+        }
+    }
+
+    private static string PeriodLabel(KitchenStatsPeriod period) => period switch
+    {
+        KitchenStatsPeriod.LastHour => "Last hour",
+        KitchenStatsPeriod.ThisWeek => "This week",
+        _ => "Today"
+    };
+
+    private static string Money(int cents) => $"£{cents / 100m:0.00}";
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

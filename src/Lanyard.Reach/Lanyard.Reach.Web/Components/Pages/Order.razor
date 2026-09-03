@@ -1,0 +1,124 @@
+@page "/order/t/{TableToken}"
+@using Lanyard.Reach.Web.Client.Ordering
+@using Lanyard.Reach.Web.Services
+@using Lanyard.Shared.DTO
+@layout OrderingLayout
+@inject ITenantContext TenantContext
+@inject LanyardOrderingClient OrderingClient
+
+@*
+    The page a customer lands on after scanning the QR code on their table.
+
+    The venue and table are resolved server-side and rendered immediately, so the customer sees
+    where they are before any framework has downloaded. Everything interactive - menu, basket,
+    checkout, live status - is the WebAssembly island below.
+*@
+
+<PageTitle>@PageHeading</PageTitle>
+
+<HeadContent>
+    @* A table-specific ordering page has nothing to offer a search engine, and every reason
+       not to be indexed: the URL is effectively a table's identifier. *@
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+@if (_outcome == OrderingApiOutcome.RateLimited)
+{
+    @* Deliberately not the "we couldn't find this table" panel. Being throttled is transient,
+       and telling a customer their QR code is wrong sends them off to find a member of staff
+       over a code that works perfectly. *@
+    <div class="ordering__status-panel">
+        <h1>Just a moment</h1>
+        <p>We're a bit busy right now. Give it a few seconds and refresh the page.</p>
+        <button class="ordering__button ordering__button--primary ordering__status-panel__action" onclick="window.location.reload()">Try again</button>
+    </div>
+}
+else if (_outcome is OrderingApiOutcome.Unavailable or OrderingApiOutcome.Unauthorized)
+{
+    <div class="ordering__status-panel">
+        <h1>We can't load the menu</h1>
+        <p>Something's gone wrong at our end. Please try again shortly, or order at the till.</p>
+        <button class="ordering__button ordering__button--primary ordering__status-panel__action" onclick="window.location.reload()">Try again</button>
+    </div>
+}
+else if (_table is null)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>We couldn't find this table</h1>
+        <p>
+            This code may have been replaced. Please order at the till, or ask a member of staff
+            for a hand.
+        </p>
+    </div>
+}
+else if (!_table.OrderingEnabled)
+{
+    <div class="ordering__status-panel ordering__status-panel--error">
+        <h1>Ordering isn't available here</h1>
+        <p>@_table.LocationName isn't taking orders from your phone at the moment. Please order at the till.</p>
+    </div>
+}
+else
+{
+    <header class="ordering__header">
+        <p class="ordering__venue">@_table.LocationName</p>
+        <h1 class="ordering__table">@_table.TableLabel</h1>
+    </header>
+
+    @* A closed venue is handed to the island too, rather than replaced with a static panel here.
+       Someone who paid at 16:55 for food arriving at 17:05 still has a live order in this
+       phone's storage, and the tracker that shows it exists only inside the island - closing
+       time must not make a paid order disappear. Only the island can see that storage, so only
+       it can choose between "we're closed" and "your food is on its way". *@
+
+    @* Prerendering is off deliberately. The island's first job is to read the basket out of
+       localStorage, which does not exist on the server - prerendering would paint an empty
+       basket and then visibly correct itself a moment later. *@
+    <OrderingApp TableToken="@TableToken"
+                 ClosedMessage="@ClosedMessage"
+                 @rendermode="@(new InteractiveWebAssemblyRenderMode(prerender: false))" />
+}
+
+@code {
+    [Parameter] public string TableToken { get; set; } = string.Empty;
+
+    private TableResolutionDto? _table;
+    private OrderingApiOutcome _outcome = OrderingApiOutcome.NotFound;
+
+    /// <summary>
+    /// The closed-for-orders wording, or null when the venue is taking orders. Never null-but-open:
+    /// a null OrderingOpen means the server could not tell, and the endpoint answers 503 for that
+    /// rather than letting it reach here as a closure.
+    /// </summary>
+    private string? ClosedMessage => _table?.OrderingOpen == false
+        ? string.IsNullOrWhiteSpace(_table.ClosedMessage)
+            ? "We're not taking orders just now."
+            : _table.ClosedMessage
+        : null;
+
+    private string PageHeading => _table is null
+        ? "Order"
+        : $"{_table.TableLabel} · {_table.LocationName}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!TenantContext.IsResolved)
+        {
+            // An unresolved tenant is not evidence that the table code is wrong. If we could not
+            // reach the Lanyard server, or it refused us, say so rather than sending the customer
+            // to find a member of staff about a QR code that is working perfectly.
+            _outcome = TenantContext.Failure == TenantResolutionFailure.ServerUnavailable
+                ? OrderingApiOutcome.Unavailable
+                : OrderingApiOutcome.NotFound;
+
+            return;
+        }
+
+        OrderingApiResult<TableResolutionDto> result = await OrderingClient.GetAsync<TableResolutionDto>(
+            $"api/ordering/tables/{Uri.EscapeDataString(TableToken)}?companyId={TenantContext.Tenant.CompanyId}",
+            CancellationToken.None);
+
+        _table = result.Value;
+        _outcome = result.Outcome;
+    }
+}

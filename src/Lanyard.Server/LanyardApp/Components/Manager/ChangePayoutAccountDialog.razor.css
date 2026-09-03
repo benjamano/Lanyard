@@ -1,0 +1,6 @@
+/* Lives with the dialog: Blazor scoped CSS is per-component, so these rules in the
+   page's stylesheet would silently never apply. */
+.payout-dialog__note {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}

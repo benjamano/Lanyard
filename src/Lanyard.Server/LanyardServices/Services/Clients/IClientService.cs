@@ -18,6 +18,13 @@ public interface IClientService
     Task<Result<Client?>> UpdateClientAsync(Client updatedClient);
     Task<Result<IEnumerable<Client>>> GetConnectedClientsAsync();
     Task<Result<IEnumerable<ClientConnectedDTO>>> GetClientsAsync();
+
+    /// <summary>
+    /// The kiosks assigned to one venue. Unlike <see cref="GetClientsAsync"/> this is scoped, and
+    /// is what any tenant-facing screen must use: the unscoped list is every kiosk on the
+    /// platform, which is only ever safe to show an administrator.
+    /// </summary>
+    Task<Result<IEnumerable<ClientConnectedDTO>>> GetClientsForLocationAsync(int locationId);
     Task<Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>>> GetClientsWithCapabilitiesAsync();
     Task<Result<IEnumerable<ClientProjectionSettings>>> GetClientProjectionSettingsAsync(Guid clientId);
     Task<Result<Guid>> GetClientIdFromConnectionIdAsync(string connectionId);

@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -16,13 +17,14 @@ public class CompanyLocationServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-    private static CompanyLocationService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static CompanyLocationService GetService(
+        DbContextOptions<ApplicationDbContext> options, ICompanyAccessService? access = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new CompanyLocationService(factoryMock.Object);
+        return new CompanyLocationService(factoryMock.Object, access ?? CompanyAccessMocks.Admin());
     }
 
     private static async Task<(Company company, Location location)> SeedCompanyAndLocationAsync(
@@ -424,5 +426,89 @@ public class CompanyLocationServiceTests
         Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingForLocationAsync(location.Id);
 
         Assert.IsFalse(result.Success);
+    }
+
+    /// <summary>
+    /// The receipt printer is the one setting on this screen that names a piece of hardware, and
+    /// a kiosk carries a venue's tickets - table, dishes, allergens and the customer's own note -
+    /// out onto paper. Permission over the venue is not permission over every kiosk in the estate.
+    /// </summary>
+    [TestMethod]
+    public async Task SetLocationServiceSettings_RejectsAKioskBelongingToAnotherVenue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        (Company _, Location ours) = await SeedCompanyAndLocationAsync(options);
+        (Company _, Location theirs) = await SeedCompanyAndLocationAsync(options, "Rival Leisure", "Norwich");
+
+        Guid theirKioskId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Clients.Add(new Client { Id = theirKioskId, Name = "Norwich kitchen", LocationId = theirs.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await service.SetLocationServiceSettingsAsync(
+            ours.Id, OrderFulfilmentMode.TableService, theirKioskId, "Europe/London");
+
+        Assert.IsFalse(result.IsSuccess);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Location saved = await ctx.Locations.SingleAsync(l => l.Id == ours.Id);
+
+            Assert.IsNull(saved.ReceiptPrinterClientId);
+
+            // The whole save is refused, not just the printer part of it, so a rejected write
+            // cannot leave the venue half-configured.
+            Assert.AreEqual(OrderFulfilmentMode.CollectAtCounter, saved.FulfilmentMode);
+        }
+    }
+
+    [TestMethod]
+    public async Task SetLocationServiceSettings_AcceptsAKioskAssignedToThisVenue()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        (Company _, Location ours) = await SeedCompanyAndLocationAsync(options);
+
+        Guid ourKioskId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Clients.Add(new Client { Id = ourKioskId, Name = "Ipswich kitchen", LocationId = ours.Id });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await service.SetLocationServiceSettingsAsync(
+            ours.Id, OrderFulfilmentMode.TableService, ourKioskId, "Europe/London");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Location saved = await ctx.Locations.SingleAsync(l => l.Id == ours.Id);
+
+            Assert.AreEqual(ourKioskId, saved.ReceiptPrinterClientId);
+            Assert.AreEqual(OrderFulfilmentMode.TableService, saved.FulfilmentMode);
+        }
+    }
+
+    /// <summary>Clearing the printer is always allowed; there is no kiosk to vouch for.</summary>
+    [TestMethod]
+    public async Task SetLocationServiceSettings_AllowsClearingThePrinter()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CompanyLocationService service = GetService(options);
+
+        (Company _, Location ours) = await SeedCompanyAndLocationAsync(options);
+
+        Result<bool> result = await service.SetLocationServiceSettingsAsync(
+            ours.Id, OrderFulfilmentMode.CollectAtCounter, null, "Europe/London");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
     }
 }

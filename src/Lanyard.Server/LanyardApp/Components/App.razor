@@ -34,6 +34,8 @@
     <script src="@Assets["js/kioskWidgetEditor.js"]"></script>
     <link rel="stylesheet" href="@Assets["Lanyard.App.styles.css"]" />
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
+    @* After Quill's own stylesheet, so these override its hardcoded light-theme greys. *@
+    <link rel="stylesheet" href="@Assets["css/quill-theme.css"]" />
     <HeadOutlet @rendermode="PageRenderMode" />
 
     <style>

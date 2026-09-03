@@ -1,0 +1,28 @@
+<Project>
+
+  <!--
+    Repo-wide build settings. Imported automatically by every project beneath this directory,
+    so a newly added project inherits them without anyone remembering to copy them across.
+  -->
+
+  <PropertyGroup>
+    <!--
+      RZ10012: "Found markup element with unexpected name 'X'. If this is intended to be a
+      component, add a @using directive for its namespace."
+
+      An error rather than a warning because Razor's default behaviour here is to emit the
+      unresolved tag into the page as literal HTML. The build succeeds, the app starts, and the
+      component silently renders as an unknown element - so the failure shows up as a blank or
+      half-drawn screen at runtime instead of at compile time.
+
+      That is not hypothetical: KitchenDisplay.razor once shipped a <KitchenTicketCard> that was
+      missing its @using, and the kitchen page rendered every ticket's action buttons with none
+      of the ticket bodies. Nothing in the build output said so above the warning line.
+
+      Applies to every project; it is only ever emitted for Razor compilation, so it is inert
+      for the WPF client, the tests and the class libraries.
+    -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

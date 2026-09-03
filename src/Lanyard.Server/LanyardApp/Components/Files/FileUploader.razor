@@ -30,6 +30,24 @@
                 <br />
                 <em>Maximum file size: @(MaximumFileSize / (1024 * 1024)) MB.</em>
             </div>
+
+            @* Only when there is something to remove and the caller has said what removing
+               means. Callers that pass no OnCleared get the component exactly as before.
+
+               The wrapper stops the click reaching the dropzone: the whole drop area opens the
+               file picker, so without this "Remove" would clear the file and immediately ask for
+               a new one. *@
+            @if (PreviewUrl is not null && OnCleared.HasDelegate)
+            {
+                <div class="file-uploader-clear" @onclick:stopPropagation="true">
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                  Title="@($"Remove the current {ClearLabel}")"
+                                  OnClick="@(async () => await OnCleared.InvokeAsync())">
+                        Remove
+                    </FluentButton>
+                </div>
+            }
         </ChildContent>
     </FluentInputFile>
 </div>
@@ -50,6 +68,20 @@
     // already-saved value vs. one just uploaded this session), so callers that want a
     // preview pass a URL and update it themselves from OnFileUploaded's FileMetadata.
     [Parameter] public string? PreviewUrl { get; set; }
+
+    /// <summary>
+    /// What "remove the current file" means to the caller. Supplying it puts a Remove button on
+    /// the dropzone itself; leaving it unset shows nothing, so callers with no notion of clearing
+    /// are unaffected.
+    ///
+    /// Here rather than as a separate button next to the uploader because that is where a person
+    /// looks for it: the control that shows the current image is the control that should let you
+    /// take it away.
+    /// </summary>
+    [Parameter] public EventCallback OnCleared { get; set; }
+
+    /// <summary>Names the thing in the Remove button's tooltip, for screen readers and hovers.</summary>
+    [Parameter] public string ClearLabel { get; set; } = "file";
 
     int ProgressPercent = 0;
     FluentInputFileEventArgs[] Files = Array.Empty<FluentInputFileEventArgs>();

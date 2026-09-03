@@ -1,0 +1,29 @@
+@page "/"
+@using Lanyard.Reach.Web.Services
+@layout MainLayout
+@inject ITenantContext TenantContext
+
+@*
+    The placeholder that stands in for the customer site until there is one.
+
+    Ordering is live and reachable at /order/t/{token} from a printed QR code, so this page
+    deliberately does not link to it: a table's code is how you get a table's menu, and a "start
+    an order" button here could only ever guess which table someone is sitting at.
+*@
+
+<PageTitle>@(TenantContext.IsResolved ? TenantContext.Tenant.CompanyName : "Coming soon")</PageTitle>
+
+<HeadContent>
+    @* Nothing here is worth indexing yet, and a placeholder ranking for a venue's name would be
+       worse than no result at all. Removed when there is a real site to index. *@
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+<div class="ordering__status-panel">
+    <h1>@(TenantContext.IsResolved ? $"{TenantContext.Tenant.CompanyName} online" : "Coming soon")</h1>
+    <p>
+        We're building this site. There's nothing to see here just yet, but food ordering is
+        already up and running: scan the QR code on your table to see the menu and order from
+        your phone.
+    </p>
+</div>
