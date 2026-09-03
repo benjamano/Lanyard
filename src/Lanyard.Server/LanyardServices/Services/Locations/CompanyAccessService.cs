@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -144,14 +144,28 @@ public class CompanyAccessService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            // Membership of this venue specifically, not of its company: the role is granted per
-            // kitchen, and someone who works one site should not be running another's hours.
+            // Scoped to the company, deliberately, because that is exactly what the venue picker
+            // on every kitchen screen shows: VisibleLocations returns the user's whole company.
+            // Requiring membership of the one venue instead would put back the fault this method
+            // was added to remove - a populated picker where half the entries refuse to save.
+            int? targetCompanyId = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(l => l.Id == locationId && l.IsActive)
+                .Select(l => (int?)l.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (targetCompanyId is not int companyId)
+            {
+                return false;
+            }
+
             return await ctx.UserLocationMemberships
                 .AsNoTracking()
                 .TagWithCallSite()
                 .AnyAsync(m => m.UserId == userId
-                    && m.LocationId == locationId
-                    && m.Location!.IsActive
+                    && m.Location!.CompanyId == companyId
+                    && m.Location.IsActive
                     && m.Location.Company!.IsActive);
         }
         catch (Exception ex)
