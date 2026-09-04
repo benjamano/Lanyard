@@ -231,5 +231,17 @@
       "The Skip button action can be set to skip to either the next or the previous step.",
       "These new button actions are Admin/Manager-only, matching the existing projection trigger button."
     ]
+  },
+  {
+    "version": "1.3.17",
+    "releaseDate": "2026-09-02",
+    "summary": "Fixed kiosk commands being slow or dropped, and a laser game dashboard widget getting stuck on a finished game's countdown.",
+    "details": [
+      "Fixed Play, Pause, Seek, volume, and song-change commands sometimes taking several seconds to reach a kiosk, getting slower the longer the kiosk had been running.",
+      "Fixed the kiosk occasionally losing its connection to the server and not automatically reconnecting.",
+      "Fixed the laser game status widget sometimes getting stuck showing a finished game's countdown timer instead of clearing when the game ends.",
+      "Fixed laser game starts sometimes being detected a moment later than they actually happened.",
+      "Fixed an issue where reloading a dashboard mid-song (for example after a mobile browser reconnects) could cause an unwanted jump in playback."
+    ]
   }
 ]
