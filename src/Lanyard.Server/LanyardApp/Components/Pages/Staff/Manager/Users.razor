@@ -1,12 +1,7 @@
 ﻿@page "/manage/users"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
-@using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Manager
 @using Lanyard.Application.Services.Authentication
-@using Lanyard.Application.Services.Gdpr
-
-@inject INotificationService ToastService
-@inject IGdprService _gdprService
 
 <PageTitle>User Management</PageTitle>
 
@@ -118,124 +113,20 @@
         }
     }
 
+    // The dialog performs its own actions (edit, password, unlock, delete, etc.) directly against
+    // the services - it doesn't report back what happened, so just refresh unconditionally once
+    // it's closed. Cheap query, and covers every action a tab could have taken.
     private async Task OpenUserActionsDialog(UserProfile user)
     {
-        DialogResult result = await _dialogService.ShowDialogAsync<UserActionsDialog>(options =>
+        await _dialogService.ShowDialogAsync<UserActionsDialog>(options =>
         {
             options.Header.Title = user.GetName();
-            options.Width = "min(400px, 95vw)";
+            options.Width = "min(520px, 95vw)";
             options.Modal = true;
             options.Parameters.Add(nameof(UserActionsDialog.Content), user);
         });
 
-        if (result.Cancelled || result.Value is not UserActionsDialog.UserAction action)
-        {
-            return;
-        }
-
-        switch (action)
-        {
-            case UserActionsDialog.UserAction.Edit:
-                await OpenEditUserDialog(user);
-                break;
-            case UserActionsDialog.UserAction.ChangePassword:
-                await OpenChangePasswordDialog(user);
-                break;
-            case UserActionsDialog.UserAction.SendPasswordEmail:
-                await SendSetPasswordLink(user);
-                break;
-            case UserActionsDialog.UserAction.Unlock:
-                await UnlockUser(user);
-                break;
-            case UserActionsDialog.UserAction.GdprErase:
-                await ConfirmGdprEraseUser(user);
-                break;
-            case UserActionsDialog.UserAction.Delete:
-                await ConfirmDeleteUser(user);
-                break;
-        }
-    }
-
-    private async Task ConfirmDeleteUser(UserProfile user)
-    {
-        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
-        {
-            options.Header.Title = "Are you sure?";
-            options.Width = "500px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
-        });
-
-        if (!result.Cancelled)
-        {
-            await _securityService.DeleteUserAsync(user.Id);
-            await GetUsers();
-        }
-    }
-
-    private async Task ConfirmGdprEraseUser(UserProfile user)
-    {
-        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
-        {
-            options.Header.Title = "Erase User Data (GDPR)";
-            options.Width = "500px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Message),
-                $"This will permanently remove {user.GetName()}'s personal data and delete their account. " +
-                "Content they authored will be kept but no longer attributed to them. This cannot be undone.");
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.ConfirmLabel), "Erase Data");
-        });
-
-        if (!result.Cancelled)
-        {
-            Result<bool> eraseResult = await _gdprService.EraseUserDataAsync(user.Id);
-
-            if (!eraseResult.IsSuccess)
-            {
-                ToastService.ShowError(eraseResult.Error ?? "Failed to erase user data.");
-            }
-
-            await GetUsers();
-        }
-    }
-
-    private async Task OpenEditUserDialog(UserProfile user)
-    {
-        if (user is null)
-        {
-            ToastService.ShowError("Unable to load user profile.");
-            return;
-        }
-
-        DialogResult result = await _dialogService.ShowDialogAsync<EditUserDialog>(options =>
-        {
-            options.Width = "500px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(EditUserDialog.Content), user);
-        });
-
-        if (result.Value is true)
-        {
-            await GetUsers();
-        }
-    }
-
-    private async Task OpenChangePasswordDialog(UserProfile user)
-    {
-        if (user is null)
-        {
-            ToastService.ShowError("Unable to load user profile.");
-            return;
-        }
-
-        await _dialogService.ShowDialogAsync<ChangePasswordDialog>(options =>
-        {
-            options.Header.Title = "Change Password";
-            options.Width = "500px";
-            options.Modal = true;
-            options.Parameters.Add(nameof(ChangePasswordDialog.Content), user);
-        });
+        await GetUsers();
     }
 
     // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
@@ -243,39 +134,4 @@
     // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
     private static bool IsLockedOut(UserProfile user) =>
         user.LockoutEnabled && user.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
-
-    private async Task UnlockUser(UserProfile user)
-    {
-        Result<bool> result = await _securityService.UnlockUserAsync(user.Id);
-
-        if (result.IsSuccess)
-        {
-            ToastService.ShowSuccess($"{user.GetName()}'s account has been unlocked.");
-        }
-        else
-        {
-            ToastService.ShowError(result.Error ?? "Failed to unlock account.");
-        }
-
-        await GetUsers();
-    }
-
-    private async Task SendSetPasswordLink(UserProfile user)
-    {
-        bool wasPending = user.PasswordSetDate is null;
-        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(user.Id);
-
-        if (result.IsSuccess)
-        {
-            ToastService.ShowSuccess(wasPending
-                ? $"Invite resent to {user.Email}."
-                : $"Password reset email sent to {user.Email}.");
-        }
-        else
-        {
-            ToastService.ShowError($"Failed to send email: {result.Error}");
-        }
-
-        await GetUsers();
-    }
 }
