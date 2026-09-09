@@ -1,0 +1,69 @@
+@using Lanyard.Application.Services.Authentication
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-actions-dialog">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Edit()"
+                          OnClick="@(() => CloseWith(UserAction.Edit))">Edit User</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Key()"
+                          OnClick="@(() => CloseWith(UserAction.ChangePassword))">Change Password</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.MailArrowClockwise()"
+                          OnClick="@(() => CloseWith(UserAction.SendPasswordEmail))">
+                @(Content?.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")
+            </FluentButton>
+            @if (IsLockedOut)
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.LockOpen()"
+                              OnClick="@(() => CloseWith(UserAction.Unlock))">Unlock Account</FluentButton>
+            }
+            <AuthorizeView Roles="Admin" Context="authContext">
+                <Authorized>
+                    <FluentButton Appearance="ButtonAppearance.Outline" Color="Color.Error"
+                                  IconStart="new Icons.Regular.Size20.PersonDelete()"
+                                  OnClick="@(() => CloseWith(UserAction.GdprErase))">Delete User Data (GDPR)</FluentButton>
+                </Authorized>
+            </AuthorizeView>
+            <FluentDivider Style="width: 100%;" />
+            <FluentButton Appearance="ButtonAppearance.Outline" Color="Color.Error"
+                          IconStart="new Icons.Regular.Size20.Delete()"
+                          OnClick="@(() => CloseWith(UserAction.Delete))">Delete User</FluentButton>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    public enum UserAction
+    {
+        Edit,
+        ChangePassword,
+        SendPasswordEmail,
+        Unlock,
+        GdprErase,
+        Delete
+    }
+
+    [Parameter]
+    public UserProfile? Content { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
+    // an account with lockout disabled can still carry a stale LockoutEnd from before it was
+    // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
+    private bool IsLockedOut =>
+        Content is not null && Content.LockoutEnabled && Content.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
+
+    private async Task CloseWith(UserAction action)
+    {
+        await Dialog.CloseAsync(action);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

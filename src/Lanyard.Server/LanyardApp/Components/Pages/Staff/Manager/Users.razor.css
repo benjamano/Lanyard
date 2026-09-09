@@ -1,0 +1,20 @@
+.users-grid-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+::deep .fluent-data-grid-row {
+    cursor: pointer;
+}
+
+@media (max-width: 599px) {
+    ::deep .users-col-username,
+    ::deep .users-col-email {
+        display: none;
+    }
+
+    ::deep .users-grid {
+        grid-template-columns: 0px 1.2fr 0px 1fr !important;
+    }
+}

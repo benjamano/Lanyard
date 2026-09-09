@@ -231,5 +231,14 @@
       "The Skip button action can be set to skip to either the next or the previous step.",
       "These new button actions are Admin/Manager-only, matching the existing projection trigger button."
     ]
+  },
+  {
+    "version": "1.3.17",
+    "releaseDate": "2026-09-09",
+    "summary": "Made the User Management page more mobile-friendly.",
+    "details": [
+      "Tapping a user row now opens a dialog with all of that user's actions (edit, change password, resend invite, unlock, delete, etc.) instead of a row of small icons.",
+      "The Username and Email columns now hide on narrow screens to keep the table readable on a phone."
+    ]
   }
 ]

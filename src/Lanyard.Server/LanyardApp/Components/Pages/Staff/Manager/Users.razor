@@ -25,45 +25,26 @@
         </FluentStack>
     </FluentStack>
 
-    <FluentDataGrid Pagination="@pagination"
-                    Items="@filteredUsers.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr 1fr 1fr"
-                    Style="width: 100%;">
-        <EmptyContent>
-            No Users Found
-        </EmptyContent>
-        <ChildContent>
-            <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" Sortable="true" />
-            <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" Sortable="true"
-                            IsDefaultSortColumn="true" />
-            <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" Sortable="true" />
-            <PropertyColumn Property="@(r => IsLockedOut(r) ? "Locked" : r.PasswordSetDate == null ? "Invite Pending" : "Active")"
-                            Title="Status" Sortable="true" />
-            <TemplateColumn Title="Actions">
-                <div class="d-flex align-items-center">
-                    <FluentIcon Icon="Icons.Regular.Size20.Edit" Color="Color.Primary"
-                                OnClick="@(() => OpenEditUserDialog(context))" title="Edit User" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Delete" Color="Color.Error"
-                                OnClick="@(() => ConfirmDeleteUser(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.Key" Color="Color.Primary"
-                                OnClick="@(() => OpenChangePasswordDialog(context))" />
-                    <FluentIcon Icon="Icons.Regular.Size20.MailArrowClockwise" Color="Color.Primary"
-                                OnClick="@(() => SendSetPasswordLink(context))"
-                                title="@(context.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email")" />
-                    @if (IsLockedOut(context))
-                    {
-                        <FluentIcon Icon="Icons.Regular.Size20.LockOpen" Color="Color.Warning"
-                                    OnClick="@(() => UnlockUser(context))" title="Unlock Account" />
-                    }
-                    <AuthorizeView Roles="Admin" Context="authContext">
-                        <Authorized>
-                            <FluentIcon Icon="Icons.Regular.Size20.PersonDelete" Color="Color.Error"
-                                        OnClick="@(() => ConfirmGdprEraseUser(context))" title="Delete User Data (GDPR)" />
-                        </Authorized>
-                    </AuthorizeView>
-                </div>
-            </TemplateColumn>
-        </ChildContent>
-    </FluentDataGrid>
+    <div class="users-grid-wrapper">
+        <FluentDataGrid Pagination="@pagination" ShowHover="true" TGridItem="UserProfile"
+                        Items="@filteredUsers.AsQueryable()" GridTemplateColumns="1fr 1.2fr 1.2fr 1fr"
+                        OnRowClick="@((row) => OpenUserActionsDialog(row.Item!))"
+                        Style="width: 100%;" Class="users-grid">
+            <EmptyContent>
+                No Users Found
+            </EmptyContent>
+            <ChildContent>
+                <PropertyColumn Property="@(r => r.UserName ?? string.Empty)" Title="Username" Sortable="true"
+                                Class="users-col-username" />
+                <PropertyColumn Property="@(r => r.GetName() ?? string.Empty)" Title="Name" Sortable="true"
+                                IsDefaultSortColumn="true" />
+                <PropertyColumn Property="@(r => r.Email ?? "Not Set")" Title="Email Address" Sortable="true"
+                                Class="users-col-email" />
+                <PropertyColumn Property="@(r => IsLockedOut(r) ? "Locked" : r.PasswordSetDate == null ? "Invite Pending" : "Active")"
+                                Title="Status" Sortable="true" />
+            </ChildContent>
+        </FluentDataGrid>
+    </div>
 
     <FluentPaginator State="@pagination" />
 </FluentCard>
@@ -134,6 +115,44 @@
         if (result.Value is true)
         {
             await GetUsers();
+        }
+    }
+
+    private async Task OpenUserActionsDialog(UserProfile user)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<UserActionsDialog>(options =>
+        {
+            options.Header.Title = user.GetName();
+            options.Width = "min(400px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(UserActionsDialog.Content), user);
+        });
+
+        if (result.Cancelled || result.Value is not UserActionsDialog.UserAction action)
+        {
+            return;
+        }
+
+        switch (action)
+        {
+            case UserActionsDialog.UserAction.Edit:
+                await OpenEditUserDialog(user);
+                break;
+            case UserActionsDialog.UserAction.ChangePassword:
+                await OpenChangePasswordDialog(user);
+                break;
+            case UserActionsDialog.UserAction.SendPasswordEmail:
+                await SendSetPasswordLink(user);
+                break;
+            case UserActionsDialog.UserAction.Unlock:
+                await UnlockUser(user);
+                break;
+            case UserActionsDialog.UserAction.GdprErase:
+                await ConfirmGdprEraseUser(user);
+                break;
+            case UserActionsDialog.UserAction.Delete:
+                await ConfirmDeleteUser(user);
+                break;
         }
     }
 
