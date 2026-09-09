@@ -1,0 +1,4 @@
+.fixture-swatch circle {
+    stroke: var(--colorNeutralStroke1, #8a8886);
+    stroke-width: 2px;
+}

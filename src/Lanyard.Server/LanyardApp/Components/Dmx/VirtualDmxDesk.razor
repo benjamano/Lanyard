@@ -4,43 +4,51 @@
 
 @inject IDmxService _dmxService
 @inject IDmxSceneService _dmxSceneService
+@inject IDmxFixtureService _dmxFixtureService
 @inject INotificationService _toastService
 
 <FluentCard Height="auto" Class="p-0 mt-2" Appearance="CardAppearance.Default">
-    <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
-                        Style="overflow-x: auto; scrollbar-width: auto;"
-                        Class="p-4 ps-0 pt-0">
-            @foreach (KeyValuePair<int, int> channel in channelValues)
-            {
-                <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1">
-                    <FluentStack Orientation="Orientation.Vertical"
-                                HorizontalAlignment="HorizontalAlignment.Center"
-                                VerticalGap="2"
-                                VerticalAlignment="VerticalAlignment.Center">
-                        <FluentSlider Label="@channel.Key.ToString()"
-                                        Message="@channel.Value.ToString()"
-                                        Orientation="Orientation.Vertical"
-                                        Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                        TValue="@int"
-                                        Value="@(channel.Value)"
-                                        Min="0" 
-                                        Max="255"
-                                        ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
-                                        Style="height: 300px; Width: 40px;"
-                                        ImmediateDelay="20"
-                                        Class="d-flex flex-column gap-3">
-                        </FluentSlider>
-                        <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                        Appearance="ButtonAppearance.Default"
-                                        OnClick="() => UpdateChannelValue(0, channel.Key)"
-                                        Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                        Class="mt-2" />
-                    </FluentStack>
-                </FluentCard>
-            }
+    @if (ShowFixturePreview)
+    {
+        <DmxFixturePreview Fixtures="@fixtures" ChannelValues="@channelValuesAsBytes" />
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
+                            Style="overflow-x: auto; scrollbar-width: auto;"
+                            Class="p-4 ps-0 pt-0">
+                @foreach (KeyValuePair<int, int> channel in channelValues)
+                {
+                    <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1">
+                        <FluentStack Orientation="Orientation.Vertical"
+                                    HorizontalAlignment="HorizontalAlignment.Center"
+                                    VerticalGap="2"
+                                    VerticalAlignment="VerticalAlignment.Center">
+                            <FluentSlider Label="@channel.Key.ToString()"
+                                            Message="@channel.Value.ToString()"
+                                            Orientation="Orientation.Vertical"
+                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                                            TValue="@int"
+                                            Value="@(channel.Value)"
+                                            Min="0"
+                                            Max="255"
+                                            ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
+                                            Style="height: 300px; Width: 40px;"
+                                            ImmediateDelay="20"
+                                            Class="d-flex flex-column gap-3">
+                            </FluentSlider>
+                            <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                                            Appearance="ButtonAppearance.Default"
+                                            OnClick="() => UpdateChannelValue(0, channel.Key)"
+                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
+                                            Class="mt-2" />
+                        </FluentStack>
+                    </FluentCard>
+                }
+            </FluentStack>
         </FluentStack>
-    </FluentStack>
+    }
 </FluentCard>
 
 @code {
@@ -56,8 +64,18 @@
     [Parameter]
     public DmxSceneStep? EditingStep { get; set; }
 
+    [Parameter]
+    public bool ShowFixturePreview { get; set; } = false;
+
     // Key: Channel number (1â€“512), Value: Channel value (0â€“255)
     private Dictionary<int, int> channelValues = new();
+
+    // Presentation-only view of channelValues for DmxFixtureColorMapper, which
+    // reads bytes; kept separate so the slider editor's int dictionary is untouched.
+    private Dictionary<int, byte> channelValuesAsBytes => channelValues.ToDictionary(kvp => kvp.Key, kvp => (byte)kvp.Value);
+
+    private List<DmxFixture> fixtures = [];
+    private Guid? _loadedFixturesClientId;
 
     // When a step is selected the desk is a per-step editor: values load from and
     // save to that step's DmxSceneStepChannelValue rows, never the live universe
@@ -109,6 +127,11 @@
             await LoadChannelValues();
         }
 
+        if (ClientId != _loadedFixturesClientId)
+        {
+            await LoadFixtures();
+        }
+
         // Operator dropped blind mode while editing a step: push the whole step to
         // the client so the fixtures snap to it and further edits preview live.
         if (_previousBlind == true && !IsBlindModeEnabled && IsEditingStep && ClientId != null)
@@ -117,6 +140,31 @@
         }
 
         _previousBlind = IsBlindModeEnabled;
+    }
+
+    // Called by DmxDesk after the fixture-manager dialog closes, since adding/editing/deleting a
+    // fixture there doesn't otherwise notify this component to reload the (unchanged) ClientId's list.
+    public async Task RefreshFixturesAsync()
+    {
+        await LoadFixtures();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadFixtures()
+    {
+        _loadedFixturesClientId = ClientId;
+
+        if (ClientId == null)
+        {
+            fixtures = [];
+
+            return;
+        }
+
+        Result<IEnumerable<DmxFixture>> result = await _dmxFixtureService.GetFixturesForClientAsync(ClientId.Value);
+
+        fixtures = result.IsSuccess && result.Data != null ? result.Data.ToList() : [];
     }
 
     private async Task LoadChannelValues()

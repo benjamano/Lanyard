@@ -1,7 +1,10 @@
-﻿@using Lanyard.Infrastructure.Models.Dmx
+﻿@implements IDisposable
+
+@using Lanyard.Infrastructure.Models.Dmx
 @using Lanyard.App.Components.Dialogs
 
 @inject IDmxSceneService _dmxSceneService
+@inject IDmxFixtureService _dmxFixtureService
 @inject INotificationService _toastService
 
 @if (OpenScene != null)
@@ -37,15 +40,45 @@
                     </FluentText>
                 </FluentStack>
                 
-                <FluentButton IconStart="new Icons.Regular.Size20.BinRecycle()"
-                                Appearance="ButtonAppearance.Transparent"
-                                Disabled="@(!IsEditModeEnabled)"
-                                OnClick="@(() => DeleteScene(OpenScene))" 
-                                Tooltip="Delete Scene"/>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
+                    <FluentButton IconStart="@(isPreviewingScene ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                    Appearance="ButtonAppearance.Transparent"
+                                    Disabled="@(sceneSteps == null || sceneSteps.Count == 0)"
+                                    OnClick="@ToggleScenePreview"
+                                    Tooltip="@(isPreviewingScene ? "Stop Preview" : "Preview Scene")"/>
+                    <FluentButton IconStart="new Icons.Regular.Size20.BinRecycle()"
+                                    Appearance="ButtonAppearance.Transparent"
+                                    Disabled="@(!IsEditModeEnabled)"
+                                    OnClick="@(() => DeleteScene(OpenScene))"
+                                    Tooltip="Delete Scene"/>
+                </FluentStack>
             </FluentStack>
         </FluentCard>
 
         <DmxSceneSettings OpenScene="@OpenScene" OnSceneEdited="@OnSceneEdited"/>
+
+        @if (isPreviewingScene && sceneSteps != null && sceneSteps.Count > 0)
+        {
+            <FluentCard Appearance="CardAppearance.Subtle">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                    <DmxFixturePreview Fixtures="@fixtures" ChannelValues="@previewChannelValues" />
+
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentButton IconStart="@(isPlaying ? new Icons.Regular.Size20.Pause() : new Icons.Regular.Size20.Play())"
+                                        Appearance="ButtonAppearance.Transparent"
+                                        OnClick="TogglePlayback"
+                                        Tooltip="@(isPlaying ? "Pause" : "Play")"/>
+                        <FluentSlider TValue="int"
+                                        Min="0"
+                                        Max="@(sceneSteps.Count - 1)"
+                                        Value="@currentStepIndex"
+                                        ValueChanged="@((int index) => ScrubToStep(index))"
+                                        Style="flex: 1;"/>
+                        <FluentText Size="TextSize.Size300">Step @(currentStepIndex + 1) / @sceneSteps.Count</FluentText>
+                    </FluentStack>
+                </FluentStack>
+            </FluentCard>
+        }
 
         <FluentCard Height="100%">
                 <FluentDataGrid Items="@sceneSteps?.AsQueryable()"
@@ -206,6 +239,13 @@
     private double beatsEditValue = 1;
     private Guid? _loadedSceneId;
 
+    private bool isPreviewingScene;
+    private bool isPlaying;
+    private int currentStepIndex;
+    private Dictionary<int, byte> previewChannelValues = new();
+    private List<DmxFixture> fixtures = [];
+    private CancellationTokenSource? _previewCts;
+
     // The editor panel is too narrow to fit an inline editor (input + save/cancel buttons)
     // in both the Duration and Beats columns at once, so the column being edited borrows
     // width from the other; only one inline editor is ever open at a time. Plain fr units
@@ -223,6 +263,7 @@
             editingStepDuration = null;
             editingStepBeats = null;
             selectedStep.Clear();
+            StopScenePreview();
             await OnEditingStepChanged.InvokeAsync(null);
             Result<List<DmxSceneStep>> result = await _dmxSceneService.GetSceneStepsAsync(OpenScene.Id);
 
@@ -236,6 +277,182 @@
 
                 sceneSteps = new List<DmxSceneStep>();
             }
+
+            await LoadFixturesAsync();
+        }
+    }
+
+    // Called by DmxDesk after the fixture-manager dialog closes, since adding/editing/deleting a
+    // fixture there doesn't otherwise notify this component to reload the (unchanged) scene's list.
+    public async Task RefreshFixturesAsync()
+    {
+        if (!ClientId.HasValue)
+        {
+            return;
+        }
+
+        await LoadFixturesAsync();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadFixturesAsync()
+    {
+        Result<IEnumerable<DmxFixture>> fixturesResult = await _dmxFixtureService.GetFixturesForClientAsync(ClientId!.Value);
+
+        fixtures = fixturesResult.IsSuccess && fixturesResult.Data != null ? fixturesResult.Data.ToList() : [];
+    }
+
+    // Client-side only: walks sceneSteps and paints previewChannelValues, never
+    // calling IDmxService/IDmxSceneRunnerService, so this can never touch real
+    // hardware or a scene actually running on a client.
+    private async Task ToggleScenePreview()
+    {
+        if (isPreviewingScene)
+        {
+            StopScenePreview();
+
+            return;
+        }
+
+        if (sceneSteps == null || sceneSteps.Count == 0)
+        {
+            return;
+        }
+
+        isPreviewingScene = true;
+        currentStepIndex = 0;
+        previewChannelValues = [];
+
+        ApplyStep(sceneSteps[0]);
+
+        StartPlayback();
+
+        await Task.CompletedTask;
+    }
+
+    private void StopScenePreview()
+    {
+        isPreviewingScene = false;
+        isPlaying = false;
+
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewCts = null;
+
+        previewChannelValues = [];
+    }
+
+    private void TogglePlayback()
+    {
+        if (isPlaying)
+        {
+            _previewCts?.Cancel();
+            _previewCts?.Dispose();
+            _previewCts = null;
+
+            isPlaying = false;
+        }
+        else
+        {
+            StartPlayback();
+        }
+    }
+
+    private void StartPlayback()
+    {
+        if (sceneSteps == null || sceneSteps.Count == 0)
+        {
+            return;
+        }
+
+        isPlaying = true;
+
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+
+        CancellationTokenSource cts = new();
+        _previewCts = cts;
+
+        _ = RunPreviewLoopAsync(cts.Token);
+    }
+
+    private async Task RunPreviewLoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (sceneSteps == null || sceneSteps.Count == 0)
+                {
+                    break;
+                }
+
+                if (currentStepIndex >= sceneSteps.Count)
+                {
+                    currentStepIndex = 0;
+                }
+
+                DmxSceneStep step = sceneSteps[currentStepIndex];
+
+                ApplyStep(step);
+
+                await InvokeAsync(StateHasChanged);
+
+                // BPM-synced timing depends on the currently playing song's live
+                // position (IDmxSceneRunnerService/IBeatClockService), which this
+                // client-side preview has no access to and must not reach into --
+                // approximate every step with its fixed Duration regardless of
+                // BpmSyncEnabled.
+                TimeSpan delay = step.Duration > TimeSpan.Zero ? step.Duration : TimeSpan.FromMilliseconds(200);
+
+                await Task.Delay(delay, token);
+
+                currentStepIndex++;
+
+                if (currentStepIndex >= sceneSteps.Count)
+                {
+                    if (OpenScene == null || !OpenScene.Loop)
+                    {
+                        isPlaying = false;
+
+                        break;
+                    }
+
+                    currentStepIndex = 0;
+                }
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Expected on stop/scrub/dispose.
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ScrubToStep(int index)
+    {
+        if (sceneSteps == null || index < 0 || index >= sceneSteps.Count)
+        {
+            return;
+        }
+
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewCts = null;
+        isPlaying = false;
+
+        currentStepIndex = index;
+
+        ApplyStep(sceneSteps[index]);
+    }
+
+    private void ApplyStep(DmxSceneStep step)
+    {
+        foreach (DmxSceneStepChannelValue channelValue in step.ChannelValues)
+        {
+            previewChannelValues[channelValue.ChannelNumber] = channelValue.Value;
         }
     }
 
@@ -408,5 +625,11 @@
         editingStepBeats = null;
 
         OnClose.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
     }
 }

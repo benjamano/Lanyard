@@ -231,5 +231,15 @@
       "The Skip button action can be set to skip to either the next or the previous step.",
       "These new button actions are Admin/Manager-only, matching the existing projection trigger button."
     ]
+  },
+  {
+    "version": "1.3.17",
+    "releaseDate": "2026-09-09",
+    "summary": "The DMX desk can now preview fixtures as colored lights and animate a scene's playback without touching real hardware.",
+    "details": [
+      "Added a Fixtures manager to the DMX desk, so staff can define a client's rig once (name, starting channel, and Dimmer / RGB / RGB + Dimmer type).",
+      "Added a Fixture Preview mode to the DMX desk that renders defined fixtures as colored lights instead of raw channel sliders, updating live as channels change.",
+      "Added a Preview Scene button to the scene editor that animates a scene through its steps entirely in the browser, with a play/pause control and a scrubber to jump straight to any step."
+    ]
   }
 ]
