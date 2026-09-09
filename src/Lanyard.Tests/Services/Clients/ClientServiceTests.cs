@@ -40,9 +40,12 @@ namespace Lanyard.Tests.Services.Clients
 
             var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
 
-            var cacheMock = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+            // UpdateClientAsync now writes through the cache (to keep connection-ID lookups fresh
+            // on reconnect), so a real MemoryCache is needed here - an unconfigured Mock<IMemoryCache>
+            // throws on .Set() since CreateEntry() isn't stubbed.
+            var cacheMock = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock.Object);
+            return new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock);
         }
 
         // SignalRControlHub.ConnectedIds is a private static set with no InternalsVisibleTo, so
@@ -80,9 +83,12 @@ namespace Lanyard.Tests.Services.Clients
 
             var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
 
-            var cacheMock = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+            // UpdateClientAsync now writes through the cache (to keep connection-ID lookups fresh
+            // on reconnect), so a real MemoryCache is needed here - an unconfigured Mock<IMemoryCache>
+            // throws on .Set() since CreateEntry() isn't stubbed.
+            var cacheMock = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-            return new TestableClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock.Object, connectedIds);
+            return new TestableClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cacheMock, connectedIds);
         }
 
         private static ProjectionProgramService GetProjectionProgramService(DbContextOptions<ApplicationDbContext> options)
@@ -156,6 +162,51 @@ namespace Lanyard.Tests.Services.Clients
 
             Assert.IsTrue(result.Success);
             Assert.AreEqual("New Name", (await ctx.Clients.FindAsync(client.Id))?.Name);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_PopulatesConnectionIdCacheInBothDirections()
+        {
+            var options = GetInMemoryOptions();
+
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+
+            var hubContextMock = new Mock<IHubContext<SignalRControlHub>>();
+            var loggerMock = new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>();
+            var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+
+            var service = new ClientService(factoryMock.Object, hubContextMock.Object, loggerMock.Object, cache);
+
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-1" };
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(client);
+                await ctx.SaveChangesAsync();
+            }
+
+            var updateResult = await service.UpdateClientAsync(client);
+            Assert.IsTrue(updateResult.Success, updateResult.Error);
+
+            int invocationsAfterUpdate = factoryMock.Invocations.Count;
+
+            var byClientId = await service.GetClientCurrentConnectionIdAsync(client.Id);
+            var byConnectionId = await service.GetClientIdFromConnectionIdAsync("connection-1");
+
+            // UpdateClientAsync must populate the cache immediately - otherwise a client that
+            // reconnects with a new connection ID keeps routing commands to the dead old one for
+            // up to the cache's 10-minute TTL. Asserting no further DB calls happened confirms
+            // both lookups above were served from cache, not a fresh query.
+            Assert.AreEqual(invocationsAfterUpdate, factoryMock.Invocations.Count,
+                "Expected the connection ID lookups to be served from cache without hitting the database.");
+
+            Assert.IsTrue(byClientId.Success);
+            Assert.AreEqual("connection-1", byClientId.Data);
+
+            Assert.IsTrue(byConnectionId.Success);
+            Assert.AreEqual(client.Id, byConnectionId.Data);
         }
 
         [TestMethod]

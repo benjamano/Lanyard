@@ -20,6 +20,13 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     private readonly ILogger<PacketSniffer> _logger = logger;
     private readonly IActionFunctions _actions = actions;
 
+    // The server resends ReceiveZoneScoreboardSettings on every OnConnectedAsync, so this
+    // runs again on every reconnect. Without tracking the active device, OnPacketArrival
+    // gets a duplicate += subscription (CaptureDeviceList.Instance returns the same cached
+    // device object) and the capture is reopened, so after N reconnects every real packet
+    // is processed and republished N times.
+    private ILiveDevice? _activeDevice;
+
     public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
     {
         CaptureDeviceList devices = CaptureDeviceList.Instance;
@@ -51,6 +58,27 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
             return;
         }
 
+        if (ReferenceEquals(_activeDevice, device))
+        {
+            _logger.LogInformation("Packet sniffer already running on {DeviceName}; re-applied filter settings without reopening.", device.Name);
+            return;
+        }
+
+        if (_activeDevice != null)
+        {
+            _activeDevice.OnPacketArrival -= OnPacketArrival;
+
+            try
+            {
+                _activeDevice.StopCapture();
+                _activeDevice.Close();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error closing previous packet sniffing device {DeviceName}.", _activeDevice.Name);
+            }
+        }
+
         device.OnPacketArrival += OnPacketArrival;
 
         device.Open(new DeviceConfiguration
@@ -62,6 +90,8 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
         _logger.LogInformation("Started Packet Sniffer on device: {DeviceName} with MAC Address: {MacAddress}", device.Name, device.MacAddress);
 
         device.StartCapture();
+
+        _activeDevice = device;
     }
 
     private void OnPacketArrival(object sender, PacketCapture e)

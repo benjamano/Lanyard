@@ -85,12 +85,27 @@
     private bool _isUserSeeking = false;
     private Timer? _songTimeTimer;
 
+    // A full page reload (e.g. the mobile ReconnectModal.razor.js location.reload() after a
+    // dropped Blazor circuit) remounts this component from scratch. The FluentSlider's
+    // client-side hydration can echo a spurious ValueChanged before the Blazor-set Value has
+    // settled in the DOM; without this guard OnSongTimeChanged would misread that echo as a
+    // real user seek and send an unwanted Seek command, producing an audible jump.
+    private bool _hasRenderedOnce = false;
+
     protected override void OnInitialized()
     {
         _player.OnPlaybackStatusChanged += HandlePlaybackStateChanged;
         _player.OnSongChanged += HandleSongChanged;
 
         InitializeFromPlayerState();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _hasRenderedOnce = true;
+        }
     }
 
     private void InitializeFromPlayerState()
@@ -230,6 +245,12 @@
         if (_isUserSeeking)
         {
             _currentSongTime = (float)newTime;
+            return;
+        }
+
+        if (!_hasRenderedOnce)
+        {
+            // Ignore slider hydration echo before the first render pass completes.
             return;
         }
 

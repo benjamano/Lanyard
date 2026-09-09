@@ -239,6 +239,11 @@
     "details": [
       "Tapping a user row now opens a dialog with all of that user's actions (edit, change password, resend invite, unlock, delete, etc.) instead of a row of small icons.",
       "The Username and Email columns now hide on narrow screens to keep the table readable on a phone."
+      "Fixed Play, Pause, Seek, volume, and song-change commands sometimes taking several seconds to reach a kiosk, getting slower the longer the kiosk had been running.",
+      "Fixed the kiosk occasionally losing its connection to the server and not automatically reconnecting.",
+      "Fixed the laser game status widget sometimes getting stuck showing a finished game's countdown timer instead of clearing when the game ends.",
+      "Fixed laser game starts sometimes being detected a moment later than they actually happened.",
+      "Fixed an issue where reloading a dashboard mid-song (for example after a mobile browser reconnects) could cause an unwanted jump in playback."
     ]
   }
 ]

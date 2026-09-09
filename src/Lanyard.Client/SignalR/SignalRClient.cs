@@ -34,6 +34,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             ? string.Empty
             : $"&secret={Uri.EscapeDataString(sharedSecret)}";
 
+        string url = serverUrl + $"?clientId={clientId}{secretQuery}";
+
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
         _logger.LogInformation("Connecting to SignalR server at {ServerUrl} with client ID {ClientId}", serverUrl, clientId);
@@ -44,91 +46,23 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         }
 
         await Task.Delay(5000);
-        
+
         while (_isConnected == false)
         {
             try
             {
-                _connection = new HubConnectionBuilder()
-                    .WithUrl(serverUrl + $"?clientId={clientId}{secretQuery}", options =>
-                    {
-                        if (allowInsecureSsl && serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                        {
-                            options.HttpMessageHandlerFactory = handler =>
-                            {
-                                if (handler is HttpClientHandler httpClientHandler)
-                                {
-                                    httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-                                }
+                HubConnection? previous = _connection;
 
-                                return handler;
-                            };
+                _connection = BuildConnection(url, allowInsecureSsl, registrations);
 
-                            options.WebSocketConfiguration = webSocketOptions =>
-                            {
-                                webSocketOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
-                            };
-                        }
-                    })
-                    .WithAutomaticReconnect(new RetryForeverPolicy())
-                    .Build();
-
-                _connection.Closed += async (error) =>
+                if (previous != null)
                 {
-                    int attempts = 0;
-                    int maxAttempts = 5;
-
-                    while (attempts < maxAttempts)
-                    {
-                        try
-                        {
-                            _logger.LogInformation("Attempting to reconnect to SignalR server... Attempt {Attempt} of {MaxAttempts}", attempts + 1, maxAttempts);
-
-                            await _connection.StartAsync();
-
-                            _isConnected = true;
-
-                            _logger.LogInformation("Reconnected to SignalR server successfully.");
-
-                            await SendStatus();
-
-                            return;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Reconnection attempt {Attempt} failed: {Message}", attempts + 1, ex.Message);
-                            attempts++;
-                            
-                            await Task.Delay(5000);
-                        }
-                    }
-
-                    _logger.LogError("Failed to reconnect to SignalR server after {MaxAttempts} attempts. Will keep trying in the background.", maxAttempts);
-                };
-
-                _connection.Reconnecting += (error) =>
-                {
-                    _isConnected = false;
-                    _logger.LogWarning("SignalR connection lost. Attempting to reconnect...");
-                    
-                    return Task.CompletedTask;
-                };
-
-                _connection.Reconnected += async (connectionId) =>
-                {
-                    _logger.LogInformation("SignalR connection reestablished. Connection ID: {ConnectionId}", connectionId);
-
-                    await SendStatus();
-
-                    return;
-                };
-
-                foreach (Action<HubConnection> register in registrations)
-                {
-                    register(_connection);
+                    // A prior failed attempt built a HubConnection that's being replaced -
+                    // dispose it so it isn't leaked during connect/retry storms.
+                    await previous.DisposeAsync();
                 }
 
-                await _connection!.StartAsync();
+                await _connection.StartAsync();
 
                 _isConnected = true;
 
@@ -157,7 +91,100 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
                 }
 
                 _logger.LogInformation("Retrying in 5 seconds...");
-                Thread.Sleep(5000);
+                await Task.Delay(5000);
+            }
+        }
+    }
+
+    private HubConnection BuildConnection(string url, bool allowInsecureSsl, List<Action<HubConnection>> registrations)
+    {
+        HubConnection connection = new HubConnectionBuilder()
+            .WithUrl(url, options =>
+            {
+                if (allowInsecureSsl && url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    options.HttpMessageHandlerFactory = handler =>
+                    {
+                        if (handler is HttpClientHandler httpClientHandler)
+                        {
+                            httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                        }
+
+                        return handler;
+                    };
+
+                    options.WebSocketConfiguration = webSocketOptions =>
+                    {
+                        webSocketOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+                    };
+                }
+            })
+            .WithAutomaticReconnect(new RetryForeverPolicy())
+            .Build();
+
+        connection.Closed += error => HandleClosedAsync(error, url, allowInsecureSsl, registrations);
+
+        connection.Reconnecting += (error) =>
+        {
+            _isConnected = false;
+            _logger.LogWarning("SignalR connection lost. Attempting to reconnect...");
+
+            return Task.CompletedTask;
+        };
+
+        connection.Reconnected += async (connectionId) =>
+        {
+            _logger.LogInformation("SignalR connection reestablished. Connection ID: {ConnectionId}", connectionId);
+
+            await SendStatus();
+        };
+
+        foreach (Action<HubConnection> register in registrations)
+        {
+            register(connection);
+        }
+
+        return connection;
+    }
+
+    /// <summary>
+    /// WithAutomaticReconnect's RetryForeverPolicy never gives up on its own, so Closed only fires
+    /// for faults automatic reconnect can't recover from itself (e.g. a transport-level break during
+    /// the handshake, like an HTTP/2 CANCEL stream reset). Rebuilds the connection from scratch and
+    /// retries indefinitely instead of giving up after a handful of attempts, which previously left
+    /// the client permanently disconnected despite logging that it would "keep trying in the background".
+    /// </summary>
+    private async Task HandleClosedAsync(Exception? error, string url, bool allowInsecureSsl, List<Action<HubConnection>> registrations)
+    {
+        _isConnected = false;
+        _logger.LogWarning(error, "SignalR connection closed unexpectedly outside automatic reconnect. Rebuilding connection.");
+
+        while (_isConnected == false)
+        {
+            try
+            {
+                HubConnection? previous = _connection;
+
+                _connection = BuildConnection(url, allowInsecureSsl, registrations);
+
+                if (previous != null)
+                {
+                    await previous.DisposeAsync();
+                }
+
+                await _connection.StartAsync();
+
+                _isConnected = true;
+
+                _logger.LogInformation("Reconnected to SignalR server successfully after an unexpected close.");
+
+                await SendStatus();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reconnect-after-close attempt failed, retrying in 5 seconds.");
+
+                await Task.Delay(5000);
             }
         }
     }
