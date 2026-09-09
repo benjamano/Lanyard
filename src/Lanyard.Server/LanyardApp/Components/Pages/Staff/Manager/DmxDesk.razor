@@ -97,7 +97,10 @@
                         IsEditModeEnabled="@isEditModeEnabled"
                         IsBlindModeEnabled="@isBlindModeEnabled"
                         EditingStep="@editingStep"
-                        ShowFixturePreview="@showFixturePreview" />
+                        ShowFixturePreview="@showFixturePreview"
+                        PreviewingSceneId="@previewingSceneId"
+                        PreviewingSceneSteps="@previewingSceneSteps"
+                        PreviewSceneLoop="@(selectedScene?.Loop ?? true)" />
 
         <DmxSceneSelector ClientId="@selectedClientId" 
                             IsEditModeEnabled="@isEditModeEnabled" 
@@ -113,14 +116,14 @@
                     Xl="@(isASceneOpen ? 3 : 0)">
         @if (isASceneOpen)
         {
-            <DmxSceneEditor @ref="dmxSceneEditor"
-                            ClientId="@selectedClientId"
+            <DmxSceneEditor ClientId="@selectedClientId"
                             OpenScene="@selectedScene"
                             OnClose="OnCloseSceneEditor"
                             OnSceneDeleted="OnSceneDeleted"
                             OnEditingStepChanged="OnEditingStepChanged"
                             IsEditModeEnabled="@isEditModeEnabled"
-                            OnSceneEdited="OnSceneEdited"/>
+                            OnSceneEdited="OnSceneEdited"
+                            OnPreviewingStepsChanged="OnPreviewingStepsChanged"/>
         }
     </FluentGridItem>
 </FluentGrid>
@@ -144,7 +147,10 @@
     private Guid? deletedSceneId;
 
     private VirtualDmxDesk? virtualDmxDesk;
-    private DmxSceneEditor? dmxSceneEditor;
+
+    // Forwarded to VirtualDmxDesk so a previewed scene renders inline in the main desk area.
+    private Guid? previewingSceneId;
+    private List<DmxSceneStep>? previewingSceneSteps;
 
     private void ToggleEditMode()
     {
@@ -183,7 +189,20 @@
             isASceneOpen = false;
             selectedScene = null;
             editingStep = null;
+            ClearScenePreview();
         }
+    }
+
+    private void OnPreviewingStepsChanged(List<DmxSceneStep>? steps)
+    {
+        previewingSceneSteps = steps;
+        previewingSceneId = steps != null ? selectedScene?.Id : null;
+    }
+
+    private void ClearScenePreview()
+    {
+        previewingSceneSteps = null;
+        previewingSceneId = null;
     }
 
     private void SetSelectedClient(Guid? clientId)
@@ -210,17 +229,13 @@
             options.Parameters.Add(nameof(DmxFixtureManagerDialog.ClientId), selectedClientId.Value);
         });
 
-        // The dialog's own add/edit/delete calls don't touch selectedClientId, so neither the
-        // desk's nor the scene editor's fixture list (each keyed only on client/scene changes)
-        // would otherwise ever see the update.
+        // The dialog's own add/edit/delete calls don't touch selectedClientId, so the desk's
+        // fixture list (keyed only on client changes) would otherwise never see the update.
+        // VirtualDmxDesk is also the sole owner of fixture data now (used for both the live
+        // preview and any scene preview), so nothing else needs telling.
         if (virtualDmxDesk != null)
         {
             await virtualDmxDesk.RefreshFixturesAsync();
-        }
-
-        if (dmxSceneEditor != null)
-        {
-            await dmxSceneEditor.RefreshFixturesAsync();
         }
     }
 
@@ -236,6 +251,7 @@
         isASceneOpen = false;
         selectedScene = null;
         editingStep = null;
+        ClearScenePreview();
     }
 
     private void OnSceneEdited(DmxScene scene)
