@@ -52,7 +52,12 @@ public class DmxFixtureService(
 
         try
         {
-            string currentUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!);
+            Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+            if (!currentUserResult.IsSuccess || currentUserResult.Data == null)
+            {
+                return Result<DmxFixture>.Fail("Unable to determine the current user.");
+            }
 
             await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
@@ -63,7 +68,7 @@ public class DmxFixtureService(
                 StartChannel = startChannel,
                 FixtureType = fixtureType,
                 IsActive = true,
-                CreateByUserId = currentUserId,
+                CreateByUserId = currentUserResult.Data,
                 CreateDate = DateTime.UtcNow,
             };
 
@@ -106,10 +111,17 @@ public class DmxFixtureService(
                 return Result<bool>.Fail("Fixture not found.");
             }
 
+            Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+            if (!currentUserResult.IsSuccess || currentUserResult.Data == null)
+            {
+                return Result<bool>.Fail("Unable to determine the current user.");
+            }
+
             existingFixture.Name = fixture.Name;
             existingFixture.StartChannel = fixture.StartChannel;
             existingFixture.FixtureType = fixture.FixtureType;
-            existingFixture.UpdateByUserId = await _securityService.GetCurrentUserIdAsync().ContinueWith(x => x.Result.Data!);
+            existingFixture.UpdateByUserId = currentUserResult.Data;
             existingFixture.UpdateDate = DateTime.UtcNow;
 
             await context.SaveChangesAsync();

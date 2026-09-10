@@ -210,6 +210,13 @@
     [Parameter]
     public EventCallback<List<DmxSceneStep>?> OnPreviewingStepsChanged { get; set; }
 
+    // DmxDesk owns the single source of truth for which scene (if any) is being previewed --
+    // this component only reads it back to know whether the toggle button applies to *this*
+    // open scene. Without this, switching clients or scenes could leave this button showing
+    // "Stop Preview" for a preview DmxDesk already force-stopped elsewhere (e.g. on client switch).
+    [Parameter]
+    public Guid? PreviewingSceneId { get; set; }
+
     private List<DmxSceneStep>? sceneSteps = null;
 
     private List<DmxSceneStep> selectedStep = new();
@@ -219,7 +226,7 @@
     private double beatsEditValue = 1;
     private Guid? _loadedSceneId;
 
-    private bool isPreviewingScene;
+    private bool isPreviewingScene => OpenScene != null && PreviewingSceneId == OpenScene.Id;
 
     // The editor panel is too narrow to fit an inline editor (input + save/cancel buttons)
     // in both the Duration and Beats columns at once, so the column being edited borrows
@@ -234,11 +241,17 @@
     {
         if (ClientId.HasValue && OpenScene != null && OpenScene.Id != _loadedSceneId)
         {
+            // Switching away from a scene that was being previewed must stop it -- otherwise
+            // DmxDesk keeps animating the old scene's steps after the editor moves on.
+            if (PreviewingSceneId == _loadedSceneId)
+            {
+                await OnPreviewingStepsChanged.InvokeAsync(null);
+            }
+
             _loadedSceneId = OpenScene.Id;
             editingStepDuration = null;
             editingStepBeats = null;
             selectedStep.Clear();
-            await StopScenePreviewAsync();
             await OnEditingStepChanged.InvokeAsync(null);
             Result<List<DmxSceneStep>> result = await _dmxSceneService.GetSceneStepsAsync(OpenScene.Id);
 
@@ -262,7 +275,7 @@
     {
         if (isPreviewingScene)
         {
-            await StopScenePreviewAsync();
+            await OnPreviewingStepsChanged.InvokeAsync(null);
 
             return;
         }
@@ -272,21 +285,7 @@
             return;
         }
 
-        isPreviewingScene = true;
-
         await OnPreviewingStepsChanged.InvokeAsync(sceneSteps);
-    }
-
-    private async Task StopScenePreviewAsync()
-    {
-        if (!isPreviewingScene)
-        {
-            return;
-        }
-
-        isPreviewingScene = false;
-
-        await OnPreviewingStepsChanged.InvokeAsync(null);
     }
 
     private async Task DeleteScene(DmxScene scene)

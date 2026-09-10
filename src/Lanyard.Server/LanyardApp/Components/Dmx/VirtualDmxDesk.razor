@@ -21,14 +21,14 @@
                 <FluentSlider TValue="int"
                                 Min="0"
                                 Max="@(PreviewingSceneSteps.Count - 1)"
-                                Value="@scenePreviewStepIndex"
+                                Value="@ClampedScenePreviewStepIndex"
                                 ValueChanged="@((int index) => ScrubToPreviewStep(index))"
                                 Style="flex: 1;"/>
-                <FluentText Size="TextSize.Size300">Step @(scenePreviewStepIndex + 1) / @PreviewingSceneSteps.Count</FluentText>
+                <FluentText Size="TextSize.Size300">Step @(ClampedScenePreviewStepIndex + 1) / @PreviewingSceneSteps.Count</FluentText>
             </FluentStack>
         </FluentStack>
     }
-    else if (ShowFixturePreview)
+    else if (ShowFixturePreview && !IsEditingStep)
     {
         <DmxFixturePreview Fixtures="@fixtures" ChannelValues="@channelValuesAsBytes" />
     }
@@ -103,9 +103,11 @@
     // Key: Channel number (1â€“512), Value: Channel value (0â€“255)
     private Dictionary<int, int> channelValues = new();
 
-    // Presentation-only view of channelValues for DmxFixtureColorMapper, which
-    // reads bytes; kept separate so the slider editor's int dictionary is untouched.
-    private Dictionary<int, byte> channelValuesAsBytes => channelValues.ToDictionary(kvp => kvp.Key, kvp => (byte)kvp.Value);
+    // Presentation-only view of channelValues for DmxFixtureColorMapper, which reads bytes;
+    // kept separate so the slider editor's int dictionary is untouched. Maintained alongside
+    // channelValues at every write site rather than recomputed on access -- a computed property
+    // here would reallocate all ~512 entries on every single-channel live update.
+    private Dictionary<int, byte> channelValuesAsBytes = new();
 
     private List<DmxFixture> fixtures = [];
     private Guid? _loadedFixturesClientId;
@@ -115,6 +117,14 @@
     private int scenePreviewStepIndex;
     private Dictionary<int, byte> scenePreviewChannelValues = new();
     private CancellationTokenSource? _scenePreviewCts;
+
+    // scenePreviewStepIndex is only re-clamped inside the running playback loop; if a step is
+    // deleted (via the scene editor's grid) while paused, the raw index can briefly point past
+    // the now-shorter PreviewingSceneSteps until the next play/scrub. Rendering always goes
+    // through this instead of the raw field so the scrubber/label never show an out-of-range step.
+    private int ClampedScenePreviewStepIndex => PreviewingSceneSteps == null || PreviewingSceneSteps.Count == 0
+        ? 0
+        : Math.Clamp(scenePreviewStepIndex, 0, PreviewingSceneSteps.Count - 1);
 
     // When a step is selected the desk is a per-step editor: values load from and
     // save to that step's DmxSceneStepChannelValue rows, never the live universe
@@ -150,6 +160,7 @@
         if (ClientId != null && clientId == ClientId)
         {
             channelValues[channel] = value;
+            channelValuesAsBytes[channel] = value;
 
             InvokeAsync(StateHasChanged);
         }
@@ -377,6 +388,8 @@
             }
         }
 
+        channelValuesAsBytes = channelValues.ToDictionary(kvp => kvp.Key, kvp => (byte)kvp.Value);
+
         _loadedStepId = EditingStep?.Id;
         _loadedClientId = ClientId;
         _hasLoaded = true;
@@ -396,6 +409,8 @@
     {
         channelValues = Enumerable.Range(1, 512)
             .ToDictionary(i => i, _ => 0);
+        channelValuesAsBytes = Enumerable.Range(1, 512)
+            .ToDictionary(i => i, _ => (byte)0);
 
         StateHasChanged();
     }
@@ -403,6 +418,7 @@
     private async Task UpdateChannelValue(int newValue, int channelNumber)
     {
         channelValues[channelNumber] = newValue;
+        channelValuesAsBytes[channelNumber] = (byte)newValue;
 
         if (ClientId == null)
         {

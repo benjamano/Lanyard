@@ -123,7 +123,8 @@
                             OnEditingStepChanged="OnEditingStepChanged"
                             IsEditModeEnabled="@isEditModeEnabled"
                             OnSceneEdited="OnSceneEdited"
-                            OnPreviewingStepsChanged="OnPreviewingStepsChanged"/>
+                            OnPreviewingStepsChanged="OnPreviewingStepsChanged"
+                            PreviewingSceneId="@previewingSceneId"/>
         }
     </FluentGridItem>
 </FluentGrid>
@@ -207,6 +208,14 @@
 
     private void SetSelectedClient(Guid? clientId)
     {
+        if (clientId != selectedClientId)
+        {
+            // A running scene preview is scoped to the previously selected client's fixtures;
+            // switching clients without stopping it would keep animating the old scene's steps
+            // and paint them onto the newly selected client's rig.
+            ClearScenePreview();
+        }
+
         selectedClientId = clientId;
     }
 
