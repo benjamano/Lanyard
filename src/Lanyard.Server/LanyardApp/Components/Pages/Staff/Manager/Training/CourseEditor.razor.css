@@ -17,6 +17,15 @@
     width: 100%;
 }
 
+/* 480px is calibrated against the desktop split pane's available height (bounded by the
+   640px card). On mobile that ceiling is gone and the page scrolls instead (see CourseEditor.razor's
+   isNarrow branch), so a flat 480px would needlessly dwarf the rest of a short phone viewport. */
+@media (max-width: 767.98px) {
+    .quill-editor-host {
+        height: 60vh;
+    }
+}
+
 .quill-editor-host ::deep .ql-toolbar.ql-snow {
     flex: 0 0 auto;
     border-color: var(--colorNeutralStroke1);
@@ -120,6 +129,32 @@
 
 .recurrence-field-host {
     width: 40%;
+}
+
+.course-name-field {
+    width: 60%;
+}
+
+.course-passmark-field {
+    width: 40%;
+}
+
+/* FluentStack renders its own fluent-stack-horizontal div in its own component scope, not this
+   file's - a bare "::deep .fluent-stack-horizontal" has no scope attribute anywhere in this file's
+   all-Fluent-components markup to anchor to (::deep only relaxes scope *matching*, it still
+   compiles to "[this-file's-scope-attr] .fluent-stack-horizontal", which never matches unless
+   some plain HTML ancestor of it actually carries that attribute). .course-name-passmark-host is
+   a plain div that does, giving ::deep a real anchor - same pattern as .question-actions-group
+   ::deep .fluent-stack-horizontal further down this file. */
+@media (max-width: 480px) {
+    .course-name-passmark-host ::deep .fluent-stack-horizontal {
+        flex-direction: column;
+    }
+
+    .course-name-field,
+    .course-passmark-field {
+        width: 100%;
+    }
 }
 
 .reorder-item {

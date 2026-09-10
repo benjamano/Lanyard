@@ -1,0 +1,10 @@
+/* FluentTabs' tab strip doesn't wrap or scroll on its own - measured at 390px it overflows its
+   340px box by 210px with overflow-x: visible, silently clipping the last 1-2 tabs off the edge
+   of the screen with no way to reach them. ::deep alone isn't enough here: this page's markup is
+   nothing but Fluent component tags, so there's no plain HTML element anywhere in it to carry the
+   scope attribute ::deep's compiled selector requires as an ancestor anchor - .training-tabs-host
+   is a real <div>, giving it one (same reason CourseEditor.razor.css's ::deep rules all hang off
+   plain divs like .option-radio-host rather than being used bare). */
+.training-tabs-host ::deep fluent-tablist {
+    overflow-x: auto;
+}

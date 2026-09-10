@@ -231,5 +231,17 @@
       "The Skip button action can be set to skip to either the next or the previous step.",
       "These new button actions are Admin/Manager-only, matching the existing projection trigger button."
     ]
+  },
+  {
+    "version": "1.3.17",
+    "releaseDate": "2026-09-10",
+    "summary": "The Training pages are now phone-friendly.",
+    "details": [
+      "The Course Editor's section/quiz-question editor now switches to a single full-width view with a Back button on a phone, instead of an unusable side-by-side split that used to squeeze the editor into a sliver of the screen.",
+      "The Course Editor's details form now uses the full screen width on a phone instead of a narrow column.",
+      "The Training Dashboard and Training Help tabs now scroll sideways on a phone instead of cutting off tabs past \"By Person\"/\"Creating Courses\".",
+      "The My Training, Training Dashboard and Training Courses lists now scroll sideways on a phone instead of clipping course names and status badges off the edge of the screen.",
+      "Buttons and switches in the Training Courses header now wrap onto a second line on a phone instead of overlapping."
+    ]
   }
 ]

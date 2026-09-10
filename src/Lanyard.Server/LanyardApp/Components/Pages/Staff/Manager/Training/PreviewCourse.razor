@@ -40,7 +40,7 @@ else
                 reflected here.
             </FluentMessageBar>
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
-                         VerticalAlignment="VerticalAlignment.Center">
+                         VerticalAlignment="VerticalAlignment.Center" Wrap="true">
                 <FluentText As="TextTag.H4" Size="TextSize.Size500">@course.Name</FluentText>
                 <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
                               OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/courses/{CourseId}"))">
