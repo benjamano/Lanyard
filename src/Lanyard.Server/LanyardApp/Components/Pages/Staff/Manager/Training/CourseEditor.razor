@@ -115,7 +115,7 @@ else
             {
                 <div class="px-3">
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
-                                  Class="mb-2" OnClick="ClearSelection">
+                                  Class="mb-2" Disabled="@(isSavingSection || isSavingQuestion)" OnClick="ClearSelection">
                         Back
                     </FluentButton>
                     @EditorPane
@@ -410,7 +410,20 @@ else
     [JSInvokable]
     public void OnViewportChanged(bool isNarrow)
     {
+        if (this.isNarrow == isNarrow)
+        {
+            return;
+        }
+
         this.isNarrow = isNarrow;
+
+        // Swapping branches remounts the FluentMultiSplitterPane/plain-div ancestor around
+        // EditorPane, tearing down any mounted BlazoredTextEditor along with it. Without this
+        // reset, OnAfterRenderAsync's guard would wrongly believe the fresh (blank) editor
+        // instance already has selectedSection's content loaded, and a Save would overwrite the
+        // real saved content with the empty editor's output - same reset every other method that
+        // touches selectedSection already performs.
+        loadedSectionEditorId = null;
         InvokeAsync(StateHasChanged);
     }
 
