@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -86,14 +87,16 @@ public class TwoFactorLoginIntegrationTests
             new Dictionary<string, string>
             {
                 ["username"] = "admin",
-                ["password"] = CustomWebApplicationFactory.SeedAdminPassword
+                ["password"] = CustomWebApplicationFactory.SeedAdminPassword,
+                ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
             }));
 
         HttpResponseMessage verifyResponse = await client.PostAsync("/api/auth/verify-2fa-form", new FormUrlEncodedContent(
             new Dictionary<string, string>
             {
                 ["code"] = "000000",
-                ["provider"] = TokenOptions.DefaultEmailProvider
+                ["provider"] = TokenOptions.DefaultEmailProvider,
+                ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
             }));
 
         Assert.IsTrue((int)verifyResponse.StatusCode is >= 300 and < 400);
@@ -113,7 +116,8 @@ public class TwoFactorLoginIntegrationTests
             new Dictionary<string, string>
             {
                 ["username"] = "admin",
-                ["password"] = CustomWebApplicationFactory.SeedAdminPassword
+                ["password"] = CustomWebApplicationFactory.SeedAdminPassword,
+                ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
             }));
 
         string code = await GenerateEmailCodeAsync();
@@ -122,7 +126,8 @@ public class TwoFactorLoginIntegrationTests
             new Dictionary<string, string>
             {
                 ["code"] = code,
-                ["provider"] = TokenOptions.DefaultEmailProvider
+                ["provider"] = TokenOptions.DefaultEmailProvider,
+                ["locationId"] = ApplicationDbContext.SeedIpswichLocationId.ToString()
             }));
 
         Assert.IsTrue((int)verifyResponse.StatusCode is >= 300 and < 400);

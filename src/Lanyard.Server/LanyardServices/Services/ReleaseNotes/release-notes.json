@@ -231,5 +231,14 @@
       "The Skip button action can be set to skip to either the next or the previous step.",
       "These new button actions are Admin/Manager-only, matching the existing projection trigger button."
     ]
+  },
+  {
+    "version": "1.3.17",
+    "releaseDate": "2026-09-11",
+    "summary": "Employee lists are now scoped to your location.",
+    "details": [
+      "The Users page, Staff Roles page, and Training assignment screens now only show employees at your own location, instead of everyone across every site.",
+      "Everyone, including Admins, now picks a location when signing in - this was previously optional for Admins."
+    ]
   }
 ]

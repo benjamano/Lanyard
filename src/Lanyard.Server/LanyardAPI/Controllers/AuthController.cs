@@ -380,7 +380,7 @@ namespace Lanyard.App.Controllers
 
             if (locationId is null)
             {
-                return isAdmin ? (true, null) : (false, "Please select your location.");
+                return (false, "Please select your location.");
             }
 
             if (isAdmin)
