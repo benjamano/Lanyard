@@ -137,25 +137,7 @@
 
     private async Task<IEnumerable<UserProfile>> LoadSelectablePeopleAsync(LocationScope scope)
     {
-        // GetActiveUsersAsync rather than GetAllUsersAsync so the GDPR deleted-user placeholder
-        // row never appears as a selectable person.
-        IEnumerable<UserProfile> allUsers = await _securityService.GetActiveUsersAsync();
-
-        if (scope.IsAdmin)
-        {
-            return allUsers;
-        }
-
-        Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
-
-        if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
-        {
-            _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
-            return [];
-        }
-
-        HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
-        return allUsers.Where(u => locationUserIds.Contains(u.Id));
+        return await _securityService.GetActiveUsersInLocationAsync(scope.LocationId!.Value);
     }
 
     private void ClearSelection()

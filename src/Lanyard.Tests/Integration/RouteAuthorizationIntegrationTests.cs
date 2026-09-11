@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -69,7 +70,8 @@ public class RouteAuthorizationIntegrationTests
         HttpResponseMessage loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginDto
         {
             Username = "admin",
-            Password = CustomWebApplicationFactory.SeedAdminPassword
+            Password = CustomWebApplicationFactory.SeedAdminPassword,
+            LocationId = ApplicationDbContext.SeedIpswichLocationId
         });
 
         Assert.IsTrue(loginResponse.IsSuccessStatusCode,
@@ -78,5 +80,25 @@ public class RouteAuthorizationIntegrationTests
         HttpResponseMessage pageResponse = await client.GetAsync("/manage/dashboards");
 
         Assert.AreEqual(HttpStatusCode.OK, pageResponse.StatusCode);
+    }
+
+    // Location selection used to be optional for Admins, letting them end up with a LocationScope
+    // that bypassed per-site employee filtering entirely. It's now required for every role so
+    // employee lists can be scoped consistently - this locks that requirement in.
+    [TestMethod]
+    public async Task AuthenticatedAdmin_WithoutLocation_IsRejected()
+    {
+        HttpClient client = _factory.CreateClient();
+
+        HttpResponseMessage loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginDto
+        {
+            Username = "admin",
+            Password = CustomWebApplicationFactory.SeedAdminPassword
+        });
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, loginResponse.StatusCode);
+
+        string body = await loginResponse.Content.ReadAsStringAsync();
+        StringAssert.Contains(body, "Please select your location.");
     }
 }

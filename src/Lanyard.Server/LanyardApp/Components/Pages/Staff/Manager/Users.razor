@@ -84,7 +84,18 @@
 
     private async Task GetUsers()
     {
-        users = await _securityService.GetActiveUsersAsync();
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data!.LocationId is null)
+        {
+            ToastService.ShowError(scopeResult.Error
+                ?? "We couldn't work out which location you're in - try signing out and back in.");
+            users = [];
+        }
+        else
+        {
+            users = await _securityService.GetActiveUsersInLocationAsync(scopeResult.Data.LocationId.Value);
+        }
 
         ApplyFilter();
     }

@@ -879,5 +879,33 @@ namespace Lanyard.Tests.Services.Authentication
             Assert.IsTrue(deleteResult.IsSuccess, deleteResult.Error);
             Assert.IsNull(await userManager.FindByIdAsync(targetAdmin.Id));
         }
+
+        [TestMethod]
+        public async Task GetActiveUsersInLocationAsync_ReturnsOnlyMembersOfThatLocation()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            UserProfile ipswichUser = new() { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", UserName = "jdoe" };
+            UserProfile otherSiteUser = new() { FirstName = "John", LastName = "Smith", Email = "john@example.com", UserName = "jsmith" };
+
+            Assert.IsTrue((await userManager.CreateAsync(ipswichUser)).Succeeded);
+            Assert.IsTrue((await userManager.CreateAsync(otherSiteUser)).Succeeded);
+
+            await using (ApplicationDbContext seedCtx = new(options))
+            {
+                seedCtx.UserLocationMemberships.Add(new UserLocationMembership { UserId = ipswichUser.Id, LocationId = 1, CreateDate = DateTime.UtcNow });
+                seedCtx.UserLocationMemberships.Add(new UserLocationMembership { UserId = otherSiteUser.Id, LocationId = 2, CreateDate = DateTime.UtcNow });
+                await seedCtx.SaveChangesAsync();
+            }
+
+            Mock<IEmailService> emailServiceMock = new();
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object);
+
+            IEnumerable<UserProfile> result = await service.GetActiveUsersInLocationAsync(1);
+
+            UserProfile onlyResult = result.Single();
+            Assert.AreEqual(ipswichUser.Id, onlyResult.Id);
+        }
     }
 }

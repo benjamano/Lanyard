@@ -152,6 +152,17 @@ public class SecurityService : ISecurityService
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<UserProfile>> GetActiveUsersInLocationAsync(int locationId)
+    {
+        using ApplicationDbContext ctx = _factory.CreateDbContext();
+        return await ctx.UserLocationMemberships
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(m => m.LocationId == locationId && m.User!.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+            .Select(m => m.User!)
+            .ToListAsync();
+    }
+
     public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds)
     {
         try
