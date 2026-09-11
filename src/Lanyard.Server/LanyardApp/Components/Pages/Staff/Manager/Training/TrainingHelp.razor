@@ -9,23 +9,25 @@
 <FluentCard Height="auto">
     <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Help</FluentText>
 
-    <FluentTabs @bind-ActiveTabId="activeTabId" Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
-        <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
-            <OverviewHelpTab />
-        </FluentTab>
-        <FluentTab Id="help-courses" Header="Creating Courses" IconStart="@(new Icons.Regular.Size16.Board())" DeferredLoading="true">
-            <CreatingCoursesHelpTab />
-        </FluentTab>
-        <FluentTab Id="help-assigning" Header="Assigning Training" IconStart="@(new Icons.Regular.Size16.PersonAdd())" DeferredLoading="true">
-            <AssigningTrainingHelpTab />
-        </FluentTab>
-        <FluentTab Id="help-reports" Header="Tracking Completion" IconStart="@(new Icons.Regular.Size16.ChartMultiple())" DeferredLoading="true">
-            <TrackingCompletionHelpTab />
-        </FluentTab>
-        <FluentTab Id="help-locations" Header="Multi-Location Rules" IconStart="@(new Icons.Regular.Size16.Location())" DeferredLoading="true">
-            <MultiLocationHelpTab />
-        </FluentTab>
-    </FluentTabs>
+    <div class="training-tabs-host">
+        <FluentTabs @bind-ActiveTabId="activeTabId" Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
+            <FluentTab Id="help-overview" Header="Overview" IconStart="@(new Icons.Regular.Size16.Info())">
+                <OverviewHelpTab />
+            </FluentTab>
+            <FluentTab Id="help-courses" Header="Creating Courses" IconStart="@(new Icons.Regular.Size16.Board())" DeferredLoading="true">
+                <CreatingCoursesHelpTab />
+            </FluentTab>
+            <FluentTab Id="help-assigning" Header="Assigning Training" IconStart="@(new Icons.Regular.Size16.PersonAdd())" DeferredLoading="true">
+                <AssigningTrainingHelpTab />
+            </FluentTab>
+            <FluentTab Id="help-reports" Header="Tracking Completion" IconStart="@(new Icons.Regular.Size16.ChartMultiple())" DeferredLoading="true">
+                <TrackingCompletionHelpTab />
+            </FluentTab>
+            <FluentTab Id="help-locations" Header="Multi-Location Rules" IconStart="@(new Icons.Regular.Size16.Location())" DeferredLoading="true">
+                <MultiLocationHelpTab />
+            </FluentTab>
+        </FluentTabs>
+    </div>
 </FluentCard>
 
 @code {
