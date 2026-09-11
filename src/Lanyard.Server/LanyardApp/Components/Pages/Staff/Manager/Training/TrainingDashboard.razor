@@ -7,7 +7,8 @@
 <PageTitle>Training Dashboard</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center"
+                 Wrap="true">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Dashboard</FluentText>
         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
                       OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/help?topic={HelpTopicForActiveTab}"))">
@@ -15,23 +16,25 @@
         </FluentButton>
     </FluentStack>
 
-    <FluentTabs @bind-ActiveTabId="activeTabId" Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
-        <FluentTab Id="dash-by-course" Header="By Course" IconStart="@(new Icons.Regular.Size16.Board())">
-            <ByCourseTrainingTab />
-        </FluentTab>
-        <FluentTab Id="dash-by-person" Header="By Person" IconStart="@(new Icons.Regular.Size16.Person())" DeferredLoading="true">
-            <ByPersonTrainingTab />
-        </FluentTab>
-        <FluentTab Id="dash-auto-assign" Header="Auto-assign rules" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())" DeferredLoading="true">
-            <AutoAssignRulesTab />
-        </FluentTab>
-        <FluentTab Id="dash-timing" Header="Timing" IconStart="@(new Icons.Regular.Size16.Timer())" DeferredLoading="true">
-            <TimingReportsTab />
-        </FluentTab>
-        <FluentTab Id="dash-analytics" Header="Analytics" IconStart="@(new Icons.Regular.Size16.ChartMultiple())" DeferredLoading="true">
-            <AnalyticsReportsTab />
-        </FluentTab>
-    </FluentTabs>
+    <div class="training-tabs-host">
+        <FluentTabs @bind-ActiveTabId="activeTabId" Orientation="Orientation.Horizontal" Size="TabsSize.Medium">
+            <FluentTab Id="dash-by-course" Header="By Course" IconStart="@(new Icons.Regular.Size16.Board())">
+                <ByCourseTrainingTab />
+            </FluentTab>
+            <FluentTab Id="dash-by-person" Header="By Person" IconStart="@(new Icons.Regular.Size16.Person())" DeferredLoading="true">
+                <ByPersonTrainingTab />
+            </FluentTab>
+            <FluentTab Id="dash-auto-assign" Header="Auto-assign rules" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())" DeferredLoading="true">
+                <AutoAssignRulesTab />
+            </FluentTab>
+            <FluentTab Id="dash-timing" Header="Timing" IconStart="@(new Icons.Regular.Size16.Timer())" DeferredLoading="true">
+                <TimingReportsTab />
+            </FluentTab>
+            <FluentTab Id="dash-analytics" Header="Analytics" IconStart="@(new Icons.Regular.Size16.ChartMultiple())" DeferredLoading="true">
+                <AnalyticsReportsTab />
+            </FluentTab>
+        </FluentTabs>
+    </div>
 </FluentCard>
 
 @code {

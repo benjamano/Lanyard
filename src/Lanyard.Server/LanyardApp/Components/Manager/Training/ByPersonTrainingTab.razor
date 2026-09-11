@@ -37,8 +37,11 @@
         }
         else
         {
+            @* Same fix as ByCourseTrainingTab/Courses.razor: keep a workable minimum width and let
+               the grid scroll sideways instead of squeezing the action icons unreachable. *@
+            <div class="assignments-grid-scroll" style="overflow-x: auto;">
             <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
-                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
+                            Style="min-width: 700px;" RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
                     <TemplateColumn Title="Course" Sortable="true">
                         @context.Label
@@ -81,6 +84,7 @@
                         : "This person has no training assigned at your location.")
                 </EmptyContent>
             </FluentDataGrid>
+            </div>
         }
     }
     }

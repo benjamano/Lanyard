@@ -6,6 +6,8 @@
 @using Lanyard.App.Components.Manager
 @using Lanyard.App.Components.Files
 
+@implements IAsyncDisposable
+
 @inject ICourseService _courseService
 @inject INotificationService _toastService
 @inject NavigationManager _navigationManager
@@ -52,17 +54,19 @@ else
 
     <FluentCard Height="auto" Class="mb-3">
         <FluentGrid Class="w-100" Spacing="3">
-            <FluentGridItem Xs="3">
-                <FluentStack HorizontalGap="6">
-                    <div style="width: 60%;">
-                        <FluentTextInput Width="100%" @bind-Value="course.Name" Label="Course Name"
-                                         Appearance="TextInputAppearance.Outline" Required="true" />
-                    </div>
-                    <div style="width: 40%;">
-                        <FluentNumberInput TValue="int" Width="100%" @bind-Value="course.PassMarkPercent"
-                                           Label="Pass Mark %" Min="1" Max="100" />
-                    </div>
-                </FluentStack>
+            <FluentGridItem Xs="12" Sm="12" Md="6" Lg="4">
+                <div class="course-name-passmark-host">
+                    <FluentStack HorizontalGap="6">
+                        <div class="course-name-field">
+                            <FluentTextInput Width="100%" @bind-Value="course.Name" Label="Course Name"
+                                             Appearance="TextInputAppearance.Outline" Required="true" />
+                        </div>
+                        <div class="course-passmark-field">
+                            <FluentNumberInput TValue="int" Width="100%" @bind-Value="course.PassMarkPercent"
+                                               Label="Pass Mark %" Min="1" Max="100" />
+                        </div>
+                    </FluentStack>
+                </div>
                 <div class="w-100">
                     <FluentTextArea Width="100%" @bind-Value="course.Description" Label="Description"
                                     Appearance="TextAreaAppearance.Outline" />
@@ -98,163 +102,41 @@ else
         </FluentStack>
     </FluentCard>
 
-    <FluentCard Height="640px">
-        <FluentMultiSplitter Height="100%">
-            <FluentMultiSplitterPane Size="30%" Class="px-2">
-                <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
-                    <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
-                    @foreach (CourseSection courseSection in course.Sections.OrderBy(x => x.SortOrder))
-                    {
-                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
-                             @ondragstart="@(() => draggedSection = courseSection)" @ondragover="@(() => { })"
-                             @ondragover:preventDefault="true" @ondrop="@(() => OnSectionDropAsync(courseSection))">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
-                            <FluentButton
-                                Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                Class="reorder-item-button" OnClick="@(() => SelectSection(courseSection))">
-                                @courseSection.Title
-                            </FluentButton>
-                        </div>
-                    }
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  Disabled="@(!canEditCourse)" OnClick="StartNewSection">
-                        Add Section
+    @if (isNarrow)
+    {
+        <FluentCard Height="auto">
+            @if (selectedSection is null && selectedQuestion is null)
+            {
+                <div class="px-2">
+                    @ListPane
+                </div>
+            }
+            else
+            {
+                <div class="px-3">
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                                  Class="mb-2" Disabled="@(isSavingSection || isSavingQuestion)" OnClick="ClearSelection">
+                        Back
                     </FluentButton>
+                    @EditorPane
+                </div>
+            }
+        </FluentCard>
+    }
+    else
+    {
+        <FluentCard Height="640px">
+            <FluentMultiSplitter Height="100%">
+                <FluentMultiSplitterPane Size="30%" Class="px-2">
+                    @ListPane
+                </FluentMultiSplitterPane>
 
-                    <FluentDivider Class="my-3" />
-
-                    <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
-                    @foreach (CourseQuestion question in course.Questions.OrderBy(x => x.SortOrder))
-                    {
-                        <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
-                             @ondragstart="@(() => draggedQuestion = question)" @ondragover="@(() => { })"
-                             @ondragover:preventDefault="true" @ondrop="@(() => OnQuestionDropAsync(question))">
-                            <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
-                            <FluentButton
-                                Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
-                                Class="reorder-item-button" OnClick="@(() => SelectQuestion(question))">
-                                @question.QuestionText
-                            </FluentButton>
-                        </div>
-                    }
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
-                                  Disabled="@(!canEditCourse)" OnClick="StartNewQuestion">
-                        Add Question
-                    </FluentButton>
-                </FluentStack>
-            </FluentMultiSplitterPane>
-
-            <FluentMultiSplitterPane Size="70%" Class="px-3">
-                @if (selectedSection is not null)
-                {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
-                        <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title"
-                                         Appearance="TextInputAppearance.Outline" Required="true" />
-                        <div class="quill-editor-host" @ref="quillEditorHostRef">
-                            <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
-                                <ToolbarContent>
-                                    <span class="ql-formats">
-                                        <select class="ql-header">
-                                            <option value="1"></option>
-                                            <option value="2"></option>
-                                            <option value="3"></option>
-                                            <option selected></option>
-                                        </select>
-                                    </span>
-                                    <span class="ql-formats">
-                                        <button class="ql-bold"></button>
-                                        <button class="ql-italic"></button>
-                                    </span>
-                                    <span class="ql-formats">
-                                        <button class="ql-list" value="ordered"></button>
-                                        <button class="ql-list" value="bullet"></button>
-                                    </span>
-                                    <span class="ql-formats">
-                                        <button type="button" class="ql-image-insert" @onclick="OpenImagePickerAsync"
-                                                title="Insert image">
-                                            <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
-                                        </button>
-                                    </span>
-                                </ToolbarContent>
-                                <EditorContent></EditorContent>
-                            </BlazoredTextEditor>
-                        </div>
-                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
-                                          Loading="@isSavingSection" Disabled="@(!canEditCourse)" OnClick="SaveSelectedSectionAsync">
-                                Save
-                            </FluentButton>
-                            <FluentButton Appearance="ButtonAppearance.Outline"
-                                          IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                          Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)"
-                                          OnClick="DeleteSelectedSectionAsync">
-                                Delete
-                            </FluentButton>
-                        </FluentStack>
-                    </FluentStack>
-                }
-                else if (selectedQuestion is not null)
-                {
-                    <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="6px">
-                        <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question"
-                                        Appearance="TextAreaAppearance.Outline" Required="true" />
-
-                        <div class="option-radio-host">
-                            <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId"
-                                              Class="w-100" Margin="@Margin.Top0">
-                                @foreach (CourseQuestionOption option in selectedQuestion.Options)
-                                {
-                                    <FluentRadio Value="@option.Id">
-                                        <LabelTemplate>
-                                            <FluentStack Orientation="Orientation.Horizontal"
-                                                         VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
-                                                <FluentTextInput Class="w-100" @bind-Value="option.OptionText"
-                                                                 Placeholder="Option text" />
-                                                <FluentButton Appearance="ButtonAppearance.Outline"
-                                                              IconStart="@(new Icons.Regular.Size20.Dismiss())"
-                                                              OnClick="@(() => RemoveOption(option))" />
-                                            </FluentStack>
-                                        </LabelTemplate>
-                                    </FluentRadio>
-                                }
-                            </FluentRadioGroup>
-                        </div>
-
-                        <div class="question-actions-group">
-                            <div class="question-actions-add">
-                                <FluentButton Appearance="ButtonAppearance.Outline"
-                                              IconStart="@(new Icons.Regular.Size20.FormNew())" Disabled="@(!canEditCourse)"
-                                              OnClick="AddOption">
-                                    Add Option
-                                </FluentButton>
-                            </div>
-
-                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
-                                <FluentButton Appearance="ButtonAppearance.Primary"
-                                              IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion"
-                                              Disabled="@(!canEditCourse)" OnClick="SaveSelectedQuestionAsync">
-                                    Save
-                                </FluentButton>
-                                <FluentButton Appearance="ButtonAppearance.Outline"
-                                              IconStart="@(new Icons.Regular.Size20.BinRecycle())"
-                                              Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)"
-                                              OnClick="DeleteSelectedQuestionAsync">
-                                    Delete
-                                </FluentButton>
-                            </FluentStack>
-                        </div>
-                    </FluentStack>
-                }
-                else
-                {
-                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
-                                 VerticalAlignment="VerticalAlignment.Center" Height="100%">
-                        <FluentText>Select a section or question, or add a new one.</FluentText>
-                    </FluentStack>
-                }
-            </FluentMultiSplitterPane>
-        </FluentMultiSplitter>
-    </FluentCard>
+                <FluentMultiSplitterPane Size="70%" Class="px-3">
+                    @EditorPane
+                </FluentMultiSplitterPane>
+            </FluentMultiSplitter>
+        </FluentCard>
+    }
 }
 
 @code {
@@ -276,6 +158,8 @@ else
     private bool scopeFailed;
     private LocationScope? currentScope;
     private List<Location> allLocations = [];
+    private bool isNarrow;
+    private DotNetObjectReference<CourseEditor>? _viewportRef;
 
     // A shared course owned by another location is readable here but not writable - the service
     // rejects every write. Gate the write controls on the same rule so the UI doesn't offer
@@ -287,6 +171,162 @@ else
 
     private string owningLocationName =>
         allLocations.FirstOrDefault(l => l.Id == course?.LocationId)?.GetDisplayName() ?? "another location";
+
+    // Shared between the desktop FluentMultiSplitter's two panes and the mobile single-pane
+    // master-detail layout, so the actual section/question list and editor markup exists once.
+    private RenderFragment ListPane => @<text>
+        <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
+            <FluentText As="TextTag.H4" Size="TextSize.Size500">Sections</FluentText>
+            @foreach (CourseSection courseSection in course!.Sections.OrderBy(x => x.SortOrder))
+            {
+                <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
+                     @ondragstart="@(() => draggedSection = courseSection)" @ondragover="@(() => { })"
+                     @ondragover:preventDefault="true" @ondrop="@(() => OnSectionDropAsync(courseSection))">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
+                    <FluentButton
+                        Appearance="@(selectedSection?.Id == courseSection.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                        Class="reorder-item-button" OnClick="@(() => SelectSection(courseSection))">
+                        @courseSection.Title
+                    </FluentButton>
+                </div>
+            }
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                          Disabled="@(!canEditCourse)" OnClick="StartNewSection">
+                Add Section
+            </FluentButton>
+
+            <FluentDivider Class="my-3" />
+
+            <FluentText As="TextTag.H4" Size="TextSize.Size500">Quiz Questions</FluentText>
+            @foreach (CourseQuestion question in course!.Questions.OrderBy(x => x.SortOrder))
+            {
+                <div class="reorder-item" draggable="@(canEditCourse ? "true" : "false")"
+                     @ondragstart="@(() => draggedQuestion = question)" @ondragover="@(() => { })"
+                     @ondragover:preventDefault="true" @ondrop="@(() => OnQuestionDropAsync(question))">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ReOrderDotsVertical())" Class="reorder-handle" />
+                    <FluentButton
+                        Appearance="@(selectedQuestion?.Id == question.Id ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                        Class="reorder-item-button" OnClick="@(() => SelectQuestion(question))">
+                        @question.QuestionText
+                    </FluentButton>
+                </div>
+            }
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())"
+                          Disabled="@(!canEditCourse)" OnClick="StartNewQuestion">
+                Add Question
+            </FluentButton>
+        </FluentStack>
+    </text>;
+
+    private RenderFragment EditorPane => @<text>
+        @if (selectedSection is not null)
+        {
+            <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="18px">
+                <FluentTextInput Class="w-100" @bind-Value="selectedSection.Title" Label="Section Title"
+                                 Appearance="TextInputAppearance.Outline" Required="true" />
+                <div class="quill-editor-host" @ref="quillEditorHostRef">
+                    <BlazoredTextEditor @ref="sectionEditor" Placeholder="Section content...">
+                        <ToolbarContent>
+                            <span class="ql-formats">
+                                <select class="ql-header">
+                                    <option value="1"></option>
+                                    <option value="2"></option>
+                                    <option value="3"></option>
+                                    <option selected></option>
+                                </select>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-bold"></button>
+                                <button class="ql-italic"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-list" value="ordered"></button>
+                                <button class="ql-list" value="bullet"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button type="button" class="ql-image-insert" @onclick="OpenImagePickerAsync"
+                                        title="Insert image">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Image())" />
+                                </button>
+                            </span>
+                        </ToolbarContent>
+                        <EditorContent></EditorContent>
+                    </BlazoredTextEditor>
+                </div>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                                  Loading="@isSavingSection" Disabled="@(!canEditCourse)" OnClick="SaveSelectedSectionAsync">
+                        Save
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                  Disabled="@(!canEditCourse || selectedSection.Id == Guid.Empty)"
+                                  OnClick="DeleteSelectedSectionAsync">
+                        Delete
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        }
+        else if (selectedQuestion is not null)
+        {
+            <FluentStack Orientation="Orientation.Vertical" Class="h-100 overflow-y-auto" VerticalGap="6px">
+                <FluentTextArea Class="w-100" @bind-Value="selectedQuestion.QuestionText" Label="Question"
+                                Appearance="TextAreaAppearance.Outline" Required="true" />
+
+                <div class="option-radio-host">
+                    <FluentRadioGroup Orientation="Orientation.Vertical" TValue="Guid" @bind-Value="correctOptionId"
+                                      Class="w-100" Margin="@Margin.Top0">
+                        @foreach (CourseQuestionOption option in selectedQuestion.Options)
+                        {
+                            <FluentRadio Value="@option.Id">
+                                <LabelTemplate>
+                                    <FluentStack Orientation="Orientation.Horizontal"
+                                                 VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+                                        <FluentTextInput Class="w-100" @bind-Value="option.OptionText"
+                                                         Placeholder="Option text" />
+                                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                                      IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                                      OnClick="@(() => RemoveOption(option))" />
+                                    </FluentStack>
+                                </LabelTemplate>
+                            </FluentRadio>
+                        }
+                    </FluentRadioGroup>
+                </div>
+
+                <div class="question-actions-group">
+                    <div class="question-actions-add">
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.FormNew())" Disabled="@(!canEditCourse)"
+                                      OnClick="AddOption">
+                            Add Option
+                        </FluentButton>
+                    </div>
+
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                        <FluentButton Appearance="ButtonAppearance.Primary"
+                                      IconStart="@(new Icons.Regular.Size20.Save())" Loading="@isSavingQuestion"
+                                      Disabled="@(!canEditCourse)" OnClick="SaveSelectedQuestionAsync">
+                            Save
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size20.BinRecycle())"
+                                      Disabled="@(!canEditCourse || selectedQuestion.Id == Guid.Empty)"
+                                      OnClick="DeleteSelectedQuestionAsync">
+                            Delete
+                        </FluentButton>
+                    </FluentStack>
+                </div>
+            </FluentStack>
+        }
+        else
+        {
+            <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center"
+                         VerticalAlignment="VerticalAlignment.Center" Height="100%">
+                <FluentText>Select a section or question, or add a new one.</FluentText>
+            </FluentStack>
+        }
+    </text>;
 
     private Guid correctOptionId
     {
@@ -344,6 +384,12 @@ else
     // show a blank editor and silently wipe out the saved BodyHtml on the next Save.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _viewportRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 768);
+        }
+
         if (selectedSection is not null && sectionEditor is not null && loadedSectionEditorId != selectedSection.Id)
         {
             try
@@ -359,6 +405,38 @@ else
                 StateHasChanged();
             }
         }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isNarrow)
+    {
+        if (this.isNarrow == isNarrow)
+        {
+            return;
+        }
+
+        this.isNarrow = isNarrow;
+
+        // Swapping branches remounts the FluentMultiSplitterPane/plain-div ancestor around
+        // EditorPane, tearing down any mounted BlazoredTextEditor along with it. Without this
+        // reset, OnAfterRenderAsync's guard would wrongly believe the fresh (blank) editor
+        // instance already has selectedSection's content loaded, and a Save would overwrite the
+        // real saved content with the empty editor's output - same reset every other method that
+        // touches selectedSection already performs.
+        loadedSectionEditorId = null;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("viewportWatcher.dispose");
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
+        _viewportRef?.Dispose();
     }
 
     private async Task LoadCourseAsync()
@@ -531,6 +609,17 @@ currentScope!);
     {
         selectedQuestion = null;
         selectedSection = CloneSection(section);
+    }
+
+    // Mirrors the loadedSectionEditorId reset already done by every other method that clears
+    // selectedSection (SelectQuestion, StartNewSection, StartNewQuestion, DeleteSelectedSectionAsync)
+    // - without it, re-selecting the same section after backing out on mobile would find
+    // loadedSectionEditorId already matching and skip re-loading its content into Quill.
+    private void ClearSelection()
+    {
+        selectedSection = null;
+        selectedQuestion = null;
+        loadedSectionEditorId = null;
     }
 
     private void StartNewSection()
