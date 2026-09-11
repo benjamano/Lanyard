@@ -71,6 +71,8 @@ gh pr create --base dev --body-file /tmp/pr-body.md
 
 Re-running on the same branch overwrites the same paths and rewrites the section in place, so the description always shows the current UI — no duplicated sections, and no stale images (URLs are cache-busted by commit SHA).
 
+**Video.** Add `.mp4`/`.webm`/`.mov` entries to the same manifest for a flow a screenshot can't convey (short and compressed — a few seconds to ~1 minute, under ~10 MiB). It renders as a "Watch video" link to GitHub's own file viewer rather than an inline player — `raw.githubusercontent.com` won't serve video as a playable type (`application/octet-stream` + `nosniff`), so linking straight to the `github.com` blob page is what actually works. There's no recording tool in this Playwright MCP config, so capturing the clip itself needs a standalone Playwright script outside the MCP with video recording enabled — this skill only covers publishing an already-captured file.
+
 ## Login (Playwright MCP)
 
 The seeded dev account is `admin` / `Dev-Admin-Pw1!` — that's `DatabaseSeeder.DevelopmentAdminPassword`, used whenever `Seed:AdminPassword` isn't configured. It is usually the *only* row in `AspNetUsers`; don't expect `bmercer` or any other name to exist.

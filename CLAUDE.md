@@ -119,6 +119,8 @@ If a change is user-noticeable UI, its PR must carry the screenshots — phone (
 
 Inline-only screenshots are not enough. An image attached in chat lives solely in the transcript, and the transcript loses images — they disappear permanently, which is exactly the problem this script exists to solve.
 
+For a multi-step flow that's hard to convey in a still image (e.g. a drag-and-drop scene edit, a live SignalR update), a short video is optional but encouraged. `publish-screenshots.sh` accepts `.mp4`/`.webm`/`.mov` files in the same manifest alongside screenshots. Keep clips short and compressed (a few seconds to ~1 minute, under ~10 MiB). Note it renders as a "Watch video" link to GitHub's file viewer, not a truly inline player — `raw.githubusercontent.com` serves video as `application/octet-stream` with `nosniff`, which browsers refuse to play regardless of extension, so the link points at `github.com`'s own blob viewer instead, which plays it properly. Screenshots remain the default requirement; only add video when a screenshot genuinely can't show the change. There is currently no recording tool in the Playwright MCP config here, so capturing a clip needs a standalone Playwright script (outside the MCP) that opens a context with video recording enabled.
+
 ### Route authorization — the one rule that must never get missed
 Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]` — there is no third option; a missing attribute redirects to login by design (`RouteAuthorizationGate.razor`). For the history, edge cases (`StaffNotFound.razor`), and why this matters, see the `route-authorization` skill.
 
