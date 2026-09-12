@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 #
-# Publish UI screenshots to the `screenshots` branch and surface them on a PR.
+# Publish UI screenshots and short demo videos to the `screenshots` branch and
+# surface them on a PR.
 #
-# Screenshots attached inline in a chat transcript do not survive — the transcript
-# drops them and the PNGs are gone. This puts them somewhere permanent and links
-# them from the pull request, which is where UI review happens anyway.
+# Screenshots/videos attached inline in a chat transcript do not survive — the
+# transcript drops them and the files are gone. This puts them somewhere
+# permanent and links them from the pull request, which is where UI review
+# happens anyway.
+#
+# Media kind (image vs. video) is inferred from each file's extension; see
+# IMAGE_EXTS / VIDEO_EXTS below.
 #
 # Uses the GitHub REST API exclusively: no checkout, no index write, no stash.
 # That matters because this repo is worked on through git worktrees that share a
@@ -19,6 +24,25 @@ SHOT_BRANCH="screenshots"
 MARKER_START="<!-- claude-screenshots:start -->"
 MARKER_END="<!-- claude-screenshots:end -->"
 MAX_REF_ATTEMPTS=5
+IMAGE_EXTS="png jpg jpeg gif webp"
+VIDEO_EXTS="mp4 webm mov"
+VIDEO_WARN_BYTES=$((10 * 1024 * 1024))   # 10 MiB — fine, but a nudge to trim/compress
+VIDEO_MAX_BYTES=$((60 * 1024 * 1024))    # 60 MiB — stay comfortably under GitHub's blob limits
+
+# Prints "image" or "video" for a filename based on its extension, or dies for
+# anything unrecognized so a typo'd manifest entry fails loudly instead of
+# silently rendering as the wrong tag.
+media_kind() {
+  local ext
+  ext="$(printf '%s' "${1##*.}" | tr '[:upper:]' '[:lower:]')"
+  if [[ " $IMAGE_EXTS " == *" $ext "* ]]; then
+    printf 'image\n'
+  elif [[ " $VIDEO_EXTS " == *" $ext "* ]]; then
+    printf 'video\n'
+  else
+    die "unrecognized file extension '.$ext' for $1 (images: $IMAGE_EXTS; videos: $VIDEO_EXTS)"
+  fi
+}
 
 manifest=""
 pr=""
@@ -28,7 +52,8 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'USAGE'
-Publish UI screenshots to the screenshots branch and onto a PR.
+Publish UI screenshots and short demo videos to the screenshots branch and
+onto a PR.
 
 Usage:
   publish-screenshots.sh --manifest <file.json> --pr <number>
@@ -36,20 +61,32 @@ Usage:
   publish-screenshots.sh --manifest <file.json> --pr <number> --emit-markdown
 
 Options:
-  --manifest <file>   JSON array describing the screenshots (required).
-  --pr <number>       Rewrite this PR's description with the screenshots.
+  --manifest <file>   JSON array describing the screenshots/videos (required).
+  --pr <number>       Rewrite this PR's description with the media.
   --emit-markdown     Print the markdown block to stdout. May be combined
                       with --pr, in which case both happen.
 
 Manifest format — "file", "viewport" and "caption" are required, "size"
-is optional and overrides the default viewport label:
+is optional and overrides the default viewport label. Images (png, jpg,
+jpeg, gif, webp) render as an inline <img>. Videos (mp4, webm, mov) render
+as a "Watch video" link to the github.com blob viewer, NOT an inline
+<video> player — raw.githubusercontent.com serves every file as
+application/octet-stream with nosniff, which browsers won't play as video
+regardless of extension; github.com's own file viewer has no such
+restriction and plays it properly, one click away:
 
   [
     { "file": ".playwright-mcp/desktop-home.png", "viewport": "desktop",
       "caption": "Home, populated" },
     { "file": ".playwright-mcp/phone-home.png",   "viewport": "phone",
-      "caption": "Home, populated" }
+      "caption": "Home, populated" },
+    { "file": ".playwright-mcp/desktop-flow.mp4", "viewport": "desktop",
+      "caption": "Creating a scene end-to-end" }
   ]
+
+Videos should be short (a few seconds to ~1 minute) and compressed — under
+~10 MiB is comfortable, over ~60 MiB is rejected outright to stay well clear
+of GitHub's blob-size limits.
 
 Capture screenshots into .playwright-mcp/ — the Playwright MCP rejects paths
 outside the repo, and a bare filename lands in the repo root where it is not
@@ -96,6 +133,14 @@ jq -e 'all(.[]; (.file? | type == "string" and length > 0)
 
 while IFS= read -r f; do
   [[ -f "$f" ]] || die "manifest references a missing file: $f"
+  media_kind "$f" >/dev/null  # validates the extension, dies on anything unrecognized
+  size_bytes="$(wc -c < "$f")"
+  if [[ "$size_bytes" -gt "$VIDEO_MAX_BYTES" ]]; then
+    die "$f is $(du -h "$f" | cut -f1), over the $((VIDEO_MAX_BYTES / 1024 / 1024)) MiB cap — trim or compress it first"
+  elif [[ "$size_bytes" -gt "$VIDEO_WARN_BYTES" ]]; then
+    printf 'warning: %s is %s — consider trimming/compressing for a shorter, lighter clip\n' \
+      "$f" "$(du -h "$f" | cut -f1)" >&2
+  fi
 done < <(jq -r '.[].file' "$manifest")
 
 # Storage is keyed on branch name, not PR number, so screenshots can be uploaded
@@ -110,7 +155,7 @@ safe_branch="$(printf '%s' "$src_branch" | tr -c 'A-Za-z0-9._-' '-')"
 dupes="$(jq -r '.[] | "\(.viewport)/\(.file | split("/") | last)"' "$manifest" | sort | uniq -d)"
 [[ -z "$dupes" ]] || die "two entries map to the same remote path (rename one): $dupes"
 
-printf 'Publishing %s screenshot(s) for branch %s\n' \
+printf 'Publishing %s media file(s) for branch %s\n' \
   "$(jq 'length' "$manifest")" "$src_branch" >&2
 
 # --- 1. Upload each PNG as a blob --------------------------------------------
@@ -190,14 +235,32 @@ done
 printf '  committed %s to %s\n' "${commit_sha:0:7}" "$SHOT_BRANCH" >&2
 
 # --- 3. Build the markdown block ---------------------------------------------
-# ?v=<sha> busts GitHub's image cache. Without it, re-running on the same branch
-# overwrites the PNG but the PR keeps rendering the previous image.
+# ?v=<sha> busts GitHub's cache for images. Without it, re-running on the same
+# branch overwrites the file but the PR keeps rendering the previous one.
+#
+# Videos link to the github.com *blob viewer* instead of embedding a <video
+# src=raw...>. raw.githubusercontent.com serves every file as
+# application/octet-stream with X-Content-Type-Options: nosniff, which stops a
+# browser from playing it as video regardless of the file extension — verified
+# empirically, not a guess. github.com's own blob page has no such restriction
+# and renders a real inline player; it just takes a click to get there instead
+# of appearing directly in the PR body.
 raw_base="https://raw.githubusercontent.com/$REPO/$SHOT_BRANCH"
+blob_base="https://github.com/$REPO/blob/$SHOT_BRANCH"
 cache_bust="${commit_sha:0:7}"
 
 build_block() {
   printf '%s\n' "$MARKER_START"
-  printf '## Screenshots\n'
+  local heading_kinds
+  heading_kinds="$(jq -r '[.[].file | split(".") | last | ascii_downcase] | unique | .[]' "$manifest" \
+    | while read -r ext; do
+        if [[ " $VIDEO_EXTS " == *" $ext "* ]]; then printf 'video\n'; else printf 'image\n'; fi
+      done | sort -u)"
+  case "$heading_kinds" in
+    image) printf '## Screenshots\n' ;;
+    video) printf '## Videos\n' ;;
+    *)     printf '## Screenshots & Videos\n' ;;
+  esac
 
   # Known viewports first in a stable order, then anything else the manifest used.
   local ordered vp heading default_size width sizes size shot_suffix cap fname safe_vp esc_cap
@@ -235,9 +298,14 @@ build_block() {
       # Captions are emitted as HTML rather than markdown so that characters
       # like * _ [ ] " & cannot break the rendering.
       printf '\n<p><strong>%s</strong></p>\n\n' "$esc_cap"
-      printf '<img%s alt="%s" src="%s">\n' \
-        "${width:+ width=\"$width\"}" "$esc_cap" \
-        "$raw_base/$safe_branch/$safe_vp/$fname?v=$cache_bust"
+      if [[ "$(media_kind "$fname")" == "video" ]]; then
+        printf '<p>&#9654; <a href="%s">Watch video</a></p>\n' \
+          "$blob_base/$safe_branch/$safe_vp/$fname"
+      else
+        printf '<img%s alt="%s" src="%s">\n' \
+          "${width:+ width=\"$width\"}" "$esc_cap" \
+          "$raw_base/$safe_branch/$safe_vp/$fname?v=$cache_bust"
+      fi
     done < <(jq -r --arg v "$vp" \
       '.[] | select(.viewport == $v)
            | [.caption, (.file | split("/") | last), (.size // "")] | @tsv' "$manifest")
@@ -268,5 +336,5 @@ stripped="$(printf '%s\n' "$stripped" | sed -e :a -e '/^\s*$/{$d;N;ba' -e '}')"
 printf '%s\n\n%s\n' "$stripped" "$block" \
   | gh pr edit "$pr" --repo "$REPO" --body-file - >/dev/null
 
-printf 'Updated PR #%s description with %s screenshot(s).\n' \
+printf 'Updated PR #%s description with %s media file(s).\n' \
   "$pr" "$(jq 'length' "$manifest")" >&2

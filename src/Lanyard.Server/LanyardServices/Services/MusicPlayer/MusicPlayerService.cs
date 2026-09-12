@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 
@@ -17,6 +18,7 @@ public class MusicPlayerService
 {
     private readonly IHubContext<SignalRControlHub> _hubContext;
     private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MusicPlayerService> _logger;
     private readonly object _lock = new();
     private static readonly Random _rng = new();
@@ -26,10 +28,12 @@ public class MusicPlayerService
     public MusicPlayerService(
         IHubContext<SignalRControlHub> hubContext,
         IDbContextFactory<ApplicationDbContext> contextFactory,
+        IServiceScopeFactory scopeFactory,
         ILogger<MusicPlayerService> logger)
     {
         _hubContext = hubContext;
         _contextFactory = contextFactory;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -428,21 +432,22 @@ public class MusicPlayerService
 
     private async Task<string?> GetClientConnectionIdAsync(Guid clientId)
     {
-        await using ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
+        // MusicPlayerService is a singleton, so IClientService (scoped) can't be constructor-injected -
+        // resolve it per call via a short-lived scope, same pattern as DmxService.UpdateChannelValue.
+        // This also picks up IClientService's cached connection-ID lookup instead of hitting the DB
+        // on every single Play/Pause/Seek/Volume command.
+        using IServiceScope scope = _scopeFactory.CreateScope();
+        IClientService clientService = scope.ServiceProvider.GetRequiredService<IClientService>();
 
-        string? connectionId = await context.Clients
-            .AsNoTracking()
-            .Where(x => x.Id == clientId)
-            .Select(x => x.MostRecentConnectionId)
-            .FirstOrDefaultAsync();
+        Result<string?> result = await clientService.GetClientCurrentConnectionIdAsync(clientId);
 
-        if (string.IsNullOrWhiteSpace(connectionId))
+        if (!result.IsSuccess || string.IsNullOrWhiteSpace(result.Data))
         {
-            _logger.LogWarning("Could not resolve connection for client {ClientId}", clientId);
+            _logger.LogWarning("Could not resolve connection for client {ClientId}: {Error}", clientId, result.Error);
             return null;
         }
 
-        return connectionId;
+        return result.Data;
     }
 
     private async Task<bool> SendToClientAsync(Guid clientId, string methodName, params object?[] args)

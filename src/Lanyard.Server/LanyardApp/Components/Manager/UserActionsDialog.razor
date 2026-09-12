@@ -1,0 +1,352 @@
+@using System.ComponentModel.DataAnnotations
+@using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Gdpr
+
+@inject IGdprService _gdprService
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <ChildContent>
+        <div class="user-actions-dialog">
+        <FluentTabs>
+            <FluentTab Header="Details" IconStart="new Icons.Regular.Size20.Edit()">
+                <EditForm EditContext="@_detailsEditContext" OnValidSubmit="HandleSaveDetails">
+                    <DataAnnotationsValidator />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-actions-tab-content">
+                        <FluentTextInput @bind-Value="detailsModel.FirstName" Label="First Name" Required="true"
+                                         Message="@_detailsEditContext.GetValidationMessage(() => detailsModel.FirstName)"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                        </FluentTextInput>
+                        <FluentTextInput @bind-Value="detailsModel.LastName" Label="Last Name" Required="true"
+                                         Message="@_detailsEditContext.GetValidationMessage(() => detailsModel.LastName)"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Person())" Slot="start" />
+                        </FluentTextInput>
+                        <FluentTextInput @bind-Value="detailsModel.PhoneNumber" Label="Phone Number"
+                                         TextInputType="TextInputType.Telephone"
+                                         Message="@_detailsEditContext.GetValidationMessage(() => detailsModel.PhoneNumber)"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Phone())" Slot="start" />
+                        </FluentTextInput>
+
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      Disabled="@isSavingDetails" IconStart="@(new Icons.Regular.Size20.Save())">
+                            @(isSavingDetails ? "Saving..." : "Save")
+                        </FluentButton>
+                    </FluentStack>
+                </EditForm>
+            </FluentTab>
+
+            <FluentTab Header="Password" IconStart="new Icons.Regular.Size20.Key()">
+                <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword">
+                    <DataAnnotationsValidator />
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-actions-tab-content">
+                        <FluentTextInput @bind-Value="passwordModel.NewPassword" Label="New Password" Required="true"
+                                         TextInputType="TextInputType.Password"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
+                        <FluentTextInput @bind-Value="passwordModel.ConfirmPassword" Label="Confirm Password" Required="true"
+                                         TextInputType="TextInputType.Password"
+                                         MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
+                        </FluentTextInput>
+
+                        <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
+                                      Disabled="@isChangingPassword" IconStart="@(new Icons.Regular.Size20.Key())">
+                            @(isChangingPassword ? "Changing..." : "Change Password")
+                        </FluentButton>
+                    </FluentStack>
+                </EditForm>
+            </FluentTab>
+
+            <FluentTab Header="Account" IconStart="new Icons.Regular.Size20.PersonSettings()">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-actions-tab-content">
+                    <FluentText>Status: <strong>@StatusText</strong></FluentText>
+
+                    @if (IsLockedOut)
+                    {
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.LockOpen()"
+                                      Disabled="@isUnlocking" OnClick="@UnlockAsync">
+                            @(isUnlocking ? "Unlocking..." : "Unlock Account")
+                        </FluentButton>
+                    }
+
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.MailArrowClockwise()"
+                                  Disabled="@isSendingEmail" OnClick="@SendSetPasswordLinkAsync">
+                        @(isSendingEmail ? "Sending..." : (Content?.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email"))
+                    </FluentButton>
+                </FluentStack>
+            </FluentTab>
+
+            <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-actions-tab-content">
+                    <AuthorizeView Roles="Admin" Context="authContext">
+                        <Authorized>
+                            <FluentButton Appearance="ButtonAppearance.Outline" Color="Color.Error"
+                                          IconStart="new Icons.Regular.Size20.PersonDelete()"
+                                          Disabled="@isErasing" OnClick="@ConfirmGdprEraseAsync">
+                                @(isErasing ? "Erasing..." : "Delete User Data (GDPR)")
+                            </FluentButton>
+                        </Authorized>
+                    </AuthorizeView>
+
+                    <FluentButton Appearance="ButtonAppearance.Outline" Color="Color.Error"
+                                  IconStart="new Icons.Regular.Size20.Delete()"
+                                  Disabled="@isDeleting" OnClick="@ConfirmDeleteAsync">
+                        @(isDeleting ? "Deleting..." : "Delete User")
+                    </FluentButton>
+                </FluentStack>
+            </FluentTab>
+        </FluentTabs>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@CloseAsync">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public UserProfile? Content { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private DetailsModel detailsModel = new();
+    private EditContext _detailsEditContext = default!;
+    private PasswordModel passwordModel = new();
+
+    private bool isSavingDetails;
+    private bool isChangingPassword;
+    private bool isUnlocking;
+    private bool isSendingEmail;
+    private bool isErasing;
+    private bool isDeleting;
+
+    // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
+    // an account with lockout disabled can still carry a stale LockoutEnd from before it was
+    // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
+    private bool IsLockedOut =>
+        Content is not null && Content.LockoutEnabled && Content.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
+
+    private string StatusText =>
+        IsLockedOut ? "Locked" : Content?.PasswordSetDate is null ? "Invite Pending" : "Active";
+
+    protected override void OnInitialized()
+    {
+        detailsModel.FirstName = Content?.FirstName ?? string.Empty;
+        detailsModel.LastName = Content?.LastName ?? string.Empty;
+        detailsModel.PhoneNumber = Content?.PhoneNumber;
+
+        _detailsEditContext = new EditContext(detailsModel);
+    }
+
+    private async Task HandleSaveDetails()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        isSavingDetails = true;
+
+        try
+        {
+            Content.FirstName = detailsModel.FirstName;
+            Content.LastName = detailsModel.LastName;
+            Content.PhoneNumber = detailsModel.PhoneNumber;
+
+            await _securityService.UpdateUserProfileAsync(Content);
+
+            ToastService.ShowSuccess("User details updated!");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error updating user: {ex.Message}");
+        }
+        finally
+        {
+            isSavingDetails = false;
+        }
+    }
+
+    private async Task HandleChangePassword()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        isChangingPassword = true;
+
+        try
+        {
+            Result<bool> result = await _securityService.ChangePasswordAsync(Content.Id, passwordModel.NewPassword);
+
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess($"Password changed successfully for '{Content.GetName()}'!");
+                passwordModel = new();
+            }
+            else
+            {
+                ToastService.ShowError($"Failed to change password: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error changing password: {ex.Message}");
+        }
+        finally
+        {
+            isChangingPassword = false;
+        }
+    }
+
+    private async Task UnlockAsync()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        isUnlocking = true;
+
+        Result<bool> result = await _securityService.UnlockUserAsync(Content.Id);
+
+        if (result.IsSuccess)
+        {
+            ToastService.ShowSuccess($"{Content.GetName()}'s account has been unlocked.");
+            Content.LockoutEnd = DateTimeOffset.UtcNow.AddSeconds(-1);
+        }
+        else
+        {
+            ToastService.ShowError(result.Error ?? "Failed to unlock account.");
+        }
+
+        isUnlocking = false;
+    }
+
+    private async Task SendSetPasswordLinkAsync()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        isSendingEmail = true;
+
+        bool wasPending = Content.PasswordSetDate is null;
+        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(Content.Id);
+
+        if (result.IsSuccess)
+        {
+            ToastService.ShowSuccess(wasPending
+                ? $"Invite resent to {Content.Email}."
+                : $"Password reset email sent to {Content.Email}.");
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to send email: {result.Error}");
+        }
+
+        isSendingEmail = false;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Are you sure?";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), Content);
+        });
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        isDeleting = true;
+
+        await _securityService.DeleteUserAsync(Content.Id);
+
+        await Dialog.CloseAsync();
+    }
+
+    private async Task ConfirmGdprEraseAsync()
+    {
+        if (Content is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmDeleteUserDialog>(options =>
+        {
+            options.Header.Title = "Erase User Data (GDPR)";
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), Content);
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Message),
+                $"This will permanently remove {Content.GetName()}'s personal data and delete their account. " +
+                "Content they authored will be kept but no longer attributed to them. This cannot be undone.");
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.ConfirmLabel), "Erase Data");
+        });
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+
+        isErasing = true;
+
+        Result<bool> eraseResult = await _gdprService.EraseUserDataAsync(Content.Id);
+
+        if (!eraseResult.IsSuccess)
+        {
+            ToastService.ShowError(eraseResult.Error ?? "Failed to erase user data.");
+            isErasing = false;
+            return;
+        }
+
+        await Dialog.CloseAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+
+    private class DetailsModel
+    {
+        [Required(ErrorMessage = "First Name is required.")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Last Name is required.")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Phone(ErrorMessage = "Invalid phone number.")]
+        public string? PhoneNumber { get; set; }
+    }
+
+    private class PasswordModel
+    {
+        [Required(ErrorMessage = "New password is required.")]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters long.")]
+        [DataType(DataType.Password)]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Confirm password is required.")]
+        [Compare(nameof(NewPassword), ErrorMessage = "Passwords do not match.")]
+        [DataType(DataType.Password)]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

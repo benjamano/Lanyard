@@ -32,7 +32,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Client? client = await ctx.Clients
                 .Where(x => x.Id == clientId)
@@ -56,7 +56,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                 return Result<string?>.Ok(cachedConnectionId);
             }
 
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             string? connectionId = await ctx.Clients
                 .AsNoTracking()
@@ -99,7 +99,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             ctx.Clients.Add(newClient);
 
@@ -117,16 +117,28 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             ctx.Clients.Update(updatedClient);
 
             await ctx.SaveChangesAsync();
 
+            // Keep both cached connection-ID lookups in sync immediately, otherwise a
+            // client that reconnects with a new connection ID keeps routing commands to
+            // the dead old one (GetClientCurrentConnectionIdAsync/GetClientIdFromConnectionIdAsync)
+            // for up to their 10-minute TTL.
+            _cache.Set(updatedClient.Id, updatedClient.MostRecentConnectionId, TimeSpan.FromMinutes(10));
+
+            if (!string.IsNullOrEmpty(updatedClient.MostRecentConnectionId))
+            {
+                _cache.Set(updatedClient.MostRecentConnectionId, updatedClient.Id, TimeSpan.FromMinutes(10));
+            }
+
             return Result<Client?>.Ok(updatedClient);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error updating client {ClientId}", updatedClient.Id);
             return Result<Client?>.Fail(ex.Message);
         }
     }
@@ -146,7 +158,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             List<string> ids = GetConnectedConnectionIds().ToList();
 
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<Client> clients = await ctx.Clients
                 .Where(x => ids.Contains(x.MostRecentConnectionId ?? ""))
@@ -166,7 +178,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             List<string> ids = GetConnectedConnectionIds().ToList();
 
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedDTO> clients = await ctx.Clients
                 .Select(x=> new ClientConnectedDTO
@@ -198,7 +210,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         {
             List<string> ids = GetConnectedConnectionIds().ToList();
 
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = await ctx.Clients
                 .Select(x => new ClientConnectedWithCapabilitiesDTO
@@ -241,7 +253,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientProjectionSettings> projectionSettings = await ctx.ClientProjectionSettings
                 .AsNoTracking()
@@ -265,7 +277,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientProjectionSettings> projectionSettings = await ctx.ClientProjectionSettings
                 .AsNoTracking()
@@ -291,7 +303,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Client? client = await ctx.Clients
                 .AsNoTracking()
@@ -317,7 +329,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Client? client = await ctx.Clients
                 .AsNoTracking()
@@ -386,7 +398,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientAvailableScreen> screens = await ctx.ClientAvailableScreens
                 .AsNoTracking()
@@ -432,7 +444,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                 return Result<Guid>.Fail("Width must be greater than zero.");
             }
 
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             clientProjectionSettings.Client = null;
             clientProjectionSettings.ProjectionProgram = null;
@@ -457,7 +469,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             ClientProjectionSettings? projectionSettings = await ctx.ClientProjectionSettings
                 .Where(x => x.Id == clientProjectionSettingsId)
@@ -682,7 +694,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Client? client = await ctx.Clients
                 .AsNoTracking()
@@ -939,7 +951,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
                 .AsNoTracking()
@@ -960,7 +972,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             List<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
                 .Where(x => x.ClientId == clientId)
@@ -985,7 +997,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             List<ClientAvailableDmxDevice> devices = await ctx.ClientAvailableDmxDevices
                 .Where(x => x.ClientId == clientId)
@@ -1014,7 +1026,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     {
         try
         {
-            using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             ClientDmxSettingsDTO? settings = await context.ClientAvailableDmxDevices
                 .AsNoTracking()

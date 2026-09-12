@@ -1,0 +1,44 @@
+@using Lanyard.Infrastructure.Models.Dmx
+
+<FluentStack Orientation="Orientation.Horizontal" HorizontalGap="12" Wrap="true" Class="p-2">
+    @if (!Fixtures.Any())
+    {
+        <FluentText Size="TextSize.Size400">No fixtures defined for this client yet.</FluentText>
+    }
+    else
+    {
+        @foreach (DmxFixture fixture in Fixtures)
+        {
+            DmxFixtureColorMapper.FixtureColor color = DmxFixtureColorMapper.GetColor(fixture, ChannelValues);
+            string fillColor = ToCssColor(color);
+
+            <FluentCard @key="fixture.Id" Appearance="CardAppearance.Subtle" Padding="@Padding.All2">
+                <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="4">
+                    <svg class="fixture-swatch" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="@($"{fixture.Name} preview")">
+                        <circle cx="24" cy="24" r="20" fill="@fillColor" />
+                    </svg>
+                    <FluentText Size="TextSize.Size300">@fixture.Name</FluentText>
+                </FluentStack>
+            </FluentCard>
+        }
+    }
+</FluentStack>
+
+@code {
+    [Parameter]
+    public required IReadOnlyList<DmxFixture> Fixtures { get; set; }
+
+    [Parameter]
+    public required IReadOnlyDictionary<int, byte> ChannelValues { get; set; }
+
+    // Brightness scales the fixture's own color rather than being drawn as a
+    // separate value, so a dimmed-down RGB fixture visibly darkens like a real light.
+    private static string ToCssColor(DmxFixtureColorMapper.FixtureColor color)
+    {
+        double scale = color.Brightness / 255.0;
+
+        byte Scale(byte channel) => (byte)Math.Round(channel * scale);
+
+        return $"rgb({Scale(color.Red)}, {Scale(color.Green)}, {Scale(color.Blue)})";
+    }
+}

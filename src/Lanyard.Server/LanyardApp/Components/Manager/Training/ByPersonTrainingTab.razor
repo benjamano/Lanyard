@@ -37,8 +37,11 @@
         }
         else
         {
+            @* Same fix as ByCourseTrainingTab/Courses.razor: keep a workable minimum width and let
+               the grid scroll sideways instead of squeezing the action icons unreachable. *@
+            <div class="assignments-grid-scroll" style="overflow-x: auto;">
             <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100 mt-2"
-                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
+                            Style="min-width: 700px;" RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
                     <TemplateColumn Title="Course" Sortable="true">
                         @context.Label
@@ -81,6 +84,7 @@
                         : "This person has no training assigned at your location.")
                 </EmptyContent>
             </FluentDataGrid>
+            </div>
         }
     }
     }
@@ -133,25 +137,7 @@
 
     private async Task<IEnumerable<UserProfile>> LoadSelectablePeopleAsync(LocationScope scope)
     {
-        // GetActiveUsersAsync rather than GetAllUsersAsync so the GDPR deleted-user placeholder
-        // row never appears as a selectable person.
-        IEnumerable<UserProfile> allUsers = await _securityService.GetActiveUsersAsync();
-
-        if (scope.IsAdmin)
-        {
-            return allUsers;
-        }
-
-        Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
-
-        if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
-        {
-            _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
-            return [];
-        }
-
-        HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
-        return allUsers.Where(u => locationUserIds.Contains(u.Id));
+        return await _securityService.GetActiveUsersInLocationAsync(scope.LocationId!.Value);
     }
 
     private void ClearSelection()

@@ -38,7 +38,7 @@
         }
         else if (summary is not null)
         {
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="24px" Class="mt-2 mb-2">
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="24px" Class="mt-2 mb-2" Wrap="true">
                 <FluentText>
                     Average total time: <strong>@(summary.AverageTotalMinutes.HasValue ? FormatMinutes(summary.AverageTotalMinutes.Value) : "-")</strong>
                 </FluentText>

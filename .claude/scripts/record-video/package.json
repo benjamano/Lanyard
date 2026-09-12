@@ -1,0 +1,9 @@
+{
+  "name": "lanyard-record-video",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Playwright video recorder for UI-flow demo clips (outside the Playwright MCP, which has no recording tool/flag). See record-video.mjs --help.",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

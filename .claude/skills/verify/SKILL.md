@@ -71,6 +71,16 @@ gh pr create --base dev --body-file /tmp/pr-body.md
 
 Re-running on the same branch overwrites the same paths and rewrites the section in place, so the description always shows the current UI — no duplicated sections, and no stale images (URLs are cache-busted by commit SHA).
 
+**Video.** Add `.mp4`/`.webm`/`.mov` entries to the same manifest for a flow a screenshot can't convey (short and compressed — a few seconds to ~1 minute, under ~10 MiB). It renders as a "Watch video" link to GitHub's own file viewer rather than an inline player — `raw.githubusercontent.com` won't serve video as a playable type (`application/octet-stream` + `nosniff`), so linking straight to the `github.com` blob page is what actually works. There's no recording tool in this Playwright MCP config, so capturing the clip uses `.claude/scripts/record-video/record-video.mjs` instead: write a scenario file default-exporting `async function(page)` (normal Playwright calls -- goto, click, waitForTimeout, etc.), then run
+
+```bash
+cd .claude/scripts/record-video && npm install   # first time only
+node record-video.mjs --scenario /tmp/my-scenario.mjs \
+  --out .playwright-mcp/desktop-my-flow.webm --viewport 1440x900
+```
+
+then feed the resulting `.webm` into the same screenshot manifest above. `--help` covers the rest (headed mode, phone viewport, etc.).
+
 ## Login (Playwright MCP)
 
 The seeded dev account is `admin` / `Dev-Admin-Pw1!` — that's `DatabaseSeeder.DevelopmentAdminPassword`, used whenever `Seed:AdminPassword` isn't configured. It is usually the *only* row in `AspNetUsers`; don't expect `bmercer` or any other name to exist.

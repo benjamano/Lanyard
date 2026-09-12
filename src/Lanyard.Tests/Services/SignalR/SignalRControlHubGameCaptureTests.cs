@@ -63,6 +63,7 @@ public class SignalRControlHubGameCaptureTests
         MusicPlayerService playerService = new(
             Mock.Of<IHubContext<SignalRControlHub>>(),
             factory,
+            Mock.Of<IServiceScopeFactory>(),
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
@@ -119,6 +120,30 @@ public class SignalRControlHubGameCaptureTests
 
         gameResultServiceMock.Verify(
             x => x.RecordCompletedGameAsync(clientId, It.IsAny<LaserGameStatusDTO>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_RecordsGameWithNonZeroDuration()
+    {
+        // Regression guard for GameStateService.HandleGameEnded() (client-side, not reachable
+        // from this test project): it must fire its edge-triggered publish before zeroing
+        // TotalTimeSeconds/TimeRemainingSeconds, otherwise every completed game would be
+        // recorded with DurationSeconds = 0. This asserts the hub forwards whatever duration
+        // the incoming DTO carries rather than discarding/zeroing it during edge detection.
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        gameResultServiceMock.Verify(
+            x => x.RecordCompletedGameAsync(clientId, It.Is<LaserGameStatusDTO>(dto => dto.TotalTimeSeconds > 0)),
             Times.Once);
     }
 

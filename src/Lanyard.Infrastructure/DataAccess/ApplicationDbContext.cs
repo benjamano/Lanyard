@@ -64,6 +64,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientAvailableVideoDevice> ClientAvailableVideoDevices { get; set; }
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
+        public DbSet<DmxFixture> DmxFixtures { get; set; }
         public DbSet<Course> Courses { get; set; }
         public DbSet<CourseSection> CourseSections { get; set; }
         public DbSet<CourseQuestion> CourseQuestions { get; set; }

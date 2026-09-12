@@ -883,6 +883,52 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableDmxDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreateByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FixtureType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("StartChannel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("CreateByUserId");
+
+                    b.HasIndex("UpdateByUserId");
+
+                    b.ToTable("DmxFixtures");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxScene", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1896,7 +1942,7 @@ namespace Lanyard.Infrastructure.Migrations
                                 .HasColumnName("ProjectionStatusWidget_DisplayIndex");
                         });
 
-                    b.HasDiscriminator().HasValue(13);
+                    b.HasDiscriminator().HasValue(14);
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TextAreaWidget", b =>
@@ -2187,6 +2233,31 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixture", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "CreateByUser")
+                        .WithMany()
+                        .HasForeignKey("CreateByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UpdateByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdateByUserId");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("CreateByUser");
+
+                    b.Navigation("UpdateByUser");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxScene", b =>

@@ -37,11 +37,18 @@
                     </FluentText>
                 </FluentStack>
                 
-                <FluentButton IconStart="new Icons.Regular.Size20.BinRecycle()"
-                                Appearance="ButtonAppearance.Transparent"
-                                Disabled="@(!IsEditModeEnabled)"
-                                OnClick="@(() => DeleteScene(OpenScene))" 
-                                Tooltip="Delete Scene"/>
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
+                    <FluentButton IconStart="@(isPreviewingScene ? new Icons.Filled.Size20.Stop() : new Icons.Regular.Size20.Play())"
+                                    Appearance="ButtonAppearance.Transparent"
+                                    Disabled="@(sceneSteps == null || sceneSteps.Count == 0)"
+                                    OnClick="@ToggleScenePreview"
+                                    Tooltip="@(isPreviewingScene ? "Stop Preview" : "Preview Scene")"/>
+                    <FluentButton IconStart="new Icons.Regular.Size20.BinRecycle()"
+                                    Appearance="ButtonAppearance.Transparent"
+                                    Disabled="@(!IsEditModeEnabled)"
+                                    OnClick="@(() => DeleteScene(OpenScene))"
+                                    Tooltip="Delete Scene"/>
+                </FluentStack>
             </FluentStack>
         </FluentCard>
 
@@ -197,6 +204,19 @@
     [Parameter]
     public EventCallback<DmxScene> OnSceneEdited { get; set; }
 
+    // Reported up to DmxDesk, which forwards it to VirtualDmxDesk so the scene's simulated look
+    // renders inline in the main desk area (the same DmxFixturePreview used for the live preview)
+    // instead of a separate copy here in the narrow sidebar.
+    [Parameter]
+    public EventCallback<List<DmxSceneStep>?> OnPreviewingStepsChanged { get; set; }
+
+    // DmxDesk owns the single source of truth for which scene (if any) is being previewed --
+    // this component only reads it back to know whether the toggle button applies to *this*
+    // open scene. Without this, switching clients or scenes could leave this button showing
+    // "Stop Preview" for a preview DmxDesk already force-stopped elsewhere (e.g. on client switch).
+    [Parameter]
+    public Guid? PreviewingSceneId { get; set; }
+
     private List<DmxSceneStep>? sceneSteps = null;
 
     private List<DmxSceneStep> selectedStep = new();
@@ -205,6 +225,8 @@
     private DmxSceneStep? editingStepBeats = null;
     private double beatsEditValue = 1;
     private Guid? _loadedSceneId;
+
+    private bool isPreviewingScene => OpenScene != null && PreviewingSceneId == OpenScene.Id;
 
     // The editor panel is too narrow to fit an inline editor (input + save/cancel buttons)
     // in both the Duration and Beats columns at once, so the column being edited borrows
@@ -219,6 +241,13 @@
     {
         if (ClientId.HasValue && OpenScene != null && OpenScene.Id != _loadedSceneId)
         {
+            // Switching away from a scene that was being previewed must stop it -- otherwise
+            // DmxDesk keeps animating the old scene's steps after the editor moves on.
+            if (PreviewingSceneId == _loadedSceneId)
+            {
+                await OnPreviewingStepsChanged.InvokeAsync(null);
+            }
+
             _loadedSceneId = OpenScene.Id;
             editingStepDuration = null;
             editingStepBeats = null;
@@ -237,6 +266,26 @@
                 sceneSteps = new List<DmxSceneStep>();
             }
         }
+    }
+
+    // The actual animation/scrubbing lives in VirtualDmxDesk so it renders inline in the main
+    // desk area through the same DmxFixturePreview used for the live preview; this component
+    // just tells the parent which steps to preview (or null to stop).
+    private async Task ToggleScenePreview()
+    {
+        if (isPreviewingScene)
+        {
+            await OnPreviewingStepsChanged.InvokeAsync(null);
+
+            return;
+        }
+
+        if (sceneSteps == null || sceneSteps.Count == 0)
+        {
+            return;
+        }
+
+        await OnPreviewingStepsChanged.InvokeAsync(sceneSteps);
     }
 
     private async Task DeleteScene(DmxScene scene)
