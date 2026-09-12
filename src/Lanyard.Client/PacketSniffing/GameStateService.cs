@@ -39,6 +39,25 @@ public class GameStateService : IGameStateService
         GameEnded?.Invoke();
 
         GameStatus = GameStatus.NotStarted;
+
+        // Fire the transition publish before clearing TimeRemaining/GameLength: the server's
+        // edge-triggered game-result recording (SignalRControlHub.UpdateLaserGameStatus ->
+        // GameResultService.RecordCompletedGameAsync) reads TotalTimeSeconds off this exact
+        // publish to persist the finished game's duration, so the real values must still be in
+        // place when GameStateChanged fires here.
+        GameStateChanged?.Invoke();
+
+        // Only now clear the countdown, so a later republish during the idle window (e.g. a
+        // stray score packet) can't keep echoing this finished game's stale countdown.
+        // Deliberately NOT touching CurrentPlayerScores - that persists until HandleGameStarted()
+        // by design (see the comment in SignalRControlHub.UpdateLaserGameStatus).
+        TimeRemaining = TimeSpan.Zero;
+        GameLength = TimeSpan.Zero;
+    }
+
+    public void HandleGameGetReady()
+    {
+        GameStatus = GameStatus.GetReady;
         GameStateChanged?.Invoke();
     }
 

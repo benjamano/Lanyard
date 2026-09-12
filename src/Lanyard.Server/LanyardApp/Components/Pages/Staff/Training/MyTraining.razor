@@ -27,8 +27,11 @@
     }
     else
     {
+        @* Course names truncate to nothing and the Status badge clips off-screen at phone width
+           with no scroll fallback - same fix as Courses.razor/ByCourseTrainingTab.razor. *@
+        <div class="my-training-grid-scroll" style="overflow-x: auto;">
         <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr" Class="w-100 mt-2"
-                        RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
+                        Style="min-width: 480px;" RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
             <ChildContent>
                 <TemplateColumn Title="Course">
                     <FluentButton Appearance="ButtonAppearance.Transparent" OnClick="@(() => OpenAssignment(context.Primary.Id))">
@@ -56,6 +59,7 @@
                 </AssignmentGroupDetails>
             </RowDetails>
         </FluentDataGrid>
+        </div>
     }
 </FluentCard>
 

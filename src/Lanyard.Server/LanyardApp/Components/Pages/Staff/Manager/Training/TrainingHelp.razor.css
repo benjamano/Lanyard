@@ -1,0 +1,6 @@
+/* Same overflow fix as TrainingDashboard.razor.css (see its comment for why .training-tabs-host
+   is needed as a ::deep anchor) - this page's tab labels are even longer ("Multi-Location Rules",
+   "Tracking Completion"), so the clipping is worse here. */
+.training-tabs-host ::deep fluent-tablist {
+    overflow-x: auto;
+}

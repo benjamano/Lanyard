@@ -47,8 +47,12 @@
         }
         else
         {
+            @* Five columns plus a 4-icon action cell don't fit a phone - same fix as Courses.razor's
+               courses-grid-scroll: keep a workable minimum width and let the grid scroll sideways
+               instead of squeezing the action icons until they're unreachable. *@
+            <div class="assignments-grid-scroll" style="overflow-x: auto;">
             <FluentDataGrid Items="@groupedAssignments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr 1fr 1fr" Class="w-100"
-                            RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
+                            Style="min-width: 700px;" RowSize="@DataGridRowSize.Medium" HasRowDetails="@(g => g.HasExpandableDetails)">
                 <ChildContent>
                     <TemplateColumn Title="Person">
                         @context.Label
@@ -110,6 +114,7 @@
                     No one is assigned to this course yet.
                 </EmptyContent>
             </FluentDataGrid>
+            </div>
         }
     }
     }

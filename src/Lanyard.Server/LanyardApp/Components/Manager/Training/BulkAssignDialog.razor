@@ -105,23 +105,7 @@
             return;
         }
 
-        users = await _securityService.GetAllUsersAsync();
-
-        if (!scope.IsAdmin)
-        {
-            Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
-
-            if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
-            {
-                _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
-                users = [];
-            }
-            else
-            {
-                HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
-                users = users.Where(u => locationUserIds.Contains(u.Id));
-            }
-        }
+        users = await _securityService.GetActiveUsersInLocationAsync(scope.LocationId!.Value);
 
         Result<List<ApplicationRole>> rolesResult = await _rolesService.GetAllApplicationRolesAsync();
 
@@ -178,19 +162,16 @@
 
             userIds = [.. usersInRoleResult.Data.Select(x => x.Id)];
 
-            if (!scope.IsAdmin)
+            Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
+
+            if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
             {
-                Result<List<UserProfile>> locationUsersResult = await _companyLocationService.GetUsersInLocationAsync(scope.LocationId!.Value);
-
-                if (!locationUsersResult.IsSuccess || locationUsersResult.Data is null)
-                {
-                    _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
-                    return;
-                }
-
-                HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
-                userIds = [.. userIds.Where(locationUserIds.Contains)];
+                _toastService.ShowError($"Failed to load location members: {locationUsersResult.Error}");
+                return;
             }
+
+            HashSet<string> locationUserIds = [.. locationUsersResult.Data.Select(u => u.Id)];
+            userIds = [.. userIds.Where(locationUserIds.Contains)];
         }
         else
         {
