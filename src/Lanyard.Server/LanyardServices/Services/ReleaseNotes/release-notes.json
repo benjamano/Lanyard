@@ -234,8 +234,8 @@
   },
   {
     "version": "1.3.17",
-    "releaseDate": "2026-09-11",
-    "summary": "Fixed kiosk command reliability, scoped employee lists to location, and made the Training and User Management pages phone-friendly.",
+    "releaseDate": "2026-09-12",
+    "summary": "Fixed kiosk command reliability, scoped employee lists to location, made the Training and User Management pages phone-friendly, and added DMX fixture/scene previews.",
     "details": [
       "Fixed Play, Pause, Seek, volume, and song-change commands sometimes taking several seconds to reach a kiosk, getting slower the longer the kiosk had been running.",
       "Fixed the kiosk occasionally losing its connection to the server and not automatically reconnecting.",
@@ -250,7 +250,10 @@
       "The My Training, Training Dashboard and Training Courses lists now scroll sideways on a phone instead of clipping course names and status badges off the edge of the screen.",
       "Buttons and switches in the Training Courses header now wrap onto a second line on a phone instead of overlapping.",
       "Tapping a user row now opens a dialog with all of that user's actions (edit, change password, resend invite, unlock, delete, etc.) instead of a row of small icons.",
-      "The Username and Email columns now hide on narrow screens to keep the table readable on a phone."
+      "The Username and Email columns now hide on narrow screens to keep the table readable on a phone.",
+      "Added a Fixtures manager to the DMX desk, so staff can define a client's rig once (name, starting channel, and Dimmer / RGB / RGB + Dimmer type).",
+      "Added a Fixture Preview mode to the DMX desk that renders defined fixtures as colored lights instead of raw channel sliders, updating live as channels change.",
+      "Added a Preview Scene button to the scene editor that animates a scene through its steps entirely in the browser, with a play/pause control and a scrubber to jump straight to any step."
     ]
   }
 ]

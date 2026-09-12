@@ -29,19 +29,43 @@
                         <FluentGrid>
                             <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
                                     <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
-                                            Appearance="ButtonAppearance.Primary" 
+                                            Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleEditMode">
                                         @(isEditModeEnabled ? "Disable Edit Mode" : "Enable Edit Mode")
                                     </FluentButton>
                                 </FluentGridItem>
                                 <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
                                     <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
-                                            Appearance="ButtonAppearance.Primary" 
+                                            Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleEditMode"
                                             Tooltip="Toggle Edit Mode"/>
                                 </FluentGridItem>
                         </FluentGrid>
                     </FluentStack>
+
+                    <FluentStack Width="auto">
+                        <FluentGrid>
+                            <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
+                                    <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
+                                            Appearance="ButtonAppearance.Outline"
+                                            OnClick="ToggleFixturePreview">
+                                        @(showFixturePreview ? "Edit Sliders" : "Fixture Preview")
+                                    </FluentButton>
+                                </FluentGridItem>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
+                                    <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
+                                            Appearance="ButtonAppearance.Outline"
+                                            OnClick="ToggleFixturePreview"
+                                            Tooltip="Toggle Fixture Preview"/>
+                                </FluentGridItem>
+                        </FluentGrid>
+                    </FluentStack>
+
+                    <FluentButton IconStart="new Icons.Regular.Size20.Settings()"
+                                    Appearance="ButtonAppearance.Outline"
+                                    Disabled="@(selectedClientId == null)"
+                                    OnClick="OpenFixtureManager"
+                                    Tooltip="Manage Fixtures" />
 
                     @if (isEditModeEnabled)
                     {
@@ -68,10 +92,15 @@
             </FluentStack>
         </FluentCard>
 
-        <VirtualDmxDesk ClientId="@selectedClientId"
+        <VirtualDmxDesk @ref="virtualDmxDesk"
+                        ClientId="@selectedClientId"
                         IsEditModeEnabled="@isEditModeEnabled"
                         IsBlindModeEnabled="@isBlindModeEnabled"
-                        EditingStep="@editingStep" />
+                        EditingStep="@editingStep"
+                        ShowFixturePreview="@showFixturePreview"
+                        PreviewingSceneId="@previewingSceneId"
+                        PreviewingSceneSteps="@previewingSceneSteps"
+                        PreviewSceneLoop="@(selectedScene?.Loop ?? true)" />
 
         <DmxSceneSelector ClientId="@selectedClientId" 
                             IsEditModeEnabled="@isEditModeEnabled" 
@@ -92,8 +121,10 @@
                             OnClose="OnCloseSceneEditor"
                             OnSceneDeleted="OnSceneDeleted"
                             OnEditingStepChanged="OnEditingStepChanged"
-                            IsEditModeEnabled="@isEditModeEnabled" 
-                            OnSceneEdited="OnSceneEdited"/>
+                            IsEditModeEnabled="@isEditModeEnabled"
+                            OnSceneEdited="OnSceneEdited"
+                            OnPreviewingStepsChanged="OnPreviewingStepsChanged"
+                            PreviewingSceneId="@previewingSceneId"/>
         }
     </FluentGridItem>
 </FluentGrid>
@@ -105,6 +136,8 @@
 
     private bool isBlindModeEnabled = true;
 
+    private bool showFixturePreview = false;
+
     private bool isASceneOpen = false;
 
     private DmxScene? selectedScene = null;
@@ -113,6 +146,13 @@
     private DmxScene? editedScene = null;
 
     private Guid? deletedSceneId;
+
+    private VirtualDmxDesk? virtualDmxDesk;
+
+    // Forwarded to VirtualDmxDesk so a previewed scene renders inline in the main desk area.
+    private Guid? previewingSceneId;
+    private List<DmxSceneStep>? previewingSceneSteps;
+
     private void ToggleEditMode()
     {
         isEditModeEnabled = !isEditModeEnabled;
@@ -150,12 +190,62 @@
             isASceneOpen = false;
             selectedScene = null;
             editingStep = null;
+            ClearScenePreview();
         }
+    }
+
+    private void OnPreviewingStepsChanged(List<DmxSceneStep>? steps)
+    {
+        previewingSceneSteps = steps;
+        previewingSceneId = steps != null ? selectedScene?.Id : null;
+    }
+
+    private void ClearScenePreview()
+    {
+        previewingSceneSteps = null;
+        previewingSceneId = null;
     }
 
     private void SetSelectedClient(Guid? clientId)
     {
+        if (clientId != selectedClientId)
+        {
+            // A running scene preview is scoped to the previously selected client's fixtures;
+            // switching clients without stopping it would keep animating the old scene's steps
+            // and paint them onto the newly selected client's rig.
+            ClearScenePreview();
+        }
+
         selectedClientId = clientId;
+    }
+
+    private void ToggleFixturePreview()
+    {
+        showFixturePreview = !showFixturePreview;
+    }
+
+    private async Task OpenFixtureManager()
+    {
+        if (selectedClientId == null)
+        {
+            return;
+        }
+
+        await _dialogService.ShowDialogAsync<DmxFixtureManagerDialog>(options =>
+        {
+            options.Width = "700px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DmxFixtureManagerDialog.ClientId), selectedClientId.Value);
+        });
+
+        // The dialog's own add/edit/delete calls don't touch selectedClientId, so the desk's
+        // fixture list (keyed only on client changes) would otherwise never see the update.
+        // VirtualDmxDesk is also the sole owner of fixture data now (used for both the live
+        // preview and any scene preview), so nothing else needs telling.
+        if (virtualDmxDesk != null)
+        {
+            await virtualDmxDesk.RefreshFixturesAsync();
+        }
     }
 
     private void OpenScene(DmxScene scene)
@@ -170,6 +260,7 @@
         isASceneOpen = false;
         selectedScene = null;
         editingStep = null;
+        ClearScenePreview();
     }
 
     private void OnSceneEdited(DmxScene scene)

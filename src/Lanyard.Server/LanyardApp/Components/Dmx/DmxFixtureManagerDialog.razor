@@ -1,0 +1,271 @@
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Infrastructure.Models.Dmx
+
+@inject IDmxFixtureService _dmxFixtureService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="new Icons.Regular.Size24.Lightbulb()" Margin="@Margin.End2" />
+            <FluentText Size="@TextSize.Size500">Manage Fixtures</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            <FluentText Size="TextSize.Size300">
+                Fixtures map a starting channel to a light type (dimmer, RGB, or RGB with a dimmer) so the preview can show it as a colored light instead of raw channel numbers.
+            </FluentText>
+
+            <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                    <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Style="width: 160px; max-width: none;" />
+                    <FluentNumberInput TValue="int" Label="Start Channel" Value="@newStartChannel" ValueChanged="@(v => newStartChannel = v)" Min="1" Max="512" Width="120px" />
+                    <FluentSelect TOption="DmxFixtureType" TValue="DmxFixtureType" Label="Type" @bind-Value="newFixtureType" Width="160px">
+                        <FluentOption Value="@DmxFixtureType.Dimmer">Dimmer</FluentOption>
+                        <FluentOption Value="@DmxFixtureType.Rgb">RGB</FluentOption>
+                        <FluentOption Value="@DmxFixtureType.RgbDimmer">RGB + Dimmer</FluentOption>
+                    </FluentSelect>
+                    <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
+                                  Appearance="ButtonAppearance.Primary"
+                                  Disabled="@string.IsNullOrWhiteSpace(newName)"
+                                  OnClick="CreateFixture"
+                                  Class="mt-5">
+                        Add Fixture
+                    </FluentButton>
+                </FluentStack>
+            </FluentCard>
+
+            <FluentDataGrid Items="@fixtures.AsQueryable()"
+                            Loading="@isLoading"
+                            TGridItem="DmxFixture"
+                            RowSize="@DataGridRowSize.Medium">
+                <ChildContent>
+                    <TemplateColumn Title="Name">
+                        <ChildContent>
+                            @if (editingFixtureId == context.Id)
+                            {
+                                <FluentTextInput Value="@editName" ValueChanged="@(v => editName = v)" Style="width: 100%; max-width: none;" />
+                            }
+                            else
+                            {
+                                @context.Name
+                            }
+                        </ChildContent>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Start Channel">
+                        <ChildContent>
+                            @if (editingFixtureId == context.Id)
+                            {
+                                <FluentNumberInput TValue="int" Value="@editStartChannel" ValueChanged="@(v => editStartChannel = v)" Min="1" Max="512" Width="90px" />
+                            }
+                            else
+                            {
+                                @context.StartChannel
+                            }
+                        </ChildContent>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Type">
+                        <ChildContent>
+                            @if (editingFixtureId == context.Id)
+                            {
+                                <FluentSelect TOption="DmxFixtureType" TValue="DmxFixtureType" @bind-Value="editFixtureType" Width="150px">
+                                    <FluentOption Value="@DmxFixtureType.Dimmer">Dimmer</FluentOption>
+                                    <FluentOption Value="@DmxFixtureType.Rgb">RGB</FluentOption>
+                                    <FluentOption Value="@DmxFixtureType.RgbDimmer">RGB + Dimmer</FluentOption>
+                                </FluentSelect>
+                            }
+                            else
+                            {
+                                @FixtureTypeLabel(context.FixtureType)
+                            }
+                        </ChildContent>
+                    </TemplateColumn>
+                    <TemplateColumn>
+                        <ChildContent>
+                            @if (editingFixtureId == context.Id)
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
+                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Checkmark()" Tooltip="Save" OnClick="SaveEditingFixture" />
+                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Dismiss()" Tooltip="Cancel" OnClick="@(() => editingFixtureId = null)" />
+                                </FluentStack>
+                            }
+                            else
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
+                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Edit()" Tooltip="Edit fixture" OnClick="@(() => StartEditing(context))" />
+                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.BinRecycle()" Tooltip="Delete fixture" OnClick="@(() => DeleteFixture(context))" />
+                                </FluentStack>
+                            }
+                        </ChildContent>
+                    </TemplateColumn>
+                </ChildContent>
+                <EmptyContent>
+                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Height="100%">
+                        <FluentText Size="TextSize.Size400">No fixtures yet. Add one above to preview it as a light.</FluentText>
+                    </FluentStack>
+                </EmptyContent>
+            </FluentDataGrid>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CloseAsync">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public required Guid ClientId { get; set; }
+
+    private List<DmxFixture> fixtures = [];
+    private bool isLoading = true;
+
+    private string newName = string.Empty;
+    private int newStartChannel = 1;
+    private DmxFixtureType newFixtureType = DmxFixtureType.Rgb;
+
+    private Guid? editingFixtureId;
+    private string editName = string.Empty;
+    private int editStartChannel = 1;
+    private DmxFixtureType editFixtureType = DmxFixtureType.Rgb;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFixtures();
+    }
+
+    private async Task LoadFixtures()
+    {
+        isLoading = true;
+
+        Result<IEnumerable<DmxFixture>> result = await _dmxFixtureService.GetFixturesForClientAsync(ClientId);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            fixtures = result.Data.ToList();
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load fixtures: {result.Error}");
+
+            fixtures = [];
+        }
+
+        isLoading = false;
+    }
+
+    private async Task CreateFixture()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return;
+        }
+
+        Result<DmxFixture> result = await _dmxFixtureService.CreateFixtureAsync(ClientId, newName, newStartChannel, newFixtureType);
+
+        if (result.IsSuccess && result.Data != null)
+        {
+            fixtures.Add(result.Data);
+
+            newName = string.Empty;
+            newStartChannel = 1;
+            newFixtureType = DmxFixtureType.Rgb;
+
+            _toastService.ShowSuccess("Fixture added successfully.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to add fixture: {result.Error}");
+        }
+    }
+
+    private void StartEditing(DmxFixture fixture)
+    {
+        editingFixtureId = fixture.Id;
+        editName = fixture.Name;
+        editStartChannel = fixture.StartChannel;
+        editFixtureType = fixture.FixtureType;
+    }
+
+    private async Task SaveEditingFixture()
+    {
+        DmxFixture? fixture = fixtures.FirstOrDefault(f => f.Id == editingFixtureId);
+
+        if (fixture == null)
+        {
+            editingFixtureId = null;
+
+            return;
+        }
+
+        DmxFixture updated = new()
+        {
+            Id = fixture.Id,
+            ClientId = fixture.ClientId,
+            Name = editName,
+            StartChannel = editStartChannel,
+            FixtureType = editFixtureType,
+            CreateByUserId = fixture.CreateByUserId
+        };
+
+        Result<bool> result = await _dmxFixtureService.UpdateFixtureAsync(updated);
+
+        if (result.IsSuccess)
+        {
+            fixture.Name = editName;
+            fixture.StartChannel = editStartChannel;
+            fixture.FixtureType = editFixtureType;
+
+            editingFixtureId = null;
+
+            _toastService.ShowSuccess("Fixture updated successfully.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to update fixture: {result.Error}");
+        }
+    }
+
+    private async Task DeleteFixture(DmxFixture fixture)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete Fixture";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Are you sure you want to delete '{fixture.Name}'? This action cannot be undone.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (!result.Cancelled && result.Value is true)
+        {
+            Result<bool> deleteResult = await _dmxFixtureService.DeleteFixtureAsync(fixture.Id);
+
+            if (deleteResult.IsSuccess)
+            {
+                fixtures.Remove(fixture);
+
+                _toastService.ShowSuccess($"Fixture '{fixture.Name}' deleted successfully.");
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to delete fixture '{fixture.Name}': {deleteResult.Error}");
+            }
+        }
+    }
+
+    private static string FixtureTypeLabel(DmxFixtureType fixtureType) => fixtureType switch
+    {
+        DmxFixtureType.Dimmer => "Dimmer",
+        DmxFixtureType.Rgb => "RGB",
+        DmxFixtureType.RgbDimmer => "RGB + Dimmer",
+        _ => fixtureType.ToString()
+    };
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync();
+    }
+}

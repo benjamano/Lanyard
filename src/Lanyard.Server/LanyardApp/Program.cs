@@ -92,6 +92,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
+builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
