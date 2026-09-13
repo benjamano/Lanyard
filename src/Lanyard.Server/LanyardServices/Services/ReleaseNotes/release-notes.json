@@ -255,5 +255,13 @@
       "Added a Fixture Preview mode to the DMX desk that renders defined fixtures as colored lights instead of raw channel sliders, updating live as channels change.",
       "Added a Preview Scene button to the scene editor that animates a scene through its steps entirely in the browser, with a play/pause control and a scrubber to jump straight to any step."
     ]
+  },
+  {
+    "version": "1.3.18",
+    "releaseDate": "2026-09-13",
+    "summary": "Fixed the file/folder list API silently returning success on failure.",
+    "details": [
+      "Fixed the file and folder listing endpoints returning a success response even when the underlying request failed, which could show an empty or stale file list instead of a clear error."
+    ]
   }
 ]
