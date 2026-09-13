@@ -13,6 +13,10 @@ description: History and edge cases behind LanyardApp's default-deny route autho
 
 This exists because of a real, previously-shipped bug: `Routes.razor` used to render a plain `<RouteView>` directly. Blazor's `[Authorize]` attribute only takes effect when rendered through `AuthorizeRouteView` — with a plain `RouteView`, every `@attribute [Authorize(...)]` in the app was silently dead code, and any page (including `/manage/users`, `/manage/roles`) was reachable by an anonymous visitor who simply navigated to the URL. `RouteAuthorizationGate` is the fix, and it flips the default from allow to deny so a *missing* attribute fails safe instead of failing open.
 
+## Automated guard
+
+`src/Lanyard.Tests/Integration/RouteAuthorizationCoverageTests.cs` enforces the rule above automatically: it reflects over every `[RouteAttribute]`-carrying type in `Lanyard.App` and fails if any lack both `[Authorize]` and `[AllowAnonymous]`. It rides the existing `dotnet test` step in CI, so a missing attribute fails the build rather than relying on review to catch it.
+
 ## Edge case to know about
 
 `StaffNotFound.razor` (`/not-found`) must stay `[AllowAnonymous]`. `UseStatusCodePagesWithReExecute("/not-found")` re-executes ordinary 404s through this same route — including benign ones like a missing `aspnetcore-browser-refresh.js` request during non-watch dev runs — so gating it behind auth would turn routine 404s into login redirects.
