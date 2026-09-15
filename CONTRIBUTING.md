@@ -62,3 +62,5 @@ dotnet test src/Lanyard.Tests/Lanyard.Tests.csproj
 4. Ensure the build and test suite pass (see above).
 5. Push your branch and open a pull request against `dev`, describing what changed and why.
 6. Address any review feedback. A maintainer will merge once the PR is approved.
+
+<!-- test: Claude GitHub App dev-merge capability test, safe to ignore -->
