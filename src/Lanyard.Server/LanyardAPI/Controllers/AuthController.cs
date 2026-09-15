@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 
-namespace Lanyard.App.Controllers
+namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]

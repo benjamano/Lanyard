@@ -1,3 +1,4 @@
+using Lanyard.API.Extensions;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.Models;
@@ -35,9 +36,7 @@ namespace Lanyard.API.Controllers
 
             string uploadedBy = User.Identity?.Name ?? "unknown";
             Result<FileMetadata> result = await _fileService.UploadFileAsync(file, folderId, uploadedBy, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpGet("download/{id}")]
@@ -62,7 +61,7 @@ namespace Lanyard.API.Controllers
                 return Unauthorized();
 
             Result<IReadOnlyList<FileMetadata>> result = await _fileService.ListFilesAsync(folderId, cancellationToken);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpDelete("{id}")]
@@ -70,9 +69,7 @@ namespace Lanyard.API.Controllers
         public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
         {
             Result<bool> result = await _fileService.DeleteFileAsync(id, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpPut("rename/{id}")]
@@ -80,9 +77,7 @@ namespace Lanyard.API.Controllers
         public async Task<IActionResult> Rename(Guid id, [FromBody] string newName, CancellationToken cancellationToken)
         {
             Result<FileMetadata> result = await _fileService.RenameFileAsync(id, newName, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpPut("move/{id}")]
@@ -90,9 +85,7 @@ namespace Lanyard.API.Controllers
         public async Task<IActionResult> Move(Guid id, [FromQuery] Guid? destinationFolderId, CancellationToken cancellationToken)
         {
             Result<FileMetadata> result = await _fileService.MoveFileAsync(id, destinationFolderId, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpPost("folders")]
@@ -101,9 +94,7 @@ namespace Lanyard.API.Controllers
         {
             string createdBy = User.Identity?.Name ?? "unknown";
             Result<Folder> result = await _fileService.CreateFolderAsync(name, parentFolderId, createdBy, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpPut("folders/rename/{id}")]
@@ -111,9 +102,7 @@ namespace Lanyard.API.Controllers
         public async Task<IActionResult> RenameFolder(Guid id, [FromBody] string newName, CancellationToken cancellationToken)
         {
             Result<Folder> result = await _fileService.RenameFolderAsync(id, newName, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpDelete("folders/{id}")]
@@ -121,9 +110,7 @@ namespace Lanyard.API.Controllers
         public async Task<IActionResult> DeleteFolder(Guid id, CancellationToken cancellationToken)
         {
             Result<bool> result = await _fileService.DeleteFolderAsync(id, cancellationToken);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            return result.ToActionResult();
         }
 
         [HttpGet("folders/list")]
@@ -133,7 +120,7 @@ namespace Lanyard.API.Controllers
                 return Unauthorized();
 
             Result<IReadOnlyList<Folder>> result = await _fileService.ListFoldersAsync(parentFolderId, cancellationToken);
-            return Ok(result);
+            return result.ToActionResult();
         }
     }
 }
