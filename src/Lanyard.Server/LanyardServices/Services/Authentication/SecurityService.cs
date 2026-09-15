@@ -220,16 +220,31 @@ public class SecurityService : ISecurityService
 
             try
             {
-                // Unscoped: auto-assignment on user creation applies across all locations,
-                // matching pre-Task-3 behaviour where GetCoursesAsync() saw every course.
+                // Fetched unscoped (allLocations: true) because the admin creating this user may not
+                // be in the same location as the new hire - this is just the candidate pool. Each
+                // course is then checked below against the new user's own locationIds before assigning.
                 Result<List<Course>> coursesResult = await _courseService.GetCoursesAsync(new LocationScope(true, null, null, null), allLocations: true);
 
                 if (coursesResult.IsSuccess && coursesResult.Data is not null)
                 {
-                    foreach (Course course in coursesResult.Data.Where(x => x.AutoAssignOnUserCreation))
+                    List<Course> autoAssignCourses = coursesResult.Data.Where(x => x.AutoAssignOnUserCreation).ToList();
+
+                    Result<List<Location>> locationsResult = autoAssignCourses.Count > 0
+                        ? await _companyLocationService.GetLocationsAsync()
+                        : Result<List<Location>>.Ok([]);
+                    HashSet<int> userCompanyIds = locationsResult.IsSuccess && locationsResult.Data is not null
+                        ? locationsResult.Data.Where(l => locationIds.Contains(l.Id)).Select(l => l.CompanyId).ToHashSet()
+                        : [];
+
+                    // A course only auto-assigns if it belongs to one of the new user's locations,
+                    // or is shared and belongs to the same company as one of those locations -
+                    // mirrors CourseAssignmentService.IsCourseInScope's non-admin rule.
+                    IEnumerable<Course> eligibleCourses = autoAssignCourses.Where(x =>
+                        (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
+                        (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)));
+
+                    foreach (Course course in eligibleCourses)
                     {
-                        // Unscoped: mirrors the GetCoursesAsync() call above - auto-assignment on
-                        // user creation applies across all locations, matching pre-Task-4 behaviour.
                         // sendAssignedEmail: false - the user already gets a welcome/set-password
                         // email in this same flow; a second "training assigned" email would be noise.
                         Result<BulkAssignResult> assignResult = await _courseAssignmentService.AssignCourseToUsersAsync(course.Id, [user.Id], null, null, new LocationScope(true, null, null, null), sendAssignedEmail: false);
