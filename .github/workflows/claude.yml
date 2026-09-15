@@ -43,8 +43,10 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          # Scoped narrowly to just the merge action -- everything else Claude needs
+          # (reading PR info, CI status) is already covered by the action's own GitHub
+          # API access, not Bash. This is what actually lets the App merge into dev once
+          # CLAUDE.md's merge-authority rule is satisfied; the dev/main ruleset bypass
+          # config alone was not enough -- the action's own tool allowlist blocked it too.
+          claude_args: '--allowedTools "Bash(gh pr merge*)"'
 
