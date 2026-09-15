@@ -33,3 +33,5 @@ repository.
   and must **never** be committed to the repository.
 - If a secret is ever committed, treat it as compromised: rotate it immediately and scrub it
   from history.
+
+Security reports can also be submitted via a private GitHub security advisory (Security tab → "Report a vulnerability").
