@@ -257,7 +257,7 @@
     ]
   },
   {
-    "version": "1.3.20",
+    "version": "1.3.18",
     "releaseDate": "2026-09-15",
     "summary": "Fixed the file/folder list API silently failing, and training courses being auto-assigned to new users regardless of location.",
     "details": [
