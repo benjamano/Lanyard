@@ -270,7 +270,9 @@
     "releaseDate": "2026-09-16",
     "summary": "Fixed removed playlist songs reappearing in the Music page song list.",
     "details": [
-      "Removing a song from a playlist on the Music page now keeps it off the list - previously it could reappear a moment later (e.g. while a song was playing) and clicking Remove again would fail with \"Song is not in this playlist\"."
+      "Removing a song from a playlist on the Music page now keeps it off the list - previously it could reappear a moment later (e.g. while a song was playing) and clicking Remove again would fail with \"Song is not in this playlist\".",
+      "The File Manager's Size column now shows file sizes as B/KB/MB/GB instead of a raw byte count.",
+      "Fixed the song list on the Music page silently clipping songs instead of scrolling once the list grew taller than the available space, on both desktop and mobile layouts."
     ]
   }
 ]

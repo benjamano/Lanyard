@@ -15,6 +15,7 @@
 
 @implements IDisposable
 
+<div class="song-list-host">
 <FluentCard Height="100%" Appearance="CardAppearance.Filled">
     <FluentStack Orientation="Orientation.Vertical" Class="song-list-stack">
         @if (Songs is not null && Songs.Any())
@@ -95,6 +96,7 @@
             }
         </FluentStack>
     </FluentCard>
+</div>
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
