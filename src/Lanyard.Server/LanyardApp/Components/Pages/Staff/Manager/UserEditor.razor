@@ -125,7 +125,7 @@ else
             </FluentTab>
 
             <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Class="user-editor-tab-content">
+                <div class="documents-tab-content">
                     @if (isLoadingDocuments)
                     {
                         <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
@@ -142,43 +142,51 @@ else
                     }
                     else
                     {
-                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
-                            @if (staffDocuments is null || staffDocuments.Count == 0)
-                            {
-                                <FluentText Style="color: var(--neutral-foreground-hint);">No documents uploaded yet.</FluentText>
-                            }
-                            else
-                            {
-                                <div class="documents-grid-wrapper">
-                                    <FluentDataGrid Items="@staffDocuments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr auto" Style="width: 100%;">
-                                        <PropertyColumn Property="@(x => x.StaffDocumentType!.Name)" Title="Type" />
-                                        <TemplateColumn Title="Expiry">
-                                            @(context.ExpiryDate is not null ? context.ExpiryDate.Value.Date.ToString("d MMM yyyy") : "-")
-                                        </TemplateColumn>
-                                        <PropertyColumn Property="@(x => x.UploadedDate)" Title="Uploaded" Format="d MMM yyyy" />
-                                        <TemplateColumn Title="Actions">
+                        @if (staffDocuments is null || staffDocuments.Count == 0)
+                        {
+                            <FluentText Style="color: var(--neutral-foreground-hint);">No documents uploaded yet.</FluentText>
+                        }
+                        else
+                        {
+                            <div class="documents-list">
+                                @foreach (StaffDocument doc in staffDocuments)
+                                {
+                                    <div class="documents-list-item">
+                                        <div class="documents-list-info">
+                                            <div class="documents-list-name">@doc.StaffDocumentType!.Name</div>
+                                            <div class="documents-list-meta">
+                                                Uploaded @doc.UploadedDate.ToString("d MMM yyyy")
+                                                @if (doc.ExpiryDate is not null)
+                                                {
+                                                    <span> &middot; Expires @doc.ExpiryDate.Value.Date.ToString("d MMM yyyy")</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="documents-list-actions">
                                             <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
-                                                          OnClick="@(() => DownloadDocument(context.FileMetadataId))" />
+                                                          OnClick="@(() => DownloadDocument(doc.FileMetadataId))" />
                                             <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
-                                                          OnClick="@(() => DeleteDocumentAsync(context.Id))" />
-                                        </TemplateColumn>
-                                    </FluentDataGrid>
-                                </div>
-                            }
-                        </FluentStack>
+                                                          OnClick="@(() => DeleteDocumentAsync(doc.Id))" />
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
 
                         <FluentCard Appearance="CardAppearance.Subtle">
                             <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
                                 <FluentText Typo="Typography.H6">Upload Document</FluentText>
 
-                                <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@documentTypes" OptionText="@(x => x.Name)"
-                                              OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
-                                              Label="Document Type" Width="100%" />
+                                <div class="documents-upload-fields">
+                                    <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@documentTypes" OptionText="@(x => x.Name)"
+                                                  OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
+                                                  Label="Document Type" Width="320px" />
 
-                                @if (selectedDocumentType?.RequiresExpiryDate == true)
-                                {
-                                    <FluentDatePicker TValue="DateTime?" @bind-Value="uploadExpiryDate" Label="Expiry Date" Width="100%" />
-                                }
+                                    @if (selectedDocumentType?.RequiresExpiryDate == true)
+                                    {
+                                        <FluentDatePicker TValue="DateTime?" @bind-Value="uploadExpiryDate" Label="Expiry Date" Width="320px" />
+                                    }
+                                </div>
 
                                 <FluentInputFile Id="staff-document-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
                                                   MaximumFileCount="1" MaximumFileSize="@(50 * 1024 * 1024)"
@@ -190,7 +198,7 @@ else
                             </FluentStack>
                         </FluentCard>
                     }
-                </FluentStack>
+                </div>
             </FluentTab>
 
             <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">

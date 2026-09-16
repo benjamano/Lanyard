@@ -22,12 +22,79 @@
     max-width: none;
 }
 
-/* The documents grid has 4 columns that don't shrink below their content width - without
-   min-width: 0 the grid forces this wrapper (and everything above it, up to the page's own
-   layout container) wider than the viewport instead of scrolling internally, which is what
-   dragged the whole page sideways on phone width until this was added. */
-.documents-grid-wrapper {
+/* Documents deliberately does NOT use .user-editor-tab-content's 480px cap - the document
+   list and upload form both benefit from the page's full available width, unlike the plain
+   forms (Details/Password/etc.) that stay narrow. This is a plain <div>, so unlike the class
+   above it doesn't need ::deep to be reached. */
+.documents-tab-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     width: 100%;
     min-width: 0;
-    overflow-x: auto;
+    padding-top: 12px;
+}
+
+/* A plain flex list instead of FluentDataGrid - a fixed-column grid has no way to let a long
+   document type name wrap, so on phone width it just truncated ("Rig..." for "Right to
+   Work"). Wrapping onto a second line (via documents-list-name's overflow-wrap) instead of
+   fighting for column space reads better than any column layout narrow enough for phones. */
+.documents-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.documents-list-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+}
+
+.documents-list-item:last-child {
+    border-bottom: none;
+}
+
+/* min-width: 0 lets this side of the row shrink instead of forcing the whole item (and the
+   actions beside it) wider than the viewport - the same trap the old FluentDataGrid fell
+   into on phone width, just one level up the tree this time. */
+.documents-list-info {
+    min-width: 0;
+    flex: 1 1 220px;
+}
+
+.documents-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.documents-list-meta {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+/* align-items: flex-start on .documents-list-item keeps this pinned to the top of the row
+   instead of drifting to the vertical center of however many lines the meta text next to it
+   wrapped to on narrow widths - the small top margin then lines it up with the name's own
+   text baseline rather than the row's bare top edge. */
+.documents-list-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* Document Type / Expiry Date sit side by side once documents-tab-content's extra width
+   gives them room, and wrap under each other below that - each field has its own fixed
+   Width (not 100%), since letting them stretch across the tab's full new width would look
+   just as awkward as the 480px cap did. */
+.documents-upload-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
 }
