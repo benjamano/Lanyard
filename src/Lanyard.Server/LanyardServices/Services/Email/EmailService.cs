@@ -95,6 +95,18 @@ public class EmailService : IEmailService
         return await SendResendEmailAsync(user.Id, user.Email, $"Certificate: {courseName}", html, [attachment]);
     }
 
+    public async Task<Result<bool>> SendStaffDocumentExpiryReminderEmailAsync(UserProfile user, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a link to.");
+        }
+
+        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Expiring soon: {documentTypeName}", html);
+    }
+
     // Resend takes the filename verbatim into the Content-Disposition header, so anything
     // that would need quoting or escaping there is stripped rather than passed through.
     private static string BuildCertificateFileName(string courseName)
@@ -266,6 +278,27 @@ public class EmailService : IEmailService
              download it again at any time from the My Training page.</p>
           <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
             No further action is needed.
+          </p>
+        </div>
+        """;
+    }
+
+    private static string BuildStaffDocumentExpiryReminderHtml(string greetingName, string documentTypeName, DateTime expiryDate, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>Your <strong>{WebUtility.HtmlEncode(documentTypeName)}</strong> is expiring on
+             <strong>{expiryDate.Date:d MMMM yyyy}</strong>. Please arrange a renewal and upload the
+             updated document to your staff profile.</p>
+          <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
+            If this has already been renewed, you can disregard this reminder once the new document is uploaded.
           </p>
         </div>
         """;

@@ -528,6 +528,60 @@ namespace Lanyard.Tests.Services.Email
             StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "Hi jdoe,");
         }
 
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_SuccessResponse_IncludesDocumentTypeAndExpiryDateInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+                daysBeforeExpiry: 7,
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("First Aid Certificate", handler.LastRequestBody);
+            Assert.Contains("1 October 2026", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(7),
+                daysBeforeExpiry: 7,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(7),
+                daysBeforeExpiry: 7,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
+        }
+
         // The set-password email deliberately still shows the username - it IS the credential
         // being communicated, so switching it to a first name would break the email's purpose.
         [TestMethod]

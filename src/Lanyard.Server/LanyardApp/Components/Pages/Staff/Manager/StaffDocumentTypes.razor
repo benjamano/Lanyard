@@ -1,0 +1,46 @@
+@page "/manage/staff-documents/types"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.Infrastructure.Models
+
+<PageTitle>Staff Document Types</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+        @if (companies is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else if (companies.Count == 0)
+        {
+            <FluentText>No companies exist yet. Add one under Companies &amp; Locations first.</FluentText>
+        }
+        else
+        {
+            <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                          @bind-SelectedOption="selectedCompany" Label="Company" Width="320px" />
+
+            @if (selectedCompany is not null)
+            {
+                <StaffDocumentTypeManager CompanyId="@selectedCompany.Id" />
+            }
+        }
+    </FluentStack>
+</div>
+
+@code {
+    private List<Company>? companies;
+    private Company? selectedCompany;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+
+        companies = result.IsSuccess ? result.Data : [];
+        selectedCompany = companies?.FirstOrDefault();
+    }
+}

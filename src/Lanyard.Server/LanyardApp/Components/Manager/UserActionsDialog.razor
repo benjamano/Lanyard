@@ -1,9 +1,14 @@
 @using System.ComponentModel.DataAnnotations
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Application.Services.Gdpr
+@using Lanyard.Application.Services.StaffDocuments
+@using Lanyard.Application.Services.Locations
+@using Microsoft.AspNetCore.Http
 
 @inject IGdprService _gdprService
 @inject INotificationService ToastService
+@inject IStaffDocumentService _staffDocumentService
+@inject IStaffDocumentTypeService _staffDocumentTypeService
 
 <FluentDialogBody>
     <ChildContent>
@@ -80,6 +85,73 @@
                 </FluentStack>
             </FluentTab>
 
+            <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Class="user-actions-tab-content">
+                    @if (isLoadingDocuments)
+                    {
+                        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                            <FluentSpinner />
+                            <FluentText>Loading...</FluentText>
+                        </FluentStack>
+                    }
+                    else if (documentTypes is null || documentTypes.Count == 0)
+                    {
+                        <FluentText Style="color: var(--neutral-foreground-hint);">
+                            No document types have been configured yet. An admin can add some under
+                            Manage &gt; Staff Document Types.
+                        </FluentText>
+                    }
+                    else
+                    {
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                            @if (staffDocuments is null || staffDocuments.Count == 0)
+                            {
+                                <FluentText Style="color: var(--neutral-foreground-hint);">No documents uploaded yet.</FluentText>
+                            }
+                            else
+                            {
+                                <FluentDataGrid Items="@staffDocuments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr auto" Style="width: 100%;">
+                                    <PropertyColumn Property="@(x => x.StaffDocumentType!.Name)" Title="Type" />
+                                    <TemplateColumn Title="Expiry">
+                                        @(context.ExpiryDate is not null ? context.ExpiryDate.Value.Date.ToString("d MMM yyyy") : "-")
+                                    </TemplateColumn>
+                                    <PropertyColumn Property="@(x => x.UploadedDate)" Title="Uploaded" Format="d MMM yyyy" />
+                                    <TemplateColumn Title="Actions">
+                                        <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
+                                                      OnClick="@(() => DownloadDocument(context.FileMetadataId))" />
+                                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
+                                                      OnClick="@(() => DeleteDocumentAsync(context.Id))" />
+                                    </TemplateColumn>
+                                </FluentDataGrid>
+                            }
+                        </FluentStack>
+
+                        <FluentCard Appearance="CardAppearance.Subtle">
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                                <FluentText Typo="Typography.H6">Upload Document</FluentText>
+
+                                <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@documentTypes" OptionText="@(x => x.Name)"
+                                              OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
+                                              Label="Document Type" Width="100%" />
+
+                                @if (selectedDocumentType?.RequiresExpiryDate == true)
+                                {
+                                    <FluentDatePicker TValue="DateTime?" @bind-Value="uploadExpiryDate" Label="Expiry Date" Width="100%" />
+                                }
+
+                                <FluentInputFile Id="staff-document-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
+                                                  MaximumFileCount="1" MaximumFileSize="@(50 * 1024 * 1024)"
+                                                  @bind-ProgressPercent="@uploadProgressPercent" OnCompleted="@OnDocumentUploadedAsync">
+                                    <ChildContent>
+                                        <label for="staff-document-upload">Choose a file, or drag it here.</label>
+                                    </ChildContent>
+                                </FluentInputFile>
+                            </FluentStack>
+                        </FluentCard>
+                    }
+                </FluentStack>
+            </FluentTab>
+
             <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-actions-tab-content">
                     <AuthorizeView Roles="Admin" Context="authContext">
@@ -125,6 +197,13 @@
     private bool isErasing;
     private bool isDeleting;
 
+    private bool isLoadingDocuments = true;
+    private List<StaffDocumentType>? documentTypes;
+    private List<StaffDocument>? staffDocuments;
+    private StaffDocumentType? selectedDocumentType;
+    private DateTime? uploadExpiryDate;
+    private int uploadProgressPercent;
+
     // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
     // an account with lockout disabled can still carry a stale LockoutEnd from before it was
     // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
@@ -141,6 +220,113 @@
         detailsModel.PhoneNumber = Content?.PhoneNumber;
 
         _detailsEditContext = new EditContext(detailsModel);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDocumentsAsync();
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        if (Content is null)
+        {
+            isLoadingDocuments = false;
+            return;
+        }
+
+        isLoadingDocuments = true;
+
+        Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(Content.Id);
+
+        if (!brandingResult.IsSuccess || brandingResult.Data is null)
+        {
+            documentTypes = [];
+            isLoadingDocuments = false;
+            return;
+        }
+
+        Result<List<StaffDocumentType>> typesResult = await _staffDocumentTypeService.GetDocumentTypesAsync(brandingResult.Data.CompanyId);
+        Result<List<StaffDocument>> documentsResult = await _staffDocumentService.GetStaffDocumentsForUserAsync(Content.Id);
+
+        documentTypes = typesResult.IsSuccess ? typesResult.Data : [];
+        staffDocuments = documentsResult.IsSuccess ? documentsResult.Data : [];
+        selectedDocumentType = documentTypes?.FirstOrDefault();
+
+        isLoadingDocuments = false;
+    }
+
+    private void DownloadDocument(Guid fileMetadataId)
+    {
+        _navigationManager.NavigateTo($"api/Files/download/{fileMetadataId}", forceLoad: true);
+    }
+
+    private async Task DeleteDocumentAsync(Guid staffDocumentId)
+    {
+        Result<bool> result = await _staffDocumentService.DeleteStaffDocumentAsync(staffDocumentId, CancellationToken.None);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to delete document: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Document deleted.");
+        await LoadDocumentsAsync();
+    }
+
+    private async Task OnDocumentUploadedAsync(IEnumerable<FluentInputFileEventArgs> files)
+    {
+        if (Content is null || selectedDocumentType is null)
+        {
+            ToastService.ShowError("Select a document type before uploading.");
+            return;
+        }
+
+        FluentInputFileEventArgs? file = files.FirstOrDefault();
+
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.ErrorMessage is not null)
+        {
+            ToastService.ShowError($"Error uploading {file.Name}: {file.ErrorMessage}");
+            return;
+        }
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!currentUserResult.IsSuccess || currentUserResult.Data is null)
+        {
+            ToastService.ShowError("Could not determine the current user.");
+            return;
+        }
+
+        using FileStream fileStream = file.LocalFile!.OpenRead();
+
+        IFormFile formFile = new FormFile(fileStream, 0, fileStream.Length, "file", file.Name)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = file.ContentType
+        };
+
+        Result<StaffDocument> uploadResult = await _staffDocumentService.UploadStaffDocumentAsync(
+            Content.Id, selectedDocumentType.Id, formFile, uploadExpiryDate, currentUserResult.Data, CancellationToken.None);
+
+        if (!uploadResult.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to upload document: {uploadResult.Error}");
+        }
+        else
+        {
+            ToastService.ShowSuccess("Document uploaded.");
+            uploadExpiryDate = null;
+        }
+
+        uploadProgressPercent = 0;
+        await LoadDocumentsAsync();
     }
 
     private async Task HandleSaveDetails()
