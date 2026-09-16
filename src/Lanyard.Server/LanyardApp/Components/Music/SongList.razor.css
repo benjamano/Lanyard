@@ -1,7 +1,26 @@
+/* .song-list-host is a plain div, not a Fluent component - ::deep's compiled
+   selector needs a real HTML element carrying this file's CSS scope
+   attribute as an ancestor, and FluentCard/FluentStack (being components)
+   don't carry it themselves (same reason as TrainingDashboard.razor.css's
+   .training-tabs-host). Without it, ::deep .song-list-stack matches nothing
+   and the stack falls back to its content height, which is what silently
+   broke scrolling here. */
+.song-list-host {
+    height: 100%;
+    min-height: 0;
+}
+
+.song-list-host ::deep .song-list-stack {
+    height: 100%;
+    min-height: 0;
+}
+
 .song-list-wrapper {
     width: 100%;
     min-width: 0;
-    overflow-x: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
 }
 
 @media (max-width: 599px) {
