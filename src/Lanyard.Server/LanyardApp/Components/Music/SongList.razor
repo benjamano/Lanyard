@@ -15,6 +15,7 @@
 
 @implements IDisposable
 
+<div class="song-list-host">
 <FluentCard Height="100%" Appearance="CardAppearance.Filled">
     <FluentStack Orientation="Orientation.Vertical" Class="song-list-stack">
         @if (Songs is not null && Songs.Any())
@@ -95,11 +96,13 @@
             }
         </FluentStack>
     </FluentCard>
+</div>
 
 @code {
     [Parameter] public IEnumerable<PlaylistSongMember>? Songs { get; set; }
     [Parameter] public bool AllowPlaying { get; set; } = true;
     [Parameter] public Guid? SelectedClientId { get; set; }
+    [Parameter] public EventCallback<PlaylistSongMember> OnSongRemoved { get; set; }
 
     private Guid? CurrentlyPlayingSongId;
 
@@ -277,6 +280,8 @@
         Songs = Songs?.Where(x => !(x.SongId == member.SongId && x.PlaylistId == member.PlaylistId)).ToList();
 
         _toastService.ShowSuccess($"Removed '{member.Song?.Name}' from '{member.Playlist?.Name}'");
+
+        await OnSongRemoved.InvokeAsync(member);
     }
 
     public void Dispose()
