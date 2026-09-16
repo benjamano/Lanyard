@@ -1,3 +1,4 @@
+@using System.Globalization
 @using Lanyard.Application.Services.StaffDocuments
 @using Microsoft.AspNetCore.Http
 
@@ -12,14 +13,16 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
+        <div class="upload-dialog-content">
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@DocumentTypes" OptionText="@(x => x.Name)"
                           OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
-                          Label="Document Type" Style="width: 100%;" />
+                          Label="Document Type" Placeholder="Select a document type" Style="width: 100%;" />
 
             @if (selectedDocumentType?.RequiresExpiryDate == true)
             {
-                <FluentDatePicker TValue="DateTime?" @bind-Value="expiryDate" Label="Expiry Date" Style="width: 100%;" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="expiryDate" Label="Expiry Date"
+                                  Culture="@UkCulture" Style="width: 100%;" />
             }
 
             <FluentInputFile Id="staff-document-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
@@ -36,6 +39,7 @@
                 </FluentButton>
             </FluentStack>
         </FluentStack>
+        </div>
     </ChildContent>
 </FluentDialogBody>
 
@@ -48,6 +52,10 @@
 
     [Parameter]
     public List<StaffDocumentType> DocumentTypes { get; set; } = [];
+
+    // en-GB's short date pattern is dd/MM/yyyy - the FluentDatePicker's displayed format
+    // follows whatever Culture it's given, there's no separate format-string parameter.
+    private static readonly CultureInfo UkCulture = new("en-GB");
 
     private StaffDocumentType? selectedDocumentType;
     private DateTime? expiryDate;
