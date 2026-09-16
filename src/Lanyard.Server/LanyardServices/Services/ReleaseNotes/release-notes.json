@@ -274,5 +274,14 @@
       "Admins can define their own catalog of document types under Manage > Staff Document Types, including whether a type requires an expiry date.",
       "Staff members are emailed automatically when one of their documents is approaching its expiry date, with reminder timing configurable per document type (e.g. 30 and 7 days before expiry)."
     ]
+  },
+  {
+    "version": "1.3.20",
+    "releaseDate": "2026-09-16",
+    "summary": "Clicking a user in Manage > Users now opens a dedicated page instead of a popup dialog.",
+    "details": [
+      "Replaced the cramped user-actions popup with a full page at its own URL, giving the Details, Password, Account, Documents and Danger Zone tabs more room to breathe.",
+      "The page can now be linked to directly and works with the browser's back/forward buttons."
+    ]
   }
 ]

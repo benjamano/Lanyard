@@ -1,0 +1,33 @@
+/* Class="..." on a Fluent* component (FluentCard here) doesn't carry the Blazor scope
+   attribute onto its rendered root, so a scoped selector anchored on ".user-editor-card"
+   silently never matches (see the fluentui-v5-blazor skill). ".user-editor-page" is a plain
+   <div> authored directly in this file - it reliably carries the scope attribute and gives
+   ::deep something real to match against. */
+.user-editor-page ::deep .user-editor-tab-content {
+    width: 100%;
+    min-width: 0;
+    padding-top: 12px;
+    max-width: 480px;
+}
+
+/* The tab strip doesn't wrap and isn't scrollable by default - on a narrow (phone width)
+   viewport the later tabs (e.g. Danger Zone) overflow past the edge with no way to reach them. */
+.user-editor-page ::deep fluent-tablist {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.user-editor-page ::deep .user-editor-tab-content fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+/* The documents grid has 4 columns that don't shrink below their content width - without
+   min-width: 0 the grid forces this wrapper (and everything above it, up to the page's own
+   layout container) wider than the viewport instead of scrolling internally, which is what
+   dragged the whole page sideways on phone width until this was added. */
+.documents-grid-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
