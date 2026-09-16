@@ -53,7 +53,7 @@ public class StaffDocumentService(
                 UserId = userId,
                 StaffDocumentTypeId = documentTypeId,
                 FileMetadataId = uploadResult.Data.Id,
-                ExpiryDate = expiryDate,
+                ExpiryDate = expiryDate.HasValue ? DateTime.SpecifyKind(expiryDate.Value, DateTimeKind.Utc) : null,
                 UploadedDate = DateTime.UtcNow,
                 UploadedByUserId = uploadedByUserId,
                 IsActive = true
