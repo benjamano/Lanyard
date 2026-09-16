@@ -13,6 +13,8 @@ namespace Lanyard.Tests.Integration;
 // class of test exists: RouteAuthorizationGate's default-deny behavior is exactly the kind of bug
 // (Routes.razor previously used RouteView instead of AuthorizeRouteView, leaving every page
 // reachable anonymously) that every service-level unit test still passed while it was broken.
+// See also RouteAuthorizationCoverageTests.cs, which reflects over every @page component to catch
+// a missing [Authorize]/[AllowAnonymous] attribute without needing a per-route test here.
 [TestClass]
 public class RouteAuthorizationIntegrationTests
 {
