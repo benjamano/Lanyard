@@ -32,7 +32,8 @@
                                InitialPlaylistId="initialPlaylistId"></Playlists>
                 </FluentTab>
                 <FluentTab Header="Songs" IconStart="@(new Icons.Regular.Size16.Speaker2())">
-                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying">
+                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"
+                              OnSongRemoved="HandleSongRemoved">
                     </SongList>
                 </FluentTab>
             </FluentTabs>
@@ -46,7 +47,8 @@
                 </div>
 
                 <div class="w-100 music-songs-pane">
-                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying">
+                    <SongList Songs="currentSongs" SelectedClientId="selectedClientId" AllowPlaying="allowPlaying"
+                              OnSongRemoved="HandleSongRemoved">
                     </SongList>
                 </div>
             </div>
@@ -560,6 +562,16 @@
     {
         currentSongs = args.Songs;
         allowPlaying = !args.IsLocalSongs;
+        StateHasChanged();
+    }
+
+    // SongList removes songs locally for immediate feedback, but currentSongs is the source of
+    // truth handed back down to it on every render (e.g. the 1s playback timer tick) — without
+    // updating it here, the next re-render clobbers SongList's local filter and the "removed"
+    // song reappears, so a second delete attempt then hits an already soft-deleted row.
+    private void HandleSongRemoved(PlaylistSongMember member)
+    {
+        currentSongs = currentSongs?.Where(x => !(x.SongId == member.SongId && x.PlaylistId == member.PlaylistId)).ToList();
         StateHasChanged();
     }
 
