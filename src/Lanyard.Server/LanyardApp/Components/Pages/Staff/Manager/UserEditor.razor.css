@@ -23,12 +23,13 @@
 }
 
 /* Documents deliberately does NOT use .user-editor-tab-content's 480px cap - the document
-   list and upload form both benefit from the page's full available width, unlike the plain
-   forms (Details/Password/etc.) that stay narrow. This is a plain <div>, so unlike the class
-   above it doesn't need ::deep to be reached. */
+   list benefits from the page's full available width (long names, meta text), unlike the
+   plain forms (Details/Password/etc.) that stay narrow. This is a plain <div>, so unlike the
+   class above it doesn't need ::deep to be reached. */
 .documents-tab-content {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 16px;
     width: 100%;
     min-width: 0;
@@ -87,14 +88,4 @@
     gap: 4px;
     flex-shrink: 0;
     margin-top: 2px;
-}
-
-/* Document Type / Expiry Date sit side by side once documents-tab-content's extra width
-   gives them room, and wrap under each other below that - each field has its own fixed
-   Width (not 100%), since letting them stretch across the tab's full new width would look
-   just as awkward as the 480px cap did. */
-.documents-upload-fields {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
 }
