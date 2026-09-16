@@ -268,8 +268,9 @@
   {
     "version": "1.3.19",
     "releaseDate": "2026-09-16",
-    "summary": "Fixed the Music page's song list not scrolling when it had more songs than fit on screen.",
+    "summary": "File sizes in the File Manager are now shown in human-readable units.",
     "details": [
+      "The File Manager's Size column now shows file sizes as B/KB/MB/GB instead of a raw byte count."
       "Fixed the song list on the Music page silently clipping songs instead of scrolling once the list grew taller than the available space, on both desktop and mobile layouts."
     ]
   }
