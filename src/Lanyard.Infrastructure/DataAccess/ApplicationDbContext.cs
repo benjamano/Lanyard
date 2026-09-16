@@ -81,6 +81,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentReminderInterval> StaffDocumentReminderIntervals { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<StaffDocumentReminderSent> StaffDocumentReminderSents { get; set; }
+        public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
+        public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -230,6 +232,12 @@ namespace Lanyard.Infrastructure.DataAccess
             // needing to hunt down and delete old StaffDocumentReminderSent rows.
             modelBuilder.Entity<StaffDocumentReminderSent>()
                 .HasIndex(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
+                .IsUnique();
+
+            // Effectively 1:1 with Company - enforced here rather than making CompanyId the
+            // primary key, so the row can still be created lazily on first Save.
+            modelBuilder.Entity<CompanyOnboardingSettings>()
+                .HasIndex(x => x.CompanyId)
                 .IsUnique();
         }
     }

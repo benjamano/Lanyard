@@ -1,0 +1,248 @@
+using Lanyard.Application.Services;
+using Lanyard.Application.Services.Email;
+using Lanyard.Application.Services.Training;
+using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Lanyard.Application.Services.Onboarding;
+
+public class OnboardingService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    IFileService fileService,
+    IEmailService emailService,
+    ITrainingBrandingResolver brandingResolver,
+    IOptions<EmailOptions> emailOptions,
+    ILogger<OnboardingService> logger) : IOnboardingService
+{
+    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IFileService _fileService = fileService;
+    private readonly IEmailService _emailService = emailService;
+    private readonly ITrainingBrandingResolver _brandingResolver = brandingResolver;
+    private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
+    private readonly ILogger<OnboardingService> _logger = logger;
+
+    public async Task<Result<CompanyOnboardingSettings?>> GetSettingsAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CompanyOnboardingSettings? settings = await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId);
+
+            return Result<CompanyOnboardingSettings?>.Ok(settings);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyOnboardingSettings?>.Fail($"Failed to retrieve onboarding settings: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<CompanyOnboardingSettings>> SaveSettingsAsync(CompanyOnboardingSettings settings)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CompanyOnboardingSettings? existing = await ctx.CompanyOnboardingSettings
+                .FirstOrDefaultAsync(x => x.CompanyId == settings.CompanyId);
+
+            if (existing is null)
+            {
+                existing = new CompanyOnboardingSettings
+                {
+                    Id = Guid.NewGuid(),
+                    CompanyId = settings.CompanyId
+                };
+                ctx.CompanyOnboardingSettings.Add(existing);
+            }
+
+            existing.SendWelcomeEmail = settings.SendWelcomeEmail;
+            existing.WelcomeEmailSubject = settings.WelcomeEmailSubject;
+            existing.WelcomeEmailBodyHtml = settings.WelcomeEmailBodyHtml;
+            existing.AutoAttachStandingDocuments = settings.AutoAttachStandingDocuments;
+            existing.UpdateDate = DateTime.UtcNow;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<CompanyOnboardingSettings>.Ok(existing);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyOnboardingSettings>.Fail($"Failed to save onboarding settings: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<CompanyOnboardingStandingAttachment>>> GetStandingAttachmentsAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<CompanyOnboardingStandingAttachment> attachments = await ctx.CompanyOnboardingStandingAttachments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.FileMetadata)
+                .Where(x => x.CompanyId == companyId && x.IsActive)
+                .OrderBy(x => x.SortOrder)
+                .ToListAsync();
+
+            return Result<List<CompanyOnboardingStandingAttachment>>.Ok(attachments);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<CompanyOnboardingStandingAttachment>>.Fail($"Failed to retrieve standing attachments: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<CompanyOnboardingStandingAttachment>> AddStandingAttachmentAsync(int companyId, Guid fileMetadataId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            int nextSortOrder = await ctx.CompanyOnboardingStandingAttachments
+                .Where(x => x.CompanyId == companyId)
+                .CountAsync();
+
+            CompanyOnboardingStandingAttachment attachment = new()
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = companyId,
+                FileMetadataId = fileMetadataId,
+                SortOrder = nextSortOrder,
+                IsActive = true
+            };
+
+            ctx.CompanyOnboardingStandingAttachments.Add(attachment);
+            await ctx.SaveChangesAsync();
+
+            return Result<CompanyOnboardingStandingAttachment>.Ok(attachment);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyOnboardingStandingAttachment>.Fail($"Failed to add standing attachment: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RemoveStandingAttachmentAsync(Guid attachmentId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            CompanyOnboardingStandingAttachment? attachment = await ctx.CompanyOnboardingStandingAttachments
+                .FirstOrDefaultAsync(x => x.Id == attachmentId);
+
+            if (attachment is null)
+            {
+                return Result<bool>.Fail("Standing attachment not found.");
+            }
+
+            attachment.IsActive = false;
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to remove standing attachment: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            TrainingBranding branding = await _brandingResolver.ResolveAsync(userId, null, null);
+
+            if (branding.CompanyId is not int companyId)
+            {
+                // No resolvable company - nothing to configure onboarding against. Not an error:
+                // this can legitimately happen for a user with no location membership yet.
+                return Result<bool>.Ok(false);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("User not found.");
+            }
+
+            CompanyOnboardingSettings? settings = await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId, cancellationToken);
+
+            if (settings is null || !settings.SendWelcomeEmail)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            List<EmailAttachment> attachments = [];
+
+            if (settings.AutoAttachStandingDocuments)
+            {
+                List<CompanyOnboardingStandingAttachment> standingAttachments = await ctx.CompanyOnboardingStandingAttachments
+                    .AsNoTracking()
+                    .Include(x => x.FileMetadata)
+                    .Where(x => x.CompanyId == companyId && x.IsActive)
+                    .OrderBy(x => x.SortOrder)
+                    .ToListAsync(cancellationToken);
+
+                foreach (CompanyOnboardingStandingAttachment standingAttachment in standingAttachments)
+                {
+                    if (standingAttachment.FileMetadata is null)
+                    {
+                        continue;
+                    }
+
+                    // A standing attachment that can't be loaded is dropped rather than failing the
+                    // whole welcome email - the new hire still needs to hear from us even if one
+                    // handbook PDF is temporarily unavailable, same reasoning as CertificateService's
+                    // logo-loading fallback.
+                    Result<Stream> downloadResult = await _fileService.DownloadFileAsync(standingAttachment.FileMetadataId, cancellationToken);
+
+                    if (!downloadResult.IsSuccess || downloadResult.Data is null)
+                    {
+                        _logger.LogWarning("Could not load standing attachment {FileMetadataId} for company {CompanyId}: {Error}",
+                            standingAttachment.FileMetadataId, companyId, downloadResult.Error);
+                        continue;
+                    }
+
+                    await using Stream fileStream = downloadResult.Data;
+                    using MemoryStream buffer = new();
+                    await fileStream.CopyToAsync(buffer, cancellationToken);
+
+                    attachments.Add(new EmailAttachment(standingAttachment.FileMetadata.FileName, buffer.ToArray()));
+                }
+            }
+
+            string? logoUrl = branding.LogoFileId is Guid logoFileId
+                ? $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
+                : null;
+
+            return await _emailService.SendOnboardingWelcomeEmailAsync(
+                user,
+                settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
+                settings.WelcomeEmailBodyHtml ?? string.Empty,
+                logoUrl,
+                branding.AccentColorHex,
+                attachments);
+        }
+        catch (Exception ex)
+        {
+            return Result<bool>.Fail($"Failed to trigger onboarding: {ex.Message}");
+        }
+    }
+}

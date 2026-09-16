@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -117,9 +118,10 @@ namespace Lanyard.Tests.Services.Authentication
             Mock<ICompanyLocationService>? companyLocationServiceMock = null,
             string publicBaseUrl = "",
             Mock<ICourseService>? courseServiceMock = null,
-            Mock<ICourseAssignmentService>? courseAssignmentServiceMock = null)
+            Mock<ICourseAssignmentService>? courseAssignmentServiceMock = null,
+            Mock<IOnboardingService>? onboardingServiceMock = null)
         {
-            return BuildServiceWithAuthProvider(options, userManager, BuildAuthProvider(isAdmin).Object, emailService, companyLocationServiceMock, publicBaseUrl, courseServiceMock, courseAssignmentServiceMock);
+            return BuildServiceWithAuthProvider(options, userManager, BuildAuthProvider(isAdmin).Object, emailService, companyLocationServiceMock, publicBaseUrl, courseServiceMock, courseAssignmentServiceMock, onboardingServiceMock);
         }
 
         private static SecurityService BuildServiceWithAuthProvider(
@@ -130,7 +132,8 @@ namespace Lanyard.Tests.Services.Authentication
             Mock<ICompanyLocationService>? companyLocationServiceMock = null,
             string publicBaseUrl = "",
             Mock<ICourseService>? courseServiceMock = null,
-            Mock<ICourseAssignmentService>? courseAssignmentServiceMock = null)
+            Mock<ICourseAssignmentService>? courseAssignmentServiceMock = null,
+            Mock<IOnboardingService>? onboardingServiceMock = null)
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
@@ -154,6 +157,14 @@ namespace Lanyard.Tests.Services.Authentication
                 .Setup(c => c.GetLocationsAsync(It.IsAny<int?>()))
                 .ReturnsAsync(Result<List<Location>>.Ok([]));
 
+            Mock<IOnboardingService> resolvedOnboardingServiceMock = onboardingServiceMock ?? new Mock<IOnboardingService>();
+            if (onboardingServiceMock is null)
+            {
+                resolvedOnboardingServiceMock
+                    .Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(Result<bool>.Ok(true));
+            }
+
             return new SecurityService(
                 authProvider,
                 new CurrentUserAccessor(authProvider),
@@ -165,7 +176,8 @@ namespace Lanyard.Tests.Services.Authentication
                 new TestNavigationManager(),
                 emailService,
                 resolvedCompanyLocationServiceMock.Object,
-                Options.Create(new EmailOptions { PublicBaseUrl = publicBaseUrl }));
+                Options.Create(new EmailOptions { PublicBaseUrl = publicBaseUrl }),
+                resolvedOnboardingServiceMock.Object);
         }
 
         [TestMethod]
@@ -243,6 +255,42 @@ namespace Lanyard.Tests.Services.Authentication
             Assert.IsNotNull(result.Data);
             Assert.IsFalse(result.Data.EmailSent);
             Assert.AreEqual("Email provider unreachable", result.Data.EmailError);
+
+            UserProfile? persisted = await userManager.FindByIdAsync(result.Data.User.Id);
+            Assert.IsNotNull(persisted);
+        }
+
+        // Onboarding automation (the welcome email + standing attachments) is decoration on top
+        // of account creation, not a precondition for it - a new hire must always get their login,
+        // regardless of what goes wrong resolving branding, loading attachments, or sending the
+        // email. This is the one behaviour the try/catch around TriggerOnboardingAsync exists to
+        // guarantee, so it's asserted directly here rather than trusted to hold implicitly.
+        [TestMethod]
+        public async Task CreateUserAsync_OnboardingServiceThrows_StillCreatesUserAndSendsSetPasswordEmail()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Mock<IOnboardingService> onboardingServiceMock = new();
+            onboardingServiceMock.Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("Simulated onboarding failure"));
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object, onboardingServiceMock: onboardingServiceMock);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsNotNull(result.Data);
+            Assert.IsTrue(result.Data.EmailSent);
 
             UserProfile? persisted = await userManager.FindByIdAsync(result.Data.User.Id);
             Assert.IsNotNull(persisted);
