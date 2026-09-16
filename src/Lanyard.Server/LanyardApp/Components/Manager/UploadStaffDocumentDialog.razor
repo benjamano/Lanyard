@@ -1,0 +1,122 @@
+@using Lanyard.Application.Services.StaffDocuments
+@using Microsoft.AspNetCore.Http
+
+@inject INotificationService ToastService
+@inject IStaffDocumentService _staffDocumentService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.ArrowUpload())" />
+            <FluentText As="@TextTag.H3">Upload Document</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@DocumentTypes" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
+                          Label="Document Type" Style="width: 100%;" />
+
+            @if (selectedDocumentType?.RequiresExpiryDate == true)
+            {
+                <FluentDatePicker TValue="DateTime?" @bind-Value="expiryDate" Label="Expiry Date" Style="width: 100%;" />
+            }
+
+            <FluentInputFile Id="staff-document-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
+                              MaximumFileCount="1" MaximumFileSize="@(50 * 1024 * 1024)"
+                              @bind-ProgressPercent="@uploadProgressPercent" OnCompleted="@OnDocumentUploadedAsync">
+                <ChildContent>
+                    <label for="staff-document-upload">Choose a file, or drag it here.</label>
+                </ChildContent>
+            </FluentInputFile>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelDialog" Disabled="@isUploading">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public string UserId { get; set; } = string.Empty;
+
+    [Parameter]
+    public List<StaffDocumentType> DocumentTypes { get; set; } = [];
+
+    private StaffDocumentType? selectedDocumentType;
+    private DateTime? expiryDate;
+    private int uploadProgressPercent;
+    private bool isUploading;
+
+    protected override void OnInitialized()
+    {
+        selectedDocumentType = DocumentTypes.FirstOrDefault();
+    }
+
+    private async Task OnDocumentUploadedAsync(IEnumerable<FluentInputFileEventArgs> files)
+    {
+        if (selectedDocumentType is null)
+        {
+            ToastService.ShowError("Select a document type before uploading.");
+            return;
+        }
+
+        FluentInputFileEventArgs? file = files.FirstOrDefault();
+
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.ErrorMessage is not null)
+        {
+            ToastService.ShowError($"Error uploading {file.Name}: {file.ErrorMessage}");
+            return;
+        }
+
+        isUploading = true;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!currentUserResult.IsSuccess || currentUserResult.Data is null)
+        {
+            ToastService.ShowError("Could not determine the current user.");
+            isUploading = false;
+            return;
+        }
+
+        using FileStream fileStream = file.LocalFile!.OpenRead();
+
+        IFormFile formFile = new FormFile(fileStream, 0, fileStream.Length, "file", file.Name)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = file.ContentType
+        };
+
+        Result<StaffDocument> uploadResult = await _staffDocumentService.UploadStaffDocumentAsync(
+            UserId, selectedDocumentType.Id, formFile, expiryDate, currentUserResult.Data, CancellationToken.None);
+
+        uploadProgressPercent = 0;
+        isUploading = false;
+
+        if (!uploadResult.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to upload document: {uploadResult.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Document uploaded.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelDialog()
+    {
+        await Dialog.CancelAsync();
+    }
+}
