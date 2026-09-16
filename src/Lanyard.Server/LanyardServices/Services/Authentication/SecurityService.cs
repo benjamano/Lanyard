@@ -108,6 +108,28 @@ public class SecurityService : ISecurityService
         }
     }
 
+    public async Task<Result<UserProfile>> GetUserByIdAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<UserProfile>.Fail("User not found.");
+            }
+
+            return Result<UserProfile>.Ok(user);
+        }
+        catch (Exception ex)
+        {
+            return Result<UserProfile>.Fail(ex.Message);
+        }
+    }
+
     public async Task<string?> GetCurrentUserName()
     {
         Result<UserProfile> getResult = await GetCurrentUserProfileAsync();

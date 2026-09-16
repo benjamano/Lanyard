@@ -1,8 +1,12 @@
+@page "/manage/users/{UserId}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
 @using System.ComponentModel.DataAnnotations
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Application.Services.Gdpr
 @using Lanyard.Application.Services.StaffDocuments
 @using Lanyard.Application.Services.Locations
+@using Lanyard.App.Components.Manager
 @using Microsoft.AspNetCore.Http
 
 @inject IGdprService _gdprService
@@ -10,14 +14,49 @@
 @inject IStaffDocumentService _staffDocumentService
 @inject IStaffDocumentTypeService _staffDocumentTypeService
 
-<FluentDialogBody>
-    <ChildContent>
-        <div class="user-actions-dialog">
+<PageTitle>@(user?.GetName() ?? "User")</PageTitle>
+
+@if (isLoadingUser)
+{
+    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" Class="my-4">
+        <FluentSpinner />
+    </FluentStack>
+}
+else if (user is null)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+            <FluentMessageBar Intent="MessageBarIntent.Error">
+                @(loadError ?? "That user could not be found.")
+            </FluentMessageBar>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                          OnClick="@(() => _navigationManager.NavigateTo("/manage/users"))">
+                Back to Users
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+}
+else
+{
+    <div class="user-editor-page">
+    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                  Class="mb-2" OnClick="@(() => _navigationManager.NavigateTo("/manage/users"))">
+        Back to Users
+    </FluentButton>
+
+    <FluentCard Height="auto" Class="user-editor-card">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="2" Class="mb-3">
+            <FluentText As="@TextTag.H3">@user.GetName()</FluentText>
+            <FluentText Style="color: var(--neutral-foreground-hint);">
+                @(user.Email ?? "No email set") &bull; @StatusText
+            </FluentText>
+        </FluentStack>
+
         <FluentTabs>
             <FluentTab Header="Details" IconStart="new Icons.Regular.Size20.Edit()">
                 <EditForm EditContext="@_detailsEditContext" OnValidSubmit="HandleSaveDetails">
                     <DataAnnotationsValidator />
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-actions-tab-content">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-editor-tab-content">
                         <FluentTextInput @bind-Value="detailsModel.FirstName" Label="First Name" Required="true"
                                          Message="@_detailsEditContext.GetValidationMessage(() => detailsModel.FirstName)"
                                          MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
@@ -46,7 +85,7 @@
             <FluentTab Header="Password" IconStart="new Icons.Regular.Size20.Key()">
                 <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword">
                     <DataAnnotationsValidator />
-                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-actions-tab-content">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-editor-tab-content">
                         <FluentTextInput @bind-Value="passwordModel.NewPassword" Label="New Password" Required="true"
                                          TextInputType="TextInputType.Password"
                                          MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error">
@@ -67,7 +106,7 @@
             </FluentTab>
 
             <FluentTab Header="Account" IconStart="new Icons.Regular.Size20.PersonSettings()">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-actions-tab-content">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
                     <FluentText>Status: <strong>@StatusText</strong></FluentText>
 
                     @if (IsLockedOut)
@@ -80,13 +119,13 @@
 
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.MailArrowClockwise()"
                                   Disabled="@isSendingEmail" OnClick="@SendSetPasswordLinkAsync">
-                        @(isSendingEmail ? "Sending..." : (Content?.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email"))
+                        @(isSendingEmail ? "Sending..." : (user.PasswordSetDate is null ? "Resend Invite" : "Send Password Reset Email"))
                     </FluentButton>
                 </FluentStack>
             </FluentTab>
 
             <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Class="user-actions-tab-content">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Class="user-editor-tab-content">
                     @if (isLoadingDocuments)
                     {
                         <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
@@ -110,19 +149,21 @@
                             }
                             else
                             {
-                                <FluentDataGrid Items="@staffDocuments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr auto" Style="width: 100%;">
-                                    <PropertyColumn Property="@(x => x.StaffDocumentType!.Name)" Title="Type" />
-                                    <TemplateColumn Title="Expiry">
-                                        @(context.ExpiryDate is not null ? context.ExpiryDate.Value.Date.ToString("d MMM yyyy") : "-")
-                                    </TemplateColumn>
-                                    <PropertyColumn Property="@(x => x.UploadedDate)" Title="Uploaded" Format="d MMM yyyy" />
-                                    <TemplateColumn Title="Actions">
-                                        <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
-                                                      OnClick="@(() => DownloadDocument(context.FileMetadataId))" />
-                                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
-                                                      OnClick="@(() => DeleteDocumentAsync(context.Id))" />
-                                    </TemplateColumn>
-                                </FluentDataGrid>
+                                <div class="documents-grid-wrapper">
+                                    <FluentDataGrid Items="@staffDocuments.AsQueryable()" GridTemplateColumns="2fr 1fr 1fr auto" Style="width: 100%;">
+                                        <PropertyColumn Property="@(x => x.StaffDocumentType!.Name)" Title="Type" />
+                                        <TemplateColumn Title="Expiry">
+                                            @(context.ExpiryDate is not null ? context.ExpiryDate.Value.Date.ToString("d MMM yyyy") : "-")
+                                        </TemplateColumn>
+                                        <PropertyColumn Property="@(x => x.UploadedDate)" Title="Uploaded" Format="d MMM yyyy" />
+                                        <TemplateColumn Title="Actions">
+                                            <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
+                                                          OnClick="@(() => DownloadDocument(context.FileMetadataId))" />
+                                            <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
+                                                          OnClick="@(() => DeleteDocumentAsync(context.Id))" />
+                                        </TemplateColumn>
+                                    </FluentDataGrid>
+                                </div>
                             }
                         </FluentStack>
 
@@ -153,7 +194,7 @@
             </FluentTab>
 
             <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
-                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-actions-tab-content">
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
                     <AuthorizeView Roles="Admin" Context="authContext">
                         <Authorized>
                             <FluentButton Appearance="ButtonAppearance.Outline" Color="Color.Error"
@@ -172,19 +213,17 @@
                 </FluentStack>
             </FluentTab>
         </FluentTabs>
-        </div>
-    </ChildContent>
-    <ActionTemplate>
-        <FluentButton OnClick="@CloseAsync">Close</FluentButton>
-    </ActionTemplate>
-</FluentDialogBody>
+    </FluentCard>
+    </div>
+}
 
 @code {
     [Parameter]
-    public UserProfile? Content { get; set; }
+    public string UserId { get; set; } = string.Empty;
 
-    [CascadingParameter]
-    public required IDialogInstance Dialog { get; set; }
+    private UserProfile? user;
+    private bool isLoadingUser = true;
+    private string? loadError;
 
     private DetailsModel detailsModel = new();
     private EditContext _detailsEditContext = default!;
@@ -208,28 +247,49 @@
     // an account with lockout disabled can still carry a stale LockoutEnd from before it was
     // disabled, and would otherwise show as "Locked" without actually being blocked from signing in.
     private bool IsLockedOut =>
-        Content is not null && Content.LockoutEnabled && Content.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
+        user is not null && user.LockoutEnabled && user.LockoutEnd is DateTimeOffset end && end > DateTimeOffset.UtcNow;
 
     private string StatusText =>
-        IsLockedOut ? "Locked" : Content?.PasswordSetDate is null ? "Invite Pending" : "Active";
-
-    protected override void OnInitialized()
-    {
-        detailsModel.FirstName = Content?.FirstName ?? string.Empty;
-        detailsModel.LastName = Content?.LastName ?? string.Empty;
-        detailsModel.PhoneNumber = Content?.PhoneNumber;
-
-        _detailsEditContext = new EditContext(detailsModel);
-    }
+        IsLockedOut ? "Locked" : user?.PasswordSetDate is null ? "Invite Pending" : "Active";
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadDocumentsAsync();
+        await LoadUserAsync();
+
+        if (user is not null)
+        {
+            await LoadDocumentsAsync();
+        }
+    }
+
+    private async Task LoadUserAsync()
+    {
+        isLoadingUser = true;
+
+        Result<UserProfile> result = await _securityService.GetUserByIdAsync(UserId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            user = null;
+            isLoadingUser = false;
+            return;
+        }
+
+        user = result.Data;
+
+        detailsModel.FirstName = user.FirstName ?? string.Empty;
+        detailsModel.LastName = user.LastName ?? string.Empty;
+        detailsModel.PhoneNumber = user.PhoneNumber;
+
+        _detailsEditContext = new EditContext(detailsModel);
+
+        isLoadingUser = false;
     }
 
     private async Task LoadDocumentsAsync()
     {
-        if (Content is null)
+        if (user is null)
         {
             isLoadingDocuments = false;
             return;
@@ -237,7 +297,7 @@
 
         isLoadingDocuments = true;
 
-        Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(Content.Id);
+        Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(user.Id);
 
         if (!brandingResult.IsSuccess || brandingResult.Data is null)
         {
@@ -247,7 +307,7 @@
         }
 
         Result<List<StaffDocumentType>> typesResult = await _staffDocumentTypeService.GetDocumentTypesAsync(brandingResult.Data.CompanyId);
-        Result<List<StaffDocument>> documentsResult = await _staffDocumentService.GetStaffDocumentsForUserAsync(Content.Id);
+        Result<List<StaffDocument>> documentsResult = await _staffDocumentService.GetStaffDocumentsForUserAsync(user.Id);
 
         documentTypes = typesResult.IsSuccess ? typesResult.Data : [];
         staffDocuments = documentsResult.IsSuccess ? documentsResult.Data : [];
@@ -277,7 +337,7 @@
 
     private async Task OnDocumentUploadedAsync(IEnumerable<FluentInputFileEventArgs> files)
     {
-        if (Content is null || selectedDocumentType is null)
+        if (user is null || selectedDocumentType is null)
         {
             ToastService.ShowError("Select a document type before uploading.");
             return;
@@ -313,7 +373,7 @@
         };
 
         Result<StaffDocument> uploadResult = await _staffDocumentService.UploadStaffDocumentAsync(
-            Content.Id, selectedDocumentType.Id, formFile, uploadExpiryDate, currentUserResult.Data, CancellationToken.None);
+            user.Id, selectedDocumentType.Id, formFile, uploadExpiryDate, currentUserResult.Data, CancellationToken.None);
 
         if (!uploadResult.IsSuccess)
         {
@@ -331,7 +391,7 @@
 
     private async Task HandleSaveDetails()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
@@ -340,11 +400,11 @@
 
         try
         {
-            Content.FirstName = detailsModel.FirstName;
-            Content.LastName = detailsModel.LastName;
-            Content.PhoneNumber = detailsModel.PhoneNumber;
+            user.FirstName = detailsModel.FirstName;
+            user.LastName = detailsModel.LastName;
+            user.PhoneNumber = detailsModel.PhoneNumber;
 
-            await _securityService.UpdateUserProfileAsync(Content);
+            await _securityService.UpdateUserProfileAsync(user);
 
             ToastService.ShowSuccess("User details updated!");
         }
@@ -360,7 +420,7 @@
 
     private async Task HandleChangePassword()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
@@ -369,11 +429,11 @@
 
         try
         {
-            Result<bool> result = await _securityService.ChangePasswordAsync(Content.Id, passwordModel.NewPassword);
+            Result<bool> result = await _securityService.ChangePasswordAsync(user.Id, passwordModel.NewPassword);
 
             if (result.IsSuccess)
             {
-                ToastService.ShowSuccess($"Password changed successfully for '{Content.GetName()}'!");
+                ToastService.ShowSuccess($"Password changed successfully for '{user.GetName()}'!");
                 passwordModel = new();
             }
             else
@@ -393,19 +453,19 @@
 
     private async Task UnlockAsync()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
 
         isUnlocking = true;
 
-        Result<bool> result = await _securityService.UnlockUserAsync(Content.Id);
+        Result<bool> result = await _securityService.UnlockUserAsync(user.Id);
 
         if (result.IsSuccess)
         {
-            ToastService.ShowSuccess($"{Content.GetName()}'s account has been unlocked.");
-            Content.LockoutEnd = DateTimeOffset.UtcNow.AddSeconds(-1);
+            ToastService.ShowSuccess($"{user.GetName()}'s account has been unlocked.");
+            user.LockoutEnd = DateTimeOffset.UtcNow.AddSeconds(-1);
         }
         else
         {
@@ -417,21 +477,21 @@
 
     private async Task SendSetPasswordLinkAsync()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
 
         isSendingEmail = true;
 
-        bool wasPending = Content.PasswordSetDate is null;
-        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(Content.Id);
+        bool wasPending = user.PasswordSetDate is null;
+        Result<bool> result = await _securityService.SendSetPasswordLinkAsync(user.Id);
 
         if (result.IsSuccess)
         {
             ToastService.ShowSuccess(wasPending
-                ? $"Invite resent to {Content.Email}."
-                : $"Password reset email sent to {Content.Email}.");
+                ? $"Invite resent to {user.Email}."
+                : $"Password reset email sent to {user.Email}.");
         }
         else
         {
@@ -443,7 +503,7 @@
 
     private async Task ConfirmDeleteAsync()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
@@ -453,7 +513,7 @@
             options.Header.Title = "Are you sure?";
             options.Width = "500px";
             options.Modal = true;
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), Content);
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
         });
 
         if (result.Cancelled)
@@ -463,14 +523,14 @@
 
         isDeleting = true;
 
-        await _securityService.DeleteUserAsync(Content.Id);
+        await _securityService.DeleteUserAsync(user.Id);
 
-        await Dialog.CloseAsync();
+        _navigationManager.NavigateTo("/manage/users");
     }
 
     private async Task ConfirmGdprEraseAsync()
     {
-        if (Content is null)
+        if (user is null)
         {
             return;
         }
@@ -480,9 +540,9 @@
             options.Header.Title = "Erase User Data (GDPR)";
             options.Width = "500px";
             options.Modal = true;
-            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), Content);
+            options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Content), user);
             options.Parameters.Add(nameof(ConfirmDeleteUserDialog.Message),
-                $"This will permanently remove {Content.GetName()}'s personal data and delete their account. " +
+                $"This will permanently remove {user.GetName()}'s personal data and delete their account. " +
                 "Content they authored will be kept but no longer attributed to them. This cannot be undone.");
             options.Parameters.Add(nameof(ConfirmDeleteUserDialog.ConfirmLabel), "Erase Data");
         });
@@ -494,7 +554,7 @@
 
         isErasing = true;
 
-        Result<bool> eraseResult = await _gdprService.EraseUserDataAsync(Content.Id);
+        Result<bool> eraseResult = await _gdprService.EraseUserDataAsync(user.Id);
 
         if (!eraseResult.IsSuccess)
         {
@@ -503,12 +563,7 @@
             return;
         }
 
-        await Dialog.CloseAsync();
-    }
-
-    private async Task CloseAsync()
-    {
-        await Dialog.CloseAsync();
+        _navigationManager.NavigateTo("/manage/users");
     }
 
     private class DetailsModel

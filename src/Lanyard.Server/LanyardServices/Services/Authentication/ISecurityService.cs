@@ -10,6 +10,7 @@ namespace Lanyard.Application.Services.Authentication
         Task<bool> IsUserLoggedIn();
         Task<bool> IsCurrentUserInRoleAsync(string role);
         Task<Result<UserProfile>> GetCurrentUserProfileAsync();
+        Task<Result<UserProfile>> GetUserByIdAsync(string userId);
         Task<string?> GetCurrentUserName();
         Task<IEnumerable<UserProfile>> GetAllUsersAsync();
         Task UpdateUserProfileAsync(UserProfile updatedUserProfile);

@@ -278,5 +278,14 @@
       "Fixed the song list on the Music page silently clipping songs instead of scrolling once the list grew taller than the available space, on both desktop and mobile layouts.",
       "Fixed bullet-point lists in course section content turning into numbered lists when previewed or completed by a learner, even though they showed correctly while being edited."
     ]
+  },
+  {
+    "version": "1.3.20",
+    "releaseDate": "2026-09-16",
+    "summary": "Clicking a user in Manage > Users now opens a dedicated page instead of a popup dialog.",
+    "details": [
+      "Replaced the cramped user-actions popup with a full page at its own URL, giving the Details, Password, Account, Documents and Danger Zone tabs more room to breathe.",
+      "The page can now be linked to directly and works with the browser's back/forward buttons."
+    ]
   }
 ]
