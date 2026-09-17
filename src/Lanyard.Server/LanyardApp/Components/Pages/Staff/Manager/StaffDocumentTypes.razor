@@ -1,5 +1,5 @@
 @page "/manage/staff-documents/types"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 
 @using Lanyard.App.Components.Manager
 @using Lanyard.Infrastructure.Models
@@ -21,8 +21,11 @@
         }
         else
         {
-            <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
-                          @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            @if (companies.Count > 1)
+            {
+                <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            }
 
             @if (SelectedCompany is not null)
             {
@@ -40,9 +43,30 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+        bool isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
 
-        companies = result.IsSuccess ? result.Data : [];
-        selectedCompanyId = companies?.FirstOrDefault()?.Id.ToString();
+        companies = isAdmin
+            ? await GetAllCompaniesAsync()
+            : await GetCompaniesForCurrentManagerAsync();
+
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+    }
+
+    private async Task<List<Company>> GetAllCompaniesAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+        return result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    // A Manager only sees the companies their own location memberships belong to, not every
+    // company in the system - GetCompaniesAsync() is unconditional and would otherwise leak
+    // every other company's document types to them.
+    private async Task<List<Company>> GetCompaniesForCurrentManagerAsync()
+    {
+        Result<List<Location>> locationsResult = await OnboardingAccessHelpers.GetLocationsForCurrentUserAsync(_securityService, _companyLocationService);
+
+        return locationsResult.IsSuccess && locationsResult.Data is not null
+            ? locationsResult.Data.Where(l => l.Company is not null).Select(l => l.Company!).DistinctBy(c => c.Id).ToList()
+            : [];
     }
 }

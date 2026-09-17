@@ -27,23 +27,34 @@
                     }
                     else
                     {
-                        <FluentDataGrid Items="@documentTypes.OrderBy(x => x.SortOrder).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 2fr auto" Style="width: 100%;">
-                            <PropertyColumn Property="@(x => x.Name)" Title="Name" />
-                            <PropertyColumn Property="@(x => x.Description ?? "")" Title="Description" />
-                            <TemplateColumn Title="Expiry?">
-                                @(context.RequiresExpiryDate ? "Yes" : "No")
-                            </TemplateColumn>
-                            <TemplateColumn Title="Reminder Days Before Expiry">
-                                <FluentTextInput Value="@FormatIntervals(context)" ValueChanged="@((string v) => { intervalEdits[context.Id] = v; })"
-                                                  Placeholder="e.g. 30,14,7" Width="100%" />
-                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Save())"
-                                              Title="Save reminder days" OnClick="@(() => SaveIntervalsAsync(context.Id))" />
-                            </TemplateColumn>
-                            <TemplateColumn Title="Actions">
-                                <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Deactivate"
-                                              OnClick="@(() => DeactivateAsync(context.Id))" />
-                            </TemplateColumn>
-                        </FluentDataGrid>
+                        <div class="document-type-list">
+                            @foreach (StaffDocumentType type in documentTypes.OrderBy(x => x.SortOrder))
+                            {
+                                <div class="document-type-list-item">
+                                    <div class="document-type-list-info">
+                                        <div class="document-type-list-name">@type.Name</div>
+                                        @if (!string.IsNullOrWhiteSpace(type.Description))
+                                        {
+                                            <div class="document-type-list-description">@type.Description</div>
+                                        }
+                                        <div class="document-type-list-meta">
+                                            @(type.RequiresExpiryDate ? "Requires an expiry date" : "No expiry date required")
+                                        </div>
+                                        <div class="document-type-list-reminder-label">Reminder days before expiry</div>
+                                        <div class="document-type-list-reminder">
+                                            <FluentTextInput Value="@FormatIntervals(type)" ValueChanged="@((string v) => { intervalEdits[type.Id] = v; })"
+                                                              Placeholder="e.g. 30,14,7" Width="100%" aria-label="Reminder days before expiry" />
+                                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Save())"
+                                                          Title="Save reminder days" OnClick="@(() => SaveIntervalsAsync(type.Id))" />
+                                        </div>
+                                    </div>
+                                    <div class="document-type-list-actions">
+                                        <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Deactivate"
+                                                      OnClick="@(() => DeactivateAsync(type.Id))" />
+                                    </div>
+                                </div>
+                            }
+                        </div>
                     }
                 </FluentStack>
             </FluentGridItem>
