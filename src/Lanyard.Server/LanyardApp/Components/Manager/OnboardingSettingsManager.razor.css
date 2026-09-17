@@ -1,0 +1,17 @@
+/* The default vertical FluentStack has align-items: start, so a plain child div shrinks to
+   Quill's own intrinsic width instead of filling the card - same gotcha as the dashboard text
+   widget and course editor. */
+.onboarding-editor-host {
+    width: 100%;
+}
+
+.onboarding-editor-host ::deep .ql-container {
+    width: 100%;
+}
+
+/* Quill's editable area otherwise sizes to its (empty) content, reading as a single-line box
+   before anything is typed - a min-height gives the welcome message room to be written without
+   the box growing awkwardly under the admin's cursor as they type. */
+.onboarding-editor-host ::deep .ql-editor {
+    min-height: 220px;
+}

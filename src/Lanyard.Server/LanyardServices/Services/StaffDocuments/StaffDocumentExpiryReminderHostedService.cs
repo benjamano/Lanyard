@@ -100,6 +100,21 @@ public class StaffDocumentExpiryReminderHostedService(
                     ? $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
                     : null;
 
+                // Marked sent before the email is sent, not after - StaffDocumentReminderSent's
+                // unique index is the concurrency guard against two overlapping sweeps (or two
+                // app instances) both picking up the same reminder. Marking first means a losing
+                // sweep is rejected here and never sends a duplicate email; marking last would
+                // leave a window where both sweeps could send before either recorded it.
+                Result<bool> markResult = await documentService.MarkReminderSentAsync(
+                    pending.Document.Id, pending.Interval.Id, pending.Document.ExpiryDate!.Value);
+
+                if (!markResult.IsSuccess)
+                {
+                    _logger.LogWarning("Skipping staff document expiry reminder for document {DocumentId} - already claimed or failed to record: {Error}",
+                        pending.Document.Id, markResult.Error);
+                    continue;
+                }
+
                 Result<bool> emailResult = await emailService.SendStaffDocumentExpiryReminderEmailAsync(
                     user,
                     pending.Document.StaffDocumentType?.Name ?? "your document",
@@ -112,16 +127,6 @@ public class StaffDocumentExpiryReminderHostedService(
                 {
                     _logger.LogWarning("Failed to send staff document expiry reminder for document {DocumentId}: {Error}",
                         pending.Document.Id, emailResult.Error);
-                    continue;
-                }
-
-                Result<bool> markResult = await documentService.MarkReminderSentAsync(
-                    pending.Document.Id, pending.Interval.Id, pending.Document.ExpiryDate.Value);
-
-                if (!markResult.IsSuccess)
-                {
-                    _logger.LogWarning("Failed to mark staff document reminder sent for document {DocumentId}: {Error}",
-                        pending.Document.Id, markResult.Error);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

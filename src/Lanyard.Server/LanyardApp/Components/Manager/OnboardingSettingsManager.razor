@@ -1,0 +1,274 @@
+@using Lanyard.Application.Services.Onboarding
+@using Lanyard.Infrastructure.Models
+@using Lanyard.App.Components.ProjectionPrograms
+
+@inject IOnboardingService _onboardingService
+@inject INotificationService ToastService
+
+<FluentCard Height="auto" Class="mt-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+        <FluentText Typo="Typography.H4">Onboarding</FluentText>
+
+        @if (_locations is not null && _locations.Count > 0)
+        {
+            <FluentSwitch Value="_configurePerLocation" ValueChanged="OnConfigurePerLocationChangedAsync"
+                          Label="Configure separately per location" />
+
+            @if (_configurePerLocation)
+            {
+                <FluentSelect TOption="Location" TValue="string" Items="@_locations" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="_selectedLocationId" @bind-Value:after="OnSelectedLocationChangedAsync"
+                              Label="Location" Width="320px" />
+            }
+        }
+
+        @if (settings is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else
+        {
+            <FluentSwitch @bind-Value="settings.SendWelcomeEmail" Label="Send a welcome email when a new user is created" />
+
+            @if (settings.SendWelcomeEmail)
+            {
+                <FluentTextInput @bind-Value="settings.WelcomeEmailSubject" Label="Email subject" Width="100%"
+                                  Placeholder="Welcome to Lanyard" />
+
+                <FluentText Typo="Typography.Body">Email body</FluentText>
+                <div class="onboarding-editor-host" @ref="_editorHostRef">
+                    <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
+                        <ToolbarContent>
+                            <span class="ql-formats">
+                                <button class="ql-bold"></button>
+                                <button class="ql-italic"></button>
+                                <button class="ql-underline"></button>
+                            </span>
+                            <span class="ql-formats">
+                                <button class="ql-list" value="ordered"></button>
+                                <button class="ql-list" value="bullet"></button>
+                            </span>
+                        </ToolbarContent>
+                        <EditorContent></EditorContent>
+                    </BlazoredTextEditor>
+                </div>
+
+                <FluentSwitch @bind-Value="settings.AutoAttachStandingDocuments" Label="Attach standing documents to the welcome email" />
+
+                @if (settings.AutoAttachStandingDocuments)
+                {
+                    <FluentText Typo="Typography.Body">Standing attachments</FluentText>
+
+                    @if (attachments is null)
+                    {
+                        <FluentSpinner />
+                    }
+                    else if (attachments.Count == 0)
+                    {
+                        <FluentText Style="color: var(--neutral-foreground-hint);">No standing attachments added yet.</FluentText>
+                    }
+                    else
+                    {
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                            @foreach (CompanyOnboardingStandingAttachment attachment in attachments)
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+                                    <FluentText>@(attachment.FileMetadata?.FileName ?? "Unknown file")</FluentText>
+                                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Delete())"
+                                                  Title="Remove" OnClick="@(() => RemoveAttachmentAsync(attachment.Id))" />
+                                </FluentStack>
+                            }
+                        </FluentStack>
+                    }
+
+                    @if (_canManageFiles)
+                    {
+                        <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
+                                    SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
+
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                                      OnClick="@(() => _attachmentPicker!.OpenAsync())">
+                            Add Attachment
+                        </FluentButton>
+                    }
+                    else
+                    {
+                        <FluentText Style="color: var(--neutral-foreground-hint);">
+                            Adding a standing attachment requires the Admin or "Can Manage Files" role.
+                        </FluentText>
+                    }
+                }
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveAsync">
+                Save
+            </FluentButton>
+        }
+    </FluentStack>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    private CompanyOnboardingSettings? settings;
+    private List<CompanyOnboardingStandingAttachment>? attachments;
+    private BlazoredTextEditor? _editor;
+    private ElementReference _editorHostRef;
+    private Guid? _loadedSettingsId;
+    private FilePicker? _attachmentPicker;
+
+    private bool _configurePerLocation;
+    private List<Location>? _locations;
+    private string? _selectedLocationId;
+    private int? _loadedForCompanyId;
+    private bool _canManageFiles;
+
+    private int? EffectiveLocationId =>
+        _configurePerLocation && int.TryParse(_selectedLocationId, out int id) ? id : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The standing-attachment picker browses the entire (company-unscoped) file library, the
+        // same capability FileManager.razor gates behind these two roles - a plain Manager must
+        // not get an indirect route to that browse surface just because they can reach this page.
+        _canManageFiles = await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("CanManageFiles");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedForCompanyId != CompanyId)
+        {
+            // Reset per-location UI state when switching to a different company's settings -
+            // a location id selected under the old company has no meaning under the new one.
+            _configurePerLocation = false;
+            _selectedLocationId = null;
+            _loadedForCompanyId = CompanyId;
+        }
+
+        await LoadLocationsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadLocationsAsync()
+    {
+        bool isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
+
+        Result<List<Location>> result = isAdmin
+            ? await _companyLocationService.GetLocationsAsync(CompanyId)
+            : await OnboardingAccessHelpers.GetLocationsForCurrentUserAsync(_securityService, _companyLocationService);
+
+        _locations = (result.IsSuccess ? result.Data : null)?.Where(l => l.CompanyId == CompanyId).OrderBy(l => l.Name).ToList() ?? [];
+
+        if (_selectedLocationId is null && _locations.Count > 0)
+        {
+            _selectedLocationId = _locations[0].Id.ToString();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
+
+        settings = (result.IsSuccess ? result.Data : null) ?? new CompanyOnboardingSettings { CompanyId = CompanyId, LocationId = EffectiveLocationId };
+        _loadedSettingsId = null;
+
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
+        attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
+    }
+
+    private async Task OnConfigurePerLocationChangedAsync(bool value)
+    {
+        _configurePerLocation = value;
+        await LoadAsync();
+    }
+
+    private async Task OnSelectedLocationChangedAsync()
+    {
+        await LoadAsync();
+    }
+
+    // BlazoredTextEditor does not accept initial content as a bound parameter - content must be
+    // pushed in via LoadHTMLContent() after the component has mounted, same as CourseEditor.razor
+    // and RenderTextAreaWidget.razor.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_editor is not null && settings is not null && _loadedSettingsId != settings.Id)
+        {
+            try
+            {
+                await _editor.LoadHTMLContent(settings.WelcomeEmailBodyHtml ?? string.Empty);
+                _loadedSettingsId = settings.Id;
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        if (_editor is not null)
+        {
+            settings.WelcomeEmailBodyHtml = await _editor.GetHTML();
+        }
+
+        Result<CompanyOnboardingSettings> result = await _onboardingService.SaveSettingsAsync(settings);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to save onboarding settings: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Onboarding settings saved.");
+        settings = result.Data;
+    }
+
+    private async Task AddAttachmentAsync(string? fileId)
+    {
+        if (!Guid.TryParse(fileId, out Guid fileMetadataId))
+        {
+            return;
+        }
+
+        Result<CompanyOnboardingStandingAttachment> result = await _onboardingService.AddStandingAttachmentAsync(CompanyId, EffectiveLocationId, fileMetadataId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to add attachment: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Attachment added.");
+
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
+        attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
+    }
+
+    private async Task RemoveAttachmentAsync(Guid attachmentId)
+    {
+        Result<bool> result = await _onboardingService.RemoveStandingAttachmentAsync(attachmentId);
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to remove attachment: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Attachment removed.");
+
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
+        attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
+    }
+}

@@ -3,26 +3,29 @@
 @inject IFileService FileService
 @inject INotificationService ToastService
 
-<div class="file-picker">
-    <FluentTextInput Value="@selectedFileDisplayName"
-                     Label="Selected File"
-                     Appearance="TextInputAppearance.Outline"
-                     ReadOnly />
+@if (ShowSelectionSummary)
+{
+    <div class="file-picker">
+        <FluentTextInput Value="@selectedFileDisplayName"
+                         Label="Selected File"
+                         Appearance="TextInputAppearance.Outline"
+                         ReadOnly />
 
-    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-        <FluentButton Appearance="ButtonAppearance.Primary"
-                      IconStart="@(new Icons.Regular.Size20.FolderOpen())"
-                      OnClick="OpenPickerAsync">
-            Browse
-        </FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Outline"
-                      IconStart="@(new Icons.Regular.Size20.Dismiss())"
-                      Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
-                      OnClick="ClearSelectionAsync">
-            Clear
-        </FluentButton>
-    </FluentStack>
-</div>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size20.FolderOpen())"
+                          OnClick="OpenPickerAsync">
+                Browse
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                          Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
+                          OnClick="ClearSelectionAsync">
+                Clear
+            </FluentButton>
+        </FluentStack>
+    </div>
+}
 
 <FluentDialog @ref="_pickerDialog" Modal="true">
     <FluentDialogBody>
@@ -122,6 +125,12 @@
     [Parameter]
     public IReadOnlyList<string>? AllowedExtensions { get; set; }
 
+    // Set false when the caller drives opening the dialog itself (via @ref + OpenAsync()) and
+    // has nowhere sensible to show a persistent "currently selected" summary - e.g. adding one
+    // of several attachments to a list, where there's no single ongoing selection to display.
+    [Parameter]
+    public bool ShowSelectionSummary { get; set; } = true;
+
     private readonly HashSet<string> allowedExtensions = [];
     private readonly Dictionary<Guid, Folder> folderLookup = [];
 
@@ -159,6 +168,13 @@
         }
 
         selectedFileDisplayName = "Unknown file";
+    }
+
+    // Public so a caller with ShowSelectionSummary="false" can open the dialog from its own
+    // trigger button (via @ref) instead of the Browse button this component no longer renders.
+    public async Task OpenAsync()
+    {
+        await OpenPickerAsync();
     }
 
     private async Task OpenPickerAsync()

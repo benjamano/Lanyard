@@ -16,7 +16,7 @@
         <div class="upload-dialog-content">
         <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
             <FluentSelect TOption="StaffDocumentType" TValue="string" Items="@DocumentTypes" OptionText="@(x => x.Name)"
-                          OptionValue="@(x => x.Id.ToString())" @bind-SelectedOption="selectedDocumentType"
+                          OptionValue="@(x => x.Id.ToString())" @bind-Value="selectedDocumentTypeId"
                           Label="Document Type" Placeholder="Select a document type" Style="width: 100%;" />
 
             @if (selectedDocumentType?.RequiresExpiryDate == true)
@@ -57,14 +57,16 @@
     // follows whatever Culture it's given, there's no separate format-string parameter.
     private static readonly CultureInfo UkCulture = new("en-GB");
 
-    private StaffDocumentType? selectedDocumentType;
+    private string? selectedDocumentTypeId;
     private DateTime? expiryDate;
     private int uploadProgressPercent;
     private bool isUploading;
 
+    private StaffDocumentType? selectedDocumentType => DocumentTypes.FirstOrDefault(x => x.Id.ToString() == selectedDocumentTypeId);
+
     protected override void OnInitialized()
     {
-        selectedDocumentType = DocumentTypes.FirstOrDefault();
+        selectedDocumentTypeId = DocumentTypes.FirstOrDefault()?.Id.ToString();
     }
 
     private async Task OnDocumentUploadedAsync(IEnumerable<FluentInputFileEventArgs> files)

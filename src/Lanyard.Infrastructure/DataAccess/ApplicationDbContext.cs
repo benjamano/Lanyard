@@ -81,6 +81,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentReminderInterval> StaffDocumentReminderIntervals { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<StaffDocumentReminderSent> StaffDocumentReminderSents { get; set; }
+        public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
+        public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -231,6 +233,40 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<StaffDocumentReminderSent>()
                 .HasIndex(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
                 .IsUnique();
+
+            // One company-wide row (LocationId IS NULL) plus at most one row per location
+            // override. A single unique index on (CompanyId, LocationId) can't express this -
+            // Postgres treats every NULL as distinct, so it would happily allow several
+            // company-wide rows for the same company. Two partial indexes instead: one enforces
+            // "at most one company-wide row per company", the other "at most one row per
+            // CompanyId+LocationId pair" for the location-specific rows.
+            modelBuilder.Entity<CompanyOnboardingSettings>()
+                .HasIndex(x => x.CompanyId)
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NULL");
+
+            modelBuilder.Entity<CompanyOnboardingSettings>()
+                .HasIndex(x => new { x.CompanyId, x.LocationId })
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NOT NULL");
+
+            // FileMetadata is shared across unrelated features (folders, logos, video devices,
+            // staff documents, onboarding attachments). The default convention-based FK behavior
+            // for a required reference is Cascade, which would let deleting a file from the
+            // general File Manager silently take a StaffDocument or a company's onboarding
+            // attachment down with it. Restrict instead: FileService.DeleteFileAsync surfaces a
+            // clear "file is in use" failure rather than an invisible cross-feature side effect.
+            modelBuilder.Entity<StaffDocument>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<CompanyOnboardingStandingAttachment>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }
