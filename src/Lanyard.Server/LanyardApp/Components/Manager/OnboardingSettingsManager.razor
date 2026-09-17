@@ -3,6 +3,7 @@
 @using Lanyard.App.Components.ProjectionPrograms
 
 @inject IOnboardingService _onboardingService
+@inject IFileService _fileService
 @inject INotificationService ToastService
 
 <FluentCard Height="auto" Class="mt-2">
@@ -90,7 +91,7 @@
                                     SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
 
                         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
-                                      OnClick="@(() => _attachmentPicker!.OpenAsync())">
+                                      OnClick="OpenAttachmentPickerAsync">
                             Add Attachment
                         </FluentButton>
                     }
@@ -233,6 +234,44 @@
 
         ToastService.ShowSuccess("Onboarding settings saved.");
         settings = result.Data;
+    }
+
+    // A well-known top-level folder so standing-attachment uploads land somewhere findable in
+    // the File Manager afterwards, instead of scattering across whatever folder happened to be
+    // open last time someone browsed. Looked up by name rather than a stored id since the file
+    // library has no other concept of "the onboarding folder" to persist a reference against.
+    private const string OnboardingDocumentsFolderName = "Onboarding Documents";
+
+    private async Task OpenAttachmentPickerAsync()
+    {
+        Folder? folder = await GetOrCreateOnboardingDocumentsFolderAsync();
+        await _attachmentPicker!.OpenAsync(folder);
+    }
+
+    private async Task<Folder?> GetOrCreateOnboardingDocumentsFolderAsync()
+    {
+        Result<IReadOnlyList<Folder>> foldersResult = await _fileService.ListFoldersAsync(null, CancellationToken.None);
+
+        Folder? existing = foldersResult.IsSuccess
+            ? foldersResult.Data?.FirstOrDefault(f => f.Name == OnboardingDocumentsFolderName)
+            : null;
+
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        Result<Folder> createResult = await _fileService.CreateFolderAsync(OnboardingDocumentsFolderName, null, CancellationToken.None);
+
+        if (!createResult.IsSuccess)
+        {
+            // Falls back to opening the picker at Root rather than blocking the admin from
+            // adding an attachment at all just because the folder couldn't be created.
+            ToastService.ShowError($"Could not prepare the standing attachments folder: {createResult.Error}");
+            return null;
+        }
+
+        return createResult.Data;
     }
 
     private async Task AddAttachmentAsync(string? fileId)

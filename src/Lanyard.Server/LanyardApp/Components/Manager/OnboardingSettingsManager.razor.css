@@ -15,3 +15,60 @@
 .onboarding-editor-host ::deep .ql-editor {
     min-height: 220px;
 }
+
+/* Quill's snow theme hardcodes a light toolbar/container (white background, near-black icons,
+   #ccc borders) with no awareness of this app's theme - unstyled, it looks fine in light mode
+   and broken in dark mode (icons stay near-black against a dark background). Same overrides as
+   RenderTextAreaWidget.razor.css, which hit this first. The outer FluentCard already supplies a
+   border around the whole widget, so the toolbar/container's own borders are dropped rather than
+   overridden - two nested borders read as a stray rectangle-in-a-rectangle otherwise. */
+.onboarding-editor-host ::deep .ql-toolbar.ql-snow {
+    border: none;
+    background-color: var(--colorNeutralBackground3);
+}
+
+.onboarding-editor-host ::deep .ql-container.ql-snow {
+    border: none;
+    background-color: var(--colorNeutralBackground1);
+}
+
+.onboarding-editor-host ::deep .ql-editor,
+.onboarding-editor-host ::deep .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.onboarding-editor-host ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+/* The list-format buttons are SVG strokes/fills; bold/italic/underline render as plain text
+   glyphs instead - both need covering, or one set is left at Quill's hardcoded near-black
+   default and reads unreadable against a dark toolbar background. This is the fix for "icons
+   don't change with the dark theme". */
+.onboarding-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button {
+    color: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}
