@@ -1,0 +1,10 @@
+/* The default vertical FluentStack has align-items: start, so a plain child div shrinks to
+   Quill's own intrinsic width instead of filling the card - same gotcha as the dashboard text
+   widget and course editor. */
+.onboarding-editor-host {
+    width: 100%;
+}
+
+.onboarding-editor-host ::deep .ql-container {
+    width: 100%;
+}

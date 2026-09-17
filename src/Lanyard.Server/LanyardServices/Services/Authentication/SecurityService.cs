@@ -292,7 +292,10 @@ public class SecurityService : ISecurityService
 
             try
             {
-                Result<bool> onboardingResult = await _onboardingService.TriggerOnboardingAsync(user.Id, CancellationToken.None);
+                // First of the (possibly several) locations the new hire was just added to -
+                // used only as a location-specific-override lookup key. TriggerOnboardingAsync
+                // falls back to the company-wide configuration when no override exists for it.
+                Result<bool> onboardingResult = await _onboardingService.TriggerOnboardingAsync(user.Id, locationIds.FirstOrDefault(), CancellationToken.None);
 
                 if (!onboardingResult.IsSuccess)
                 {

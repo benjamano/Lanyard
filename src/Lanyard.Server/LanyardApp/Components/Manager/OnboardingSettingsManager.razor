@@ -9,6 +9,19 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentText Typo="Typography.H4">Onboarding</FluentText>
 
+        @if (_locations is not null && _locations.Count > 0)
+        {
+            <FluentSwitch Value="_configurePerLocation" ValueChanged="OnConfigurePerLocationChangedAsync"
+                          Label="Configure separately per location" />
+
+            @if (_configurePerLocation)
+            {
+                <FluentSelect TOption="Location" TValue="string" Items="@_locations" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="_selectedLocationId" @bind-Value:after="OnSelectedLocationChangedAsync"
+                              Label="Location" Width="320px" />
+            }
+        }
+
         @if (settings is null)
         {
             <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
@@ -71,7 +84,13 @@
                         </FluentStack>
                     }
 
-                    <FilePicker SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
+                    <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
+                                SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
+
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                                  OnClick="@(() => _attachmentPicker!.OpenAsync())">
+                        Add Attachment
+                    </FluentButton>
                 }
             }
 
@@ -91,21 +110,76 @@
     private BlazoredTextEditor? _editor;
     private ElementReference _editorHostRef;
     private Guid? _loadedSettingsId;
+    private FilePicker? _attachmentPicker;
+
+    private bool _configurePerLocation;
+    private List<Location>? _locations;
+    private string? _selectedLocationId;
+    private int? _loadedForCompanyId;
+
+    private int? EffectiveLocationId =>
+        _configurePerLocation && int.TryParse(_selectedLocationId, out int id) ? id : null;
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_loadedForCompanyId != CompanyId)
+        {
+            // Reset per-location UI state when switching to a different company's settings -
+            // a location id selected under the old company has no meaning under the new one.
+            _configurePerLocation = false;
+            _selectedLocationId = null;
+            _loadedForCompanyId = CompanyId;
+        }
+
+        await LoadLocationsAsync();
         await LoadAsync();
+    }
+
+    private async Task LoadLocationsAsync()
+    {
+        bool isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
+
+        Result<List<Location>> result = isAdmin
+            ? await _companyLocationService.GetLocationsAsync(CompanyId)
+            : await GetLocationsForCurrentManagerAsync();
+
+        _locations = (result.IsSuccess ? result.Data : null)?.Where(l => l.CompanyId == CompanyId).OrderBy(l => l.Name).ToList() ?? [];
+
+        if (_selectedLocationId is null && _locations.Count > 0)
+        {
+            _selectedLocationId = _locations[0].Id.ToString();
+        }
+    }
+
+    private async Task<Result<List<Location>>> GetLocationsForCurrentManagerAsync()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        return userIdResult.IsSuccess && userIdResult.Data is not null
+            ? await _companyLocationService.GetLocationsForUserAsync(userIdResult.Data)
+            : Result<List<Location>>.Ok([]);
     }
 
     private async Task LoadAsync()
     {
-        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetSettingsAsync(CompanyId);
+        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
 
-        settings = (result.IsSuccess ? result.Data : null) ?? new CompanyOnboardingSettings { CompanyId = CompanyId };
+        settings = (result.IsSuccess ? result.Data : null) ?? new CompanyOnboardingSettings { CompanyId = CompanyId, LocationId = EffectiveLocationId };
         _loadedSettingsId = null;
 
-        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId);
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
         attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
+    }
+
+    private async Task OnConfigurePerLocationChangedAsync(bool value)
+    {
+        _configurePerLocation = value;
+        await LoadAsync();
+    }
+
+    private async Task OnSelectedLocationChangedAsync()
+    {
+        await LoadAsync();
     }
 
     // BlazoredTextEditor does not accept initial content as a bound parameter - content must be
@@ -158,7 +232,7 @@
             return;
         }
 
-        Result<CompanyOnboardingStandingAttachment> result = await _onboardingService.AddStandingAttachmentAsync(CompanyId, fileMetadataId);
+        Result<CompanyOnboardingStandingAttachment> result = await _onboardingService.AddStandingAttachmentAsync(CompanyId, EffectiveLocationId, fileMetadataId);
 
         if (!result.IsSuccess)
         {
@@ -168,7 +242,7 @@
 
         ToastService.ShowSuccess("Attachment added.");
 
-        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId);
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
         attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
     }
 
@@ -184,7 +258,7 @@
 
         ToastService.ShowSuccess("Attachment removed.");
 
-        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId);
+        Result<List<CompanyOnboardingStandingAttachment>> attachmentsResult = await _onboardingService.GetStandingAttachmentsAsync(CompanyId, EffectiveLocationId);
         attachments = attachmentsResult.IsSuccess ? attachmentsResult.Data : [];
     }
 }

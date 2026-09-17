@@ -234,11 +234,21 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
                 .IsUnique();
 
-            // Effectively 1:1 with Company - enforced here rather than making CompanyId the
-            // primary key, so the row can still be created lazily on first Save.
+            // One company-wide row (LocationId IS NULL) plus at most one row per location
+            // override. A single unique index on (CompanyId, LocationId) can't express this -
+            // Postgres treats every NULL as distinct, so it would happily allow several
+            // company-wide rows for the same company. Two partial indexes instead: one enforces
+            // "at most one company-wide row per company", the other "at most one row per
+            // CompanyId+LocationId pair" for the location-specific rows.
             modelBuilder.Entity<CompanyOnboardingSettings>()
                 .HasIndex(x => x.CompanyId)
-                .IsUnique();
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NULL");
+
+            modelBuilder.Entity<CompanyOnboardingSettings>()
+                .HasIndex(x => new { x.CompanyId, x.LocationId })
+                .IsUnique()
+                .HasFilter("\"LocationId\" IS NOT NULL");
         }
     }
 }

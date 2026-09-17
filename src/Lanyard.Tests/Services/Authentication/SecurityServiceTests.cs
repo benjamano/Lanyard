@@ -161,7 +161,7 @@ namespace Lanyard.Tests.Services.Authentication
             if (onboardingServiceMock is null)
             {
                 resolvedOnboardingServiceMock
-                    .Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result<bool>.Ok(true));
             }
 
@@ -276,7 +276,7 @@ namespace Lanyard.Tests.Services.Authentication
                 .ReturnsAsync(Result<bool>.Ok(true));
 
             Mock<IOnboardingService> onboardingServiceMock = new();
-            onboardingServiceMock.Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            onboardingServiceMock.Setup(o => o.TriggerOnboardingAsync(It.IsAny<string>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("Simulated onboarding failure"));
 
             SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object, onboardingServiceMock: onboardingServiceMock);

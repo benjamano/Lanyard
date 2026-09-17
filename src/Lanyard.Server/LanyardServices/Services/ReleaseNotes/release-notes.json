@@ -279,7 +279,10 @@
       "Fixed the song list on the Music page silently clipping songs instead of scrolling once the list grew taller than the available space, on both desktop and mobile layouts.",
       "Added a new Manage > Onboarding page where admins can turn on an automatic welcome email for newly created users, with a custom subject and rich-text body.",
       "Admins can curate a standing set of files (handbook, starter forms, posters) that are automatically attached to every onboarding welcome email for their company.",
-      "The welcome email is sent automatically the moment a new user account is created, and never blocks account creation if it fails to send."
+      "The welcome email is sent automatically the moment a new user account is created, and never blocks account creation if it fails to send.",
+      "Managers can now view and edit the Onboarding settings too, not just Admins - scoped to only the companies and locations they actually belong to.",
+      "Onboarding settings can now be configured per location instead of only company-wide, with a toggle to switch between the two - a location without its own override falls back to the company default.",
+      "Adding a standing attachment now opens a dialog instead of showing a permanently-visible upload area on the page."
     ]
   }
 ]

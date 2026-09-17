@@ -25,7 +25,7 @@ public class OnboardingService(
     private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
     private readonly ILogger<OnboardingService> _logger = logger;
 
-    public async Task<Result<CompanyOnboardingSettings?>> GetSettingsAsync(int companyId)
+    public async Task<Result<CompanyOnboardingSettings?>> GetSettingsAsync(int companyId, int? locationId = null)
     {
         try
         {
@@ -34,7 +34,7 @@ public class OnboardingService(
             CompanyOnboardingSettings? settings = await ctx.CompanyOnboardingSettings
                 .AsNoTracking()
                 .TagWithCallSite()
-                .FirstOrDefaultAsync(x => x.CompanyId == companyId);
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == locationId);
 
             return Result<CompanyOnboardingSettings?>.Ok(settings);
         }
@@ -51,14 +51,15 @@ public class OnboardingService(
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             CompanyOnboardingSettings? existing = await ctx.CompanyOnboardingSettings
-                .FirstOrDefaultAsync(x => x.CompanyId == settings.CompanyId);
+                .FirstOrDefaultAsync(x => x.CompanyId == settings.CompanyId && x.LocationId == settings.LocationId);
 
             if (existing is null)
             {
                 existing = new CompanyOnboardingSettings
                 {
                     Id = Guid.NewGuid(),
-                    CompanyId = settings.CompanyId
+                    CompanyId = settings.CompanyId,
+                    LocationId = settings.LocationId
                 };
                 ctx.CompanyOnboardingSettings.Add(existing);
             }
@@ -79,7 +80,7 @@ public class OnboardingService(
         }
     }
 
-    public async Task<Result<List<CompanyOnboardingStandingAttachment>>> GetStandingAttachmentsAsync(int companyId)
+    public async Task<Result<List<CompanyOnboardingStandingAttachment>>> GetStandingAttachmentsAsync(int companyId, int? locationId = null)
     {
         try
         {
@@ -89,7 +90,7 @@ public class OnboardingService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.FileMetadata)
-                .Where(x => x.CompanyId == companyId && x.IsActive)
+                .Where(x => x.CompanyId == companyId && x.LocationId == locationId && x.IsActive)
                 .OrderBy(x => x.SortOrder)
                 .ToListAsync();
 
@@ -101,20 +102,21 @@ public class OnboardingService(
         }
     }
 
-    public async Task<Result<CompanyOnboardingStandingAttachment>> AddStandingAttachmentAsync(int companyId, Guid fileMetadataId)
+    public async Task<Result<CompanyOnboardingStandingAttachment>> AddStandingAttachmentAsync(int companyId, int? locationId, Guid fileMetadataId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             int nextSortOrder = await ctx.CompanyOnboardingStandingAttachments
-                .Where(x => x.CompanyId == companyId)
+                .Where(x => x.CompanyId == companyId && x.LocationId == locationId)
                 .CountAsync();
 
             CompanyOnboardingStandingAttachment attachment = new()
             {
                 Id = Guid.NewGuid(),
                 CompanyId = companyId,
+                LocationId = locationId,
                 FileMetadataId = fileMetadataId,
                 SortOrder = nextSortOrder,
                 IsActive = true
@@ -157,11 +159,11 @@ public class OnboardingService(
         }
     }
 
-    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, CancellationToken cancellationToken)
+    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken)
     {
         try
         {
-            TrainingBranding branding = await _brandingResolver.ResolveAsync(userId, null, null);
+            TrainingBranding branding = await _brandingResolver.ResolveAsync(userId, locationId, null);
 
             if (branding.CompanyId is not int companyId)
             {
@@ -180,9 +182,30 @@ public class OnboardingService(
                 return Result<bool>.Fail("User not found.");
             }
 
-            CompanyOnboardingSettings? settings = await ctx.CompanyOnboardingSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.CompanyId == companyId, cancellationToken);
+            // A location-specific override, if one exists and is enabled, replaces the
+            // company-wide configuration entirely rather than merging field-by-field - simpler
+            // to reason about, and matches how the admin edits one scope at a time in the UI.
+            CompanyOnboardingSettings? settings = null;
+            int? resolvedLocationId = null;
+
+            if (locationId is int lid)
+            {
+                settings = await ctx.CompanyOnboardingSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
+
+                if (settings is not null)
+                {
+                    resolvedLocationId = lid;
+                }
+            }
+
+            if (settings is null)
+            {
+                settings = await ctx.CompanyOnboardingSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
+            }
 
             if (settings is null || !settings.SendWelcomeEmail)
             {
@@ -196,7 +219,7 @@ public class OnboardingService(
                 List<CompanyOnboardingStandingAttachment> standingAttachments = await ctx.CompanyOnboardingStandingAttachments
                     .AsNoTracking()
                     .Include(x => x.FileMetadata)
-                    .Where(x => x.CompanyId == companyId && x.IsActive)
+                    .Where(x => x.CompanyId == companyId && x.LocationId == resolvedLocationId && x.IsActive)
                     .OrderBy(x => x.SortOrder)
                     .ToListAsync(cancellationToken);
 

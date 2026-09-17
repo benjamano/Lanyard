@@ -1,5 +1,5 @@
 @page "/manage/onboarding"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 
 @using Lanyard.App.Components.Manager
 @using Lanyard.Infrastructure.Models
@@ -21,12 +21,15 @@
         }
         else
         {
-            <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
-                          @bind-SelectedOption="selectedCompany" Label="Company" Width="320px" />
-
-            @if (selectedCompany is not null)
+            @if (companies.Count > 1)
             {
-                <OnboardingSettingsManager CompanyId="@selectedCompany.Id" />
+                <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            }
+
+            @if (SelectedCompany is not null)
+            {
+                <OnboardingSettingsManager CompanyId="@SelectedCompany.Id" />
             }
         }
     </FluentStack>
@@ -34,13 +37,43 @@
 
 @code {
     private List<Company>? companies;
-    private Company? selectedCompany;
+    private string? selectedCompanyId;
+
+    private Company? SelectedCompany => companies?.FirstOrDefault(c => c.Id.ToString() == selectedCompanyId);
 
     protected override async Task OnInitializedAsync()
     {
-        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+        bool isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
 
-        companies = result.IsSuccess ? result.Data : [];
-        selectedCompany = companies?.FirstOrDefault();
+        companies = isAdmin
+            ? await GetAllCompaniesAsync()
+            : await GetCompaniesForCurrentManagerAsync();
+
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+    }
+
+    private async Task<List<Company>> GetAllCompaniesAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+        return result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    // A Manager only sees the companies their own location memberships belong to, not every
+    // company in the system - GetCompaniesAsync() is unconditional and would otherwise leak
+    // every other company's onboarding configuration to them.
+    private async Task<List<Company>> GetCompaniesForCurrentManagerAsync()
+    {
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userIdResult.IsSuccess || userIdResult.Data is null)
+        {
+            return [];
+        }
+
+        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(userIdResult.Data);
+
+        return locationsResult.IsSuccess && locationsResult.Data is not null
+            ? locationsResult.Data.Where(l => l.Company is not null).Select(l => l.Company!).DistinctBy(c => c.Id).ToList()
+            : [];
     }
 }
