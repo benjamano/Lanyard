@@ -77,6 +77,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<GameResult> GameResults { get; set; }
         public DbSet<GameResultPlayerScore> GameResultPlayerScores { get; set; }
         public DbSet<Announcement> Announcements { get; set; }
+        public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
+        public DbSet<StaffDocumentReminderInterval> StaffDocumentReminderIntervals { get; set; }
+        public DbSet<StaffDocument> StaffDocuments { get; set; }
+        public DbSet<StaffDocumentReminderSent> StaffDocumentReminderSents { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -214,6 +218,19 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<GameResult>()
                 .HasIndex(x => new { x.ClientId, x.PlayedAtUtc });
+
+            // Mirrors Location's (CompanyId, Name) uniqueness below - a company shouldn't end up
+            // with two document types of the same name via a race in the admin catalog UI.
+            modelBuilder.Entity<StaffDocumentType>()
+                .HasIndex(x => new { x.CompanyId, x.Name })
+                .IsUnique();
+
+            // Snapshotting ExpiryDate into the key means re-uploading a renewed document with a
+            // new expiry date naturally makes every interval eligible to fire again, without
+            // needing to hunt down and delete old StaffDocumentReminderSent rows.
+            modelBuilder.Entity<StaffDocumentReminderSent>()
+                .HasIndex(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
+                .IsUnique();
         }
     }
 }
