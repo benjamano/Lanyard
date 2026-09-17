@@ -1,0 +1,28 @@
+/* FluentInputFile's drop-zone label sits at the top of its container by default (plain
+   block layout). Its sibling progress-bar div is only visibility:hidden (not display:none)
+   while idle, so it still occupies ~50px of the container's ~70px height - centering the
+   label via flexbox on the shared parent would center the whole label+hidden-progress
+   block, not the label itself. Taking the label out of flow with absolute positioning
+   sidesteps that entirely and centers it against the container's own box regardless of
+   what its hidden sibling is doing.
+   ::deep is required because .inputfile-content/.fluent-inputfile-container are rendered
+   inside FluentInputFile's own template, not authored in this file - "upload-dialog-content"
+   is a plain <div> here that carries the scope attribute ::deep needs an anchor. */
+/* Without an explicit width/height, this collapses to 0x0 the moment its only child (the
+   label) is taken out of flow below - a block element's box normally comes from its
+   in-flow content, and an absolutely positioned child no longer contributes to that. */
+.upload-dialog-content ::deep .inputfile-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.upload-dialog-content ::deep .inputfile-content label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    margin: 0;
+    text-align: center;
+}

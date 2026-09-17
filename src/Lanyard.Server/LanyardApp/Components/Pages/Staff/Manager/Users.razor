@@ -23,7 +23,7 @@
     <div class="users-grid-wrapper">
         <FluentDataGrid Pagination="@pagination" ShowHover="true" TGridItem="UserProfile"
                         Items="@filteredUsers.AsQueryable()" GridTemplateColumns="1fr 1.2fr 1.2fr 1fr"
-                        OnRowClick="@((row) => OpenUserActionsDialog(row.Item!))"
+                        OnRowClick="@((row) => _navigationManager.NavigateTo($"/manage/users/{row.Item!.Id}"))"
                         Style="width: 100%;" Class="users-grid">
             <EmptyContent>
                 No Users Found
@@ -122,22 +122,6 @@
         {
             await GetUsers();
         }
-    }
-
-    // The dialog performs its own actions (edit, password, unlock, delete, etc.) directly against
-    // the services - it doesn't report back what happened, so just refresh unconditionally once
-    // it's closed. Cheap query, and covers every action a tab could have taken.
-    private async Task OpenUserActionsDialog(UserProfile user)
-    {
-        await _dialogService.ShowDialogAsync<UserActionsDialog>(options =>
-        {
-            options.Header.Title = user.GetName();
-            options.Width = "min(520px, 95vw)";
-            options.Modal = true;
-            options.Parameters.Add(nameof(UserActionsDialog.Content), user);
-        });
-
-        await GetUsers();
     }
 
     // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
