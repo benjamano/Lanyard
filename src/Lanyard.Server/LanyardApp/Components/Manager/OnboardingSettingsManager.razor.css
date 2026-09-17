@@ -18,18 +18,24 @@
 
 /* Quill's snow theme hardcodes a light toolbar/container (white background, near-black icons,
    #ccc borders) with no awareness of this app's theme - unstyled, it looks fine in light mode
-   and broken in dark mode (icons stay near-black against a dark background). Same overrides as
-   RenderTextAreaWidget.razor.css, which hit this first. The outer FluentCard already supplies a
-   border around the whole widget, so the toolbar/container's own borders are dropped rather than
-   overridden - two nested borders read as a stray rectangle-in-a-rectangle otherwise. */
+   and broken in dark mode (icons stay near-black against a dark background). Unlike
+   RenderTextAreaWidget.razor.css (where the editor IS the whole widget, so its own border would
+   duplicate the FluentCard's), this editor sits as one field among many inside a much larger
+   settings card - so it needs its own border to read as a distinct box, matching
+   CourseEditor.razor.css's pattern instead: keep Quill's border but recolor it to the theme
+   token, and round only the outer corners since the toolbar/container meet in the middle. */
 .onboarding-editor-host ::deep .ql-toolbar.ql-snow {
-    border: none;
+    border-color: var(--colorNeutralStroke1);
     background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
 }
 
 .onboarding-editor-host ::deep .ql-container.ql-snow {
-    border: none;
+    border-color: var(--colorNeutralStroke1);
     background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
 }
 
 .onboarding-editor-host ::deep .ql-editor,
