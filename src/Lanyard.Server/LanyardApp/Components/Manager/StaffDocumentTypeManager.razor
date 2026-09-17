@@ -9,7 +9,7 @@
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentText Typo="Typography.H4">Staff Document Types</FluentText>
 
-        <FluentGrid Class="w-100">
+        <FluentGrid Class="w-100" Spacing="3">
             <FluentGridItem Xs="12" Sm="@(isCreating ? 8 : 12)">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                     @if (documentTypes is null)
@@ -62,7 +62,7 @@
             @if (isCreating)
             {
                 <FluentGridItem Xs="12" Sm="4">
-                    <FluentCard Appearance="CardAppearance.Subtle">
+                    <FluentCard Appearance="CardAppearance.Outline">
                         <FluentText Typo="Typography.H6" Class="mb-2">New Document Type</FluentText>
 
                         <EditForm EditContext="@_editContext" OnValidSubmit="HandleCreateAsync">
