@@ -283,7 +283,9 @@
       "Managers can now view and edit the Onboarding settings too, not just Admins - scoped to only the companies and locations they actually belong to.",
       "Onboarding settings can now be configured per location instead of only company-wide, with a toggle to switch between the two - a location without its own override falls back to the company default.",
       "Adding a standing attachment now opens a dialog instead of showing a permanently-visible upload area on the page.",
-      "Fixed bullet-point lists in course section content turning into numbered lists when previewed or completed by a learner, even though they showed correctly while being edited."
+      "Fixed bullet-point lists in course section content turning into numbered lists when previewed or completed by a learner, even though they showed correctly while being edited.",
+      "A new standing attachment can now be uploaded directly from the Add Attachment dialog, instead of needing a separate trip to the File Manager first.",
+      "Fixed the onboarding welcome email's rich-text toolbar being unreadable in dark mode."
     ]
   }
 ]
