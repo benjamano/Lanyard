@@ -1,0 +1,72 @@
+@page "/manage/staff-documents/types"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.Infrastructure.Models
+
+<PageTitle>Staff Document Types</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+        @if (companies is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else if (companies.Count == 0)
+        {
+            <FluentText>No companies exist yet. Add one under Companies &amp; Locations first.</FluentText>
+        }
+        else
+        {
+            @if (companies.Count > 1)
+            {
+                <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            }
+
+            @if (SelectedCompany is not null)
+            {
+                <StaffDocumentTypeManager CompanyId="@SelectedCompany.Id" />
+            }
+        }
+    </FluentStack>
+</div>
+
+@code {
+    private List<Company>? companies;
+    private string? selectedCompanyId;
+
+    private Company? SelectedCompany => companies?.FirstOrDefault(c => c.Id.ToString() == selectedCompanyId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        bool isAdmin = await _securityService.IsCurrentUserInRoleAsync("Admin");
+
+        companies = isAdmin
+            ? await GetAllCompaniesAsync()
+            : await GetCompaniesForCurrentManagerAsync();
+
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+    }
+
+    private async Task<List<Company>> GetAllCompaniesAsync()
+    {
+        Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
+        return result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    // A Manager only sees the companies their own location memberships belong to, not every
+    // company in the system - GetCompaniesAsync() is unconditional and would otherwise leak
+    // every other company's document types to them.
+    private async Task<List<Company>> GetCompaniesForCurrentManagerAsync()
+    {
+        Result<List<Location>> locationsResult = await OnboardingAccessHelpers.GetLocationsForCurrentUserAsync(_securityService, _companyLocationService);
+
+        return locationsResult.IsSuccess && locationsResult.Data is not null
+            ? locationsResult.Data.Where(l => l.Company is not null).Select(l => l.Company!).DistinctBy(c => c.Id).ToList()
+            : [];
+    }
+}

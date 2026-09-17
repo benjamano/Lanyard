@@ -1,28 +1,32 @@
 ﻿@using Lanyard.Infrastructure.Models
+@using Lanyard.App.Components.Files
 
 @inject IFileService FileService
 @inject INotificationService ToastService
 
-<div class="file-picker">
-    <FluentTextInput Value="@selectedFileDisplayName"
-                     Label="Selected File"
-                     Appearance="TextInputAppearance.Outline"
-                     ReadOnly />
+@if (ShowSelectionSummary)
+{
+    <div class="file-picker">
+        <FluentTextInput Value="@selectedFileDisplayName"
+                         Label="Selected File"
+                         Appearance="TextInputAppearance.Outline"
+                         ReadOnly />
 
-    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
-        <FluentButton Appearance="ButtonAppearance.Primary"
-                      IconStart="@(new Icons.Regular.Size20.FolderOpen())"
-                      OnClick="OpenPickerAsync">
-            Browse
-        </FluentButton>
-        <FluentButton Appearance="ButtonAppearance.Outline"
-                      IconStart="@(new Icons.Regular.Size20.Dismiss())"
-                      Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
-                      OnClick="ClearSelectionAsync">
-            Clear
-        </FluentButton>
-    </FluentStack>
-</div>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size20.FolderOpen())"
+                          OnClick="OpenPickerAsync">
+                Browse
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                          Disabled="@string.IsNullOrWhiteSpace(selectedFileId)"
+                          OnClick="ClearSelectionAsync">
+                Clear
+            </FluentButton>
+        </FluentStack>
+    </div>
+}
 
 <FluentDialog @ref="_pickerDialog" Modal="true">
     <FluentDialogBody>
@@ -103,6 +107,14 @@
                         </FluentCard>
                     </FluentGridItem>
                 </FluentGrid>
+
+                <FluentDivider class="my-2" />
+
+                <FluentText Typo="Typography.Body">Or upload a new file here</FluentText>
+                <FileUploader Id="file-picker-uploader" SelectedFolderId="@currentFolderId"
+                              MaximumFileCount="1" Label="Upload a file"
+                              Accept="@BuildAcceptAttribute()"
+                              OnFileUploaded="OnFileUploadedAsync" />
             </div>
         }
         </ChildContent>
@@ -121,6 +133,12 @@
 
     [Parameter]
     public IReadOnlyList<string>? AllowedExtensions { get; set; }
+
+    // Set false when the caller drives opening the dialog itself (via @ref + OpenAsync()) and
+    // has nowhere sensible to show a persistent "currently selected" summary - e.g. adding one
+    // of several attachments to a list, where there's no single ongoing selection to display.
+    [Parameter]
+    public bool ShowSelectionSummary { get; set; } = true;
 
     private readonly HashSet<string> allowedExtensions = [];
     private readonly Dictionary<Guid, Folder> folderLookup = [];
@@ -159,6 +177,31 @@
         }
 
         selectedFileDisplayName = "Unknown file";
+    }
+
+    // Public so a caller with ShowSelectionSummary="false" can open the dialog from its own
+    // trigger button (via @ref) instead of the Browse button this component no longer renders.
+    // The optional folder lets a caller land the browser straight in a specific folder (e.g. a
+    // company's standing-attachments folder) instead of always starting at Root - seeded into
+    // folderLookup too, so the breadcrumb and Up button resolve correctly on the very first
+    // render, before that folder has ever appeared in a listing of its own children.
+    public async Task OpenAsync(Folder? folder = null)
+    {
+        if (folder is not null)
+        {
+            folderLookup[folder.Id] = folder;
+            currentFolderId = folder.Id;
+        }
+        else
+        {
+            // Otherwise a folder passed on a previous call (this component instance persists
+            // across dialog close/reopen) would still be selected here, contradicting the "falls
+            // back to Root" behavior callers rely on when they have no folder to pass (e.g. a
+            // failed lookup/create upstream).
+            currentFolderId = null;
+        }
+
+        await OpenPickerAsync();
     }
 
     private async Task OpenPickerAsync()
@@ -207,6 +250,14 @@
         }
 
         isLoading = false;
+
+        // OpenAsync can be invoked via @ref from a different component's own event handler (e.g.
+        // OnboardingSettingsManager's "Add Attachment" button) - Blazor's automatic post-event
+        // re-render only covers the component that owns the triggering event, not an unrelated
+        // component reached through a stored @ref, so without this explicit call the dialog can
+        // open showing stale content (breadcrumb stuck on "Root") even though currentFolderId/
+        // folders/files are all already correct here.
+        StateHasChanged();
     }
 
     private async Task OpenFolderAsync(Guid folderId)
@@ -242,6 +293,32 @@
         await OnFileSelected.InvokeAsync(newFileId);
         await _pickerDialog!.HideAsync();
     }
+
+    // Uploads straight into whatever folder is currently open and immediately selects the result
+    // - the whole point is that a caller never has to leave this dialog, go to the File Manager,
+    // upload there, and come back to find the file they just added.
+    private async Task OnFileUploadedAsync(FileMetadata file)
+    {
+        // The Accept attribute on the uploader is only a browser-level hint - a caller can still
+        // pick a disallowed file via "All files", drag-and-drop, or a non-browser client. Without
+        // this check it would bypass IsAllowedFile (which the existing Files browse list already
+        // enforces) and become e.g. a video-only parameter's value uncontested.
+        if (!IsAllowedFile(file))
+        {
+            await FileService.DeleteFileAsync(file.Id, CancellationToken.None);
+            ToastService.ShowError($"\"{file.FileName}\" is not an allowed file type here and was not added.");
+            await LoadFolderContentsAsync(currentFolderId);
+            return;
+        }
+
+        await SelectFileAsync(file);
+    }
+
+    // Mirrors allowedExtensions (already normalized to ".ext" form by RefreshAllowedExtensions)
+    // into the format <input accept> expects, so the browser's own file picker steers users away
+    // from disallowed types before they even reach IsAllowedFile's after-the-fact check above.
+    private string? BuildAcceptAttribute() =>
+        allowedExtensions.Count == 0 ? null : string.Join(',', allowedExtensions);
 
     private async Task ClearSelectionAsync()
     {

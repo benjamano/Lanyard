@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916222610_AddCompanyOnboardingSettings")]
+    partial class AddCompanyOnboardingSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -546,9 +549,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("SendWelcomeEmail")
                         .HasColumnType("boolean");
 
@@ -564,14 +564,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId")
-                        .IsUnique()
-                        .HasFilter("\"LocationId\" IS NULL");
-
-                    b.HasIndex("LocationId");
-
-                    b.HasIndex("CompanyId", "LocationId")
-                        .IsUnique()
-                        .HasFilter("\"LocationId\" IS NOT NULL");
+                        .IsUnique();
 
                     b.ToTable("CompanyOnboardingSettings");
                 });
@@ -591,9 +584,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
@@ -602,8 +592,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("FileMetadataId");
-
-                    b.HasIndex("LocationId");
 
                     b.ToTable("CompanyOnboardingStandingAttachments");
                 });
@@ -2318,13 +2306,7 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
-
                     b.Navigation("Company");
-
-                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingStandingAttachment", b =>
@@ -2338,18 +2320,12 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
                         .WithMany()
                         .HasForeignKey("FileMetadataId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
 
                     b.Navigation("Company");
 
                     b.Navigation("FileMetadata");
-
-                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
@@ -2735,7 +2711,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
                         .WithMany()
                         .HasForeignKey("FileMetadataId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Lanyard.Infrastructure.Models.StaffDocumentType", "StaffDocumentType")

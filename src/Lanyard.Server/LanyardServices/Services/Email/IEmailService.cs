@@ -11,4 +11,6 @@ public interface IEmailService
     Task<Result<bool>> SendTrainingAssignedEmailAsync(UserProfile user, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex);
     Task<Result<bool>> SendTrainingDueSoonEmailAsync(UserProfile user, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex);
     Task<Result<bool>> SendCourseCompletionCertificateEmailAsync(UserProfile user, string courseName, byte[] certificatePdf, string? logoUrl, string accentColorHex);
+    Task<Result<bool>> SendStaffDocumentExpiryReminderEmailAsync(UserProfile user, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex);
+    Task<Result<bool>> SendOnboardingWelcomeEmailAsync(UserProfile user, string subject, string bodyHtml, string? logoUrl, string accentColorHex, IReadOnlyList<EmailAttachment> attachments);
 }

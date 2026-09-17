@@ -1,0 +1,80 @@
+/* The default vertical FluentStack has align-items: start, so a plain child div shrinks to
+   Quill's own intrinsic width instead of filling the card - same gotcha as the dashboard text
+   widget and course editor. */
+.onboarding-editor-host {
+    width: 100%;
+}
+
+.onboarding-editor-host ::deep .ql-container {
+    width: 100%;
+}
+
+/* Quill's editable area otherwise sizes to its (empty) content, reading as a single-line box
+   before anything is typed - a min-height gives the welcome message room to be written without
+   the box growing awkwardly under the admin's cursor as they type. */
+.onboarding-editor-host ::deep .ql-editor {
+    min-height: 220px;
+}
+
+/* Quill's snow theme hardcodes a light toolbar/container (white background, near-black icons,
+   #ccc borders) with no awareness of this app's theme - unstyled, it looks fine in light mode
+   and broken in dark mode (icons stay near-black against a dark background). Unlike
+   RenderTextAreaWidget.razor.css (where the editor IS the whole widget, so its own border would
+   duplicate the FluentCard's), this editor sits as one field among many inside a much larger
+   settings card - so it needs its own border to read as a distinct box, matching
+   CourseEditor.razor.css's pattern instead: keep Quill's border but recolor it to the theme
+   token, and round only the outer corners since the toolbar/container meet in the middle. */
+.onboarding-editor-host ::deep .ql-toolbar.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
+}
+
+.onboarding-editor-host ::deep .ql-container.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
+}
+
+.onboarding-editor-host ::deep .ql-editor,
+.onboarding-editor-host ::deep .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.onboarding-editor-host ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+/* The list-format buttons are SVG strokes/fills; bold/italic/underline render as plain text
+   glyphs instead - both need covering, or one set is left at Quill's hardcoded near-black
+   default and reads unreadable against a dark toolbar background. This is the fix for "icons
+   don't change with the dark theme". */
+.onboarding-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button {
+    color: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}

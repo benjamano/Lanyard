@@ -95,6 +95,30 @@ public class EmailService : IEmailService
         return await SendResendEmailAsync(user.Id, user.Email, $"Certificate: {courseName}", html, [attachment]);
     }
 
+    public async Task<Result<bool>> SendStaffDocumentExpiryReminderEmailAsync(UserProfile user, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a link to.");
+        }
+
+        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, daysBeforeExpiry, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Expiring soon: {documentTypeName}", html);
+    }
+
+    public async Task<Result<bool>> SendOnboardingWelcomeEmailAsync(UserProfile user, string subject, string bodyHtml, string? logoUrl, string accentColorHex, IReadOnlyList<EmailAttachment> attachments)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a welcome email to.");
+        }
+
+        string html = BuildOnboardingWelcomeHtml(user.GetGreetingName(), bodyHtml, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, subject, html, attachments);
+    }
+
     // Resend takes the filename verbatim into the Content-Disposition header, so anything
     // that would need quoting or escaping there is stripped rather than passed through.
     private static string BuildCertificateFileName(string courseName)
@@ -267,6 +291,55 @@ public class EmailService : IEmailService
           <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
             No further action is needed.
           </p>
+        </div>
+        """;
+    }
+
+    private static string BuildStaffDocumentExpiryReminderHtml(string greetingName, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>Your <strong>{WebUtility.HtmlEncode(documentTypeName)}</strong> is expiring in
+             <strong>{daysBeforeExpiry} day{(daysBeforeExpiry == 1 ? "" : "s")}</strong>, on
+             <strong>{expiryDate.Date:d MMMM yyyy}</strong>. Please arrange a renewal and upload the
+             updated document to your staff profile.</p>
+          <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
+            If this has already been renewed, you can disregard this reminder once the new document is uploaded.
+          </p>
+        </div>
+        """;
+    }
+
+    // The admin-authored body is arbitrary Quill HTML - fundamentally untrusted the moment it's
+    // read back out of storage. Sanitized here, right before it leaves the app in an email, not
+    // at save time - matches RenderTextAreaWidget.razor's "sanitize at the point it becomes live
+    // markup" precedent, and this is a stronger case for it since the output goes to third-party
+    // mail clients rather than just back into our own page.
+    private static readonly Ganss.Xss.HtmlSanitizer _welcomeEmailSanitizer = new();
+
+    private static string BuildOnboardingWelcomeHtml(string greetingName, string bodyHtml, string? logoUrl, string accentColorHex)
+    {
+        string logoHtml = logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+
+        string safeBodyHtml = _welcomeEmailSanitizer.Sanitize(bodyHtml);
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {logoHtml}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <div style="border-left: 4px solid {accentColorHex}; padding-left: 12px;">
+            {safeBodyHtml}
+          </div>
         </div>
         """;
     }

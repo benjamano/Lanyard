@@ -458,7 +458,18 @@ public class MusicPlayerService
             return false;
         }
 
+        // Timestamped so a slow command can be diagnosed by comparing this against the
+        // client's "Received {Method} command" log line - narrows a reported delay down to
+        // either server-side dispatch (the gap before this line) or transport/client-side
+        // processing (the gap after it).
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogInformation("Dispatching {Method} to client {ClientId} (connection {ConnectionId})", methodName, clientId, connectionId);
+
         await _hubContext.Clients.Client(connectionId).SendCoreAsync(methodName, args);
+
+        stopwatch.Stop();
+        _logger.LogInformation("Dispatched {Method} to client {ClientId} in {ElapsedMs}ms", methodName, clientId, stopwatch.ElapsedMilliseconds);
+
         return true;
     }
 

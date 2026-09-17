@@ -1,0 +1,91 @@
+/* Class="..." on a Fluent* component (FluentCard here) doesn't carry the Blazor scope
+   attribute onto its rendered root, so a scoped selector anchored on ".user-editor-card"
+   silently never matches (see the fluentui-v5-blazor skill). ".user-editor-page" is a plain
+   <div> authored directly in this file - it reliably carries the scope attribute and gives
+   ::deep something real to match against. */
+.user-editor-page ::deep .user-editor-tab-content {
+    width: 100%;
+    min-width: 0;
+    padding-top: 12px;
+    max-width: 480px;
+}
+
+/* The tab strip doesn't wrap and isn't scrollable by default - on a narrow (phone width)
+   viewport the later tabs (e.g. Danger Zone) overflow past the edge with no way to reach them. */
+.user-editor-page ::deep fluent-tablist {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.user-editor-page ::deep .user-editor-tab-content fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+/* Documents deliberately does NOT use .user-editor-tab-content's 480px cap - the document
+   list benefits from the page's full available width (long names, meta text), unlike the
+   plain forms (Details/Password/etc.) that stay narrow. This is a plain <div>, so unlike the
+   class above it doesn't need ::deep to be reached. */
+.documents-tab-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+    padding-top: 12px;
+}
+
+/* A plain flex list instead of FluentDataGrid - a fixed-column grid has no way to let a long
+   document type name wrap, so on phone width it just truncated ("Rig..." for "Right to
+   Work"). Wrapping onto a second line (via documents-list-name's overflow-wrap) instead of
+   fighting for column space reads better than any column layout narrow enough for phones. */
+.documents-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.documents-list-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+}
+
+.documents-list-item:last-child {
+    border-bottom: none;
+}
+
+/* min-width: 0 lets this side of the row shrink instead of forcing the whole item (and the
+   actions beside it) wider than the viewport - the same trap the old FluentDataGrid fell
+   into on phone width, just one level up the tree this time. */
+.documents-list-info {
+    min-width: 0;
+    flex: 1 1 220px;
+}
+
+.documents-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.documents-list-meta {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+/* align-items: flex-start on .documents-list-item keeps this pinned to the top of the row
+   instead of drifting to the vertical center of however many lines the meta text next to it
+   wrapped to on narrow widths - the small top margin then lines it up with the name's own
+   text baseline rather than the row's bare top edge. */
+.documents-list-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
