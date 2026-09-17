@@ -84,13 +84,22 @@
                         </FluentStack>
                     }
 
-                    <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
-                                SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
+                    @if (_canManageFiles)
+                    {
+                        <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
+                                    SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
 
-                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
-                                  OnClick="@(() => _attachmentPicker!.OpenAsync())">
-                        Add Attachment
-                    </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                                      OnClick="@(() => _attachmentPicker!.OpenAsync())">
+                            Add Attachment
+                        </FluentButton>
+                    }
+                    else
+                    {
+                        <FluentText Style="color: var(--neutral-foreground-hint);">
+                            Adding a standing attachment requires the Admin or "Can Manage Files" role.
+                        </FluentText>
+                    }
                 }
             }
 
@@ -116,9 +125,19 @@
     private List<Location>? _locations;
     private string? _selectedLocationId;
     private int? _loadedForCompanyId;
+    private bool _canManageFiles;
 
     private int? EffectiveLocationId =>
         _configurePerLocation && int.TryParse(_selectedLocationId, out int id) ? id : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The standing-attachment picker browses the entire (company-unscoped) file library, the
+        // same capability FileManager.razor gates behind these two roles - a plain Manager must
+        // not get an indirect route to that browse surface just because they can reach this page.
+        _canManageFiles = await _securityService.IsCurrentUserInRoleAsync("Admin")
+            || await _securityService.IsCurrentUserInRoleAsync("CanManageFiles");
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -141,7 +160,7 @@
 
         Result<List<Location>> result = isAdmin
             ? await _companyLocationService.GetLocationsAsync(CompanyId)
-            : await GetLocationsForCurrentManagerAsync();
+            : await OnboardingAccessHelpers.GetLocationsForCurrentUserAsync(_securityService, _companyLocationService);
 
         _locations = (result.IsSuccess ? result.Data : null)?.Where(l => l.CompanyId == CompanyId).OrderBy(l => l.Name).ToList() ?? [];
 
@@ -149,15 +168,6 @@
         {
             _selectedLocationId = _locations[0].Id.ToString();
         }
-    }
-
-    private async Task<Result<List<Location>>> GetLocationsForCurrentManagerAsync()
-    {
-        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
-
-        return userIdResult.IsSuccess && userIdResult.Data is not null
-            ? await _companyLocationService.GetLocationsForUserAsync(userIdResult.Data)
-            : Result<List<Location>>.Ok([]);
     }
 
     private async Task LoadAsync()

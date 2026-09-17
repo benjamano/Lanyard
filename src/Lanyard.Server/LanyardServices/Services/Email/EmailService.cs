@@ -102,7 +102,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, logoUrl, accentColorHex);
+        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, daysBeforeExpiry, logoUrl, accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Expiring soon: {documentTypeName}", html);
     }
@@ -295,7 +295,7 @@ public class EmailService : IEmailService
         """;
     }
 
-    private static string BuildStaffDocumentExpiryReminderHtml(string greetingName, string documentTypeName, DateTime expiryDate, string? logoUrl, string accentColorHex)
+    private static string BuildStaffDocumentExpiryReminderHtml(string greetingName, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex)
     {
         string logoHtml = logoUrl is not null
             ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
@@ -306,7 +306,8 @@ public class EmailService : IEmailService
           {logoHtml}
           <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
-          <p>Your <strong>{WebUtility.HtmlEncode(documentTypeName)}</strong> is expiring on
+          <p>Your <strong>{WebUtility.HtmlEncode(documentTypeName)}</strong> is expiring in
+             <strong>{daysBeforeExpiry} day{(daysBeforeExpiry == 1 ? "" : "s")}</strong>, on
              <strong>{expiryDate.Date:d MMMM yyyy}</strong>. Please arrange a renewal and upload the
              updated document to your staff profile.</p>
           <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">

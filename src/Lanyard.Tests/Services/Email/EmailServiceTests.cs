@@ -546,6 +546,27 @@ namespace Lanyard.Tests.Services.Email
             Assert.Contains("1 October 2026", handler.LastRequestBody);
             Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
             Assert.Contains("#C8102E", handler.LastRequestBody);
+            Assert.Contains("7 days", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_SingularDayCount_ReadsAsOneDayNotOneDays()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(1),
+                daysBeforeExpiry: 1,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "1 day<");
+            Assert.IsFalse(html.Contains("1 days"), "singular day count should read \"1 day\", not \"1 days\"");
         }
 
         [TestMethod]
@@ -640,6 +661,46 @@ namespace Lanyard.Tests.Services.Email
             StringAssert.Contains(html, "Hello");
             Assert.IsFalse(html.Contains("<script>"), "sanitizer should strip script tags from admin-authored body HTML");
             Assert.IsFalse(html.Contains("alert("), "sanitizer should strip script tags from admin-authored body HTML");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_StripsEventHandlerAttributesFromBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p><img src=\"x\" onerror=\"alert('xss')\" />",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Hello");
+            Assert.IsFalse(html.Contains("onerror"), "sanitizer should strip event-handler attributes from admin-authored body HTML");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_StripsJavascriptHrefFromBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p><a href=\"javascript:alert('xss')\">Click here</a></p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Click here");
+            Assert.IsFalse(html.Contains("javascript:"), "sanitizer should strip javascript: hrefs from admin-authored body HTML");
         }
 
         [TestMethod]

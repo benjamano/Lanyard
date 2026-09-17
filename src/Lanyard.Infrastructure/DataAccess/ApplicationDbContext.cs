@@ -249,6 +249,24 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => new { x.CompanyId, x.LocationId })
                 .IsUnique()
                 .HasFilter("\"LocationId\" IS NOT NULL");
+
+            // FileMetadata is shared across unrelated features (folders, logos, video devices,
+            // staff documents, onboarding attachments). The default convention-based FK behavior
+            // for a required reference is Cascade, which would let deleting a file from the
+            // general File Manager silently take a StaffDocument or a company's onboarding
+            // attachment down with it. Restrict instead: FileService.DeleteFileAsync surfaces a
+            // clear "file is in use" failure rather than an invisible cross-feature side effect.
+            modelBuilder.Entity<StaffDocument>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<CompanyOnboardingStandingAttachment>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

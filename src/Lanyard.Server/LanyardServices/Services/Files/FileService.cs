@@ -281,6 +281,16 @@ public class FileService : IFileService
             if (file == null)
                 return Result<bool>.Fail("File not found.");
 
+            // Checked before touching storage, not just relying on the FK's Restrict behavior at
+            // SaveChangesAsync - the physical delete below happens first and can't be rolled back,
+            // so catching this only at the DB step would still lose the bytes while leaving the
+            // referencing StaffDocument/attachment row pointing at nothing.
+            bool isReferenced = await db.StaffDocuments.AnyAsync(x => x.FileMetadataId == file.Id, cancellationToken)
+                || await db.CompanyOnboardingStandingAttachments.AnyAsync(x => x.FileMetadataId == file.Id, cancellationToken);
+
+            if (isReferenced)
+                return Result<bool>.Fail("This file is attached to a staff document or an onboarding email and cannot be deleted.");
+
             if (_isDevelopment)
             {
                 if (File.Exists(file.FilePath))

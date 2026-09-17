@@ -63,14 +63,7 @@
     // every other company's onboarding configuration to them.
     private async Task<List<Company>> GetCompaniesForCurrentManagerAsync()
     {
-        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
-
-        if (!userIdResult.IsSuccess || userIdResult.Data is null)
-        {
-            return [];
-        }
-
-        Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsForUserAsync(userIdResult.Data);
+        Result<List<Location>> locationsResult = await OnboardingAccessHelpers.GetLocationsForCurrentUserAsync(_securityService, _companyLocationService);
 
         return locationsResult.IsSuccess && locationsResult.Data is not null
             ? locationsResult.Data.Where(l => l.Company is not null).Select(l => l.Company!).DistinctBy(c => c.Id).ToList()

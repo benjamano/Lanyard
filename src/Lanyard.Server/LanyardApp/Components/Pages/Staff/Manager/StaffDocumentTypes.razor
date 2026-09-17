@@ -22,11 +22,11 @@
         else
         {
             <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
-                          @bind-SelectedOption="selectedCompany" Label="Company" Width="320px" />
+                          @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
 
-            @if (selectedCompany is not null)
+            @if (SelectedCompany is not null)
             {
-                <StaffDocumentTypeManager CompanyId="@selectedCompany.Id" />
+                <StaffDocumentTypeManager CompanyId="@SelectedCompany.Id" />
             }
         }
     </FluentStack>
@@ -34,13 +34,15 @@
 
 @code {
     private List<Company>? companies;
-    private Company? selectedCompany;
+    private string? selectedCompanyId;
+
+    private Company? SelectedCompany => companies?.FirstOrDefault(c => c.Id.ToString() == selectedCompanyId);
 
     protected override async Task OnInitializedAsync()
     {
         Result<List<Company>> result = await _companyLocationService.GetCompaniesAsync();
 
         companies = result.IsSuccess ? result.Data : [];
-        selectedCompany = companies?.FirstOrDefault();
+        selectedCompanyId = companies?.FirstOrDefault()?.Id.ToString();
     }
 }

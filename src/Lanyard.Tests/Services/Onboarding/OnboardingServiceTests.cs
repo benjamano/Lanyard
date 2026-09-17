@@ -460,6 +460,58 @@ public class OnboardingServiceTests
     }
 
     [TestMethod]
+    public async Task TriggerOnboardingAsync_StandingAttachmentOverSizeLimit_SkipsItWithoutDownloading()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        string userId;
+        Guid fileId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            UserProfile user = new() { UserName = "jdoe", Email = "jane@example.com" };
+            ctx.Users.Add(user);
+            ctx.FileMetadata.Add(new FileMetadata { Id = fileId, FileName = "HugeHandbook.pdf", FilePath = "/huge.pdf", FileSize = 100 * 1024 * 1024 });
+            ctx.CompanyOnboardingSettings.Add(new CompanyOnboardingSettings
+            {
+                CompanyId = company.Id,
+                SendWelcomeEmail = true,
+                AutoAttachStandingDocuments = true
+            });
+            ctx.CompanyOnboardingStandingAttachments.Add(new CompanyOnboardingStandingAttachment
+            {
+                CompanyId = company.Id,
+                FileMetadataId = fileId,
+                SortOrder = 0,
+                IsActive = true
+            });
+            await ctx.SaveChangesAsync();
+            userId = user.Id;
+        }
+
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock.Setup(b => b.ResolveAsync(userId, It.IsAny<int?>(), null))
+            .ReturnsAsync(new TrainingBranding("#123456", company.Id, null));
+
+        Mock<IFileService> fileServiceMock = new();
+
+        Mock<IEmailService> emailServiceMock = new();
+        emailServiceMock.Setup(e => e.SendOnboardingWelcomeEmailAsync(
+                It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        OnboardingService service = GetService(options, fileServiceMock: fileServiceMock, emailServiceMock: emailServiceMock, brandingResolverMock: brandingResolverMock);
+        Result<bool> result = await service.TriggerOnboardingAsync(userId, null, CancellationToken.None);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        fileServiceMock.Verify(f => f.DownloadFileAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        emailServiceMock.Verify(e => e.SendOnboardingWelcomeEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(),
+            It.Is<IReadOnlyList<EmailAttachment>>(a => a.Count == 0)),
+            Times.Once);
+    }
+
+    [TestMethod]
     public async Task TriggerOnboardingAsync_HasLogo_BuildsLogoUrlFromCompanyIdAndFileId()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

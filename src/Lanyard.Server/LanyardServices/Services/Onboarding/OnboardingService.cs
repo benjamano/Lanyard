@@ -25,6 +25,11 @@ public class OnboardingService(
     private readonly IOptions<EmailOptions> _emailOptions = emailOptions;
     private readonly ILogger<OnboardingService> _logger = logger;
 
+    // Resend (like most providers) rejects overly large messages once attachments are
+    // base64-encoded; dropped rather than failing the whole welcome email, same reasoning as a
+    // standing attachment that fails to download below.
+    private const long MaxStandingAttachmentBytes = 15 * 1024 * 1024;
+
     public async Task<Result<CompanyOnboardingSettings?>> GetSettingsAsync(int companyId, int? locationId = null)
     {
         try
@@ -192,6 +197,7 @@ public class OnboardingService(
             {
                 settings = await ctx.CompanyOnboardingSettings
                     .AsNoTracking()
+                    .TagWithCallSite()
                     .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
 
                 if (settings is not null)
@@ -204,6 +210,7 @@ public class OnboardingService(
             {
                 settings = await ctx.CompanyOnboardingSettings
                     .AsNoTracking()
+                    .TagWithCallSite()
                     .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
             }
 
@@ -218,37 +225,20 @@ public class OnboardingService(
             {
                 List<CompanyOnboardingStandingAttachment> standingAttachments = await ctx.CompanyOnboardingStandingAttachments
                     .AsNoTracking()
+                    .TagWithCallSite()
                     .Include(x => x.FileMetadata)
                     .Where(x => x.CompanyId == companyId && x.LocationId == resolvedLocationId && x.IsActive)
                     .OrderBy(x => x.SortOrder)
                     .ToListAsync(cancellationToken);
 
-                foreach (CompanyOnboardingStandingAttachment standingAttachment in standingAttachments)
-                {
-                    if (standingAttachment.FileMetadata is null)
-                    {
-                        continue;
-                    }
+                // Downloaded in parallel rather than one at a time - this runs synchronously on
+                // the CreateUserAsync request path, so a company with several standing
+                // attachments shouldn't pay for N sequential storage round trips.
+                EmailAttachment?[] downloaded = await Task.WhenAll(standingAttachments
+                    .Where(x => x.FileMetadata is not null)
+                    .Select(x => DownloadStandingAttachmentAsync(x, companyId, cancellationToken)));
 
-                    // A standing attachment that can't be loaded is dropped rather than failing the
-                    // whole welcome email - the new hire still needs to hear from us even if one
-                    // handbook PDF is temporarily unavailable, same reasoning as CertificateService's
-                    // logo-loading fallback.
-                    Result<Stream> downloadResult = await _fileService.DownloadFileAsync(standingAttachment.FileMetadataId, cancellationToken);
-
-                    if (!downloadResult.IsSuccess || downloadResult.Data is null)
-                    {
-                        _logger.LogWarning("Could not load standing attachment {FileMetadataId} for company {CompanyId}: {Error}",
-                            standingAttachment.FileMetadataId, companyId, downloadResult.Error);
-                        continue;
-                    }
-
-                    await using Stream fileStream = downloadResult.Data;
-                    using MemoryStream buffer = new();
-                    await fileStream.CopyToAsync(buffer, cancellationToken);
-
-                    attachments.Add(new EmailAttachment(standingAttachment.FileMetadata.FileName, buffer.ToArray()));
-                }
+                attachments.AddRange(downloaded.OfType<EmailAttachment>());
             }
 
             string? logoUrl = branding.LogoFileId is Guid logoFileId
@@ -267,5 +257,36 @@ public class OnboardingService(
         {
             return Result<bool>.Fail($"Failed to trigger onboarding: {ex.Message}");
         }
+    }
+
+    private async Task<EmailAttachment?> DownloadStandingAttachmentAsync(
+        CompanyOnboardingStandingAttachment standingAttachment, int companyId, CancellationToken cancellationToken)
+    {
+        FileMetadata fileMetadata = standingAttachment.FileMetadata!;
+
+        if (fileMetadata.FileSize > MaxStandingAttachmentBytes)
+        {
+            _logger.LogWarning("Standing attachment {FileMetadataId} for company {CompanyId} is {SizeBytes} bytes, over the {MaxBytes}-byte limit - skipped.",
+                standingAttachment.FileMetadataId, companyId, fileMetadata.FileSize, MaxStandingAttachmentBytes);
+            return null;
+        }
+
+        // A standing attachment that can't be loaded is dropped rather than failing the whole
+        // welcome email - the new hire still needs to hear from us even if one handbook PDF is
+        // temporarily unavailable, same reasoning as CertificateService's logo-loading fallback.
+        Result<Stream> downloadResult = await _fileService.DownloadFileAsync(standingAttachment.FileMetadataId, cancellationToken);
+
+        if (!downloadResult.IsSuccess || downloadResult.Data is null)
+        {
+            _logger.LogWarning("Could not load standing attachment {FileMetadataId} for company {CompanyId}: {Error}",
+                standingAttachment.FileMetadataId, companyId, downloadResult.Error);
+            return null;
+        }
+
+        await using Stream fileStream = downloadResult.Data;
+        using MemoryStream buffer = new();
+        await fileStream.CopyToAsync(buffer, cancellationToken);
+
+        return new EmailAttachment(fileMetadata.FileName, buffer.ToArray());
     }
 }
