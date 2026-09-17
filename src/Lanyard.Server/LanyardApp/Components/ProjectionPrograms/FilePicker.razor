@@ -241,6 +241,14 @@
         }
 
         isLoading = false;
+
+        // OpenAsync can be invoked via @ref from a different component's own event handler (e.g.
+        // OnboardingSettingsManager's "Add Attachment" button) - Blazor's automatic post-event
+        // re-render only covers the component that owns the triggering event, not an unrelated
+        // component reached through a stored @ref, so without this explicit call the dialog can
+        // open showing stale content (breadcrumb stuck on "Root") even though currentFolderId/
+        // folders/files are all already correct here.
+        StateHasChanged();
     }
 
     private async Task OpenFolderAsync(Guid folderId)
