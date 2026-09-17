@@ -1,0 +1,62 @@
+/* A plain flex list instead of FluentDataGrid - a fixed-column grid can't let a long document
+   type name wrap, and forced the reminder-days input+button into the grid's fixed row height,
+   so the input rendered visibly taller than its own row. Same fix already applied to the
+   per-user Documents list in UserEditor.razor.css, for the same reason. */
+.document-type-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.document-type-list-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+}
+
+.document-type-list-item:last-child {
+    border-bottom: none;
+}
+
+/* min-width: 0 lets this side of the row shrink instead of forcing the whole item (and the
+   Deactivate button beside it) wider than the viewport on phone width. */
+.document-type-list-info {
+    min-width: 0;
+    flex: 1 1 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.document-type-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.document-type-list-description,
+.document-type-list-meta {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.85rem;
+}
+
+/* Capped width so the reminder-days input doesn't stretch across the full card on a wide
+   desktop window - align-items: flex-end lines the Save button up with the input box itself
+   rather than the label sitting above it. */
+.document-type-list-reminder {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+    max-width: 320px;
+    width: 100%;
+}
+
+.document-type-list-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}

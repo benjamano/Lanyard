@@ -287,7 +287,8 @@
       "A new standing attachment can now be uploaded directly from the Add Attachment dialog, instead of needing a separate trip to the File Manager first.",
       "Fixed the onboarding welcome email's rich-text toolbar being unreadable in dark mode.",
       "Managers can now open Manage > Staff Document Types too, not just Admins - scoped to only their own company, matching the same access Managers already have to Onboarding settings.",
-      "Added a Staff Document Types link to the Manage nav menu, which was previously missing even for Admins."
+      "Added a Staff Document Types link to the Manage nav menu, which was previously missing even for Admins.",
+      "Fixed the Staff Document Types list rendering as a fixed-column table, which squashed the reminder-days input taller than its own row and clipped long names on a phone - it's now a plain list that wraps and resizes properly on any screen."
     ]
   }
 ]
