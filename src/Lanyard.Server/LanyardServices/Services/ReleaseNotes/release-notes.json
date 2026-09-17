@@ -268,7 +268,7 @@
   {
     "version": "1.3.19",
     "releaseDate": "2026-09-16",
-    "summary": "Added staff document tracking with expiry reminders, automated onboarding emails, a redesigned user profile page, and Music/File Manager fixes.",
+    "summary": "Added staff document tracking with expiry reminders, automated onboarding emails, a redesigned user profile page, plus Music, File Manager, and training course fixes.",
     "details": [
       "Added a Documents tab to each staff member's profile, where documents like DBS checks, First Aid certificates and other paperwork can be uploaded, tracked and downloaded.",
       "Admins can define their own catalog of document types under Manage > Staff Document Types, including whether a type requires an expiry date.",
@@ -282,7 +282,8 @@
       "The welcome email is sent automatically the moment a new user account is created, and never blocks account creation if it fails to send.",
       "Managers can now view and edit the Onboarding settings too, not just Admins - scoped to only the companies and locations they actually belong to.",
       "Onboarding settings can now be configured per location instead of only company-wide, with a toggle to switch between the two - a location without its own override falls back to the company default.",
-      "Adding a standing attachment now opens a dialog instead of showing a permanently-visible upload area on the page."
+      "Adding a standing attachment now opens a dialog instead of showing a permanently-visible upload area on the page.",
+      "Fixed bullet-point lists in course section content turning into numbered lists when previewed or completed by a learner, even though they showed correctly while being edited."
     ]
   }
 ]

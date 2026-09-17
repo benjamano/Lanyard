@@ -9,7 +9,7 @@
             @foreach (CourseSection courseSection in Course.Sections)
             {
                 <FluentWizardStep Label="@courseSection.Title">
-                    <div class="take-course-section-body">
+                    <div class="take-course-section-body ql-editor">
                         @((MarkupString)courseSection.BodyHtml)
                     </div>
                 </FluentWizardStep>
