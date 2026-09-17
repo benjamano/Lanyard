@@ -40,9 +40,10 @@
                                         <div class="document-type-list-meta">
                                             @(type.RequiresExpiryDate ? "Requires an expiry date" : "No expiry date required")
                                         </div>
+                                        <div class="document-type-list-reminder-label">Reminder days before expiry</div>
                                         <div class="document-type-list-reminder">
                                             <FluentTextInput Value="@FormatIntervals(type)" ValueChanged="@((string v) => { intervalEdits[type.Id] = v; })"
-                                                              Label="Reminder days before expiry" Placeholder="e.g. 30,14,7" Width="100%" />
+                                                              Placeholder="e.g. 30,14,7" Width="100%" aria-label="Reminder days before expiry" />
                                             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Save())"
                                                           Title="Save reminder days" OnClick="@(() => SaveIntervalsAsync(type.Id))" />
                                         </div>
