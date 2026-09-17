@@ -55,6 +55,15 @@
     width: 100%;
 }
 
+/* FluentTextInput's Label renders it wrapped in a <fluent-field>, which carries a built-in
+   12px top/bottom margin that isn't part of its visible content - flex-end above then aligns
+   to that invisible margin box instead of the actual input, leaving Save looking ~12px lower
+   than the input itself. Stripping the margin (confirmed via getBoundingClientRect against the
+   Save button) is what actually lines the two up. */
+.document-type-list-reminder ::deep fluent-field {
+    margin: 0;
+}
+
 .document-type-list-actions {
     display: flex;
     gap: 4px;
