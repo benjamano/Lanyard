@@ -58,6 +58,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # actions/checkout always leaves the workspace in detached HEAD, even when checking out a
+      # specific commit - publish-screenshots.sh derives its storage path from
+      # `git rev-parse --abbrev-ref HEAD` (branch-name-keyed, so re-runs on the same PR overwrite
+      # rather than accumulate) and refuses to run detached. Re-attaching to a real local branch
+      # here is cheaper than changing that script's interface for CI's sake.
+      - name: Un-detach HEAD for publish-screenshots.sh
+        if: github.event_name == 'pull_request'
+        run: git checkout -B "${{ github.head_ref }}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
