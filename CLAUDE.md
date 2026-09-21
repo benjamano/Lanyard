@@ -147,6 +147,7 @@ The topics below used to live in this file as long-form sections. They moved to 
 | `client-release-pipeline` | `release.yml` auto-publishes whatever `<Version>` is in `Lanyard.Client.csproj` on every client-touching push to `main`, with no increment check; how kiosks auto-update on next restart |
 | `kiosk-client-dev-stack` | Launching the full server+client exe stack for SignalR/DMX end-to-end testing |
 | `verify` | Lighter Playwright-driven UI verification loop (server only, no kiosk client) |
+| `visual-regression-testing` | CI-enforced pixel-diff suite (`tests/visual-regression`, TypeScript `@playwright/test`) plus its .NET fixture-seeding utility — why it's TS not MSTest, coverage gaps, baseline regen |
 | `dashboard-widgets` | 6-touchpoint checklist for adding a new dashboard widget type; failure modes when a step is missed |
 | `location-scoping` | What `ICurrentLocationContext`/`LocationScope` actually cover (Training/Course only, not app-wide) and a known cross-location gap in `CourseService` |
 | `dmx-scene-engine` | Why DMX services are singletons with locks, server-side vs. client-side stepping vs. projection programs, BPM timing, momentary-scene semantics |

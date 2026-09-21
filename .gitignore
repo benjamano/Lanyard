@@ -285,6 +285,13 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# Playwright visual regression suite (tests/visual-regression) - generated at run time.
+# Baseline PNGs under tests/visual-regression/tests/**-snapshots/ are NOT ignored - those are
+# checked in on purpose.
+tests/visual-regression/test-results/
+tests/visual-regression/playwright-report/
+tests/visual-regression/.fixture-ids.generated.json
+
 # Visual Studio 6 build log
 *.plg
 
