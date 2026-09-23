@@ -13,12 +13,11 @@ using Microsoft.Extensions.Options;
 namespace Lanyard.Application.Services.StaffDocuments;
 
 /// <summary>
-/// Sweeps for active staff documents whose expiry date has entered one of their document type's
-/// configured reminder windows and emails the affected staff member once per (document, interval).
-/// Idempotent via StaffDocumentReminderSent, keyed on the document's current ExpiryDate so a
-/// renewal (re-upload with a new expiry date) naturally makes every interval eligible again. Same
-/// periodic-sweep shape as TrainingDueSoonHostedService/CourseRecurrenceHostedService, generalized
-/// to support N thresholds per document type instead of one fixed threshold.
+/// Sweeps for active staff documents whose custom ReminderDate has arrived (and ExpiryDate hasn't
+/// passed yet) and emails the affected staff member once, tracked via the document's own
+/// ReminderSentDate flag. A re-upload (renewal) always creates a new StaffDocument row with
+/// ReminderSentDate null, so it naturally becomes eligible again. Same periodic-sweep shape as
+/// TrainingDueSoonHostedService/CourseRecurrenceHostedService.
 /// </summary>
 public class StaffDocumentExpiryReminderHostedService(
     IServiceScopeFactory scopeFactory,
@@ -62,7 +61,7 @@ public class StaffDocumentExpiryReminderHostedService(
         EmailOptions emailOptions = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
         ITrainingBrandingResolver brandingResolver = scope.ServiceProvider.GetRequiredService<ITrainingBrandingResolver>();
 
-        Result<List<PendingStaffDocumentReminder>> pendingResult = await documentService.GetDocumentsWithPendingRemindersAsync();
+        Result<List<StaffDocument>> pendingResult = await documentService.GetDocumentsWithPendingRemindersAsync();
 
         if (!pendingResult.IsSuccess || pendingResult.Data is null)
         {
@@ -79,18 +78,18 @@ public class StaffDocumentExpiryReminderHostedService(
 
         await using ApplicationDbContext ctx = await factory.CreateDbContextAsync(stoppingToken);
 
-        foreach (PendingStaffDocumentReminder pending in pendingResult.Data)
+        foreach (StaffDocument document in pendingResult.Data)
         {
             try
             {
-                UserProfile? user = await ctx.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == pending.Document.UserId, stoppingToken);
+                UserProfile? user = await ctx.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == document.UserId, stoppingToken);
 
                 if (user is null)
                 {
                     continue;
                 }
 
-                TrainingBranding branding = await brandingResolver.ResolveAsync(pending.Document.UserId, null, null);
+                TrainingBranding branding = await brandingResolver.ResolveAsync(document.UserId, null, null);
 
                 string accentColorHex = branding.AccentColorHex;
 
@@ -100,33 +99,34 @@ public class StaffDocumentExpiryReminderHostedService(
                     ? $"{emailOptions.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
                     : null;
 
-                // Marked sent before the email is sent, not after - StaffDocumentReminderSent's
-                // unique index is the concurrency guard against two overlapping sweeps (or two
-                // app instances) both picking up the same reminder. Marking first means a losing
-                // sweep is rejected here and never sends a duplicate email; marking last would
-                // leave a window where both sweeps could send before either recorded it.
-                Result<bool> markResult = await documentService.MarkReminderSentAsync(
-                    pending.Document.Id, pending.Interval.Id, pending.Document.ExpiryDate!.Value);
+                // Marked sent before the email is sent, not after - ReminderSentDate is the
+                // concurrency guard against two overlapping sweeps (or two app instances) both
+                // picking up the same reminder. Marking first means a losing sweep is rejected
+                // here and never sends a duplicate email; marking last would leave a window
+                // where both sweeps could send before either recorded it.
+                Result<bool> markResult = await documentService.MarkReminderSentAsync(document.Id);
 
                 if (!markResult.IsSuccess)
                 {
                     _logger.LogWarning("Skipping staff document expiry reminder for document {DocumentId} - already claimed or failed to record: {Error}",
-                        pending.Document.Id, markResult.Error);
+                        document.Id, markResult.Error);
                     continue;
                 }
 
+                int daysUntilExpiry = Math.Max(0, (int)(document.ExpiryDate!.Value.Date - DateTime.UtcNow.Date).TotalDays);
+
                 Result<bool> emailResult = await emailService.SendStaffDocumentExpiryReminderEmailAsync(
                     user,
-                    pending.Document.StaffDocumentType?.Name ?? "your document",
-                    pending.Document.ExpiryDate!.Value,
-                    pending.Interval.DaysBeforeExpiry,
+                    document.StaffDocumentType?.Name ?? "your document",
+                    document.ExpiryDate!.Value,
+                    daysUntilExpiry,
                     logoUrl,
                     accentColorHex);
 
                 if (!emailResult.IsSuccess)
                 {
                     _logger.LogWarning("Failed to send staff document expiry reminder for document {DocumentId}: {Error}",
-                        pending.Document.Id, emailResult.Error);
+                        document.Id, emailResult.Error);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -135,7 +135,7 @@ public class StaffDocumentExpiryReminderHostedService(
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled error processing staff document expiry reminder for document {DocumentId}", pending.Document.Id);
+                _logger.LogError(ex, "Unhandled error processing staff document expiry reminder for document {DocumentId}", document.Id);
             }
         }
     }

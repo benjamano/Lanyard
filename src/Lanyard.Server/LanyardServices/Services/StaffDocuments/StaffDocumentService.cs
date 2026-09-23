@@ -13,7 +13,7 @@ public class StaffDocumentService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IFileService _fileService = fileService;
 
-    public async Task<Result<StaffDocument>> UploadStaffDocumentAsync(string userId, Guid documentTypeId, IFormFile file, DateTime? expiryDate, string uploadedByUserId, CancellationToken cancellationToken)
+    public async Task<Result<StaffDocument>> UploadStaffDocumentAsync(string userId, Guid documentTypeId, IFormFile file, DateTime? expiryDate, DateTime? reminderDate, string uploadedByUserId, CancellationToken cancellationToken)
     {
         try
         {
@@ -28,9 +28,22 @@ public class StaffDocumentService(
                 return Result<StaffDocument>.Fail("Document type not found.");
             }
 
-            if (documentType.RequiresExpiryDate && expiryDate is null)
+            if (documentType.RequiresExpiryDate)
             {
-                return Result<StaffDocument>.Fail($"{documentType.Name} requires an expiry date.");
+                if (expiryDate is null)
+                {
+                    return Result<StaffDocument>.Fail($"{documentType.Name} requires an expiry date.");
+                }
+
+                if (reminderDate is null)
+                {
+                    return Result<StaffDocument>.Fail($"{documentType.Name} requires a reminder date.");
+                }
+
+                if (reminderDate.Value.Date > expiryDate.Value.Date)
+                {
+                    return Result<StaffDocument>.Fail("The reminder date must be on or before the expiry date.");
+                }
             }
 
             bool userExists = await ctx.Users.AnyAsync(x => x.Id == userId, cancellationToken);
@@ -54,6 +67,7 @@ public class StaffDocumentService(
                 StaffDocumentTypeId = documentTypeId,
                 FileMetadataId = uploadResult.Data.Id,
                 ExpiryDate = expiryDate.HasValue ? DateTime.SpecifyKind(expiryDate.Value, DateTimeKind.Utc) : null,
+                ReminderDate = reminderDate.HasValue ? DateTime.SpecifyKind(reminderDate.Value, DateTimeKind.Utc) : null,
                 UploadedDate = DateTime.UtcNow,
                 UploadedByUserId = uploadedByUserId,
                 IsActive = true
@@ -128,80 +142,54 @@ public class StaffDocumentService(
         }
     }
 
-    public async Task<Result<List<PendingStaffDocumentReminder>>> GetDocumentsWithPendingRemindersAsync()
+    public async Task<Result<List<StaffDocument>>> GetDocumentsWithPendingRemindersAsync()
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<StaffDocument> candidates = await ctx.StaffDocuments
+            DateTime utcNow = DateTime.UtcNow;
+
+            List<StaffDocument> pending = await ctx.StaffDocuments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.StaffDocumentType!).ThenInclude(t => t.ReminderIntervals.Where(i => i.IsActive))
-                .Where(x => x.IsActive && x.ExpiryDate != null && x.StaffDocumentType!.IsActive)
+                .Include(x => x.StaffDocumentType)
+                .Where(x => x.IsActive
+                    && x.ExpiryDate != null
+                    && x.ReminderDate != null
+                    && x.ReminderSentDate == null
+                    && x.StaffDocumentType!.IsActive
+                    && utcNow >= x.ReminderDate
+                    && utcNow < x.ExpiryDate)
                 .ToListAsync();
 
-            if (candidates.Count == 0)
-            {
-                return Result<List<PendingStaffDocumentReminder>>.Ok([]);
-            }
-
-            List<Guid> candidateIds = [.. candidates.Select(x => x.Id)];
-
-            HashSet<(Guid DocumentId, Guid IntervalId, DateTime ExpirySnapshot)> alreadySent = [.. (await ctx.StaffDocumentReminderSents
-                .Where(x => candidateIds.Contains(x.StaffDocumentId))
-                .Select(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
-                .ToListAsync())
-                .Select(x => (x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot))];
-
-            DateTime utcNow = DateTime.UtcNow;
-            List<PendingStaffDocumentReminder> pending = [];
-
-            foreach (StaffDocument document in candidates)
-            {
-                DateTime expiryDate = document.ExpiryDate!.Value;
-
-                foreach (StaffDocumentReminderInterval interval in document.StaffDocumentType!.ReminderIntervals)
-                {
-                    DateTime reminderDate = expiryDate.AddDays(-interval.DaysBeforeExpiry);
-
-                    if (utcNow < reminderDate || utcNow >= expiryDate)
-                    {
-                        continue;
-                    }
-
-                    if (alreadySent.Contains((document.Id, interval.Id, expiryDate)))
-                    {
-                        continue;
-                    }
-
-                    pending.Add(new PendingStaffDocumentReminder(document, interval));
-                }
-            }
-
-            return Result<List<PendingStaffDocumentReminder>>.Ok(pending);
+            return Result<List<StaffDocument>>.Ok(pending);
         }
         catch (Exception ex)
         {
-            return Result<List<PendingStaffDocumentReminder>>.Fail($"Failed to retrieve documents with pending reminders: {ex.Message}");
+            return Result<List<StaffDocument>>.Fail($"Failed to retrieve documents with pending reminders: {ex.Message}");
         }
     }
 
-    public async Task<Result<bool>> MarkReminderSentAsync(Guid staffDocumentId, Guid intervalId, DateTime expiryDateSnapshot)
+    public async Task<Result<bool>> MarkReminderSentAsync(Guid staffDocumentId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            ctx.StaffDocumentReminderSents.Add(new StaffDocumentReminderSent
-            {
-                Id = Guid.NewGuid(),
-                StaffDocumentId = staffDocumentId,
-                ReminderIntervalId = intervalId,
-                ExpiryDateSnapshot = expiryDateSnapshot,
-                SentDate = DateTime.UtcNow
-            });
+            StaffDocument? document = await ctx.StaffDocuments.FirstOrDefaultAsync(x => x.Id == staffDocumentId);
 
+            if (document is null)
+            {
+                return Result<bool>.Fail("Document not found.");
+            }
+
+            if (document.ReminderSentDate is not null)
+            {
+                return Result<bool>.Fail("Reminder already sent.");
+            }
+
+            document.ReminderSentDate = DateTime.UtcNow;
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);

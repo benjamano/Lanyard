@@ -19,22 +19,6 @@ namespace Lanyard.Infrastructure.Models
         public int SortOrder { get; set; }
 
         public bool IsActive { get; set; } = true;
-
-        public virtual List<StaffDocumentReminderInterval> ReminderIntervals { get; set; } = [];
-    }
-
-    // A child table (not a CSV column) so admins can add/remove thresholds as a list - e.g.
-    // 30 and 7 days before expiry - and each fires independently, tracked via StaffDocumentReminderSent.
-    public class StaffDocumentReminderInterval
-    {
-        public Guid Id { get; set; }
-
-        public required Guid StaffDocumentTypeId { get; set; }
-        public StaffDocumentType? StaffDocumentType { get; set; }
-
-        public int DaysBeforeExpiry { get; set; }
-
-        public bool IsActive { get; set; } = true;
     }
 
     // One uploaded document instance for one staff member. A join entity referencing FileMetadata
@@ -56,32 +40,19 @@ namespace Lanyard.Infrastructure.Models
 
         public DateTime? ExpiryDate { get; set; }
 
+        // Custom reminder date chosen by the uploader alongside ExpiryDate, rather than a
+        // type-level "days before expiry" policy - each document's reminder timing is its own call.
+        public DateTime? ReminderDate { get; set; }
+
+        // Idempotency flag for the expiry-reminder sweep. A single nullable DateTime is enough
+        // here (unlike a per-interval log) because there's exactly one reminder per document -
+        // same shape as CourseAssignment.DueSoonReminderSentDate. Always null on a freshly
+        // uploaded document, so re-uploading a renewed document naturally re-arms its reminder.
+        public DateTime? ReminderSentDate { get; set; }
+
         public DateTime UploadedDate { get; set; }
         public required string UploadedByUserId { get; set; }
 
         public bool IsActive { get; set; } = true;
-    }
-
-    // Idempotency log for the expiry-reminder sweep. One row per (document, interval) so N
-    // configured thresholds can each fire independently - unlike CourseAssignment.DueSoonReminderSentDate
-    // (a single nullable DateTime flag), a single flag here couldn't represent "30-day reminder sent,
-    // 7-day reminder still pending" for the same document.
-    //
-    // ExpiryDateSnapshot is part of the row (and the uniqueness key) so that re-uploading a renewed
-    // document with a new ExpiryDate naturally makes every interval eligible to fire again, without
-    // needing to hunt down and delete old rows.
-    public class StaffDocumentReminderSent
-    {
-        public Guid Id { get; set; }
-
-        public required Guid StaffDocumentId { get; set; }
-        public StaffDocument? StaffDocument { get; set; }
-
-        public required Guid ReminderIntervalId { get; set; }
-        public StaffDocumentReminderInterval? ReminderInterval { get; set; }
-
-        public DateTime ExpiryDateSnapshot { get; set; }
-
-        public DateTime SentDate { get; set; }
     }
 }
