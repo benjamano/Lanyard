@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Lanyard.Infrastructure.Models
 {
     // Company-scoped catalog of document types staff can be asked to provide (P45, DBS check,
@@ -48,6 +50,13 @@ namespace Lanyard.Infrastructure.Models
         // here (unlike a per-interval log) because there's exactly one reminder per document -
         // same shape as CourseAssignment.DueSoonReminderSentDate. Always null on a freshly
         // uploaded document, so re-uploading a renewed document naturally re-arms its reminder.
+        //
+        // [ConcurrencyCheck] (not a schema change - no new column) makes SaveChangesAsync include
+        // the original value in the UPDATE's WHERE clause, so two overlapping sweeps racing to
+        // claim the same reminder can't both win: the loser's UPDATE affects zero rows and EF
+        // throws DbUpdateConcurrencyException instead of silently overwriting. Works identically
+        // against the EF InMemory test provider, unlike ExecuteUpdateAsync (relational-only).
+        [ConcurrencyCheck]
         public DateTime? ReminderSentDate { get; set; }
 
         public DateTime UploadedDate { get; set; }

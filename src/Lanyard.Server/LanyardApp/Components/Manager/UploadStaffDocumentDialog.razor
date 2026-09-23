@@ -80,21 +80,6 @@
             return;
         }
 
-        if (selectedDocumentType.RequiresExpiryDate)
-        {
-            if (expiryDate is null || reminderDate is null)
-            {
-                ToastService.ShowError("Set both an expiry date and a reminder date before uploading.");
-                return;
-            }
-
-            if (reminderDate.Value.Date > expiryDate.Value.Date)
-            {
-                ToastService.ShowError("The reminder date must be on or before the expiry date.");
-                return;
-            }
-        }
-
         FluentInputFileEventArgs? file = files.FirstOrDefault();
 
         if (file is null)

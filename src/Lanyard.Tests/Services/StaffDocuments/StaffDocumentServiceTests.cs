@@ -186,6 +186,20 @@ public class StaffDocumentServiceTests
     }
 
     [TestMethod]
+    public async Task GetDocumentsWithPendingRemindersAsync_IncludesDocumentWhenReminderDateEqualsExpiryDate()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DateTime sameDay = DateTime.UtcNow.Date;
+        await SeedDocumentAsync(options, sameDay, sameDay);
+
+        StaffDocumentService service = GetService(options);
+        Result<List<StaffDocument>> result = await service.GetDocumentsWithPendingRemindersAsync();
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(1, result.Data!.Count);
+    }
+
+    [TestMethod]
     public async Task GetDocumentsWithPendingRemindersAsync_ExcludesDocumentOutsideReminderWindow()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
@@ -213,6 +227,24 @@ public class StaffDocumentServiceTests
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(0, result.Data!.Count);
+    }
+
+    [TestMethod]
+    public async Task MarkReminderSentAsync_FailsOnSecondCallForSameDocument()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        StaffDocument document = await SeedDocumentAsync(options, DateTime.UtcNow.AddDays(5), DateTime.UtcNow.AddDays(-2));
+
+        StaffDocumentService service = GetService(options);
+
+        Result<bool> firstResult = await service.MarkReminderSentAsync(document.Id);
+        Assert.IsTrue(firstResult.IsSuccess);
+
+        // A second claim on the same document must not silently succeed, or the hosted service
+        // would send a duplicate email - see ReminderSentDate's [ConcurrencyCheck] for the case
+        // where the second read also observes null (a true overlapping-sweep race).
+        Result<bool> secondResult = await service.MarkReminderSentAsync(document.Id);
+        Assert.IsFalse(secondResult.IsSuccess);
     }
 
     [TestMethod]

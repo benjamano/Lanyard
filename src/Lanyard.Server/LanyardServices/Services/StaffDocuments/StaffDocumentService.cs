@@ -148,8 +148,11 @@ public class StaffDocumentService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            DateTime utcNow = DateTime.UtcNow;
+            DateTime today = DateTime.UtcNow.Date;
 
+            // Compared by calendar date, not exact instant - both dates come from date-only
+            // pickers, so a document with ReminderDate == ExpiryDate must still fall inside the
+            // window on that day rather than describing an empty (instant < same instant) range.
             List<StaffDocument> pending = await ctx.StaffDocuments
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -159,8 +162,8 @@ public class StaffDocumentService(
                     && x.ReminderDate != null
                     && x.ReminderSentDate == null
                     && x.StaffDocumentType!.IsActive
-                    && utcNow >= x.ReminderDate
-                    && utcNow < x.ExpiryDate)
+                    && today >= x.ReminderDate!.Value.Date
+                    && today <= x.ExpiryDate!.Value.Date)
                 .ToListAsync();
 
             return Result<List<StaffDocument>>.Ok(pending);
@@ -190,7 +193,18 @@ public class StaffDocumentService(
             }
 
             document.ReminderSentDate = DateTime.UtcNow;
-            await ctx.SaveChangesAsync();
+
+            try
+            {
+                await ctx.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another sweep (or app instance) already claimed this reminder between our read
+                // and our write - ReminderSentDate's [ConcurrencyCheck] turned the UPDATE's WHERE
+                // clause into the atomic guard, and this is the losing side of that race.
+                return Result<bool>.Fail("Reminder already sent.");
+            }
 
             return Result<bool>.Ok(true);
         }
