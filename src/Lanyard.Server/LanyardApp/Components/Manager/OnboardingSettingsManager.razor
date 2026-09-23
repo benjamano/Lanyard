@@ -121,6 +121,7 @@
     private BlazoredTextEditor? _editor;
     private ElementReference _editorHostRef;
     private Guid? _loadedSettingsId;
+    private BlazoredTextEditor? _loadedIntoEditor;
     private FilePicker? _attachmentPicker;
 
     private bool _configurePerLocation;
@@ -156,13 +157,15 @@
 
         await LoadLocationsAsync();
 
+        Result<CompanyOnboardingSettings?>? prefetchedGlobalSettings = null;
+
         if (!_initialScopeResolved)
         {
-            await ResolveInitialScopeAsync();
+            prefetchedGlobalSettings = await ResolveInitialScopeAsync();
             _initialScopeResolved = true;
         }
 
-        await LoadAsync();
+        await LoadAsync(prefetchedGlobalSettings);
     }
 
     private async Task LoadLocationsAsync()
@@ -184,18 +187,22 @@
     // Reveals a location-specific config that was saved without a company-wide row underneath it -
     // without this, the page always opens on the (nonexistent) company-wide scope and looks blank
     // even though onboarding is actually configured for one location.
-    private async Task ResolveInitialScopeAsync()
+    // Returns the fetched company-wide result so the caller's immediately-following LoadAsync can
+    // reuse it instead of querying the same (CompanyId, null) row again a second time.
+    private async Task<Result<CompanyOnboardingSettings?>?> ResolveInitialScopeAsync()
     {
         if (_locations is null || _locations.Count == 0)
         {
-            return;
+            return null;
         }
 
         Result<CompanyOnboardingSettings?> globalResult = await _onboardingService.GetSettingsAsync(CompanyId, null);
 
-        if (globalResult.IsSuccess && globalResult.Data is not null)
+        // A failed lookup is not evidence that no company-wide settings exist - treating it as
+        // such risked silently switching the admin into per-location mode for the wrong reason.
+        if (!globalResult.IsSuccess || globalResult.Data is not null)
         {
-            return;
+            return globalResult;
         }
 
         Result<List<int>> configuredResult = await _onboardingService.GetLocationIdsWithSettingsAsync(CompanyId);
@@ -209,12 +216,17 @@
         {
             _configurePerLocation = true;
             _selectedLocationId = firstConfigured.Id.ToString();
+            return null;
         }
+
+        return globalResult;
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(Result<CompanyOnboardingSettings?>? prefetchedGlobalSettings = null)
     {
-        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
+        Result<CompanyOnboardingSettings?> result = EffectiveLocationId is null && prefetchedGlobalSettings is not null
+            ? prefetchedGlobalSettings
+            : await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
 
         settings = (result.IsSuccess ? result.Data : null) ?? new CompanyOnboardingSettings { CompanyId = CompanyId, LocationId = EffectiveLocationId };
         _loadedSettingsId = null;
@@ -239,12 +251,17 @@
     // and RenderTextAreaWidget.razor.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_editor is not null && settings is not null && _loadedSettingsId != settings.Id)
+        // Also reload when the editor instance itself changed (e.g. SendWelcomeEmail toggled off
+        // then back on remounts a brand-new BlazoredTextEditor) - settings.Id alone doesn't change
+        // in that case, so relying on it left the new editor blank and Save silently wiped the body.
+        if (_editor is not null && settings is not null
+            && (_loadedSettingsId != settings.Id || !ReferenceEquals(_loadedIntoEditor, _editor)))
         {
             try
             {
                 await _editor.LoadHTMLContent(settings.WelcomeEmailBodyHtml ?? string.Empty);
                 _loadedSettingsId = settings.Id;
+                _loadedIntoEditor = _editor;
             }
             catch (Microsoft.JSInterop.JSException)
             {
