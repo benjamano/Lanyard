@@ -1,0 +1,65 @@
+/* Same Quill theming as OnboardingSettingsManager.razor.css - Blazor's scoped CSS is per-file,
+   so this dialog needs its own copy of the dark-mode-aware overrides rather than inheriting
+   the settings page's rules. */
+.onboarding-editor-host {
+    width: 100%;
+}
+
+.onboarding-editor-host ::deep .ql-container {
+    width: 100%;
+}
+
+.onboarding-editor-host ::deep .ql-editor {
+    min-height: 160px;
+}
+
+.onboarding-editor-host ::deep .ql-toolbar.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground3);
+    border-top-left-radius: var(--borderRadiusMedium);
+    border-top-right-radius: var(--borderRadiusMedium);
+}
+
+.onboarding-editor-host ::deep .ql-container.ql-snow {
+    border-color: var(--colorNeutralStroke1);
+    background-color: var(--colorNeutralBackground1);
+    border-bottom-left-radius: var(--borderRadiusMedium);
+    border-bottom-right-radius: var(--borderRadiusMedium);
+}
+
+.onboarding-editor-host ::deep .ql-editor,
+.onboarding-editor-host ::deep .ql-editor * {
+    color: var(--colorNeutralForeground1) !important;
+}
+
+.onboarding-editor-host ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground3);
+    font-style: normal;
+}
+
+.onboarding-editor-host ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button {
+    color: var(--colorNeutralForeground1);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active {
+    color: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-stroke,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+    stroke: var(--colorCompoundBrandStroke);
+}
+
+.onboarding-editor-host ::deep .ql-snow.ql-toolbar button:hover .ql-fill,
+.onboarding-editor-host ::deep .ql-snow .ql-toolbar button.ql-active .ql-fill {
+    fill: var(--colorCompoundBrandStroke);
+}

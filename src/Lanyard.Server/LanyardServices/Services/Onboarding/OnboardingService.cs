@@ -185,7 +185,51 @@ public class OnboardingService(
         }
     }
 
-    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken)
+    public async Task<Result<CompanyOnboardingSettings?>> GetEffectiveSettingsAsync(int companyId, int? locationId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            CompanyOnboardingSettings? settings = await ResolveEffectiveSettingsAsync(ctx, companyId, locationId, cancellationToken);
+
+            return Result<CompanyOnboardingSettings?>.Ok(settings);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyOnboardingSettings?>.Fail($"Failed to resolve effective onboarding settings: {ex.Message}");
+        }
+    }
+
+    // Shared by GetEffectiveSettingsAsync (its own short-lived context) and TriggerOnboardingAsync
+    // (reuses the context it already has open for the Users lookup) so the latter doesn't pay for
+    // a second DB connection on a path that's fired synchronously during user creation.
+    private static async Task<CompanyOnboardingSettings?> ResolveEffectiveSettingsAsync(
+        ApplicationDbContext ctx, int companyId, int? locationId, CancellationToken cancellationToken)
+    {
+        // A location-specific override, if one exists and is enabled, replaces the company-wide
+        // configuration entirely rather than merging field-by-field - simpler to reason about,
+        // and matches how the admin edits one scope at a time in the UI.
+        CompanyOnboardingSettings? settings = null;
+
+        if (locationId is int lid)
+        {
+            settings = await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
+        }
+
+        settings ??= await ctx.CompanyOnboardingSettings
+            .AsNoTracking()
+            .TagWithCallSite()
+            .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
+
+        return settings;
+    }
+
+    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken,
+        string? subjectOverride = null, string? bodyHtmlOverride = null)
     {
         try
         {
@@ -208,32 +252,7 @@ public class OnboardingService(
                 return Result<bool>.Fail("User not found.");
             }
 
-            // A location-specific override, if one exists and is enabled, replaces the
-            // company-wide configuration entirely rather than merging field-by-field - simpler
-            // to reason about, and matches how the admin edits one scope at a time in the UI.
-            CompanyOnboardingSettings? settings = null;
-            int? resolvedLocationId = null;
-
-            if (locationId is int lid)
-            {
-                settings = await ctx.CompanyOnboardingSettings
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
-
-                if (settings is not null)
-                {
-                    resolvedLocationId = lid;
-                }
-            }
-
-            if (settings is null)
-            {
-                settings = await ctx.CompanyOnboardingSettings
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
-            }
+            CompanyOnboardingSettings? settings = await ResolveEffectiveSettingsAsync(ctx, companyId, locationId, cancellationToken);
 
             if (settings is null || !settings.SendWelcomeEmail)
             {
@@ -248,7 +267,7 @@ public class OnboardingService(
                     .AsNoTracking()
                     .TagWithCallSite()
                     .Include(x => x.FileMetadata)
-                    .Where(x => x.CompanyId == companyId && x.LocationId == resolvedLocationId && x.IsActive)
+                    .Where(x => x.CompanyId == companyId && x.LocationId == settings.LocationId && x.IsActive)
                     .OrderBy(x => x.SortOrder)
                     .ToListAsync(cancellationToken);
 
@@ -268,8 +287,8 @@ public class OnboardingService(
 
             return await _emailService.SendOnboardingWelcomeEmailAsync(
                 user,
-                settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
-                settings.WelcomeEmailBodyHtml ?? string.Empty,
+                subjectOverride ?? settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
+                bodyHtmlOverride ?? settings.WelcomeEmailBodyHtml ?? string.Empty,
                 logoUrl,
                 branding.AccentColorHex,
                 attachments);
