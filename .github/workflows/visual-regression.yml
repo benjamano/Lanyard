@@ -1,0 +1,142 @@
+name: Visual Regression
+
+# Scoped to UI-relevant paths only, mirroring release.yml's path-filtered trigger - this job spins
+# up Postgres, the full server, and a browser, so it's not worth adding minutes to every
+# backend-only PR. Includes Infrastructure/Services paths too: a model or service-layer change can
+# alter what a screen renders without touching a single .razor file.
+on:
+  pull_request:
+    paths:
+      - '**/*.razor'
+      - '**/*.razor.css'
+      - 'src/Lanyard.Server/LanyardApp/wwwroot/**'
+      - 'src/Lanyard.Server/LanyardApp/Components/**'
+      - 'src/Lanyard.Infrastructure/**'
+      - 'src/Lanyard.Server/LanyardServices/**'
+      - 'src/Lanyard.VisualTestFixtures/**'
+      - 'tests/visual-regression/**'
+      - '.github/workflows/visual-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  visual-regression:
+    # Pinned, not ubuntu-latest: that alias rolls forward periodically and a GitHub-side image
+    # bump can shift font rendering/anti-aliasing enough to invalidate every committed baseline
+    # PNG with no code change on our side. Bump this deliberately alongside a baseline
+    # regeneration, not implicitly.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+
+    services:
+      # First Postgres service container in this repo's CI - no existing workflow to copy the
+      # pattern from. The health check matters: without it, the migrate step below can race a
+      # Postgres that has accepted the container start but hasn't finished initializing yet.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: lanyarddb
+          POSTGRES_USER: lanyard_dev
+          POSTGRES_PASSWORD: lanyard_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lanyard_dev -d lanyarddb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=lanyarddb;Username=lanyard_dev;Password=lanyard_dev_password"
+      VISUAL_TESTS_CONNECTION_STRING: "Host=localhost;Port=5432;Database=lanyarddb;Username=lanyard_dev;Password=lanyard_dev_password"
+      BASE_URL: "http://localhost:5096"
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://localhost:5096"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # actions/checkout always leaves the workspace in detached HEAD, even when checking out a
+      # specific commit - publish-screenshots.sh derives its storage path from
+      # `git rev-parse --abbrev-ref HEAD` (branch-name-keyed, so re-runs on the same PR overwrite
+      # rather than accumulate) and refuses to run detached. Re-attaching to a real local branch
+      # here is cheaper than changing that script's interface for CI's sake.
+      - name: Un-detach HEAD for publish-screenshots.sh
+        if: github.event_name == 'pull_request'
+        run: git checkout -B "${{ github.head_ref }}"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.0
+
+      - name: Build server
+        run: dotnet build src/Lanyard.Server/LanyardApp/Lanyard.App.csproj
+
+      - name: Build fixture seeder
+        run: dotnet build src/Lanyard.VisualTestFixtures/Lanyard.VisualTestFixtures.csproj
+
+      - name: Apply migrations
+        run: dotnet ef database update --project src/Lanyard.Infrastructure --startup-project src/Lanyard.Server/LanyardApp --no-build
+
+      - name: Launch server
+        run: |
+          nohup dotnet src/Lanyard.Server/LanyardApp/bin/Debug/net10.0/Lanyard.App.dll \
+            > server.log 2>&1 &
+          echo "Waiting for server on $BASE_URL..."
+          timeout 60 bash -c 'until curl -sf -o /dev/null "$BASE_URL/login"; do sleep 1; done'
+
+      - name: Install visual regression suite dependencies
+        working-directory: tests/visual-regression
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: tests/visual-regression
+        run: npx playwright install --with-deps chromium
+
+      - name: Run visual regression suite
+        working-directory: tests/visual-regression
+        run: npm test
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat server.log
+
+      - name: Build failing-diff manifest
+        if: failure()
+        working-directory: tests/visual-regression
+        run: node build-diff-manifest.mjs > /tmp/visual-diff-manifest.json
+
+      - name: Publish failing diffs to the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(jq 'length' /tmp/visual-diff-manifest.json)" -gt 0 ]; then
+            .claude/scripts/publish-screenshots.sh \
+              --manifest /tmp/visual-diff-manifest.json \
+              --pr ${{ github.event.pull_request.number }}
+          else
+            echo "No diff images found to publish (suite likely failed before any screenshot assertion ran - see the uploaded test-results artifact and server log)."
+          fi
+
+      - name: Upload test-results artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-test-results
+          path: tests/visual-regression/test-results
+          if-no-files-found: ignore

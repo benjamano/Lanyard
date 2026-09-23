@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A small standalone console utility, not a test project - it seeds deterministic fixture data
+    (one dashboard, a music playlist, a training course, a DMX client) that the visual regression
+    suite under tests/visual-regression/ needs to render its "populated" screens. It exists as a
+    separate .NET project (rather than raw SQL from the TypeScript side) specifically to reuse the
+    real Lanyard.Infrastructure EF models as the single source of truth for schema shape, instead
+    of duplicating column/table knowledge in hand-written SQL that could silently drift from the
+    actual model. See the visual-regression-testing skill for the full rationale, including why
+    the pixel-diffing test runner itself is TypeScript (@playwright/test) rather than .NET
+    (Microsoft.Playwright for .NET has no built-in screenshot-comparison assertion - verified by
+    reflecting over the installed 1.62.0 assembly, which has no ToHaveScreenshotAsync anywhere).
+
+    Deliberately NOT added to LanyardApp.sln / LanyardApp.CI.slnf, matching that same reasoning:
+    it only ever runs inside the dedicated visual-regression CI job, never via the Windows
+    build-and-test job or `dotnet build LanyardApp.sln`.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lanyard.Infrastructure\Lanyard.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

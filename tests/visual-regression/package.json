@@ -1,0 +1,12 @@
+{
+  "name": "lanyard-visual-regression",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
