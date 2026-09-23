@@ -92,6 +92,50 @@ public class FileServiceTests
         Assert.IsFalse(File.Exists(fileMeta.FilePath));
     }
 
+    // A shared FileMetadata row (StaffDocuments, CompanyOnboardingStandingAttachments, and
+    // ordinary File Manager entries all point at the same table) must not be deletable while
+    // another feature still references it - the physical bytes are deleted before SaveChangesAsync
+    // and can't be rolled back, so this has to be caught before storage is touched at all, not left
+    // to the FK's Restrict behavior to reject only the DB half of the operation.
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenFileIsReferencedByAStaffDocument_FailsWithoutDeletingStorage()
+    {
+        var fileId = Guid.NewGuid();
+        var filePath = Path.GetTempFileName();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "handbook.pdf",
+            FilePath = filePath,
+            FileSize = 10,
+            ContentType = "application/pdf",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            IsActive = true
+        };
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.StaffDocuments.AddAsync(new StaffDocument
+        {
+            Id = Guid.NewGuid(),
+            UserId = "staff-user",
+            StaffDocumentTypeId = Guid.NewGuid(),
+            FileMetadataId = fileId,
+            UploadedByUserId = "user1",
+            UploadedDate = DateTime.UtcNow,
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+        File.WriteAllText(filePath, "dummy");
+
+        var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsNotNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsTrue(File.Exists(filePath));
+
+        File.Delete(filePath);
+    }
+
     [TestMethod]
     public async Task RenameFileAsync_WhenRenamingFileThenNameIsUpdated()
     {

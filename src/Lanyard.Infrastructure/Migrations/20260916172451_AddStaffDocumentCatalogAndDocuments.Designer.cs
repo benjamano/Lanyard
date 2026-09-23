@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916172451_AddStaffDocumentCatalogAndDocuments")]
+    partial class AddStaffDocumentCatalogAndDocuments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -532,80 +535,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("LogoFileId");
 
                     b.ToTable("Companies");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("AutoAttachStandingDocuments")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("SendWelcomeEmail")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("WelcomeEmailBodyHtml")
-                        .HasColumnType("text");
-
-                    b.Property<string>("WelcomeEmailSubject")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId")
-                        .IsUnique()
-                        .HasFilter("\"LocationId\" IS NULL");
-
-                    b.HasIndex("LocationId");
-
-                    b.HasIndex("CompanyId", "LocationId")
-                        .IsUnique()
-                        .HasFilter("\"LocationId\" IS NOT NULL");
-
-                    b.ToTable("CompanyOnboardingSettings");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingStandingAttachment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("FileMetadataId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("LocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("FileMetadataId");
-
-                    b.HasIndex("LocationId");
-
-                    b.ToTable("CompanyOnboardingStandingAttachments");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
@@ -2310,48 +2239,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("LogoFile");
                 });
 
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("Location");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingStandingAttachment", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
-                        .WithMany()
-                        .HasForeignKey("FileMetadataId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("FileMetadata");
-
-                    b.Navigation("Location");
-                });
-
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Course", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
@@ -2735,7 +2622,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
                         .WithMany()
                         .HasForeignKey("FileMetadataId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Lanyard.Infrastructure.Models.StaffDocumentType", "StaffDocumentType")

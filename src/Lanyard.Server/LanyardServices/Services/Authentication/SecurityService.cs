@@ -9,6 +9,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Training;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,6 +32,7 @@ public class SecurityService : ISecurityService
     private readonly IEmailService _emailService;
     private readonly ICompanyLocationService _companyLocationService;
     private readonly IOptions<EmailOptions> _emailOptions;
+    private readonly IOnboardingService _onboardingService;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -43,7 +45,8 @@ public class SecurityService : ISecurityService
         NavigationManager navigationManager,
         IEmailService emailService,
         ICompanyLocationService companyLocationService,
-        IOptions<EmailOptions> emailOptions)
+        IOptions<EmailOptions> emailOptions,
+        IOnboardingService onboardingService)
     {
         _authStateProvider = authStateProvider;
         _currentUserAccessor = currentUserAccessor;
@@ -56,6 +59,7 @@ public class SecurityService : ISecurityService
         _emailService = emailService;
         _companyLocationService = companyLocationService;
         _emailOptions = emailOptions;
+        _onboardingService = onboardingService;
     }
 
     // Delegates to ICurrentUserAccessor so this and FileService can never disagree about
@@ -98,6 +102,28 @@ public class SecurityService : ISecurityService
             if (user is null)
             {
                 return Result<UserProfile>.Fail("User not found");
+            }
+
+            return Result<UserProfile>.Ok(user);
+        }
+        catch (Exception ex)
+        {
+            return Result<UserProfile>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<UserProfile>> GetUserByIdAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<UserProfile>.Fail("User not found.");
             }
 
             return Result<UserProfile>.Ok(user);
@@ -262,6 +288,25 @@ public class SecurityService : ISecurityService
                 // a new hire needs their login regardless of whether their induction
                 // course could be auto-assigned.
                 _logger.LogWarning(ex, "Failed to auto-assign training courses to newly created user {UserId}", user.Id);
+            }
+
+            try
+            {
+                // First of the (possibly several) locations the new hire was just added to -
+                // used only as a location-specific-override lookup key. TriggerOnboardingAsync
+                // falls back to the company-wide configuration when no override exists for it.
+                Result<bool> onboardingResult = await _onboardingService.TriggerOnboardingAsync(user.Id, locationIds.FirstOrDefault(), CancellationToken.None);
+
+                if (!onboardingResult.IsSuccess)
+                {
+                    _logger.LogWarning("Failed to trigger onboarding automation for newly created user {UserId}: {Error}", user.Id, onboardingResult.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Onboarding automation (welcome email + attachments) must never block account
+                // creation - same reasoning as the course auto-assign block above.
+                _logger.LogWarning(ex, "Failed to trigger onboarding automation for newly created user {UserId}", user.Id);
             }
 
             Result<bool> emailResult = await SendSetPasswordLinkEmailAsync(user);

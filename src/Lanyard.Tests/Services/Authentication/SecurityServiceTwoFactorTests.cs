@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -86,6 +87,7 @@ namespace Lanyard.Tests.Services.Authentication
             Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
             Mock<ICompanyLocationService> companyLocationServiceMock = new();
             Mock<IEmailService> emailServiceMock = new();
+            Mock<IOnboardingService> onboardingServiceMock = new();
 
             AuthenticationStateProvider authProvider = BuildAuthProviderForUser(userId).Object;
 
@@ -100,7 +102,8 @@ namespace Lanyard.Tests.Services.Authentication
                 new TestNavigationManager(),
                 emailServiceMock.Object,
                 companyLocationServiceMock.Object,
-                Options.Create(new EmailOptions()));
+                Options.Create(new EmailOptions()),
+                onboardingServiceMock.Object);
         }
 
         private static async Task<UserProfile> CreateUserAsync(UserManager<UserProfile> userManager, string password = "P@ssword1")

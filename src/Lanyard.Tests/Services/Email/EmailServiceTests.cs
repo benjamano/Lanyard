@@ -528,6 +528,81 @@ namespace Lanyard.Tests.Services.Email
             StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "Hi jdoe,");
         }
 
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_SuccessResponse_IncludesDocumentTypeAndExpiryDateInHtmlBody()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+                daysBeforeExpiry: 7,
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("First Aid Certificate", handler.LastRequestBody);
+            Assert.Contains("1 October 2026", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+            Assert.Contains("7 days", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_SingularDayCount_ReadsAsOneDayNotOneDays()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(1),
+                daysBeforeExpiry: 1,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "1 day<");
+            Assert.IsFalse(html.Contains("1 days"), "singular day count should read \"1 day\", not \"1 days\"");
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(7),
+                daysBeforeExpiry: 7,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendStaffDocumentExpiryReminderEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendStaffDocumentExpiryReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "First Aid Certificate",
+                DateTime.UtcNow.AddDays(7),
+                daysBeforeExpiry: 7,
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
+        }
+
         // The set-password email deliberately still shows the username - it IS the credential
         // being communicated, so switching it to a first name would break the email's purpose.
         [TestMethod]
@@ -544,6 +619,162 @@ namespace Lanyard.Tests.Services.Email
 
             using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
             StringAssert.Contains(body.RootElement.GetProperty("html").GetString()!, "jdoe");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_SuccessResponse_IncludesSubjectAndBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com", FirstName = "Jane", LastName = "Doe" },
+                "Welcome to Acme",
+                "<p>Glad to have you.</p>",
+                logoUrl: "https://lanyard.example.com/api/companies/1/logo",
+                accentColorHex: "#C8102E",
+                attachments: []);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("Welcome to Acme", handler.LastRequestBody);
+            Assert.Contains("Glad to have you.", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
+            Assert.Contains("#C8102E", handler.LastRequestBody);
+            Assert.Contains("Hi Jane,", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_StripsScriptTagsFromBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p><script>alert('xss')</script>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Hello");
+            Assert.IsFalse(html.Contains("<script>"), "sanitizer should strip script tags from admin-authored body HTML");
+            Assert.IsFalse(html.Contains("alert("), "sanitizer should strip script tags from admin-authored body HTML");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_StripsEventHandlerAttributesFromBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p><img src=\"x\" onerror=\"alert('xss')\" />",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Hello");
+            Assert.IsFalse(html.Contains("onerror"), "sanitizer should strip event-handler attributes from admin-authored body HTML");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_StripsJavascriptHrefFromBodyHtml()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p><a href=\"javascript:alert('xss')\">Click here</a></p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            string html = body.RootElement.GetProperty("html").GetString()!;
+
+            StringAssert.Contains(html, "Click here");
+            Assert.IsFalse(html.Contains("javascript:"), "sanitizer should strip javascript: hrefs from admin-authored body HTML");
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_WithAttachments_AttachesThemAsBase64()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+            byte[] handbookBytes = [1, 2, 3, 4];
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: [new EmailAttachment("Handbook.pdf", handbookBytes)]);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+            JsonElement attachments = body.RootElement.GetProperty("attachments");
+
+            Assert.AreEqual(1, attachments.GetArrayLength());
+            Assert.AreEqual("Handbook.pdf", attachments[0].GetProperty("filename").GetString());
+            CollectionAssert.AreEqual(handbookBytes, Convert.FromBase64String(attachments[0].GetProperty("content").GetString()!));
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_NoAttachments_OmitsAttachmentsPropertyEntirely()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            using JsonDocument body = JsonDocument.Parse(handler.LastRequestBody!);
+
+            Assert.IsFalse(body.RootElement.TryGetProperty("attachments", out _));
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_UserHasNoEmail_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = null },
+                "Welcome",
+                "<p>Hello</p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendOnboardingWelcomeEmailAsync_NonSuccessStatusCode_ReturnsFail()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.Unauthorized, ValidOptions());
+
+            Result<bool> result = await service.SendOnboardingWelcomeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Welcome",
+                "<p>Hello</p>",
+                logoUrl: null,
+                accentColorHex: BrandConstants.PrimaryColorHex,
+                attachments: []);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("401", result.Error);
         }
     }
 }

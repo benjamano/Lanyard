@@ -1,0 +1,98 @@
+@using System.ComponentModel.DataAnnotations
+@using Lanyard.Application.Services.StaffDocuments
+@using Lanyard.Infrastructure.Models
+
+@inject IStaffDocumentTypeService _staffDocumentTypeService
+@inject INotificationService ToastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.DocumentAdd())" />
+            <FluentText As="@TextTag.H3">New Document Type</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <EditForm EditContext="@_editContext" OnValidSubmit="HandleCreateAsync">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                <FluentTextInput @bind-Value="model.Name" Label="Name" Required="true" Width="100%"
+                                  Message="@_editContext.GetValidationMessage(() => model.Name)"
+                                  MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error" />
+                <FluentTextInput @bind-Value="model.Description" Label="Description" Width="100%" />
+                <FluentCheckbox @bind-Value="model.RequiresExpiryDate" Label="Requires an expiry date" />
+
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                    <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" Disabled="@isSaving">
+                        @(isSaving ? "Creating..." : "Create")
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isSaving">
+                        Cancel
+                    </FluentButton>
+                </FluentStack>
+            </FluentStack>
+        </EditForm>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    // The new type is appended after everything already in the list - the caller passes its
+    // current count rather than this dialog re-fetching the list itself just to compute one number.
+    [Parameter]
+    public int NextSortOrder { get; set; }
+
+    private CreateModel model = new();
+    private EditContext _editContext = default!;
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
+
+    private async Task HandleCreateAsync()
+    {
+        isSaving = true;
+
+        Result<StaffDocumentType> result = await _staffDocumentTypeService.SaveDocumentTypeAsync(new StaffDocumentType
+        {
+            CompanyId = CompanyId,
+            Name = model.Name,
+            Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description,
+            RequiresExpiryDate = model.RequiresExpiryDate,
+            SortOrder = NextSortOrder
+        });
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            ToastService.ShowError($"Failed to create document type: {result.Error}");
+            return;
+        }
+
+        ToastService.ShowSuccess("Document type created.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private class CreateModel
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public bool RequiresExpiryDate { get; set; }
+    }
+}
