@@ -7,8 +7,8 @@
 <div class="file-uploader-wrapper w-100">
     <FluentInputFile Id="@Id" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="true"
                      MaximumFileCount="@MaximumFileCount" MaximumFileSize="@MaximumFileSize" Accept="@Accept"
-                     @bind-ProgressPercent="@ProgressPercent" OnCompleted="@OnCompletedAsync" Class="file-uploader-dropzone"
-                     Padding="@Padding.Top5">
+                     @bind-ProgressPercent="@ProgressPercent" OnCompleted="@OnCompletedAsync" OnFileError="@OnFileErrorAsync"
+                     Class="file-uploader-dropzone" Padding="@Padding.Top5">
         <ChildContent>
             <label for="@Id">
                 @if (PreviewUrl is not null)
@@ -53,6 +53,19 @@
 
     int ProgressPercent = 0;
     FluentInputFileEventArgs[] Files = Array.Empty<FluentInputFileEventArgs>();
+
+    // Without this bound, FluentInputFile falls through to InputFileChangeEventArgs.GetMultipleFiles
+    // (MaximumFileCount) when too many files are selected/dropped, which throws
+    // InvalidOperationException and crashes the whole page via MainLayout's ErrorBoundary instead
+    // of surfacing a friendly message.
+    private Task OnFileErrorAsync(FluentInputFileErrorEventArgs e)
+    {
+        _toastService.ShowError(e.ErrorCode == FluentInputFileErrorEventArgs.FileCountExceeded.Code
+            ? $"Only {MaximumFileCount} file{(MaximumFileCount > 1 ? "s" : "")} can be uploaded at once."
+            : e.ErrorMessage);
+
+        return Task.CompletedTask;
+    }
 
     private async Task OnCompletedAsync(IEnumerable<FluentInputFileEventArgs> files)
     {

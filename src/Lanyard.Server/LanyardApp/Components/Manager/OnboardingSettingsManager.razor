@@ -88,6 +88,7 @@
                     @if (_canManageFiles)
                     {
                         <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
+                                    MaximumFileCount="10" CloseOnSelect="false"
                                     SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
 
                         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
