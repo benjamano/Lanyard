@@ -136,6 +136,119 @@ public class FileServiceTests
         File.Delete(filePath);
     }
 
+    // Regression test: RemoveStandingAttachmentAsync only soft-deletes (IsActive = false), so once
+    // a file has ever been used as a standing attachment or staff document it must become
+    // deletable again as soon as that reference is inactive - the reference checks above must
+    // filter on IsActive, not just existence, or a removed attachment permanently blocks deletion.
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenOnlyReferencedByInactiveStaffDocument_Succeeds()
+    {
+        var fileId = Guid.NewGuid();
+        var filePath = Path.GetTempFileName();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "handbook.pdf",
+            FilePath = filePath,
+            FileSize = 10,
+            ContentType = "application/pdf",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            IsActive = true
+        };
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.StaffDocuments.AddAsync(new StaffDocument
+        {
+            Id = Guid.NewGuid(),
+            UserId = "staff-user",
+            StaffDocumentTypeId = Guid.NewGuid(),
+            FileMetadataId = fileId,
+            UploadedByUserId = "user1",
+            UploadedDate = DateTime.UtcNow,
+            IsActive = false
+        });
+        await _dbContext.SaveChangesAsync();
+        File.WriteAllText(filePath, "dummy");
+
+        var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsFalse(File.Exists(filePath));
+    }
+
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenOnlyReferencedByInactiveOnboardingStandingAttachment_Succeeds()
+    {
+        var fileId = Guid.NewGuid();
+        var filePath = Path.GetTempFileName();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "handbook.pdf",
+            FilePath = filePath,
+            FileSize = 10,
+            ContentType = "application/pdf",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            IsActive = true
+        };
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.CompanyOnboardingStandingAttachments.AddAsync(new CompanyOnboardingStandingAttachment
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = 1,
+            FileMetadataId = fileId,
+            SortOrder = 0,
+            IsActive = false
+        });
+        await _dbContext.SaveChangesAsync();
+        File.WriteAllText(filePath, "dummy");
+
+        var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsFalse(File.Exists(filePath));
+    }
+
+    [TestMethod]
+    public async Task DeleteFileAsync_WhenReferencedByActiveOnboardingStandingAttachment_FailsWithoutDeletingStorage()
+    {
+        var fileId = Guid.NewGuid();
+        var filePath = Path.GetTempFileName();
+        var fileMeta = new FileMetadata
+        {
+            Id = fileId,
+            FileName = "handbook.pdf",
+            FilePath = filePath,
+            FileSize = 10,
+            ContentType = "application/pdf",
+            UploadedAt = DateTime.UtcNow,
+            UploadedBy = "user1",
+            IsActive = true
+        };
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.CompanyOnboardingStandingAttachments.AddAsync(new CompanyOnboardingStandingAttachment
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = 1,
+            FileMetadataId = fileId,
+            SortOrder = 0,
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+        File.WriteAllText(filePath, "dummy");
+
+        var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsNotNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsTrue(File.Exists(filePath));
+
+        File.Delete(filePath);
+    }
+
     [TestMethod]
     public async Task RenameFileAsync_WhenRenamingFileThenNameIsUpdated()
     {

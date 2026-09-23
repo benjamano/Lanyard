@@ -112,7 +112,7 @@
 
                 <FluentText Typo="Typography.Body">Or upload a new file here</FluentText>
                 <FileUploader Id="file-picker-uploader" SelectedFolderId="@currentFolderId"
-                              MaximumFileCount="1" Label="Upload a file"
+                              MaximumFileCount="@MaximumFileCount" Label="Upload a file"
                               Accept="@BuildAcceptAttribute()"
                               OnFileUploaded="OnFileUploadedAsync" />
             </div>
@@ -139,6 +139,15 @@
     // of several attachments to a list, where there's no single ongoing selection to display.
     [Parameter]
     public bool ShowSelectionSummary { get; set; } = true;
+
+    [Parameter]
+    public int MaximumFileCount { get; set; } = 1;
+
+    // Set false for callers building a list (e.g. onboarding standing attachments) so picking or
+    // uploading a file doesn't close the dialog before the rest of a multi-file batch has been
+    // processed - see OnFileUploadedAsync, which invokes SelectFileAsync once per uploaded file.
+    [Parameter]
+    public bool CloseOnSelect { get; set; } = true;
 
     private readonly HashSet<string> allowedExtensions = [];
     private readonly Dictionary<Guid, Folder> folderLookup = [];
@@ -291,7 +300,11 @@
         // Notify the parent before any await: a render with the old SelectedFileId can
         // interleave at the first await and OnParametersSetAsync would clobber the selection.
         await OnFileSelected.InvokeAsync(newFileId);
-        await _pickerDialog!.HideAsync();
+
+        if (CloseOnSelect)
+        {
+            await _pickerDialog!.HideAsync();
+        }
     }
 
     // Uploads straight into whatever folder is currently open and immediately selects the result

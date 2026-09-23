@@ -290,5 +290,24 @@
       "Added a Staff Document Types link to the Manage nav menu, which was previously missing even for Admins.",
       "Fixed the Staff Document Types list rendering as a fixed-column table, which squashed the reminder-days input taller than its own row and clipped long names on a phone - it's now a plain list that wraps and resizes properly on any screen."
     ]
+  },
+  {
+    "version": "1.3.20",
+    "releaseDate": "2026-09-23",
+    "summary": "Staff document reminders are now set per document instead of per document type, bulk onboarding attachments, a stuck File Manager delete fix, a fix for the Onboarding settings page not showing a location's saved configuration, and admins can now customize a new user's welcome email at the point of registration.",
+    "details": [
+      "Removed the reminder-days configuration from Staff Document Types - document types no longer have a reminder policy of their own.",
+      "When uploading a document to a staff member, the uploader now sets a custom expiry date and reminder date for that specific document.",
+      "The staff member's Documents tab now shows the configured reminder date alongside the expiry date.",
+      "Documents uploaded before this change won't have a reminder date until they're re-uploaded.",
+      "The Add Attachment dialog on the Onboarding settings page now supports adding several documents in one session - drag/drop or select multiple files at once, or add multiple existing files from the library, without the dialog closing after each one.",
+      "Selecting or dropping more files than allowed now shows a clear message instead of crashing the page.",
+      "Fixed a bug where removing a standing attachment from the Onboarding settings page permanently blocked that file from being deleted in the File Manager, even though it was no longer attached to anything.",
+      "The Onboarding settings page now correctly detects and shows a location's saved welcome email settings on load, instead of looking blank when only a location-specific configuration (and no company-wide one) had been saved.",
+      "Fixed saving Onboarding settings crashing with an error after turning \"Configure separately per location\" on and back off.",
+      "The Register New User dialog now shows a \"Customize welcome email for this user\" option once a location is selected, prefilled with that location's default subject and rich-text body.",
+      "Editing the subject or body only changes the email sent to that one new user - the shared company/location welcome email template is left untouched.",
+      "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
+    ]
   }
 ]

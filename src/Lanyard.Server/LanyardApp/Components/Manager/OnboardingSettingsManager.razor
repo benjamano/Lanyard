@@ -88,6 +88,7 @@
                     @if (_canManageFiles)
                     {
                         <FilePicker @ref="_attachmentPicker" ShowSelectionSummary="false"
+                                    MaximumFileCount="10" CloseOnSelect="false"
                                     SelectedFileId="@null" OnFileSelected="AddAttachmentAsync" />
 
                         <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
@@ -120,6 +121,7 @@
     private BlazoredTextEditor? _editor;
     private ElementReference _editorHostRef;
     private Guid? _loadedSettingsId;
+    private BlazoredTextEditor? _loadedIntoEditor;
     private FilePicker? _attachmentPicker;
 
     private bool _configurePerLocation;
@@ -127,6 +129,7 @@
     private string? _selectedLocationId;
     private int? _loadedForCompanyId;
     private bool _canManageFiles;
+    private bool _initialScopeResolved;
 
     private int? EffectiveLocationId =>
         _configurePerLocation && int.TryParse(_selectedLocationId, out int id) ? id : null;
@@ -149,10 +152,20 @@
             _configurePerLocation = false;
             _selectedLocationId = null;
             _loadedForCompanyId = CompanyId;
+            _initialScopeResolved = false;
         }
 
         await LoadLocationsAsync();
-        await LoadAsync();
+
+        Result<CompanyOnboardingSettings?>? prefetchedGlobalSettings = null;
+
+        if (!_initialScopeResolved)
+        {
+            prefetchedGlobalSettings = await ResolveInitialScopeAsync();
+            _initialScopeResolved = true;
+        }
+
+        await LoadAsync(prefetchedGlobalSettings);
     }
 
     private async Task LoadLocationsAsync()
@@ -171,9 +184,49 @@
         }
     }
 
-    private async Task LoadAsync()
+    // Reveals a location-specific config that was saved without a company-wide row underneath it -
+    // without this, the page always opens on the (nonexistent) company-wide scope and looks blank
+    // even though onboarding is actually configured for one location.
+    // Returns the fetched company-wide result so the caller's immediately-following LoadAsync can
+    // reuse it instead of querying the same (CompanyId, null) row again a second time.
+    private async Task<Result<CompanyOnboardingSettings?>?> ResolveInitialScopeAsync()
     {
-        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
+        if (_locations is null || _locations.Count == 0)
+        {
+            return null;
+        }
+
+        Result<CompanyOnboardingSettings?> globalResult = await _onboardingService.GetSettingsAsync(CompanyId, null);
+
+        // A failed lookup is not evidence that no company-wide settings exist - treating it as
+        // such risked silently switching the admin into per-location mode for the wrong reason.
+        if (!globalResult.IsSuccess || globalResult.Data is not null)
+        {
+            return globalResult;
+        }
+
+        Result<List<int>> configuredResult = await _onboardingService.GetLocationIdsWithSettingsAsync(CompanyId);
+        HashSet<int> configuredLocationIds = configuredResult.IsSuccess && configuredResult.Data is not null
+            ? [.. configuredResult.Data]
+            : [];
+
+        Location? firstConfigured = _locations.FirstOrDefault(l => configuredLocationIds.Contains(l.Id));
+
+        if (firstConfigured is not null)
+        {
+            _configurePerLocation = true;
+            _selectedLocationId = firstConfigured.Id.ToString();
+            return null;
+        }
+
+        return globalResult;
+    }
+
+    private async Task LoadAsync(Result<CompanyOnboardingSettings?>? prefetchedGlobalSettings = null)
+    {
+        Result<CompanyOnboardingSettings?> result = EffectiveLocationId is null && prefetchedGlobalSettings is not null
+            ? prefetchedGlobalSettings
+            : await _onboardingService.GetSettingsAsync(CompanyId, EffectiveLocationId);
 
         settings = (result.IsSuccess ? result.Data : null) ?? new CompanyOnboardingSettings { CompanyId = CompanyId, LocationId = EffectiveLocationId };
         _loadedSettingsId = null;
@@ -198,12 +251,17 @@
     // and RenderTextAreaWidget.razor.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_editor is not null && settings is not null && _loadedSettingsId != settings.Id)
+        // Also reload when the editor instance itself changed (e.g. SendWelcomeEmail toggled off
+        // then back on remounts a brand-new BlazoredTextEditor) - settings.Id alone doesn't change
+        // in that case, so relying on it left the new editor blank and Save silently wiped the body.
+        if (_editor is not null && settings is not null
+            && (_loadedSettingsId != settings.Id || !ReferenceEquals(_loadedIntoEditor, _editor)))
         {
             try
             {
                 await _editor.LoadHTMLContent(settings.WelcomeEmailBodyHtml ?? string.Empty);
                 _loadedSettingsId = settings.Id;
+                _loadedIntoEditor = _editor;
             }
             catch (Microsoft.JSInterop.JSException)
             {
@@ -219,9 +277,17 @@
             return;
         }
 
-        if (_editor is not null)
+        if (settings.SendWelcomeEmail && _editor is not null)
         {
-            settings.WelcomeEmailBodyHtml = await _editor.GetHTML();
+            try
+            {
+                settings.WelcomeEmailBodyHtml = await _editor.GetHTML();
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                // Editor not fully attached yet (e.g. just remounted) - keep whatever body was already
+                // loaded rather than failing the whole save, matching RenderTextAreaWidget's AutoSaveIfChangedAsync.
+            }
         }
 
         Result<CompanyOnboardingSettings> result = await _onboardingService.SaveSettingsAsync(settings);
