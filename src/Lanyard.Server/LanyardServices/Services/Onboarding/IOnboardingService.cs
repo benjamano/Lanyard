@@ -6,6 +6,7 @@ namespace Lanyard.Application.Services.Onboarding;
 public interface IOnboardingService
 {
     Task<Result<CompanyOnboardingSettings?>> GetSettingsAsync(int companyId, int? locationId = null);
+    Task<Result<List<int>>> GetLocationIdsWithSettingsAsync(int companyId);
     Task<Result<CompanyOnboardingSettings>> SaveSettingsAsync(CompanyOnboardingSettings settings);
     Task<Result<List<CompanyOnboardingStandingAttachment>>> GetStandingAttachmentsAsync(int companyId, int? locationId = null);
     Task<Result<CompanyOnboardingStandingAttachment>> AddStandingAttachmentAsync(int companyId, int? locationId, Guid fileMetadataId);

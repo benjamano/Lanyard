@@ -128,6 +128,7 @@
     private string? _selectedLocationId;
     private int? _loadedForCompanyId;
     private bool _canManageFiles;
+    private bool _initialScopeResolved;
 
     private int? EffectiveLocationId =>
         _configurePerLocation && int.TryParse(_selectedLocationId, out int id) ? id : null;
@@ -150,9 +151,17 @@
             _configurePerLocation = false;
             _selectedLocationId = null;
             _loadedForCompanyId = CompanyId;
+            _initialScopeResolved = false;
         }
 
         await LoadLocationsAsync();
+
+        if (!_initialScopeResolved)
+        {
+            await ResolveInitialScopeAsync();
+            _initialScopeResolved = true;
+        }
+
         await LoadAsync();
     }
 
@@ -169,6 +178,37 @@
         if (_selectedLocationId is null && _locations.Count > 0)
         {
             _selectedLocationId = _locations[0].Id.ToString();
+        }
+    }
+
+    // Reveals a location-specific config that was saved without a company-wide row underneath it -
+    // without this, the page always opens on the (nonexistent) company-wide scope and looks blank
+    // even though onboarding is actually configured for one location.
+    private async Task ResolveInitialScopeAsync()
+    {
+        if (_locations is null || _locations.Count == 0)
+        {
+            return;
+        }
+
+        Result<CompanyOnboardingSettings?> globalResult = await _onboardingService.GetSettingsAsync(CompanyId, null);
+
+        if (globalResult.IsSuccess && globalResult.Data is not null)
+        {
+            return;
+        }
+
+        Result<List<int>> configuredResult = await _onboardingService.GetLocationIdsWithSettingsAsync(CompanyId);
+        HashSet<int> configuredLocationIds = configuredResult.IsSuccess && configuredResult.Data is not null
+            ? [.. configuredResult.Data]
+            : [];
+
+        Location? firstConfigured = _locations.FirstOrDefault(l => configuredLocationIds.Contains(l.Id));
+
+        if (firstConfigured is not null)
+        {
+            _configurePerLocation = true;
+            _selectedLocationId = firstConfigured.Id.ToString();
         }
     }
 
@@ -220,9 +260,17 @@
             return;
         }
 
-        if (_editor is not null)
+        if (settings.SendWelcomeEmail && _editor is not null)
         {
-            settings.WelcomeEmailBodyHtml = await _editor.GetHTML();
+            try
+            {
+                settings.WelcomeEmailBodyHtml = await _editor.GetHTML();
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                // Editor not fully attached yet (e.g. just remounted) - keep whatever body was already
+                // loaded rather than failing the whole save, matching RenderTextAreaWidget's AutoSaveIfChangedAsync.
+            }
         }
 
         Result<CompanyOnboardingSettings> result = await _onboardingService.SaveSettingsAsync(settings);
