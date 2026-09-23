@@ -57,7 +57,7 @@
                         }
                         else
                         {
-                            <FluentSwitch @bind-Value="customizeWelcomeEmail" Label="Customize welcome email for this user" />
+                            <FluentSwitch Value="customizeWelcomeEmail" ValueChanged="OnCustomizeWelcomeEmailChanged" Label="Customize welcome email for this user" />
 
                             @if (customizeWelcomeEmail)
                             {
@@ -151,6 +151,11 @@
     private ElementReference _editorHostRef;
     private Guid? _loadedSettingsId;
 
+    // Bumped on every RefreshWelcomeEmailDefaultsAsync call so a stale response (e.g. from
+    // quickly switching locations) can detect it's no longer the latest and discard itself
+    // instead of overwriting a newer result.
+    private int _welcomeEmailDefaultsRequestId;
+
     protected override async Task OnInitializedAsync()
     {
         _editContext = new EditContext(model);
@@ -175,6 +180,7 @@
     // previewed default here is exactly what would actually be sent on submit.
     private async Task RefreshWelcomeEmailDefaultsAsync()
     {
+        int requestId = ++_welcomeEmailDefaultsRequestId;
         Location? firstLocation = selectedLocations.FirstOrDefault();
 
         if (firstLocation is null)
@@ -188,10 +194,33 @@
 
         Result<CompanyOnboardingSettings?> result = await _onboardingService.GetEffectiveSettingsAsync(firstLocation.CompanyId, firstLocation.Id);
 
+        if (requestId != _welcomeEmailDefaultsRequestId)
+        {
+            // A newer location selection fired its own request while this one was in flight -
+            // that result already won or is still pending, so applying this stale one now would
+            // overwrite it with the wrong location's defaults.
+            return;
+        }
+
         resolvedDefaultSettings = result.IsSuccess ? result.Data : null;
         welcomeEmailSubject = resolvedDefaultSettings?.WelcomeEmailSubject ?? "Welcome to Lanyard";
         isLoadingWelcomeEmailDefaults = false;
         StateHasChanged();
+    }
+
+    private void OnCustomizeWelcomeEmailChanged(bool value)
+    {
+        customizeWelcomeEmail = value;
+
+        if (value)
+        {
+            // The editor sits inside an @if(customizeWelcomeEmail) block, so turning this back on
+            // remounts a fresh BlazoredTextEditor instance. Without resetting this, the guard in
+            // OnAfterRenderAsync sees the same resolvedDefaultSettings.Id as before and skips
+            // LoadHTMLContent, leaving the new instance blank even though state still thinks
+            // content was already loaded.
+            _loadedSettingsId = null;
+        }
     }
 
     // BlazoredTextEditor does not accept initial content as a bound parameter - content must be

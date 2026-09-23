@@ -170,23 +170,7 @@ public class OnboardingService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
-            // A location-specific override, if one exists and is enabled, replaces the
-            // company-wide configuration entirely rather than merging field-by-field - simpler
-            // to reason about, and matches how the admin edits one scope at a time in the UI.
-            CompanyOnboardingSettings? settings = null;
-
-            if (locationId is int lid)
-            {
-                settings = await ctx.CompanyOnboardingSettings
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
-            }
-
-            settings ??= await ctx.CompanyOnboardingSettings
-                .AsNoTracking()
-                .TagWithCallSite()
-                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
+            CompanyOnboardingSettings? settings = await ResolveEffectiveSettingsAsync(ctx, companyId, locationId, cancellationToken);
 
             return Result<CompanyOnboardingSettings?>.Ok(settings);
         }
@@ -194,6 +178,33 @@ public class OnboardingService(
         {
             return Result<CompanyOnboardingSettings?>.Fail($"Failed to resolve effective onboarding settings: {ex.Message}");
         }
+    }
+
+    // Shared by GetEffectiveSettingsAsync (its own short-lived context) and TriggerOnboardingAsync
+    // (reuses the context it already has open for the Users lookup) so the latter doesn't pay for
+    // a second DB connection on a path that's fired synchronously during user creation.
+    private static async Task<CompanyOnboardingSettings?> ResolveEffectiveSettingsAsync(
+        ApplicationDbContext ctx, int companyId, int? locationId, CancellationToken cancellationToken)
+    {
+        // A location-specific override, if one exists and is enabled, replaces the company-wide
+        // configuration entirely rather than merging field-by-field - simpler to reason about,
+        // and matches how the admin edits one scope at a time in the UI.
+        CompanyOnboardingSettings? settings = null;
+
+        if (locationId is int lid)
+        {
+            settings = await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
+        }
+
+        settings ??= await ctx.CompanyOnboardingSettings
+            .AsNoTracking()
+            .TagWithCallSite()
+            .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
+
+        return settings;
     }
 
     public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken,
@@ -220,14 +231,7 @@ public class OnboardingService(
                 return Result<bool>.Fail("User not found.");
             }
 
-            Result<CompanyOnboardingSettings?> settingsResult = await GetEffectiveSettingsAsync(companyId, locationId, cancellationToken);
-
-            if (!settingsResult.IsSuccess)
-            {
-                return Result<bool>.Fail(settingsResult.Error!);
-            }
-
-            CompanyOnboardingSettings? settings = settingsResult.Data;
+            CompanyOnboardingSettings? settings = await ResolveEffectiveSettingsAsync(ctx, companyId, locationId, cancellationToken);
 
             if (settings is null || !settings.SendWelcomeEmail)
             {
