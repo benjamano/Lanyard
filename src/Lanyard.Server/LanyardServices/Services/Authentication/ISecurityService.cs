@@ -16,7 +16,8 @@ namespace Lanyard.Application.Services.Authentication
         Task UpdateUserProfileAsync(UserProfile updatedUserProfile);
         Task<IEnumerable<UserProfile>> GetActiveUsersAsync();
         Task<IEnumerable<UserProfile>> GetActiveUsersInLocationAsync(int locationId);
-        Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds);
+        Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds,
+            string? welcomeEmailSubjectOverride = null, string? welcomeEmailBodyHtmlOverride = null);
         Task<Result<bool>> DeleteUserAsync(string userId);
         Task<Result<bool>> UnlockUserAsync(string userId);
         Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword);

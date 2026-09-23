@@ -300,5 +300,15 @@
       "Selecting or dropping more files than allowed now shows a clear message instead of crashing the page.",
       "Fixed a bug where removing a standing attachment from the Onboarding settings page permanently blocked that file from being deleted in the File Manager, even though it was no longer attached to anything."
     ]
+  },
+  {
+    "version": "1.3.21",
+    "releaseDate": "2026-09-23",
+    "summary": "Admins can now customize a new user's welcome email at the point of registration.",
+    "details": [
+      "The Register New User dialog now shows a \"Customize welcome email for this user\" option once a location is selected, prefilled with that location's default subject and rich-text body.",
+      "Editing the subject or body only changes the email sent to that one new user - the shared company/location welcome email template is left untouched.",
+      "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
+    ]
   }
 ]

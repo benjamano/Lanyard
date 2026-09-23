@@ -164,7 +164,40 @@ public class OnboardingService(
         }
     }
 
-    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken)
+    public async Task<Result<CompanyOnboardingSettings?>> GetEffectiveSettingsAsync(int companyId, int? locationId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            // A location-specific override, if one exists and is enabled, replaces the
+            // company-wide configuration entirely rather than merging field-by-field - simpler
+            // to reason about, and matches how the admin edits one scope at a time in the UI.
+            CompanyOnboardingSettings? settings = null;
+
+            if (locationId is int lid)
+            {
+                settings = await ctx.CompanyOnboardingSettings
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
+            }
+
+            settings ??= await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
+
+            return Result<CompanyOnboardingSettings?>.Ok(settings);
+        }
+        catch (Exception ex)
+        {
+            return Result<CompanyOnboardingSettings?>.Fail($"Failed to resolve effective onboarding settings: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> TriggerOnboardingAsync(string userId, int? locationId, CancellationToken cancellationToken,
+        string? subjectOverride = null, string? bodyHtmlOverride = null)
     {
         try
         {
@@ -187,32 +220,14 @@ public class OnboardingService(
                 return Result<bool>.Fail("User not found.");
             }
 
-            // A location-specific override, if one exists and is enabled, replaces the
-            // company-wide configuration entirely rather than merging field-by-field - simpler
-            // to reason about, and matches how the admin edits one scope at a time in the UI.
-            CompanyOnboardingSettings? settings = null;
-            int? resolvedLocationId = null;
+            Result<CompanyOnboardingSettings?> settingsResult = await GetEffectiveSettingsAsync(companyId, locationId, cancellationToken);
 
-            if (locationId is int lid)
+            if (!settingsResult.IsSuccess)
             {
-                settings = await ctx.CompanyOnboardingSettings
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == lid, cancellationToken);
-
-                if (settings is not null)
-                {
-                    resolvedLocationId = lid;
-                }
+                return Result<bool>.Fail(settingsResult.Error!);
             }
 
-            if (settings is null)
-            {
-                settings = await ctx.CompanyOnboardingSettings
-                    .AsNoTracking()
-                    .TagWithCallSite()
-                    .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.LocationId == null, cancellationToken);
-            }
+            CompanyOnboardingSettings? settings = settingsResult.Data;
 
             if (settings is null || !settings.SendWelcomeEmail)
             {
@@ -227,7 +242,7 @@ public class OnboardingService(
                     .AsNoTracking()
                     .TagWithCallSite()
                     .Include(x => x.FileMetadata)
-                    .Where(x => x.CompanyId == companyId && x.LocationId == resolvedLocationId && x.IsActive)
+                    .Where(x => x.CompanyId == companyId && x.LocationId == settings.LocationId && x.IsActive)
                     .OrderBy(x => x.SortOrder)
                     .ToListAsync(cancellationToken);
 
@@ -247,8 +262,8 @@ public class OnboardingService(
 
             return await _emailService.SendOnboardingWelcomeEmailAsync(
                 user,
-                settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
-                settings.WelcomeEmailBodyHtml ?? string.Empty,
+                subjectOverride ?? settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
+                bodyHtmlOverride ?? settings.WelcomeEmailBodyHtml ?? string.Empty,
                 logoUrl,
                 branding.AccentColorHex,
                 attachments);

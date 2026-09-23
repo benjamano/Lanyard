@@ -1,7 +1,9 @@
 ﻿@using Lanyard.Application.Services.Authentication
+@using Lanyard.Application.Services.Onboarding
 @using Lanyard.Infrastructure.Models
 
 @inject INotificationService ToastService
+@inject IOnboardingService _onboardingService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -36,8 +38,52 @@
                                   Items="@availableLocations"
                                   OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
                                   OptionValue="@(l => l?.Id ?? 0)"
-                                  @bind-SelectedItems="selectedLocations"
+                                  SelectedItems="@selectedLocations" SelectedItemsChanged="OnSelectedLocationsChangedAsync"
                                   Label="Location(s)" Required="true" Style="width: 100%;" />
+
+                    @if (selectedLocations.Any())
+                    {
+                        @if (isLoadingWelcomeEmailDefaults)
+                        {
+                            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                                <FluentSpinner Style="width: 16px; height: 16px;" />
+                            </FluentStack>
+                        }
+                        else if (resolvedDefaultSettings is null || !resolvedDefaultSettings.SendWelcomeEmail)
+                        {
+                            <FluentMessageBar Intent="MessageBarIntent.Info">
+                                Welcome emails aren't enabled for the selected location(s) - there's nothing to customize.
+                            </FluentMessageBar>
+                        }
+                        else
+                        {
+                            <FluentSwitch @bind-Value="customizeWelcomeEmail" Label="Customize welcome email for this user" />
+
+                            @if (customizeWelcomeEmail)
+                            {
+                                <FluentTextInput @bind-Value="welcomeEmailSubject" Label="Welcome email subject" Width="100%"
+                                                  Placeholder="Welcome to Lanyard" />
+
+                                <FluentText Typo="Typography.Body">Welcome email body</FluentText>
+                                <div class="onboarding-editor-host" @ref="_editorHostRef">
+                                    <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
+                                        <ToolbarContent>
+                                            <span class="ql-formats">
+                                                <button class="ql-bold"></button>
+                                                <button class="ql-italic"></button>
+                                                <button class="ql-underline"></button>
+                                            </span>
+                                            <span class="ql-formats">
+                                                <button class="ql-list" value="ordered"></button>
+                                                <button class="ql-list" value="bullet"></button>
+                                            </span>
+                                        </ToolbarContent>
+                                        <EditorContent></EditorContent>
+                                    </BlazoredTextEditor>
+                                </div>
+                            }
+                        }
+                    }
 
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
                         <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
@@ -97,6 +143,14 @@
     private List<Location> availableLocations = [];
     private IEnumerable<Location> selectedLocations = [];
 
+    private bool customizeWelcomeEmail;
+    private string welcomeEmailSubject = string.Empty;
+    private CompanyOnboardingSettings? resolvedDefaultSettings;
+    private bool isLoadingWelcomeEmailDefaults;
+    private BlazoredTextEditor? _editor;
+    private ElementReference _editorHostRef;
+    private Guid? _loadedSettingsId;
+
     protected override async Task OnInitializedAsync()
     {
         _editContext = new EditContext(model);
@@ -106,6 +160,57 @@
         if (locationsResult.IsSuccess)
         {
             availableLocations = locationsResult.Data!;
+        }
+    }
+
+    private async Task OnSelectedLocationsChangedAsync(IEnumerable<Location> newSelection)
+    {
+        selectedLocations = newSelection;
+        customizeWelcomeEmail = false;
+        _loadedSettingsId = null;
+        await RefreshWelcomeEmailDefaultsAsync();
+    }
+
+    // Mirrors TriggerOnboardingAsync's own "first of the selected locations" lookup key, so the
+    // previewed default here is exactly what would actually be sent on submit.
+    private async Task RefreshWelcomeEmailDefaultsAsync()
+    {
+        Location? firstLocation = selectedLocations.FirstOrDefault();
+
+        if (firstLocation is null)
+        {
+            resolvedDefaultSettings = null;
+            return;
+        }
+
+        isLoadingWelcomeEmailDefaults = true;
+        StateHasChanged();
+
+        Result<CompanyOnboardingSettings?> result = await _onboardingService.GetEffectiveSettingsAsync(firstLocation.CompanyId, firstLocation.Id);
+
+        resolvedDefaultSettings = result.IsSuccess ? result.Data : null;
+        welcomeEmailSubject = resolvedDefaultSettings?.WelcomeEmailSubject ?? "Welcome to Lanyard";
+        isLoadingWelcomeEmailDefaults = false;
+        StateHasChanged();
+    }
+
+    // BlazoredTextEditor does not accept initial content as a bound parameter - content must be
+    // pushed in via LoadHTMLContent() after the component has mounted, same as
+    // OnboardingSettingsManager.razor.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (customizeWelcomeEmail && _editor is not null && resolvedDefaultSettings is not null
+            && _loadedSettingsId != resolvedDefaultSettings.Id)
+        {
+            try
+            {
+                await _editor.LoadHTMLContent(resolvedDefaultSettings.WelcomeEmailBodyHtml ?? string.Empty);
+                _loadedSettingsId = resolvedDefaultSettings.Id;
+            }
+            catch (Microsoft.JSInterop.JSException)
+            {
+                StateHasChanged();
+            }
         }
     }
 
@@ -131,7 +236,17 @@
                 return;
             }
 
-            Result<UserCreationResult> result = await _securityService.CreateUserAsync(newUser, selectedLocations.Select(l => l.Id).ToList());
+            string? subjectOverride = null;
+            string? bodyHtmlOverride = null;
+
+            if (customizeWelcomeEmail)
+            {
+                subjectOverride = welcomeEmailSubject;
+                bodyHtmlOverride = _editor is not null ? await _editor.GetHTML() : null;
+            }
+
+            Result<UserCreationResult> result = await _securityService.CreateUserAsync(
+                newUser, selectedLocations.Select(l => l.Id).ToList(), subjectOverride, bodyHtmlOverride);
 
             if (result.IsSuccess)
             {
