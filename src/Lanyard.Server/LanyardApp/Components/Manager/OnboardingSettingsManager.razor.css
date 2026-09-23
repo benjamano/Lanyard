@@ -1,4 +1,7 @@
-/* The default vertical FluentStack has align-items: start, so a plain child div shrinks to
+/* Same Quill theming as RegisterUserDialog.razor.css - Blazor's scoped CSS is per-file, so that
+   dialog carries its own copy of these dark-mode-aware overrides rather than inheriting this
+   file's rules. Keep the two in sync if you change the theming here.
+   The default vertical FluentStack has align-items: start, so a plain child div shrinks to
    Quill's own intrinsic width instead of filling the card - same gotcha as the dashboard text
    widget and course editor. */
 .onboarding-editor-host {

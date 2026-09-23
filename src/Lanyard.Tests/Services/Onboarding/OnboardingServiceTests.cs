@@ -685,4 +685,128 @@ public class OnboardingServiceTests
             It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()),
             Times.Never);
     }
+
+    [TestMethod]
+    public async Task GetEffectiveSettingsAsync_LocationOverrideExists_ReturnsLocationSettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        Location location = await SeedLocationAsync(options, company.Id);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CompanyOnboardingSettings.AddRange(
+                new CompanyOnboardingSettings { CompanyId = company.Id, LocationId = null, SendWelcomeEmail = true, WelcomeEmailSubject = "Company-wide" },
+                new CompanyOnboardingSettings { CompanyId = company.Id, LocationId = location.Id, SendWelcomeEmail = true, WelcomeEmailSubject = "Location-specific" });
+            await ctx.SaveChangesAsync();
+        }
+
+        OnboardingService service = GetService(options);
+        Result<CompanyOnboardingSettings?> result = await service.GetEffectiveSettingsAsync(company.Id, location.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual("Location-specific", result.Data?.WelcomeEmailSubject);
+    }
+
+    [TestMethod]
+    public async Task GetEffectiveSettingsAsync_NoLocationOverride_FallsBackToCompanyWideSettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        Location location = await SeedLocationAsync(options, company.Id);
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CompanyOnboardingSettings.Add(
+                new CompanyOnboardingSettings { CompanyId = company.Id, LocationId = null, SendWelcomeEmail = true, WelcomeEmailSubject = "Company-wide" });
+            await ctx.SaveChangesAsync();
+        }
+
+        OnboardingService service = GetService(options);
+        Result<CompanyOnboardingSettings?> result = await service.GetEffectiveSettingsAsync(company.Id, location.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual("Company-wide", result.Data?.WelcomeEmailSubject);
+    }
+
+    [TestMethod]
+    public async Task TriggerOnboardingAsync_SubjectAndBodyOverridesProvided_SendsOverridesInsteadOfSettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        string userId;
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            UserProfile user = new() { UserName = "jdoe", Email = "jane@example.com" };
+            ctx.Users.Add(user);
+            ctx.CompanyOnboardingSettings.Add(new CompanyOnboardingSettings
+            {
+                CompanyId = company.Id,
+                SendWelcomeEmail = true,
+                WelcomeEmailSubject = "Default subject",
+                WelcomeEmailBodyHtml = "<p>Default body</p>"
+            });
+            await ctx.SaveChangesAsync();
+            userId = user.Id;
+        }
+
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock.Setup(b => b.ResolveAsync(userId, It.IsAny<int?>(), null))
+            .ReturnsAsync(new TrainingBranding("#123456", company.Id, null));
+
+        Mock<IEmailService> emailServiceMock = new();
+        emailServiceMock.Setup(e => e.SendOnboardingWelcomeEmailAsync(
+                It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        OnboardingService service = GetService(options, emailServiceMock: emailServiceMock, brandingResolverMock: brandingResolverMock);
+        await service.TriggerOnboardingAsync(userId, null, CancellationToken.None, "Custom subject", "<p>Custom body</p>");
+
+        emailServiceMock.Verify(e => e.SendOnboardingWelcomeEmailAsync(
+            It.IsAny<UserProfile>(), "Custom subject", "<p>Custom body</p>", It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()),
+            Times.Once);
+    }
+
+    [TestMethod]
+    public async Task TriggerOnboardingAsync_SubjectOverrideEmpty_FallsBackToSettingsSubject()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        string userId;
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            UserProfile user = new() { UserName = "jdoe", Email = "jane@example.com" };
+            ctx.Users.Add(user);
+            ctx.CompanyOnboardingSettings.Add(new CompanyOnboardingSettings
+            {
+                CompanyId = company.Id,
+                SendWelcomeEmail = true,
+                WelcomeEmailSubject = "Default subject",
+                WelcomeEmailBodyHtml = "<p>Default body</p>"
+            });
+            await ctx.SaveChangesAsync();
+            userId = user.Id;
+        }
+
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock.Setup(b => b.ResolveAsync(userId, It.IsAny<int?>(), null))
+            .ReturnsAsync(new TrainingBranding("#123456", company.Id, null));
+
+        Mock<IEmailService> emailServiceMock = new();
+        emailServiceMock.Setup(e => e.SendOnboardingWelcomeEmailAsync(
+                It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+
+        OnboardingService service = GetService(options, emailServiceMock: emailServiceMock, brandingResolverMock: brandingResolverMock);
+
+        // An empty subjectOverride (e.g. the admin clears the prefilled field) must fall back to
+        // the location/company default rather than sending a blank subject line.
+        await service.TriggerOnboardingAsync(userId, null, CancellationToken.None, string.Empty, null);
+
+        emailServiceMock.Verify(e => e.SendOnboardingWelcomeEmailAsync(
+            It.IsAny<UserProfile>(), "Default subject", It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()),
+            Times.Once);
+    }
 }

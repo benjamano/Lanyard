@@ -49,6 +49,12 @@
                                 <FluentSpinner Style="width: 16px; height: 16px;" />
                             </FluentStack>
                         }
+                        else if (welcomeEmailDefaultsLoadFailed)
+                        {
+                            <FluentMessageBar Intent="MessageBarIntent.Error">
+                                Couldn't check welcome email settings for the selected location(s). Reselect the location to try again.
+                            </FluentMessageBar>
+                        }
                         else if (resolvedDefaultSettings is null || !resolvedDefaultSettings.SendWelcomeEmail)
                         {
                             <FluentMessageBar Intent="MessageBarIntent.Info">
@@ -65,7 +71,7 @@
                                                   Placeholder="Welcome to Lanyard" />
 
                                 <FluentText Typo="Typography.Body">Welcome email body</FluentText>
-                                <div class="onboarding-editor-host" @ref="_editorHostRef">
+                                <div class="onboarding-editor-host">
                                     <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
                                         <ToolbarContent>
                                             <span class="ql-formats">
@@ -147,8 +153,8 @@
     private string welcomeEmailSubject = string.Empty;
     private CompanyOnboardingSettings? resolvedDefaultSettings;
     private bool isLoadingWelcomeEmailDefaults;
+    private bool welcomeEmailDefaultsLoadFailed;
     private BlazoredTextEditor? _editor;
-    private ElementReference _editorHostRef;
     private Guid? _loadedSettingsId;
 
     // Bumped on every RefreshWelcomeEmailDefaultsAsync call so a stale response (e.g. from
@@ -186,11 +192,21 @@
         if (firstLocation is null)
         {
             resolvedDefaultSettings = null;
+            welcomeEmailDefaultsLoadFailed = false;
             return;
         }
 
         isLoadingWelcomeEmailDefaults = true;
         StateHasChanged();
+
+        // Debounce rapid successive location changes (e.g. selecting several locations one at a
+        // time in the multi-select) so only the final selection pays for a DB round trip.
+        await Task.Delay(300);
+
+        if (requestId != _welcomeEmailDefaultsRequestId)
+        {
+            return;
+        }
 
         Result<CompanyOnboardingSettings?> result = await _onboardingService.GetEffectiveSettingsAsync(firstLocation.CompanyId, firstLocation.Id);
 
@@ -202,6 +218,7 @@
             return;
         }
 
+        welcomeEmailDefaultsLoadFailed = !result.IsSuccess;
         resolvedDefaultSettings = result.IsSuccess ? result.Data : null;
         welcomeEmailSubject = resolvedDefaultSettings?.WelcomeEmailSubject ?? "Welcome to Lanyard";
         isLoadingWelcomeEmailDefaults = false;
@@ -271,7 +288,21 @@
             if (customizeWelcomeEmail)
             {
                 subjectOverride = welcomeEmailSubject;
-                bodyHtmlOverride = _editor is not null ? await _editor.GetHTML() : null;
+
+                if (_editor is not null)
+                {
+                    // The default body is loaded into the editor asynchronously in
+                    // OnAfterRenderAsync, which may not have completed yet if the switch was
+                    // only just turned on - make sure it has before reading the content back
+                    // out, or GetHTML() can return blank.
+                    if (resolvedDefaultSettings is not null && _loadedSettingsId != resolvedDefaultSettings.Id)
+                    {
+                        await _editor.LoadHTMLContent(resolvedDefaultSettings.WelcomeEmailBodyHtml ?? string.Empty);
+                        _loadedSettingsId = resolvedDefaultSettings.Id;
+                    }
+
+                    bodyHtmlOverride = await _editor.GetHTML();
+                }
             }
 
             Result<UserCreationResult> result = await _securityService.CreateUserAsync(
