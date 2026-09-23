@@ -266,7 +266,7 @@ public class OnboardingService(
 
             return await _emailService.SendOnboardingWelcomeEmailAsync(
                 user,
-                subjectOverride ?? settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
+                !string.IsNullOrWhiteSpace(subjectOverride) ? subjectOverride : settings.WelcomeEmailSubject ?? "Welcome to Lanyard",
                 bodyHtmlOverride ?? settings.WelcomeEmailBodyHtml ?? string.Empty,
                 logoUrl,
                 branding.AccentColorHex,
