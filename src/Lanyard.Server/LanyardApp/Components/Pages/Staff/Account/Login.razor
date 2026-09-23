@@ -19,13 +19,13 @@
 
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="10"
                          HorizontalAlignment="HorizontalAlignment.Stretch" Class="company-picker">
-                @if (!companyOptions.Any())
+                @if (!CompanyOptions.Any())
                 {
                     <FluentText>Loading companies...</FluentText>
                 }
                 else
                 {
-                    @foreach (LoginCompanyOption company in companyOptions)
+                    @foreach (LoginCompanyOption company in CompanyOptions)
                     {
                         <FluentButton Appearance="ButtonAppearance.Outline" Class="company-picker-button"
                                       OnClick="@(() => SelectCompany(company.CompanyId))">
@@ -89,12 +89,12 @@ else
                             <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                         </FluentTextInput>
 
-                        @if (locationOptions.Any())
+                        @if (LocationOptions.Any())
                         {
                             <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
                                           Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
                                           ValueChanged="@(item => OnLocationChanged(item))" Class="login-full-width"
-                                          Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
+                                          Items="@LocationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
                                           OptionValue="@(option => option.LocationId)" />
                         }
                         else
@@ -132,12 +132,32 @@ else
     [SupplyParameterFromQuery(Name = "company")]
     public int? CompanyId { get; set; }
 
-    private IEnumerable<LoginLocationOption> locationOptions = [];
-    private IEnumerable<LoginCompanyOption> companyOptions = [];
+    // This page prerenders, then initialises again on the interactive circuit. The company picker
+    // list, or the chosen company's branding and locations, are carried across from the prerender
+    // pass so the interactive pass renders the same data without re-querying it (and without the
+    // picker briefly collapsing back to "Loading companies..."). It is all public, pre-login data.
+    // LoadedForCompanyId is the guard: the skip only applies while the company in the query string
+    // still matches what the state was loaded for, so switching company in-circuit reloads as normal.
+    [PersistentState]
+    public bool StateLoaded { get; set; }
 
-    private string? SelectedAccentColor;
-    private string? SelectedLogoUrl;
-    private string? BackgroundImageUrl;
+    [PersistentState]
+    public int? LoadedForCompanyId { get; set; }
+
+    [PersistentState]
+    public List<LoginLocationOption> LocationOptions { get; set; } = [];
+
+    [PersistentState]
+    public List<LoginCompanyOption> CompanyOptions { get; set; } = [];
+
+    [PersistentState]
+    public string? SelectedAccentColor { get; set; }
+
+    [PersistentState]
+    public string? SelectedLogoUrl { get; set; }
+
+    [PersistentState]
+    public string? BackgroundImageUrl { get; set; }
 
     // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
     private string? _pendingThemeColor;
@@ -152,6 +172,24 @@ else
     // reuses this instance and re-invokes parameter binding rather than recreating it.
     protected override async Task OnParametersSetAsync()
     {
+        // The [PersistentState] binder supplies null on the first parameter set when there is
+        // nothing to restore (the prerender pass), overriding the field initialisers.
+        CompanyOptions ??= [];
+        LocationOptions ??= [];
+
+        if (StateLoaded && LoadedForCompanyId == CompanyId)
+        {
+            // Data already in hand for this company (restored from the prerender pass, or loaded
+            // earlier in this circuit). Only the theme still needs applying - see OnAfterRenderAsync.
+            _pendingThemeColor = CompanyId is null || SelectedAccentColor is null
+                ? BrandConstants.PrimaryColorHex
+                : BrandConstants.ResolveAccentColor(SelectedAccentColor);
+            return;
+        }
+
+        StateLoaded = true;
+        LoadedForCompanyId = CompanyId;
+
         if (CompanyId is null)
         {
             await LoadCompanyOptionsAsync();
@@ -165,6 +203,7 @@ else
         {
             // Stale/invalid company id in the URL - fall back to the company picker.
             CompanyId = null;
+            LoadedForCompanyId = null;
             await LoadCompanyOptionsAsync();
             _pendingThemeColor = BrandConstants.PrimaryColorHex;
             return;
@@ -182,7 +221,7 @@ else
 
         if (result.IsSuccess)
         {
-            locationOptions = result.Data!;
+            LocationOptions = result.Data!;
         }
     }
 
@@ -213,7 +252,7 @@ else
 
         if (result.IsSuccess)
         {
-            companyOptions = result.Data!;
+            CompanyOptions = result.Data!;
         }
     }
 
@@ -224,7 +263,7 @@ else
 
     private void OnLocationChanged(int locationId)
     {
-        LoginLocationOption? option = locationOptions.FirstOrDefault(x => x.LocationId == locationId);
+        LoginLocationOption? option = LocationOptions.FirstOrDefault(x => x.LocationId == locationId);
 
         SelectedAccentColor = option?.ThemeColorHex;
         SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
