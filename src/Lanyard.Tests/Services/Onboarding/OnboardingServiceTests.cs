@@ -139,6 +139,36 @@ public class OnboardingServiceTests
     }
 
     [TestMethod]
+    public async Task GetLocationIdsWithSettingsAsync_NoRows_ReturnsEmpty()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+
+        OnboardingService service = GetService(options);
+        Result<List<int>> result = await service.GetLocationIdsWithSettingsAsync(company.Id);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(0, result.Data!.Count);
+    }
+
+    [TestMethod]
+    public async Task GetLocationIdsWithSettingsAsync_CompanyWideAndLocationRows_ExcludesCompanyWide()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        Location location = await SeedLocationAsync(options, company.Id);
+
+        OnboardingService service = GetService(options);
+        await service.SaveSettingsAsync(new CompanyOnboardingSettings { CompanyId = company.Id, LocationId = null, SendWelcomeEmail = false });
+        await service.SaveSettingsAsync(new CompanyOnboardingSettings { CompanyId = company.Id, LocationId = location.Id, SendWelcomeEmail = true });
+
+        Result<List<int>> result = await service.GetLocationIdsWithSettingsAsync(company.Id);
+
+        Assert.IsTrue(result.IsSuccess);
+        CollectionAssert.AreEqual(new[] { location.Id }, result.Data);
+    }
+
+    [TestMethod]
     public async Task AddStandingAttachmentAsync_ThenGetStandingAttachmentsAsync_ReturnsItOrderedBySortOrder()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

@@ -49,6 +49,27 @@ public class OnboardingService(
         }
     }
 
+    public async Task<Result<List<int>>> GetLocationIdsWithSettingsAsync(int companyId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<int> locationIds = await ctx.CompanyOnboardingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.CompanyId == companyId && x.LocationId != null)
+                .Select(x => x.LocationId!.Value)
+                .ToListAsync();
+
+            return Result<List<int>>.Ok(locationIds);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<int>>.Fail($"Failed to retrieve configured locations: {ex.Message}");
+        }
+    }
+
     public async Task<Result<CompanyOnboardingSettings>> SaveSettingsAsync(CompanyOnboardingSettings settings)
     {
         try
