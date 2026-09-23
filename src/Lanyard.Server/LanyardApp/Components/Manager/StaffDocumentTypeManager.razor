@@ -36,13 +36,6 @@
                             <div class="document-type-list-meta">
                                 @(type.RequiresExpiryDate ? "Requires an expiry date" : "No expiry date required")
                             </div>
-                            <div class="document-type-list-reminder-label">Reminder days before expiry</div>
-                            <div class="document-type-list-reminder">
-                                <FluentTextInput Value="@FormatIntervals(type)" ValueChanged="@((string v) => { intervalEdits[type.Id] = v; })"
-                                                  Placeholder="e.g. 30,14,7" Width="100%" aria-label="Reminder days before expiry" />
-                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Save())"
-                                              Title="Save reminder days" OnClick="@(() => SaveIntervalsAsync(type.Id))" />
-                            </div>
                         </div>
                         <div class="document-type-list-actions">
                             <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Deactivate"
@@ -65,7 +58,6 @@
     public required int CompanyId { get; set; }
 
     private List<StaffDocumentType>? documentTypes;
-    private readonly Dictionary<Guid, string> intervalEdits = [];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -77,36 +69,6 @@
         Result<List<StaffDocumentType>> result = await _staffDocumentTypeService.GetDocumentTypesAsync(CompanyId);
 
         documentTypes = result.IsSuccess ? result.Data : [];
-    }
-
-    private string FormatIntervals(StaffDocumentType type) =>
-        intervalEdits.TryGetValue(type.Id, out string? edited)
-            ? edited
-            : string.Join(",", type.ReminderIntervals.OrderByDescending(x => x.DaysBeforeExpiry).Select(x => x.DaysBeforeExpiry));
-
-    private async Task SaveIntervalsAsync(Guid documentTypeId)
-    {
-        string raw = intervalEdits.TryGetValue(documentTypeId, out string? edited)
-            ? edited
-            : FormatIntervals(documentTypes!.First(x => x.Id == documentTypeId));
-
-        List<int> days = [.. raw
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => int.TryParse(x, out int value) ? value : (int?)null)
-            .Where(x => x.HasValue)
-            .Select(x => x!.Value)];
-
-        Result<bool> result = await _staffDocumentTypeService.SaveReminderIntervalsAsync(documentTypeId, days);
-
-        if (!result.IsSuccess)
-        {
-            ToastService.ShowError($"Failed to save reminder days: {result.Error}");
-            return;
-        }
-
-        ToastService.ShowSuccess("Reminder days saved.");
-        intervalEdits.Remove(documentTypeId);
-        await LoadAsync();
     }
 
     private async Task OpenCreateDialogAsync()
