@@ -285,11 +285,27 @@ public class FileService : IFileService
             // SaveChangesAsync - the physical delete below happens first and can't be rolled back,
             // so catching this only at the DB step would still lose the bytes while leaving the
             // referencing StaffDocument/attachment row pointing at nothing.
-            bool isReferenced = await db.StaffDocuments.AnyAsync(x => x.FileMetadataId == file.Id, cancellationToken)
-                || await db.CompanyOnboardingStandingAttachments.AnyAsync(x => x.FileMetadataId == file.Id, cancellationToken);
+            bool isReferenced = await db.StaffDocuments.AnyAsync(x => x.FileMetadataId == file.Id && x.IsActive, cancellationToken)
+                || await db.CompanyOnboardingStandingAttachments.AnyAsync(x => x.FileMetadataId == file.Id && x.IsActive, cancellationToken);
 
             if (isReferenced)
                 return Result<bool>.Fail("This file is attached to a staff document or an onboarding email and cannot be deleted.");
+
+            // StaffDocument/CompanyOnboardingStandingAttachment are soft-delete models, so an
+            // inactive row is never actually removed from the table - it would otherwise sit
+            // there permanently holding the FK's Restrict behavior against this file, blocking
+            // the delete below even though the row is no longer active. Once the file itself is
+            // being deleted, a stale reference to it has no further use, so these are hard-deleted
+            // here rather than left as orphaned rows pointing at nothing.
+            List<StaffDocument> inactiveStaffDocuments = await db.StaffDocuments
+                .Where(x => x.FileMetadataId == file.Id && !x.IsActive)
+                .ToListAsync(cancellationToken);
+            db.StaffDocuments.RemoveRange(inactiveStaffDocuments);
+
+            List<CompanyOnboardingStandingAttachment> inactiveStandingAttachments = await db.CompanyOnboardingStandingAttachments
+                .Where(x => x.FileMetadataId == file.Id && !x.IsActive)
+                .ToListAsync(cancellationToken);
+            db.CompanyOnboardingStandingAttachments.RemoveRange(inactiveStandingAttachments);
 
             if (_isDevelopment)
             {
