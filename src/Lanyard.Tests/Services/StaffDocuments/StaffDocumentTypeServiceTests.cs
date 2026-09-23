@@ -124,45 +124,4 @@ public class StaffDocumentTypeServiceTests
         StaffDocumentType type = await verifyCtx.StaffDocumentTypes.FirstAsync(x => x.Id == typeId);
         Assert.IsFalse(type.IsActive);
     }
-
-    [TestMethod]
-    public async Task SaveReminderIntervalsAsync_AddsNewAndDeactivatesRemoved()
-    {
-        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Company company = await SeedCompanyAsync(options);
-        Guid typeId = Guid.NewGuid();
-        Guid existingIntervalId = Guid.NewGuid();
-
-        await using (ApplicationDbContext ctx = new(options))
-        {
-            ctx.StaffDocumentTypes.Add(new StaffDocumentType { Id = typeId, CompanyId = company.Id, Name = "DBS Check", IsActive = true });
-            ctx.StaffDocumentReminderIntervals.Add(new StaffDocumentReminderInterval
-            {
-                Id = existingIntervalId,
-                StaffDocumentTypeId = typeId,
-                DaysBeforeExpiry = 7,
-                IsActive = true
-            });
-            await ctx.SaveChangesAsync();
-        }
-
-        StaffDocumentTypeService service = GetService(options);
-
-        // Replace 7 with 30 and 14 - the old 7-day interval should be deactivated, not deleted
-        // (so any StaffDocumentReminderSent rows referencing it via FK stay intact), and the two
-        // new thresholds should be added as active.
-        Result<bool> result = await service.SaveReminderIntervalsAsync(typeId, [30, 14]);
-
-        Assert.IsTrue(result.IsSuccess);
-
-        await using ApplicationDbContext verifyCtx = new(options);
-        List<StaffDocumentReminderInterval> intervals = await verifyCtx.StaffDocumentReminderIntervals
-            .Where(x => x.StaffDocumentTypeId == typeId)
-            .ToListAsync();
-
-        Assert.AreEqual(3, intervals.Count);
-        Assert.IsFalse(intervals.Single(x => x.DaysBeforeExpiry == 7).IsActive);
-        Assert.IsTrue(intervals.Single(x => x.DaysBeforeExpiry == 30).IsActive);
-        Assert.IsTrue(intervals.Single(x => x.DaysBeforeExpiry == 14).IsActive);
-    }
 }

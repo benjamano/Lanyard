@@ -18,7 +18,6 @@ public class StaffDocumentTypeService(IDbContextFactory<ApplicationDbContext> fa
             List<StaffDocumentType> types = await ctx.StaffDocumentTypes
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.ReminderIntervals.Where(i => i.IsActive))
                 .Where(x => x.CompanyId == companyId && x.IsActive)
                 .OrderBy(x => x.SortOrder)
                 .ToListAsync();
@@ -96,53 +95,6 @@ public class StaffDocumentTypeService(IDbContextFactory<ApplicationDbContext> fa
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to deactivate document type: {ex.Message}");
-        }
-    }
-
-    public async Task<Result<bool>> SaveReminderIntervalsAsync(Guid documentTypeId, List<int> daysBeforeExpiry)
-    {
-        try
-        {
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            bool typeExists = await ctx.StaffDocumentTypes.AnyAsync(x => x.Id == documentTypeId);
-
-            if (!typeExists)
-            {
-                return Result<bool>.Fail("Document type not found.");
-            }
-
-            List<StaffDocumentReminderInterval> existingIntervals = await ctx.StaffDocumentReminderIntervals
-                .Where(x => x.StaffDocumentTypeId == documentTypeId)
-                .ToListAsync();
-
-            HashSet<int> desired = [.. daysBeforeExpiry.Where(x => x > 0).Distinct()];
-
-            foreach (StaffDocumentReminderInterval existing in existingIntervals)
-            {
-                existing.IsActive = desired.Contains(existing.DaysBeforeExpiry);
-            }
-
-            HashSet<int> alreadyPresent = [.. existingIntervals.Select(x => x.DaysBeforeExpiry)];
-
-            foreach (int days in desired.Where(x => !alreadyPresent.Contains(x)))
-            {
-                ctx.StaffDocumentReminderIntervals.Add(new StaffDocumentReminderInterval
-                {
-                    Id = Guid.NewGuid(),
-                    StaffDocumentTypeId = documentTypeId,
-                    DaysBeforeExpiry = days,
-                    IsActive = true
-                });
-            }
-
-            await ctx.SaveChangesAsync();
-
-            return Result<bool>.Ok(true);
-        }
-        catch (Exception ex)
-        {
-            return Result<bool>.Fail($"Failed to save reminder intervals: {ex.Message}");
         }
     }
 }
