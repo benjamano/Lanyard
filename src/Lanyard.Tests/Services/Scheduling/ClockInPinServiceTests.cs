@@ -211,4 +211,17 @@ public class ClockInPinServiceTests
         await using ApplicationDbContext ctx = new(options);
         Assert.IsNull((await ctx.UserClockInPins.SingleAsync()).SetByUserId);
     }
+
+    [TestMethod]
+    public async Task SetPinForUserAsync_RejectsStaffWithoutManagerRole()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile colleague = await SchedulingTestHelpers.SeedUserAsync(options, location, "Colleague");
+
+        Result<bool> result = await GetService(options).SetPinForUserAsync(
+            SchedulingTestHelpers.StaffScopeFor(location), colleague.Id, "1234", "nosy-coworker");
+
+        Assert.IsFalse(result.IsSuccess);
+    }
 }

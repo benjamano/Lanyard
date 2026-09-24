@@ -354,4 +354,16 @@ public class ContractRequirementServiceTests
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(1, result.Data![user.Id].MinShiftsPerWeek.Value);
     }
+
+    [TestMethod]
+    public async Task SaveTierAsync_RejectsStaffWithoutManagerRole()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<ContractRequirement?> result = await GetService(options).SaveTierAsync(SchedulingTestHelpers.StaffScopeFor(location),
+            new ContractRequirement { CompanyId = company.Id, MinShiftsPerWeek = 1 });
+
+        Assert.IsFalse(result.IsSuccess);
+    }
 }

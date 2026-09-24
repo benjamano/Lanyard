@@ -355,10 +355,16 @@
             return;
         }
 
+        string? actingUserId = await GetActingUserIdAsync();
+
+        if (actingUserId is null)
+        {
+            return;
+        }
+
         isBusy = true;
 
-        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
-        Result<CopyRangeResult> result = await _rotaService.CopyRangeAsync(scope, location, From, To, offsetDays, actingUser.Data ?? string.Empty);
+        Result<CopyRangeResult> result = await _rotaService.CopyRangeAsync(scope, location, From, To, offsetDays, actingUserId);
 
         isBusy = false;
 
@@ -408,10 +414,16 @@
             return;
         }
 
+        string? actingUserId = await GetActingUserIdAsync();
+
+        if (actingUserId is null)
+        {
+            return;
+        }
+
         isBusy = true;
 
-        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
-        Result<PublishResult> result = await _rotaService.PublishRangeAsync(scope, location, From, To, actingUser.Data ?? string.Empty);
+        Result<PublishResult> result = await _rotaService.PublishRangeAsync(scope, location, From, To, actingUserId);
 
         isBusy = false;
 
@@ -424,6 +436,21 @@
         _toastService.ShowSuccess($"Published {result.Data.ShiftCount} {(result.Data.ShiftCount == 1 ? "change" : "changes")} for {result.Data.PeopleAffected} {(result.Data.PeopleAffected == 1 ? "person" : "people")}.");
 
         await LoadAsync();
+    }
+
+    // Copies and publishes are stamped with who did them; if that can't be established, stop
+    // rather than write rows with a blank author.
+    private async Task<string?> GetActingUserIdAsync()
+    {
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError($"Couldn't confirm who you are - try reloading the page. {actingUser.Error}");
+            return null;
+        }
+
+        return actingUser.Data;
     }
 
     private async Task<bool> ConfirmAsync(string title, string message, string confirmText)

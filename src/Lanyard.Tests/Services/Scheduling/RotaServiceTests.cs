@@ -624,4 +624,139 @@ public class RotaServiceTests
         Assert.AreEqual(published.Id, result.Data!.Single().Id);
         Assert.AreEqual(location.Name, result.Data[0].Location!.Name);
     }
+
+    // --- Review fixes ---
+
+    [TestMethod]
+    public async Task EveryRotaAction_RejectsStaffWithoutManagerRoleAtTheirOwnLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        Shift existing = await SeedShiftAsync(options, ShiftFor(location, ben, Monday, 9, 17));
+        RotaService service = GetService(options);
+        LocationScope staff = SchedulingTestHelpers.StaffScopeFor(location);
+
+        Assert.IsFalse((await service.GetRangeViewAsync(staff, location.Id, Monday, Sunday)).IsSuccess);
+        Assert.IsFalse((await service.SaveShiftAsync(staff, ShiftFor(location, ben, Monday.AddDays(1), 9, 17), ben.Id)).IsSuccess);
+        Assert.IsFalse((await service.DeleteShiftAsync(staff, existing.Id, ben.Id)).IsSuccess);
+        Assert.IsFalse((await service.CopyRangeAsync(staff, location.Id, Monday.AddDays(7), Sunday.AddDays(7), 7, ben.Id)).IsSuccess);
+        Assert.IsFalse((await service.PublishRangeAsync(staff, location.Id, Monday, Sunday, ben.Id)).IsSuccess);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(1, await ctx.Shifts.CountAsync());
+        Assert.IsNull((await ctx.Shifts.SingleAsync()).PublishedDateUtc);
+    }
+
+    [TestMethod]
+    public async Task SaveShiftAsync_AllowsEditingALeaversExistingShift()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile leaver = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        Shift shift = await SeedShiftAsync(options, ShiftFor(location, leaver, Monday, 9, 17));
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.UserLocationMemberships.RemoveRange(ctx.UserLocationMemberships.Where(x => x.UserId == leaver.Id));
+            await ctx.SaveChangesAsync();
+        }
+
+        Shift edit = ShiftFor(location, leaver, Monday, 9, 15);
+        edit.Id = shift.Id;
+
+        Result<ShiftSaveResult> result = await GetService(options).SaveShiftAsync(SchedulingTestHelpers.AdminScope, edit, Manager);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(6m, result.Data!.Shift.PaidHours);
+    }
+
+    [TestMethod]
+    public async Task SaveShiftAsync_KeepsArchivedPositionWhenEditingOtherFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
+        Shift shift = await SeedShiftAsync(options, ShiftFor(location, ben, Monday, 9, 17, positionId: supervisor.Id));
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.StaffPositions.SingleAsync()).IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Shift edit = ShiftFor(location, ben, Monday, 9, 17, positionId: supervisor.Id);
+        edit.Id = shift.Id;
+        edit.Notes = "Covering the party room";
+
+        Result<ShiftSaveResult> result = await GetService(options).SaveShiftAsync(SchedulingTestHelpers.AdminScope, edit, Manager);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(supervisor.Id, result.Data!.Shift.StaffPositionId);
+        Assert.AreEqual(0, result.Data.Warnings.Count);
+    }
+
+    [TestMethod]
+    public async Task SaveShiftAsync_RejectsNewlyChosenArchivedPosition()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.StaffPositions.SingleAsync()).IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<ShiftSaveResult> result = await GetService(options).SaveShiftAsync(
+            SchedulingTestHelpers.AdminScope, ShiftFor(location, ben, Monday, 9, 17, positionId: supervisor.Id), Manager);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task PublishRangeAsync_RecordsWhereTheShiftStartedWhenPublished()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        Shift draft = await SeedShiftAsync(options, ShiftFor(location, ben, Monday, 9, 17));
+
+        await GetService(options).PublishRangeAsync(SchedulingTestHelpers.AdminScope, location.Id, Monday, Sunday, Manager);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(draft.StartUtc, (await ctx.Shifts.SingleAsync()).PublishedStartUtc);
+    }
+
+    [TestMethod]
+    public async Task PublishRangeAsync_IncludesPublishedShiftMovedIntoAnotherWeek()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile ben = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        RotaService service = GetService(options);
+        LocationScope scope = SchedulingTestHelpers.AdminScope;
+
+        // Friday of week 1, published...
+        Shift friday = await SeedShiftAsync(options, ShiftFor(location, ben, Monday.AddDays(4), 9, 17));
+        await service.PublishRangeAsync(scope, location.Id, Monday, Sunday, Manager);
+
+        // ...then moved to Monday of week 2.
+        Shift moved = ShiftFor(location, ben, Monday.AddDays(7), 9, 17);
+        moved.Id = friday.Id;
+        await service.SaveShiftAsync(scope, moved, Manager);
+
+        Result<RotaRangeView> weekOne = await service.GetRangeViewAsync(scope, location.Id, Monday, Sunday);
+        Assert.AreEqual(1, weekOne.Data!.UnpublishedChangeCount);
+
+        Result<PublishResult> result = await service.PublishRangeAsync(scope, location.Id, Monday, Sunday, Manager);
+
+        Assert.AreEqual(1, result.Data!.Changes.Single().Changed.Count);
+
+        Result<RotaRangeView> weekTwo = await service.GetRangeViewAsync(scope, location.Id, Monday.AddDays(7), Sunday.AddDays(7));
+        Assert.AreEqual(0, weekTwo.Data!.UnpublishedChangeCount);
+    }
 }

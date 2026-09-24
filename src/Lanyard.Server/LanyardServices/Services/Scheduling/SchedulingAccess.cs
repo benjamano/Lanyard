@@ -11,16 +11,18 @@ namespace Lanyard.Application.Services.Scheduling;
 // Admins may do anything. A Manager acts within the company they logged in under
 // (LocationScope.CompanyId); they may touch a user only if that user is a member of a
 // location in that company - the user editor loads any user id, so this is what stops a
-// manager at one company changing the positions or PIN of someone at another.
+// manager at one company changing the positions or PIN of someone at another. Anyone who is
+// neither is refused outright: the pages are role-gated too, but the service is the boundary
+// that must hold if something else ever calls it.
 internal static class SchedulingAccess
 {
     public static bool CanManageCompany(LocationScope scope, int companyId) =>
-        scope.IsAdmin || scope.CompanyId == companyId;
+        scope.IsAdmin || (scope.IsManager && scope.CompanyId == companyId);
 
     // The rota is per location, and a Manager builds the rota for the location they logged in
     // under - the same rule CourseService applies to training (see the location-scoping skill).
     public static bool CanManageLocation(LocationScope scope, int locationId) =>
-        scope.IsAdmin || scope.LocationId == locationId;
+        scope.IsAdmin || (scope.IsManager && scope.LocationId == locationId);
 
     public static async Task<bool> CanManageUserAsync(ApplicationDbContext ctx, LocationScope scope, string userId)
     {
@@ -29,7 +31,7 @@ internal static class SchedulingAccess
             return true;
         }
 
-        if (scope.CompanyId is not int companyId)
+        if (!scope.IsManager || scope.CompanyId is not int companyId)
         {
             return false;
         }

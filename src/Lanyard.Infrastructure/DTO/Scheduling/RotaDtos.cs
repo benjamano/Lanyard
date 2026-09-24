@@ -57,3 +57,12 @@ public static class RotaNames
         return string.IsNullOrWhiteSpace(name) ? user.UserName ?? "Unknown" : name;
     }
 }
+
+// The one place rota numbers are formatted, shared by contract-warning messages (service layer)
+// and the grid/My Shifts (UI) so the two can't drift apart.
+public static class RotaFormat
+{
+    public static readonly System.Globalization.CultureInfo Uk = System.Globalization.CultureInfo.GetCultureInfo("en-GB");
+
+    public static string Hours(decimal hours) => $"{hours.ToString("0.##", Uk)} h";
+}

@@ -25,6 +25,7 @@ public class CurrentLocationContextService(
             }
 
             bool isAdmin = authState.User.IsInRole("Admin");
+            bool isManager = authState.User.IsInRole("Manager");
             string? locationIdClaim = authState.User.FindFirst(LocationClaimTypes.LocationId)?.Value;
 
             if (string.IsNullOrEmpty(locationIdClaim) || !int.TryParse(locationIdClaim, out int locationId))
@@ -62,7 +63,7 @@ public class CurrentLocationContextService(
             // write any location's data. An admin's LocationId is no longer branding-only though:
             // CourseService.GetCoursesAsync uses it to decide which location's courses to list
             // unless allLocations is set, so treat it as a real value when adding scoped reads.
-            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName()));
+            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName(), isManager));
         }
         catch (Exception ex)
         {

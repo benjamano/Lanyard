@@ -1,4 +1,5 @@
 using System.Globalization;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -9,7 +10,7 @@ namespace Lanyard.App.Extensions;
 // the server runs in UTC, so ToLocalTime() would show summer shifts an hour early.
 public static class RotaDisplayExtensions
 {
-    public static readonly CultureInfo Uk = CultureInfo.GetCultureInfo("en-GB");
+    public static CultureInfo Uk => RotaFormat.Uk;
 
     public static DateOnly LocalDate(this Shift shift) => RotaTime.LocalDate(shift.StartUtc);
 
@@ -22,7 +23,7 @@ public static class RotaDisplayExtensions
     public static string CompactTimeRange(this Shift shift) =>
         $"{Compact(RotaTime.LocalTime(shift.StartUtc))}–{Compact(RotaTime.LocalTime(shift.EndUtc))}";
 
-    public static string FormatHours(decimal hours) => $"{hours.ToString("0.##", Uk)} h";
+    public static string FormatHours(decimal hours) => RotaFormat.Hours(hours);
 
     public static string StateLabel(this ShiftState state) => state switch
     {

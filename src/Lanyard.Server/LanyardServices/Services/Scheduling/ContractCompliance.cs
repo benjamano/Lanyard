@@ -1,4 +1,3 @@
-using System.Globalization;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -9,8 +8,6 @@ namespace Lanyard.Application.Services.Scheduling;
 // so the rules can be tested directly and reused by the future automated scheduler.
 public static class ContractCompliance
 {
-    private static readonly CultureInfo Uk = CultureInfo.GetCultureInfo("en-GB");
-
     // shiftsInWeek: the person's active shifts that start in this Monday-starting week, at any
     // location in the company. Draft shifts count too - the warning is for the manager building
     // the rota, before anything is published.
@@ -56,5 +53,5 @@ public static class ContractCompliance
         return warnings;
     }
 
-    public static string Hours(decimal hours) => $"{hours.ToString("0.##", Uk)} h";
+    private static string Hours(decimal hours) => RotaFormat.Hours(hours);
 }

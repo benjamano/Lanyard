@@ -389,4 +389,30 @@ public class StaffPositionServiceTests
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(1, result.Data!.Count);
     }
+
+    [TestMethod]
+    public async Task SavePositionAsync_RejectsStaffWithoutManagerRole()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<StaffPosition> result = await GetService(options).SavePositionAsync(SchedulingTestHelpers.StaffScopeFor(location),
+            new StaffPosition { CompanyId = company.Id, Name = "Supervisor" });
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SetUserPositionsAsync_RejectsStaffWithoutManagerRole()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
+
+        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.StaffScopeFor(location), user.Id, [csa.Id], null);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
 }

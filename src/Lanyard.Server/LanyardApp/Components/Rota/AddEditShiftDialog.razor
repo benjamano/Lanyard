@@ -138,6 +138,13 @@
 
         positionOptions = [new PositionOption(string.Empty, "No position"), .. View.Positions.Select(p => new PositionOption(p.Id.ToString(), p.Name))];
 
+        // A shift can keep a position that's since been archived; list it so the select isn't blank
+        // and saving other edits doesn't silently drop (or trip over) it.
+        if (Existing?.StaffPosition is StaffPosition current && View.Positions.All(p => p.Id != current.Id))
+        {
+            positionOptions.Add(new PositionOption(current.Id.ToString(), $"{current.Name} (archived)"));
+        }
+
         if (Existing is not null)
         {
             userId = Existing.UserId;

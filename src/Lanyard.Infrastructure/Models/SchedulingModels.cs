@@ -169,6 +169,12 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? PublishedDateUtc { get; set; }
         public string? PublishedByUserId { get; set; }
 
+        // Where the shift started when it was last published. A published shift that's since been
+        // moved into another week must still be picked up by publishing the week it used to be in
+        // (that's the week the person was told about), so publish and the unpublished-change count
+        // match on this as well as on StartUtc.
+        public DateTime? PublishedStartUtc { get; set; }
+
         public bool RemovalPending { get; set; }
 
         public bool IsActive { get; set; } = true;
