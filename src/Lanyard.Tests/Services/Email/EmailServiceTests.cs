@@ -203,7 +203,7 @@ namespace Lanyard.Tests.Services.Email
         }
 
         [TestMethod]
-        public async Task SendTwoFactorCodeEmailAsync_NoPublicBaseUrl_OmitsImageTag()
+        public async Task SendTwoFactorCodeEmailAsync_NoPublicBaseUrl_OmitsLogo()
         {
             (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
 
@@ -212,8 +212,8 @@ namespace Lanyard.Tests.Services.Email
                 "123456");
 
             Assert.IsTrue(result.IsSuccess, result.Error);
-            Assert.DoesNotContain("<img", handler.LastRequestBody);
-            Assert.DoesNotContain("\u003Cimg", handler.LastRequestBody);
+            // The request body is JSON, which escapes "<" - so assert on the logo path, not the tag.
+            Assert.DoesNotContain("logo.png", handler.LastRequestBody);
         }
 
         [TestMethod]
