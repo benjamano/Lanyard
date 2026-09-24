@@ -1,0 +1,407 @@
+@page "/manage/rota/timesheets"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject ITimeEntryService _timeEntryService
+
+<PageTitle>Timesheets</PageTitle>
+
+<div class="timesheets-page">
+    <div class="timesheets-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="TerminalLocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+
+        <div class="timesheets-nav">
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronLeft())" Title="Previous week" OnClick="@(() => Navigate(locationId, weekStart.AddDays(-7)))" />
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => Navigate(locationId, RotaTime.GetWeekStart(RotaTime.Today(DateTime.UtcNow))))">This week</FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronRight())" Title="Next week" OnClick="@(() => Navigate(locationId, weekStart.AddDays(7)))" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Class="timesheets-range">
+                @RotaDisplayExtensions.RangeLabel(weekStart, weekStart.AddDays(6))
+            </FluentText>
+        </div>
+
+        <div class="timesheets-actions">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                          Disabled="@(view is null)" OnClick="@(() => OpenEditorAsync(null, null, null))">
+                Add time
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.CheckmarkCircle())"
+                          Disabled="@(view is null || ReadyToApprove == 0 || isBusy)" OnClick="@ApproveAllAsync">
+                @(ReadyToApprove > 0 ? $"Approve {ReadyToApprove} ready" : "Nothing to approve")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (view is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (view.People.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentText>No shifts were published and nobody clocked in at @view.LocationName this week.</FluentText>
+        </FluentCard>
+    }
+    else
+    {
+        <FluentText Class="timesheets-summary">
+            @view.LocationName · @view.People.Sum(p => p.AwaitingApprovalCount) waiting for approval
+            @if (view.People.Sum(p => p.NeedsReviewCount) is int review and > 0)
+            {
+                <span> · @review flagged for review</span>
+            }
+        </FluentText>
+
+        <div class="timesheet-people">
+            @foreach (TimesheetPerson person in view.People)
+            {
+                <section class="timesheet-person">
+                    <div class="timesheet-person-header">
+                        <div class="timesheet-person-name">@person.DisplayName</div>
+                        <div class="timesheet-person-totals">
+                            @RotaFormat.Hours(Math.Round(person.ClockedHours, 2)) clocked · @RotaFormat.Hours(person.ScheduledHours) scheduled
+                        </div>
+                    </div>
+
+                    @foreach (TimesheetLine line in person.Lines)
+                    {
+                        TimeEntry? entry = line.Entry;
+                        Shift? shift = line.Shift;
+
+                        <div class="timesheet-line @(line.IsMissed(nowUtc) ? "is-missed" : string.Empty)">
+                            <div class="timesheet-date">@line.Date.DayLabel()</div>
+                            <div class="timesheet-cell">
+                                <span class="timesheet-label">Rota</span>
+                                <span>@(shift is null ? "Not scheduled" : shift.TimeRange())</span>
+                            </div>
+                            <div class="timesheet-cell">
+                                <span class="timesheet-label">Clocked</span>
+                                <span>@ClockedText(line)</span>
+                                @if (Variance(line) is string variance)
+                                {
+                                    <span class="timesheet-note">@variance</span>
+                                }
+                            </div>
+                            <div class="timesheet-status">
+                                @StatusBadge(line)
+                                @if (entry?.NeedsReview == true && entry.ReviewReason is not null)
+                                {
+                                    <span class="timesheet-note">@entry.ReviewReason</span>
+                                }
+                                @if (entry?.Notes is string entryNotes)
+                                {
+                                    <span class="timesheet-note">“@entryNotes”</span>
+                                }
+                            </div>
+                            <div class="timesheet-line-actions">
+                                @if (entry is not null)
+                                {
+                                    @if (!entry.IsOpen && !entry.IsApproved)
+                                    {
+                                        <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => ApproveAsync(entry))">Approve</FluentButton>
+                                    }
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit time" OnClick="@(() => OpenEditorAsync(entry, null, null))" />
+                                }
+                                else if (shift is not null && line.IsMissed(nowUtc))
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => OpenEditorAsync(null, shift, person.UserId))">Add time</FluentButton>
+                                }
+                            </div>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "week")]
+    public string? WeekQuery { get; set; }
+
+    private LocationScope? scope;
+    private List<TerminalLocationOption> locationOptions = [];
+    private List<EntryStaffOption> staff = [];
+    private int? locationId;
+    private DateOnly weekStart;
+    private TimesheetView? view;
+    private string? loadError;
+    private bool isBusy;
+    private string? loadedKey;
+    private DateTime nowUtc = DateTime.UtcNow;
+
+    private int ReadyToApprove => view?.People
+        .SelectMany(p => p.Lines)
+        .Count(l => l.Entry is { IsOpen: false, IsApproved: false, NeedsReview: false }) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            locationOptions = locations.IsSuccess && locations.Data is not null
+                ? locations.Data.OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new TerminalLocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        weekStart = RotaTime.GetWeekStart(DateOnly.TryParseExact(WeekQuery, "yyyy-MM-dd", out DateOnly parsed) ? parsed : today);
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own) ? own : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations yet.";
+            return;
+        }
+
+        if ($"{locationId}|{weekStart}" != loadedKey)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        loadedKey = $"{location}|{weekStart}";
+        nowUtc = DateTime.UtcNow;
+
+        Result<TimesheetView> result = await _timeEntryService.GetTimesheetAsync(scope, location, weekStart, weekStart.AddDays(6));
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            view = null;
+            return;
+        }
+
+        loadError = null;
+        view = result.Data;
+
+        Result<List<UserProfile>> members = await _companyLocationService.GetUsersInLocationAsync(location);
+        staff = members.IsSuccess && members.Data is not null
+            ? members.Data
+                .Where(u => u.Id != Lanyard.Infrastructure.DataAccess.ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Select(u => new EntryStaffOption(u.Id, RotaNames.For(u)))
+                .OrderBy(x => x.Name)
+                .ToList()
+            : [];
+    }
+
+    private void Navigate(int? location, DateOnly week) =>
+        _navigationManager.NavigateTo($"/manage/rota/timesheets?location={location}&week={week:yyyy-MM-dd}");
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            Navigate(id, weekStart);
+        }
+    }
+
+    private async Task OpenEditorAsync(TimeEntry? entry, Shift? missedShift, string? userId)
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<EditTimeEntryDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(EditTimeEntryDialog.LocationId), location);
+            options.Parameters.Add(nameof(EditTimeEntryDialog.Staff), staff);
+            options.Parameters.Add(nameof(EditTimeEntryDialog.Existing), entry);
+            options.Parameters.Add(nameof(EditTimeEntryDialog.DefaultUserId), userId);
+
+            DateOnly defaultDate = missedShift is not null ? missedShift.LocalDate() : RotaTime.Today(DateTime.UtcNow);
+            options.Parameters.Add(nameof(EditTimeEntryDialog.DefaultDate), defaultDate);
+
+            if (missedShift is not null)
+            {
+                options.Parameters.Add(nameof(EditTimeEntryDialog.DefaultIn), (TimeOnly?)RotaTime.LocalTime(missedShift.StartUtc));
+                options.Parameters.Add(nameof(EditTimeEntryDialog.DefaultOut), (TimeOnly?)RotaTime.LocalTime(missedShift.EndUtc));
+            }
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task ApproveAsync(TimeEntry entry)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        string? approver = await ActingUserIdAsync();
+
+        if (approver is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _timeEntryService.ApproveEntryAsync(scope, entry.Id, approver);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't approve that entry.");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ApproveAllAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        string? approver = await ActingUserIdAsync();
+
+        if (approver is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<int> result = await _timeEntryService.ApproveAllAsync(scope, location, weekStart, weekStart.AddDays(6), approver);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't approve the timesheet.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Approved {result.Data} {(result.Data == 1 ? "entry" : "entries")}. Anything flagged for review still needs a look.");
+        await LoadAsync();
+    }
+
+    private async Task<string?> ActingUserIdAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return null;
+        }
+
+        return user.Data;
+    }
+
+    private string ClockedText(TimesheetLine line)
+    {
+        if (line.Entry is not TimeEntry entry)
+        {
+            return line.IsMissed(nowUtc) ? "Didn't clock in" : "Not yet";
+        }
+
+        return entry.ClockOutUtc is DateTime outUtc
+            ? $"{RotaFormat.TimeRange(entry.ClockInUtc, outUtc)} · {RotaFormat.Hours(Math.Round(entry.ClockedHours ?? 0, 2))}"
+            : $"{RotaFormat.LocalTime(entry.ClockInUtc)} – still on the clock";
+    }
+
+    private static string? Variance(TimesheetLine line)
+    {
+        if (line.Entry is not TimeEntry entry || line.Shift is not Shift shift)
+        {
+            return null;
+        }
+
+        List<string> notes = [];
+        int lateMinutes = (int)Math.Round((entry.ClockInUtc - shift.StartUtc).TotalMinutes);
+
+        if (lateMinutes > 2)
+        {
+            notes.Add($"{lateMinutes} min late");
+        }
+
+        if (entry.ClockOutUtc is DateTime outUtc)
+        {
+            int earlyMinutes = (int)Math.Round((shift.EndUtc - outUtc).TotalMinutes);
+
+            if (earlyMinutes > 2)
+            {
+                notes.Add($"left {earlyMinutes} min early");
+            }
+        }
+
+        return notes.Count == 0 ? null : string.Join(", ", notes);
+    }
+
+    private RenderFragment StatusBadge(TimesheetLine line) => builder =>
+    {
+        (string text, BadgeColor color) = line.Entry switch
+        {
+            null when line.IsMissed(nowUtc) => ("Missed", BadgeColor.Danger),
+            null => ("Upcoming", BadgeColor.Subtle),
+            { IsOpen: true } => ("On the clock", BadgeColor.Informative),
+            { NeedsReview: true } => ("Needs review", BadgeColor.Warning),
+            { IsApproved: true } => ("Approved", BadgeColor.Success),
+            _ => ("Awaiting approval", BadgeColor.Subtle)
+        };
+
+        builder.OpenComponent<FluentBadge>(0);
+        builder.AddAttribute(1, "Appearance", BadgeAppearance.Filled);
+        builder.AddAttribute(2, "Color", color);
+        builder.AddAttribute(3, "ChildContent", (RenderFragment)(b => b.AddContent(0, text)));
+        builder.CloseComponent();
+    };
+}

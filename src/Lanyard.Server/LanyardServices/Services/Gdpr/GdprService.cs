@@ -293,12 +293,13 @@ public class GdprService : IGdprService
                 pin.SetByUserId = null;
             }
 
-            // Shift history is retained (6 years), so it's re-pointed at the placeholder account
-            // rather than deleted; future shifts are cancelled. Must run before the user row is
+            // Shift and timesheet history is retained (6 years), so it's re-pointed at the
+            // placeholder account rather than deleted; future shifts are cancelled and an open
+            // time entry is closed. Must run before the user row is
             // deleted - Shift.UserId is a Restrict FK precisely so this can't be skipped silently.
             // (The snapshot is discarded - erasure anonymises regardless of whether the account
             // delete that follows succeeds, the same as every other attribution scrubbed here.)
-            _ = await ShiftRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow);
+            _ = await ScheduleRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow);
 
             await ctx.SaveChangesAsync();
 

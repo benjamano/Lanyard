@@ -32,6 +32,10 @@
                         <div class="settings-hint">Used to show holiday allowances in days as well as hours.</div>
                     </div>
                     <div class="settings-field">
+                        <FluentNumberInput TValue="int" Label="Clock-in window (minutes)" @bind-Value="clockInWindowMinutes" Width="100%" />
+                        <div class="settings-hint">How long before a shift starts, and after it ends, staff can clock in for it on a terminal.</div>
+                    </div>
+                    <div class="settings-field">
                         <FluentNumberInput TValue="int" Label="Shift reminder lead time (hours)" @bind-Value="shiftReminderLeadHours" Width="100%" />
                         <div class="settings-hint">How far ahead of a shift staff are emailed a reminder.</div>
                     </div>
@@ -65,6 +69,7 @@
     private int financialYearStartDay = 6;
     private double hoursPerDay = 8;
     private int shiftReminderLeadHours = 24;
+    private int clockInWindowMinutes = 60;
     private bool isSaving;
 
     protected override async Task OnParametersSetAsync()
@@ -92,6 +97,7 @@
         financialYearStartDay = settings.FinancialYearStartDay;
         hoursPerDay = (double)settings.HoursPerDay;
         shiftReminderLeadHours = settings.ShiftReminderLeadHours;
+        clockInWindowMinutes = settings.ClockInWindowMinutes;
     }
 
     private async Task SaveAsync()
@@ -113,7 +119,8 @@
             FinancialYearStartMonth = int.TryParse(financialYearStartMonth, out int month) ? month : 4,
             FinancialYearStartDay = financialYearStartDay,
             HoursPerDay = (decimal)hoursPerDay,
-            ShiftReminderLeadHours = shiftReminderLeadHours
+            ShiftReminderLeadHours = shiftReminderLeadHours,
+            ClockInWindowMinutes = clockInWindowMinutes
         };
 
         Result<CompanySchedulingSettings> result = await _schedulingSettingsService.SaveSettingsAsync(scopeResult.Data, toSave);

@@ -65,4 +65,16 @@ public static class RotaFormat
     public static readonly System.Globalization.CultureInfo Uk = System.Globalization.CultureInfo.GetCultureInfo("en-GB");
 
     public static string Hours(decimal hours) => $"{hours.ToString("0.##", Uk)} h";
+
+    // "09:00–17:00", with "(+1)" when it runs past midnight - in venue-local time.
+    public static string TimeRange(DateTime startUtc, DateTime endUtc)
+    {
+        bool nextDay = Enum.RotaTime.LocalDate(endUtc) > Enum.RotaTime.LocalDate(startUtc);
+
+        return $"{Enum.RotaTime.LocalTime(startUtc).ToString("HH:mm", Uk)}–{Enum.RotaTime.LocalTime(endUtc).ToString("HH:mm", Uk)}{(nextDay ? " (+1)" : string.Empty)}";
+    }
+
+    public static string LocalTime(DateTime utc) => Enum.RotaTime.LocalTime(utc).ToString("HH:mm", Uk);
+
+    public static string DayAndTime(DateTime utc) => Enum.RotaTime.ToVenueLocal(utc).ToString("ddd d MMM 'at' HH:mm", Uk);
 }

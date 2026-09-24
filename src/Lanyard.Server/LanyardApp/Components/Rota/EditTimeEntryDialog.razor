@@ -1,0 +1,218 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject ITimeEntryService _timeEntryService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Clock())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "Add time" : "Edit time")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="entry-dialog">
+            <FluentText Class="entry-hint">
+                For cover shifts, forgotten clock-ins and corrections. Saving counts as your approval.
+            </FluentText>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <FluentSelect TOption="EntryStaffOption" TValue="string" Items="@Staff" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
+                          @bind-Value="userId" Label="Staff member" Width="100%" />
+
+            <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaFormat.Uk" Style="width: 100%;" />
+
+            <div class="entry-times">
+                <FluentTimePicker @bind-Value="clockIn" RenderStyle="DatePickerRenderStyle.Native" Label="Clocked in" />
+                <FluentTimePicker @bind-Value="clockOut" RenderStyle="DatePickerRenderStyle.Native" Label="Clocked out" Disabled="@stillIn" />
+            </div>
+
+            <FluentCheckbox @bind-Value="stillIn" Label="Still on the clock" />
+
+            @if (!stillIn)
+            {
+                <FluentText Class="entry-hint">@DurationHint</FluentText>
+            }
+
+            <FluentTextInput @bind-Value="notes" Label="Notes" Placeholder="e.g. Covered Tom's shift" Width="100%" />
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <div class="entry-actions">
+            @if (confirmingRemove)
+            {
+                <FluentText>Remove this time?</FluentText>
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@RemoveAsync">Remove</FluentButton>
+                <FluentButton Disabled="@isBusy" OnClick="@(() => confirmingRemove = false)">Keep</FluentButton>
+            }
+            else
+            {
+                @if (Existing is not null)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())" Class="entry-remove"
+                                  Disabled="@isBusy" OnClick="@(() => confirmingRemove = true)">Remove</FluentButton>
+                }
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : "Save")</FluentButton>
+                <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+            }
+        </div>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<EntryStaffOption> Staff { get; set; }
+
+    [Parameter]
+    public TimeEntry? Existing { get; set; }
+
+    [Parameter]
+    public DateOnly DefaultDate { get; set; }
+
+    [Parameter]
+    public string? DefaultUserId { get; set; }
+
+    [Parameter]
+    public TimeOnly? DefaultIn { get; set; }
+
+    [Parameter]
+    public TimeOnly? DefaultOut { get; set; }
+
+    private string? userId;
+    private DateTime? date;
+    private TimeOnly clockIn = new(9, 0);
+    private TimeOnly clockOut = new(17, 0);
+    private bool stillIn;
+    private string? notes;
+    private string? errorMessage;
+    private bool isBusy;
+    private bool confirmingRemove;
+
+    private bool EndsNextDay => clockOut <= clockIn;
+
+    private string DurationHint
+    {
+        get
+        {
+            TimeSpan length = EndsNextDay ? clockOut.ToTimeSpan() + TimeSpan.FromDays(1) - clockIn.ToTimeSpan() : clockOut - clockIn;
+            return $"{RotaFormat.Hours(Math.Round((decimal)length.TotalHours, 2))} on the clock.{(EndsNextDay ? " Ends the next day." : string.Empty)}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Existing is not null)
+        {
+            userId = Existing.UserId;
+            date = RotaTime.LocalDate(Existing.ClockInUtc).ToDateTime(TimeOnly.MinValue);
+            clockIn = RotaTime.LocalTime(Existing.ClockInUtc);
+            stillIn = Existing.ClockOutUtc is null;
+            clockOut = Existing.ClockOutUtc is DateTime outUtc ? RotaTime.LocalTime(outUtc) : clockIn.AddHours(1);
+            notes = Existing.Notes;
+
+            // Someone who has since left the location can still have their time corrected.
+            if (Staff.All(x => x.UserId != Existing.UserId))
+            {
+                Staff = [.. Staff, new EntryStaffOption(Existing.UserId, RotaNames.For(Existing.User))];
+            }
+        }
+        else
+        {
+            userId = DefaultUserId ?? Staff.FirstOrDefault()?.UserId;
+            date = DefaultDate.ToDateTime(TimeOnly.MinValue);
+            clockIn = DefaultIn ?? clockIn;
+            clockOut = DefaultOut ?? clockOut;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrEmpty(userId) || date is null)
+        {
+            errorMessage = "Choose a staff member and a date.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        DateOnly day = DateOnly.FromDateTime(date.Value);
+
+        TimeEntry entry = new()
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            UserId = userId,
+            LocationId = LocationId,
+            ClockInUtc = RotaTime.ToUtc(day, clockIn),
+            ClockOutUtc = stillIn ? null : RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, clockOut),
+            Notes = notes
+        };
+
+        Result<TimeEntry> result = await _timeEntryService.SaveEntryAsync(scope.Data, entry, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (Existing is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        Result<bool> result = await _timeEntryService.DeactivateEntryAsync(scope.Data, Existing.Id, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            confirmingRemove = false;
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

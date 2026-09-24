@@ -87,6 +87,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
+        public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
+        public DbSet<TimeEntry> TimeEntries { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -319,7 +321,7 @@ namespace Lanyard.Infrastructure.DataAccess
             // Restrict, not the default Cascade: shift history is kept for 6 years
             // (docs/DATA_RETENTION.md), so deleting a user must never silently take it with them.
             // Both delete paths (SecurityService.DeleteUserAsync, GdprService) re-point a user's
-            // shifts to the placeholder account first via ShiftRetention.
+            // shifts to the placeholder account first via ScheduleRetention.
             modelBuilder.Entity<Shift>()
                 .HasOne(x => x.User)
                 .WithMany()
@@ -337,6 +339,58 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Terminals are looked up by the hash of the device's cookie token on every page load.
+            modelBuilder.Entity<ClockInTerminal>()
+                .HasIndex(x => x.DeviceTokenHash)
+                .IsUnique();
+
+            modelBuilder.Entity<ClockInTerminal>()
+                .HasIndex(x => x.LocationId);
+
+            modelBuilder.Entity<ClockInTerminal>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<TimeEntry>()
+                .HasIndex(x => new { x.UserId, x.ClockInUtc });
+
+            modelBuilder.Entity<TimeEntry>()
+                .HasIndex(x => new { x.LocationId, x.ClockInUtc });
+
+            // At most one open entry per person - the database-level guard against two terminals
+            // (or a terminal and a phone) clocking the same person in at the same moment.
+            modelBuilder.Entity<TimeEntry>()
+                .HasIndex(x => x.UserId)
+                .IsUnique()
+                .HasFilter("\"ClockOutUtc\" IS NULL AND \"IsActive\"");
+
+            // Same retention reasoning as Shift.UserId: timesheets outlive accounts.
+            modelBuilder.Entity<TimeEntry>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<TimeEntry>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<TimeEntry>()
+                .HasOne(x => x.Shift)
+                .WithMany()
+                .HasForeignKey(x => x.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<TimeEntry>()
+                .HasOne(x => x.ClockInTerminal)
+                .WithMany()
+                .HasForeignKey(x => x.ClockInTerminalId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

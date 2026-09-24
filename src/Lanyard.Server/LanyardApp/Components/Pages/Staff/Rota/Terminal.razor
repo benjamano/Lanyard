@@ -1,0 +1,460 @@
+@page "/rota/terminal"
+@* Anonymous on purpose: this page runs on a shared wall tablet that nobody is signed in to. It
+   authenticates the *device* instead, by the HttpOnly cookie set when a manager paired it (see
+   TerminalController). It shows nothing until the cookie resolves to an active terminal, and
+   even then only first names and today's shift times; every clock action re-checks the terminal
+   server-side and needs the person's PIN, or a QR code that only existed on this screen. *@
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@implements IDisposable
+
+@using System.Text.Json
+@using Lanyard.App.Components.Rota.Terminal
+@using Lanyard.Application.Services.Common
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+@using Microsoft.AspNetCore.DataProtection
+@using Microsoft.AspNetCore.Http
+
+@inject IClockInTerminalService _terminalService
+@inject ITimeEntryService _timeEntryService
+@inject ITerminalEphemeralTokenService _tokenService
+@inject ITerminalEventBus _eventBus
+@inject IHttpContextAccessor _httpContextAccessor
+@inject IDataProtectionProvider _dataProtectionProvider
+@inject PersistentComponentState _applicationState
+
+<PageTitle>Clock in</PageTitle>
+
+<div class="terminal">
+    @switch (mode)
+    {
+        case TerminalMode.Ready when session is not null:
+            <header class="terminal-header">
+                <div class="terminal-where">
+                    <div class="terminal-location">@session.LocationName</div>
+                    <div class="terminal-name">@session.TerminalName</div>
+                </div>
+                <div class="terminal-clock">
+                    <div class="terminal-time">@localNow.ToString("HH:mm", RotaFormat.Uk)</div>
+                    <div class="terminal-date">@localNow.ToString("dddd d MMMM", RotaFormat.Uk)</div>
+                </div>
+            </header>
+
+            <main class="terminal-body">
+                <section class="terminal-roster" aria-labelledby="roster-heading">
+                    <h1 id="roster-heading" class="terminal-heading">Tap your name to clock in or out</h1>
+
+                    @if (roster is null)
+                    {
+                        <p class="terminal-muted">Loading today's staff...</p>
+                    }
+                    else if (roster.Count == 0)
+                    {
+                        <p class="terminal-muted">Nobody is on the rota here today.</p>
+                    }
+                    else
+                    {
+                        <div class="roster-grid">
+                            @foreach (TerminalRosterEntry person in roster)
+                            {
+                                <button type="button" class="roster-button @(person.IsClockedIn ? "is-in" : string.Empty)" @onclick="@(() => SelectPerson(person))">
+                                    <span class="roster-name">@person.DisplayName</span>
+                                    <span class="roster-meta">
+                                        <span class="roster-status">@(person.IsClockedIn ? "Clocked in" : "Not clocked in")</span>
+                                        @if (person.ShiftSummary is not null)
+                                        {
+                                            <span> · @person.ShiftSummary</span>
+                                        }
+                                    </span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <aside class="terminal-qr" aria-labelledby="qr-heading">
+                    <h2 id="qr-heading" class="terminal-heading">Or scan with your phone</h2>
+                    @if (qrImage is not null)
+                    {
+                        <img class="qr-image" src="@qrImage" alt="QR code for clocking in with your phone" />
+                    }
+                    <div class="qr-countdown" aria-hidden="true">
+                        <div class="qr-countdown-fill" style="@($"width: {QrProgressPercent}%;")"></div>
+                    </div>
+                    <p class="terminal-muted">Opens Lanyard on your phone. You'll need to be signed in. The code changes every @((int)TerminalEphemeralTokenService.QrRotationInterval.TotalSeconds) seconds.</p>
+                </aside>
+            </main>
+
+            @if (selected is not null)
+            {
+                <PinPad @ref="pinPad" PersonName="@selected.DisplayName" Busy="@isBusy"
+                        OnSubmit="@SubmitPinAsync" OnCancel="@CloseSelection" OnActivity="@MarkActivity" />
+            }
+
+            @if (banner is not null)
+            {
+                <div class="terminal-banner-overlay" @onclick="DismissBanner">
+                    <div class="terminal-banner @(banner.IsSuccess ? "is-success" : "is-error")" role="status" aria-live="assertive">
+                        <div class="banner-title">@banner.Title</div>
+                        @if (!string.IsNullOrEmpty(banner.Detail))
+                        {
+                            <div class="banner-detail">@banner.Detail</div>
+                        }
+                        <div class="banner-hint">Tap to close</div>
+                    </div>
+                </div>
+            }
+            break;
+
+        case TerminalMode.Loading:
+            <div class="terminal-message">
+                <p class="terminal-muted">Starting the clock-in terminal...</p>
+            </div>
+            break;
+
+        case TerminalMode.OpenDirectly:
+            <div class="terminal-message">
+                <h1>Reloading the terminal</h1>
+                <p>This page has to be opened directly to check the tablet is paired.</p>
+                <button type="button" class="terminal-button" @onclick="ReloadDirectly">Reload</button>
+            </div>
+            break;
+
+        default:
+            <div class="terminal-message">
+                <h1>@(mode == TerminalMode.Unpaired ? "This tablet has been unpaired" : "This tablet isn't a clock-in terminal yet")</h1>
+                <p>A manager can pair it by signing in on this tablet and going to Manage &gt; Rota &gt; Clock-In Terminals.</p>
+                <a class="terminal-button" href="/manage/rota/terminals">Go to Clock-In Terminals</a>
+            </div>
+            break;
+    }
+</div>
+
+@code {
+    private enum TerminalMode { Loading, NotPaired, Unpaired, OpenDirectly, Ready }
+
+    // What the first (prerendered) request learned from the device cookie, carried into the live
+    // page. The live page can't read the cookie itself - a Blazor Server circuit has no HTTP
+    // request - so the prerender pass reads it via IHttpContextAccessor, and hands the result over
+    // through PersistentComponentState (the first use of that in this app). The payload is also
+    // protected with Data Protection so the browser can't swap in another terminal's id.
+    private record TerminalBootstrap(TerminalMode Mode, TerminalSession? Session);
+
+    private const string StateKey = "lanyard-clock-in-terminal";
+    private const string ProtectorPurpose = "Lanyard.ClockInTerminal.Bootstrap.v1";
+    private static readonly TimeSpan SuccessBannerTime = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ErrorBannerTime = TimeSpan.FromSeconds(7);
+    private static readonly TimeSpan PinIdleTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
+
+    [SupplyParameterFromQuery(Name = "reloaded")]
+    public string? Reloaded { get; set; }
+
+    private record Banner(bool IsSuccess, string Title, string? Detail, DateTime ExpiresUtc);
+
+    private TerminalMode mode = TerminalMode.Loading;
+    private TerminalSession? session;
+    private List<TerminalRosterEntry>? roster;
+    private TerminalRosterEntry? selected;
+    private PinPad? pinPad;
+    private Banner? banner;
+    private bool isBusy;
+
+    private string? qrImage;
+    private DateTime qrIssuedUtc;
+    private DateTime lastRefreshUtc;
+    private DateTime lastActivityUtc;
+    private DateTime localNow = RotaTime.ToVenueLocal(DateTime.UtcNow);
+
+    private PersistingComponentStateSubscription? _persisting;
+    private System.Threading.Timer? _ticker;
+    private bool _live;
+
+    private double QrProgressPercent
+    {
+        get
+        {
+            double elapsed = (DateTime.UtcNow - qrIssuedUtc).TotalSeconds;
+            double total = TerminalEphemeralTokenService.QrRotationInterval.TotalSeconds;
+
+            return Math.Clamp(100 - (elapsed / total * 100), 0, 100);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_applicationState.TryTakeFromJson(StateKey, out string? protectedBootstrap) && protectedBootstrap is not null)
+        {
+            TerminalBootstrap? bootstrap = Unprotect(protectedBootstrap);
+
+            if (bootstrap is null)
+            {
+                mode = TerminalMode.OpenDirectly;
+                return;
+            }
+
+            mode = bootstrap.Mode;
+            session = bootstrap.Session;
+            return;
+        }
+
+        if (!RendererInfo.IsInteractive)
+        {
+            // Prerender: this is the real HTTP request for the page, so the cookie is readable.
+            string? token = _httpContextAccessor.HttpContext?.Request.Cookies[TerminalCookie.Name];
+            Result<TerminalSession> resolved = await _terminalService.ResolveByTokenAsync(token);
+
+            TerminalBootstrap bootstrap = resolved.IsSuccess && resolved.Data is not null
+                ? new TerminalBootstrap(TerminalMode.Ready, resolved.Data)
+                : new TerminalBootstrap(string.IsNullOrEmpty(token) ? TerminalMode.NotPaired : TerminalMode.Unpaired, null);
+
+            mode = bootstrap.Mode;
+            session = bootstrap.Session;
+
+            _persisting = _applicationState.RegisterOnPersisting(() =>
+            {
+                _applicationState.PersistAsJson(StateKey, Protect(bootstrap));
+                return Task.CompletedTask;
+            });
+
+            return;
+        }
+
+        // Interactive with nothing handed over: reached by in-app navigation rather than a page
+        // load, so there was no request to read the cookie from.
+        mode = TerminalMode.OpenDirectly;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (mode == TerminalMode.OpenDirectly && Reloaded is null)
+        {
+            ReloadDirectly();
+            return;
+        }
+
+        if (mode == TerminalMode.Ready && session is not null)
+        {
+            // The handed-over session could be minutes old by now; confirm it's still live.
+            Result<TerminalSession> check = await _terminalService.GetActiveSessionAsync(session.TerminalId);
+
+            if (!check.IsSuccess)
+            {
+                mode = TerminalMode.Unpaired;
+                StateHasChanged();
+                return;
+            }
+
+            _live = true;
+            _eventBus.OnClock += HandleClockEvent;
+            IssueQrCode();
+            await LoadRosterAsync();
+            _ticker = new System.Threading.Timer(_ => InvokeAsync(TickAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            StateHasChanged();
+        }
+    }
+
+    private async Task TickAsync()
+    {
+        if (!_live || session is null)
+        {
+            return;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        localNow = RotaTime.ToVenueLocal(now);
+
+        if (now - qrIssuedUtc >= TerminalEphemeralTokenService.QrRotationInterval)
+        {
+            IssueQrCode();
+        }
+
+        if (banner is not null && now >= banner.ExpiresUtc)
+        {
+            banner = null;
+        }
+
+        if (selected is not null && !isBusy && now - lastActivityUtc > PinIdleTimeout)
+        {
+            selected = null;
+        }
+
+        if (now - lastRefreshUtc >= RefreshInterval)
+        {
+            Result<TerminalSession> check = await _terminalService.GetActiveSessionAsync(session.TerminalId);
+
+            if (!check.IsSuccess)
+            {
+                StopLive();
+                mode = TerminalMode.Unpaired;
+                selected = null;
+                banner = null;
+            }
+            else
+            {
+                await LoadRosterAsync();
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadRosterAsync()
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        lastRefreshUtc = DateTime.UtcNow;
+        Result<List<TerminalRosterEntry>> result = await _timeEntryService.GetTerminalRosterAsync(session.TerminalId);
+
+        if (result.IsSuccess)
+        {
+            roster = result.Data ?? [];
+        }
+    }
+
+    private void IssueQrCode()
+    {
+        if (session is null)
+        {
+            return;
+        }
+
+        string nonce = _tokenService.IssueQrNonce(session.TerminalId);
+        qrImage = QrCodeDataUri.Create($"{_navigationManager.BaseUri}rota/scan/{nonce}", 8);
+        qrIssuedUtc = DateTime.UtcNow;
+    }
+
+    private void SelectPerson(TerminalRosterEntry person)
+    {
+        if (!person.HasPin)
+        {
+            ShowBanner(false, $"{person.DisplayName}, you haven't set a PIN yet",
+                "Scan the QR code with your phone instead, or ask a manager to set a PIN for you.");
+            return;
+        }
+
+        banner = null;
+        selected = person;
+        MarkActivity();
+    }
+
+    private void CloseSelection() => selected = null;
+
+    private void MarkActivity() => lastActivityUtc = DateTime.UtcNow;
+
+    private async Task SubmitPinAsync(string pin)
+    {
+        if (session is null || selected is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+        MarkActivity();
+
+        Result<ClockActionResult> result = await _timeEntryService.ClockByPinAsync(session.TerminalId, selected.UserId, pin);
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            string error = result.Error ?? "Something went wrong. Try again.";
+
+            // A wrong PIN keeps the pad open for another go; anything else closes it.
+            if (error.Contains("PIN isn't right", StringComparison.Ordinal))
+            {
+                pinPad?.Reset();
+                ShowBanner(false, "That PIN isn't right", "Try again.");
+            }
+            else
+            {
+                selected = null;
+                ShowBanner(false, "Couldn't clock you in", error);
+            }
+
+            return;
+        }
+
+        selected = null;
+        ShowResult(result.Data);
+        await LoadRosterAsync();
+    }
+
+    private void ShowResult(ClockActionResult result)
+    {
+        string time = RotaFormat.LocalTime(result.AtUtc);
+
+        if (result.Direction == ClockDirection.In)
+        {
+            ShowBanner(true, $"Hi {result.GreetingName}, you're clocked in at {time}",
+                result.ShiftSummary is null ? null : $"Your shift: {result.ShiftSummary}");
+        }
+        else
+        {
+            string hours = result.ClockedHours is decimal h ? $"{RotaFormat.Hours(Math.Round(h, 2))} on the clock" : string.Empty;
+            ShowBanner(true, $"Bye {result.GreetingName}, you're clocked out at {time}", hours);
+        }
+    }
+
+    // A QR clock-in happens on the person's phone; greet them on the tablet they scanned too.
+    private void HandleClockEvent(TerminalClockEvent clockEvent)
+    {
+        if (session is null || clockEvent.TerminalId != session.TerminalId || clockEvent.Method != ClockMethod.Qr)
+        {
+            return;
+        }
+
+        InvokeAsync(async () =>
+        {
+            ShowResult(new ClockActionResult(clockEvent.GreetingName, clockEvent.Direction, clockEvent.AtUtc, null, null));
+            await LoadRosterAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void ShowBanner(bool success, string title, string? detail) =>
+        banner = new Banner(success, title, detail, DateTime.UtcNow.Add(success ? SuccessBannerTime : ErrorBannerTime));
+
+    private void DismissBanner() => banner = null;
+
+    private void ReloadDirectly() =>
+        _navigationManager.NavigateTo("/rota/terminal?reloaded=1", forceLoad: true);
+
+    private string Protect(TerminalBootstrap bootstrap) =>
+        _dataProtectionProvider.CreateProtector(ProtectorPurpose).Protect(JsonSerializer.Serialize(bootstrap));
+
+    private TerminalBootstrap? Unprotect(string value)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<TerminalBootstrap>(_dataProtectionProvider.CreateProtector(ProtectorPurpose).Unprotect(value));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private void StopLive()
+    {
+        _live = false;
+        _eventBus.OnClock -= HandleClockEvent;
+        _ticker?.Dispose();
+        _ticker = null;
+    }
+
+    public void Dispose()
+    {
+        StopLive();
+        _persisting?.Dispose();
+    }
+}

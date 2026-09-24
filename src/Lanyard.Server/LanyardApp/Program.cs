@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 ﻿using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
@@ -97,6 +98,11 @@ builder.Services.AddScoped<IContractRequirementService, ContractRequirementServi
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
+builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
+builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
+builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();

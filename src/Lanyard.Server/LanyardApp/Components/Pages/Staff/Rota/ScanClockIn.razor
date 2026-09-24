@@ -1,0 +1,138 @@
+@page "/rota/scan/{Nonce}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject ITimeEntryService _timeEntryService
+@inject ITerminalEphemeralTokenService _tokenService
+
+<PageTitle>Clock in</PageTitle>
+
+<div class="scan-page">
+    <FluentCard Height="auto">
+        <div class="scan-card">
+            @if (isLoading)
+            {
+                <FluentSpinner />
+            }
+            else if (outcome is not null)
+            {
+                <FluentIcon Value="@((Icon)(outcome.Direction == ClockDirection.In ? new Icons.Filled.Size48.CheckmarkCircle() : new Icons.Filled.Size48.ArrowExit()))"
+                            Color="Color.Success" />
+                <FluentText As="TextTag.H2" Size="TextSize.Size700" Weight="TextWeight.Semibold">
+                    @(outcome.Direction == ClockDirection.In ? $"You're clocked in, {outcome.GreetingName}" : $"You're clocked out, {outcome.GreetingName}")
+                </FluentText>
+                <FluentText>
+                    @(outcome.Direction == ClockDirection.In ? "Clocked in" : "Clocked out") at @RotaFormat.LocalTime(outcome.AtUtc)
+                    @if (outcome.ShiftSummary is not null)
+                    {
+                        <span> for your @outcome.ShiftSummary shift</span>
+                    }
+                    @if (outcome.ClockedHours is decimal hours)
+                    {
+                        <span> · @RotaFormat.Hours(Math.Round(hours, 2)) on the clock</span>
+                    }
+                </FluentText>
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => _navigationManager.NavigateTo("/rota"))">See my shifts</FluentButton>
+            }
+            else if (!codeValid)
+            {
+                <FluentIcon Value="@(new Icons.Regular.Size24.ErrorCircle())" />
+                <FluentText As="TextTag.H2" Size="TextSize.Size700" Weight="TextWeight.Semibold">This code has expired</FluentText>
+                <FluentText>The code on the tablet changes every 30 seconds. Scan the one showing now.</FluentText>
+            }
+            else
+            {
+                <FluentText As="TextTag.H2" Size="TextSize.Size700" Weight="TextWeight.Semibold">Hi @greetingName</FluentText>
+                <FluentText>
+                    @if (state is { IsClockedIn: true })
+                    {
+                        <span>You've been clocked in at @(state.LocationName ?? "work") since @RotaFormat.LocalTime(state.SinceUtc!.Value).</span>
+                    }
+                    else
+                    {
+                        <span>You're not clocked in.</span>
+                    }
+                </FluentText>
+
+                @if (errorMessage is not null)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Primary" Class="scan-action" Disabled="@isBusy" OnClick="@ClockAsync"
+                              IconStart="@((Icon)(state is { IsClockedIn: true } ? new Icons.Regular.Size24.ArrowExit() : new Icons.Regular.Size24.Clock()))">
+                    @(isBusy ? "Just a moment..." : state is { IsClockedIn: true } ? "Clock out" : "Clock in")
+                </FluentButton>
+            }
+        </div>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter]
+    public string Nonce { get; set; } = string.Empty;
+
+    private bool isLoading = true;
+    private bool isBusy;
+    private bool codeValid;
+    private string greetingName = string.Empty;
+    private string? userId;
+    private ClockState? state;
+    private ClockActionResult? outcome;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<UserProfile> user = await _securityService.GetCurrentUserProfileAsync();
+
+        if (!user.IsSuccess || user.Data is null)
+        {
+            errorMessage = "Couldn't confirm who you are - try signing in again.";
+            isLoading = false;
+            return;
+        }
+
+        userId = user.Data.Id;
+        greetingName = user.Data.GetGreetingName();
+
+        // Only checked here, not consumed - the code is used up when they press the button.
+        codeValid = _tokenService.PeekQrNonce(Nonce) is not null;
+
+        Result<ClockState> stateResult = await _timeEntryService.GetClockStateAsync(userId);
+        state = stateResult.IsSuccess ? stateResult.Data : null;
+
+        isLoading = false;
+    }
+
+    private async Task ClockAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+
+        Result<ClockActionResult> result = await _timeEntryService.ClockByQrAsync(Nonce, userId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error;
+
+            if (result.Error?.Contains("expired", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                codeValid = false;
+            }
+
+            return;
+        }
+
+        outcome = result.Data;
+    }
+}

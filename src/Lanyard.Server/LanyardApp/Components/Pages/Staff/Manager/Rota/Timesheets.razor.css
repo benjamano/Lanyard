@@ -1,0 +1,130 @@
+.timesheets-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.timesheets-toolbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.timesheets-nav,
+.timesheets-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.timesheets-page ::deep .timesheets-range {
+    margin-left: 6px;
+}
+
+.timesheets-page ::deep .timesheets-summary {
+    color: var(--colorNeutralForeground3);
+}
+
+.timesheet-people {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.timesheet-person {
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.timesheet-person-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.timesheet-person-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.timesheet-person-totals {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+/* A grid on wide screens; each cell wraps onto its own line on a phone. */
+.timesheet-line {
+    display: grid;
+    grid-template-columns: 110px minmax(130px, 1fr) minmax(200px, 1.5fr) minmax(160px, 1.2fr) auto;
+    align-items: start;
+    gap: 6px 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.timesheet-line:last-child {
+    border-bottom: none;
+}
+
+.timesheet-line.is-missed {
+    background: color-mix(in srgb, #c50f1f 6%, transparent);
+}
+
+.timesheet-date {
+    font-weight: 600;
+}
+
+.timesheet-cell,
+.timesheet-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    align-items: flex-start;
+}
+
+.timesheet-label {
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.timesheet-note {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.timesheet-line-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+    .timesheet-line {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .timesheet-date,
+    .timesheet-status,
+    .timesheet-line-actions {
+        grid-column: 1 / -1;
+    }
+
+    .timesheet-line-actions {
+        justify-content: flex-start;
+    }
+}

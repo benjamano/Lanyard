@@ -1,0 +1,260 @@
+@page "/manage/rota/terminals"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IClockInTerminalService _terminalService
+@inject ITerminalEphemeralTokenService _tokenService
+
+<PageTitle>Clock-In Terminals</PageTitle>
+
+<div class="terminals-page">
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="14">
+            <FluentText Typo="Typography.H4">Clock-In Terminals</FluentText>
+            <FluentText Class="terminals-intro">
+                A terminal is a tablet at the venue where staff clock in and out. Open this page on the tablet itself and pair
+                it; staff then tap their name and enter their PIN, or scan its code with their phone. Unpairing a terminal
+                stops it working straight away.
+            </FluentText>
+
+            @if (pairingMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="true">@pairingMessage</FluentMessageBar>
+            }
+
+            <div>
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Tablet())"
+                              Disabled="@(locationOptions.Count == 0)" OnClick="@PairAsync">
+                    Pair this device as a terminal
+                </FluentButton>
+            </div>
+
+            @if (terminals is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (terminals.Count == 0)
+            {
+                <FluentText Class="terminals-intro">No terminals have been paired yet.</FluentText>
+            }
+            else
+            {
+                <div class="terminal-list">
+                    @foreach (ClockInTerminal terminal in terminals)
+                    {
+                        <div class="terminal-list-item @(terminal.IsActive ? string.Empty : "is-revoked")">
+                            <div class="terminal-list-info">
+                                <div class="terminal-list-name">
+                                    @terminal.Name
+                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="@(terminal.IsActive ? BadgeColor.Success : BadgeColor.Subtle)">
+                                        @(terminal.IsActive ? "Active" : "Unpaired")
+                                    </FluentBadge>
+                                </div>
+                                <div class="terminal-list-meta">
+                                    @if (scope?.IsAdmin == true)
+                                    {
+                                        <span>@terminal.Location?.Name · </span>
+                                    }
+                                    Paired @RotaTime.ToVenueLocal(terminal.CreateDate).ToString("d MMM yyyy", RotaFormat.Uk)
+                                    @if (terminal.IsActive && terminal.LastSeenUtc is DateTime seen)
+                                    {
+                                        <span> · last used @LastSeenText(seen)</span>
+                                    }
+                                    @if (!terminal.IsActive && terminal.RevokedDateUtc is DateTime revoked)
+                                    {
+                                        <span> · unpaired @RotaTime.ToVenueLocal(revoked).ToString("d MMM yyyy", RotaFormat.Uk)</span>
+                                    }
+                                </div>
+                            </div>
+                            @if (terminal.IsActive)
+                            {
+                                <div class="terminal-list-actions">
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Rename" OnClick="@(() => RenameAsync(terminal))" />
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => RevokeAsync(terminal))">Unpair</FluentButton>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "pairing")]
+    public string? Pairing { get; set; }
+
+    private LocationScope? scope;
+    private List<ClockInTerminal>? terminals;
+    private List<TerminalLocationOption> locationOptions = [];
+    private string? pairingMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pairingMessage = Pairing switch
+        {
+            "expired" => "That pairing link has expired or was already used. Start again with \"Pair this device\".",
+            "forbidden" => "You can only pair terminals at a location you belong to.",
+            "failed" => "Pairing didn't complete. Try again.",
+            _ => null
+        };
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out which location you're signed in to: {scopeResult.Error}");
+            terminals = [];
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            locationOptions = locations.IsSuccess && locations.Data is not null
+                ? locations.Data.OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new TerminalLocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<List<ClockInTerminal>> result = await _terminalService.GetTerminalsAsync(scope);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load terminals.");
+        }
+
+        terminals = result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    private async Task PairAsync()
+    {
+        DialogResult dialog = await _dialogService.ShowDialogAsync<PairTerminalDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PairTerminalDialog.Locations), locationOptions);
+        });
+
+        if (dialog.Cancelled || dialog.Value is not PairTerminalRequest request || scope is null)
+        {
+            return;
+        }
+
+        // The page checks the location here; the controller checks it again when it completes.
+        if (!scope.IsAdmin && scope.LocationId != request.LocationId)
+        {
+            _toastService.ShowError("You can only pair terminals at your own location.");
+            return;
+        }
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userId.IsSuccess || string.IsNullOrEmpty(userId.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        string code = _tokenService.IssuePairingCode(request.LocationId, request.Name, userId.Data, request.SignOutAfterPairing);
+
+        // A full page load: the controller has to set a cookie, which a running Blazor circuit can't.
+        _navigationManager.NavigateTo($"/api/terminal/pair/{Uri.EscapeDataString(code)}", forceLoad: true);
+    }
+
+    private async Task RenameAsync(ClockInTerminal terminal)
+    {
+        DialogResult dialog = await _dialogService.ShowDialogAsync<RenameTerminalDialog>(options =>
+        {
+            options.Header.Title = "Rename terminal";
+            options.Width = "420px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RenameTerminalDialog.CurrentName), terminal.Name);
+        });
+
+        if (dialog.Cancelled || dialog.Value is not string name || scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _terminalService.RenameAsync(scope, terminal.Id, name);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't rename the terminal.");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task RevokeAsync(ClockInTerminal terminal)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Unpair terminal";
+            options.Width = "440px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Unpair \"{terminal.Name}\"? It stops working straight away and would need pairing again to be used.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Unpair");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true || scope is null)
+        {
+            return;
+        }
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userId.IsSuccess || string.IsNullOrEmpty(userId.Data))
+        {
+            _toastService.ShowError("Couldn't confirm who you are - try reloading the page.");
+            return;
+        }
+
+        Result<bool> result = await _terminalService.RevokeAsync(scope, terminal.Id, userId.Data);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't unpair the terminal.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"\"{terminal.Name}\" unpaired.");
+        await LoadAsync();
+    }
+
+    private static string LastSeenText(DateTime seenUtc)
+    {
+        TimeSpan ago = DateTime.UtcNow - seenUtc;
+
+        return ago.TotalMinutes < 10 ? "just now"
+            : ago.TotalHours < 1 ? $"{(int)ago.TotalMinutes} min ago"
+            : ago.TotalDays < 1 ? $"{(int)ago.TotalHours} h ago"
+            : RotaTime.ToVenueLocal(seenUtc).ToString("d MMM", RotaFormat.Uk);
+    }
+}
