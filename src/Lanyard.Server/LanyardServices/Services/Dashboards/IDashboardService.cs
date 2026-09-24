@@ -6,6 +6,13 @@ namespace Lanyard.Application.Services;
 public interface IDashboardService
 {
     Task<Result<IEnumerable<Dashboard>>> GetDashboardsAsync();
+
+    /// <summary>
+    /// Active dashboards without their widgets, for pickers and lists that only show names.
+    /// <see cref="GetDashboardsAsync"/> loads every widget of every dashboard (including text
+    /// widgets' full HTML), which nothing that lists dashboards actually needs.
+    /// </summary>
+    Task<Result<IEnumerable<Dashboard>>> GetDashboardSummariesAsync();
     Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId);
     Task<Result<bool>> DeleteDashboardAsync(Guid dashboardId);
     Task<Result<bool>> CreateDashboardAsync(Dashboard dashboard);

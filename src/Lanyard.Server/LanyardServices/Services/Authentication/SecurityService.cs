@@ -96,8 +96,12 @@ public class SecurityService : ISecurityService
                 return Result<UserProfile>.Fail("User ID is not available");
             }
 
-            using ApplicationDbContext ctx = _factory.CreateDbContext();
-            UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == getResult.Data);
 
             if (user is null)
             {
@@ -155,8 +159,8 @@ public class SecurityService : ISecurityService
 
     public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
-        return await ctx.Users.ToListAsync();
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await ctx.Users.AsNoTracking().TagWithCallSite().ToListAsync();
     }
 
     public async Task UpdateUserProfileAsync(UserProfile updatedUserProfile)
@@ -172,10 +176,20 @@ public class SecurityService : ISecurityService
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
         return await ctx.Users
+            .AsNoTracking()
+            .TagWithCallSite()
             .Where(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
             .ToListAsync();
+    }
+
+    private async Task<bool> AnyActiveUsersAsync()
+    {
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await ctx.Users
+            .TagWithCallSite()
+            .AnyAsync(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId);
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersInLocationAsync(int locationId)
@@ -194,7 +208,8 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if ((await GetActiveUsersAsync()).Any())
+            // An existence check, not a load of every user row (password hashes included).
+            if (await AnyActiveUsersAsync())
             {
                 // Once at least one account exists, only an Admin or Manager may create further
                 // accounts - being merely logged in is not enough (any Staff-level account could

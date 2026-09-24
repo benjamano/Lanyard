@@ -88,17 +88,30 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
     public async Task<Result<bool>> IsClientConnectedAsync(Guid clientId)
     {
-        Result<IEnumerable<Client>> connectedClientsResult = await GetConnectedClientsAsync();
-
-        if (connectedClientsResult.IsSuccess)
+        try
         {
-            bool isConnected = connectedClientsResult.Data!.Any(x => x.Id == clientId);
+            // An existence check for one client, not a load of every connected client row.
+            // Automation action executors call this per action.
+            List<string> ids = GetConnectedConnectionIds().ToList();
+
+            if (ids.Count == 0)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool isConnected = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.Id == clientId && ids.Contains(x.MostRecentConnectionId ?? ""));
 
             return Result<bool>.Ok(isConnected);
         }
-        else
+        catch (Exception ex)
         {
-            return Result<bool>.Fail(connectedClientsResult.Error!);
+            _logger.LogError(ex, "Error checking whether client {ClientId} is connected", clientId);
+            return Result<bool>.Fail(ex.Message);
         }
     }
 
