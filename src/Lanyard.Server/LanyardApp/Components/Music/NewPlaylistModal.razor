@@ -5,7 +5,7 @@
 @using Lanyard.Infrastructure.Models
 
 @inject INotificationService ToastService
-@inject IDbContextFactory<ApplicationDbContext> _dbFactory
+@inject IPlaylistService _playlistService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -83,16 +83,15 @@
 
         try
         {
-            Playlist playlist = new Playlist
-            {
-                Name = model.Name,
-                Description = model.Description,
-                CreateDate = DateTime.UtcNow
-            };
+            Result<Playlist> createResult = await _playlistService.CreatePlaylistAsync(model.Name, model.Description);
 
-            await using ApplicationDbContext context = await _dbFactory.CreateDbContextAsync();
-            context.Playlists.Add(playlist);
-            await context.SaveChangesAsync();
+            if (!createResult.IsSuccess || createResult.Data is null)
+            {
+                ToastService.ShowError($"Error creating playlist: {createResult.Error}");
+                return;
+            }
+
+            Playlist playlist = createResult.Data;
 
             ToastService.ShowSuccess($"Playlist '{playlist.Name}' created successfully!");
             await Dialog.CloseAsync(playlist);

@@ -7,10 +7,8 @@
 @using Lanyard.Infrastructure.Models;
 @using Microsoft.EntityFrameworkCore
 
-@inject IDbContextFactory<ApplicationDbContext> _dbFactory
 @inject INotificationService _toastService
 @inject MusicPlayerService _player
-@inject ISongAnalysisQueue _songAnalysisQueue
 @inject IPlaylistService _playlistService
 
 @implements IDisposable
@@ -240,64 +238,21 @@
             return;
         }
 
-        try
+        Result<bool> addResult = await _playlistService.AddSongToPlaylistAsync(song, selectedPlaylist.Id);
+
+        if (!addResult.IsSuccess)
         {
-            // A fresh context per operation: an injected DbContext lives for the whole circuit
-            // and its change tracker grows with every song added.
-            await using ApplicationDbContext _context = await _dbFactory.CreateDbContextAsync();
+            _toastService.ShowError($"Failed to add song: {addResult.Error}");
+            return;
+        }
 
-            Song? existingSong = await _context.Songs
-                .Where(x => x.Id == song.Id)
-                .FirstOrDefaultAsync();
-
-            if (existingSong is null)
-            {
-                existingSong = new Song
-                {
-                    Id = Guid.NewGuid(),
-                    Name = song.Name,
-                    AlbumName = song.AlbumName,
-                    FilePath = song.FilePath,
-                    DurationSeconds = song.DurationSeconds,
-                    CreateDate = DateTime.UtcNow,
-                    IsDownloaded = true,
-                    IsActive = true
-                };
-
-                _context.Add(existingSong);
-                await _context.SaveChangesAsync();
-
-                // First time this dev-scanned song is persisted â€” queue BPM analysis
-                // so beat-synced DMX scenes can lock onto it.
-                _songAnalysisQueue.Enqueue(existingSong.Id);
-            }
-
-            bool alreadyInPlaylist = await _context.PlaylistSongMembers
-                .AnyAsync(psm => psm.SongId == existingSong.Id
-                              && psm.PlaylistId == selectedPlaylist.Id
-                              && psm.DeleteDate == null);
-
-            if (alreadyInPlaylist)
-            {
-                _toastService.ShowWarning($"'{song.Name}' is already in '{selectedPlaylist.Name}'");
-                return;
-            }
-
-            PlaylistSongMember playlistSongMember = new PlaylistSongMember
-            {
-                SongId = existingSong.Id,
-                PlaylistId = selectedPlaylist.Id,
-                CreateDate = DateTime.UtcNow
-            };
-
-            _context.Add(playlistSongMember);
-            await _context.SaveChangesAsync();
-
+        if (addResult.Data)
+        {
             _toastService.ShowSuccess($"Added '{song.Name}' to '{selectedPlaylist.Name}'");
         }
-        catch (Exception ex)
+        else
         {
-            _toastService.ShowError($"Failed to add song: {ex.Message}");
+            _toastService.ShowWarning($"'{song.Name}' is already in '{selectedPlaylist.Name}'");
         }
     }
 

@@ -2,7 +2,7 @@
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
 @using Microsoft.EntityFrameworkCore
-@inject IDbContextFactory<ApplicationDbContext> _dbFactory
+@inject IPlaylistService _playlistService
 @inject INotificationService ToastService
 
 <FluentDialogBody>
@@ -74,12 +74,15 @@
 
         try
         {
-            await using ApplicationDbContext context = await _dbFactory.CreateDbContextAsync();
-            Playlists = await context.Playlists
-                .AsNoTracking()
-                .Where(p => p.DeleteDate == null)
-                .OrderByDescending(p => p.CreateDate)
-                .ToListAsync();
+            Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistSummariesAsync();
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                ToastService.ShowError($"Failed to load playlists: {result.Error}");
+                return;
+            }
+
+            Playlists = result.Data.OrderByDescending(p => p.CreateDate).ToList();
         }
         catch (Exception ex)
         {

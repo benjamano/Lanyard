@@ -60,8 +60,10 @@ public class AutomationEngineService(
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
-    private volatile bool _initializedEnabled = false;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
+    // The one-time read of the enabled flag, shared by every caller. Cleared again if the read
+    // fails so a transient DB error at startup is retried on the next tick instead of leaving
+    // the engine disabled until the process restarts.
+    private Task<bool>? _initTask;
 
     public ChannelReader<GameStatusTransitionEvent> Reader => _transitionChannel.Reader;
     public bool IsEnabled => _isEnabled;
@@ -107,21 +109,25 @@ public class AutomationEngineService(
         _transitionChannel.Writer.TryWrite(ev);
     }
 
-    private async Task InitializeEnabledAsync(CancellationToken ct)
+    /// <returns>True when the setting was read; false when the read failed and should be retried.</returns>
+    private async Task<bool> InitializeEnabledAsync(CancellationToken ct)
     {
         try
         {
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             AppSetting? setting = await ctx.AppSettings
                 .AsNoTracking()
+                .TagWithCallSite()
                 .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled", ct);
             _isEnabled = setting?.Value == "true";
             _logger.LogInformation("AutomationEngine initialized - enabled: {IsEnabled}", _isEnabled);
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read AutomationEngine.Enabled setting; defaulting to disabled");
+            _logger.LogError(ex, "Failed to read AutomationEngine.Enabled setting; treating the engine as disabled and retrying on the next evaluation");
             _isEnabled = false;
+            return false;
         }
     }
 
@@ -149,26 +155,14 @@ public class AutomationEngineService(
 
     private async Task EnsureEnabledInitializedAsync(CancellationToken ct)
     {
-        // One-time read of the enabled flag. The three hosted services can arrive here
-        // together on startup; this used to block a thread-pool thread on the DB call
-        // (GetAwaiter().GetResult()) while holding a lock the others were waiting on.
-        if (_initializedEnabled)
-        {
-            return;
-        }
+        // The three hosted services can arrive here together on startup. They all await the
+        // same cached task (a lost race at most issues one extra read, which is harmless), and
+        // no thread blocks on the DB call. The shared read isn't tied to any one caller's token.
+        Task<bool> initTask = LazyInitializer.EnsureInitialized(ref _initTask, () => InitializeEnabledAsync(CancellationToken.None));
 
-        await _initLock.WaitAsync(ct);
-        try
+        if (!await initTask.WaitAsync(ct))
         {
-            if (!_initializedEnabled)
-            {
-                await InitializeEnabledAsync(ct);
-                _initializedEnabled = true;
-            }
-        }
-        finally
-        {
-            _initLock.Release();
+            Interlocked.CompareExchange(ref _initTask, null, initTask);
         }
     }
 
