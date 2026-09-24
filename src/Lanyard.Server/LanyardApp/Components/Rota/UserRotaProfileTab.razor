@@ -1,0 +1,179 @@
+@using Lanyard.Application.Services.Scheduling
+
+@inject IStaffPositionService _staffPositionService
+@inject ISchedulingSettingsService _schedulingSettingsService
+
+<div class="rota-profile">
+    @if (isLoading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (companyId is null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+            @(companyError ?? "This user's company could not be resolved.")
+        </FluentMessageBar>
+    }
+    else
+    {
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Positions</FluentText>
+
+            @if (companyPositions.Count == 0)
+            {
+                <FluentText Style="color: var(--neutral-foreground-hint);">
+                    No positions have been set up for this company yet. Add some under Manage &gt; Rota &gt; Positions.
+                </FluentText>
+            }
+            else
+            {
+                <div class="rota-profile-positions">
+                    @foreach (StaffPosition position in companyPositions)
+                    {
+                        <FluentCheckbox Label="@position.Name" Value="@selectedPositionIds.Contains(position.Id)"
+                                        ValueChanged="@(isChecked => TogglePosition(position.Id, isChecked))" />
+                    }
+                </div>
+
+                @if (selectedPositionIds.Count > 1)
+                {
+                    <FluentSelect TOption="StaffPosition" TValue="string" Items="@SelectedPositions" OptionText="@(x => x.Name)"
+                                  OptionValue="@(x => x.Id.ToString())" @bind-Value="primaryPositionId"
+                                  Label="Primary position" Width="100%" />
+                    <FluentText Style="color: var(--neutral-foreground-hint);">
+                        Contract requirements and time-off allowances follow the primary position.
+                    </FluentText>
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                              Disabled="@isSavingPositions" OnClick="@SavePositionsAsync">
+                    @(isSavingPositions ? "Saving..." : "Save Positions")
+                </FluentButton>
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <ContractRequirementEditor @key="@SavedPrimaryPositionId" CompanyId="@companyId.Value" UserId="@UserId"
+                                       PrimaryPositionId="@SavedPrimaryPositionId" Title="Contract requirements for this person" />
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Clock-in PIN</FluentText>
+            <ClockInPinEditor UserId="@UserId" SetByManager="true" />
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    private bool isLoading = true;
+    private int? companyId;
+    private string? companyError;
+
+    private List<StaffPosition> companyPositions = [];
+    private List<UserPosition> userPositions = [];
+    private HashSet<Guid> selectedPositionIds = [];
+    private string? primaryPositionId;
+    private bool isSavingPositions;
+
+    private List<StaffPosition> SelectedPositions =>
+        companyPositions.Where(x => selectedPositionIds.Contains(x.Id)).ToList();
+
+    // The contract editor's inherited hints depend on the *saved* primary, not the one being
+    // picked in the dropdown - it re-keys (and reloads) only once Save Positions succeeds.
+    private Guid? SavedPrimaryPositionId =>
+        userPositions.FirstOrDefault(x => x.IsPrimary)?.StaffPositionId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+
+        Result<int> companyResult = await _schedulingSettingsService.ResolveCompanyIdForUserAsync(UserId);
+
+        if (!companyResult.IsSuccess)
+        {
+            companyId = null;
+            companyError = companyResult.Error;
+            isLoading = false;
+            return;
+        }
+
+        companyId = companyResult.Data;
+
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(companyId.Value);
+        Result<List<UserPosition>> userPositionsResult = await _staffPositionService.GetUserPositionsAsync(UserId);
+
+        companyPositions = positionsResult.IsSuccess ? positionsResult.Data ?? [] : [];
+        userPositions = userPositionsResult.IsSuccess ? userPositionsResult.Data ?? [] : [];
+
+        selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
+        primaryPositionId = SavedPrimaryPositionId?.ToString();
+
+        isLoading = false;
+    }
+
+    private void TogglePosition(Guid positionId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedPositionIds.Add(positionId);
+        }
+        else
+        {
+            selectedPositionIds.Remove(positionId);
+        }
+
+        // Keep the primary pointing at something that is still selected.
+        if (!Guid.TryParse(primaryPositionId, out Guid primary) || !selectedPositionIds.Contains(primary))
+        {
+            primaryPositionId = selectedPositionIds.FirstOrDefault().ToString();
+        }
+    }
+
+    private async Task SavePositionsAsync()
+    {
+        isSavingPositions = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSavingPositions = false;
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        Guid? primary = Guid.TryParse(primaryPositionId, out Guid parsed) && selectedPositionIds.Contains(parsed) ? parsed : null;
+
+        Result<List<UserPosition>> result = await _staffPositionService.SetUserPositionsAsync(
+            scopeResult.Data, UserId, selectedPositionIds.ToList(), primary);
+
+        isSavingPositions = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save positions: {result.Error}");
+            return;
+        }
+
+        userPositions = result.Data ?? [];
+        selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
+        primaryPositionId = SavedPrimaryPositionId?.ToString();
+
+        _toastService.ShowSuccess("Positions saved.");
+    }
+}

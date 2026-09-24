@@ -7,6 +7,7 @@
 @using Lanyard.Application.Services.StaffDocuments
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Rota
 
 @inject IGdprService _gdprService
 @inject INotificationService ToastService
@@ -181,6 +182,12 @@ else
                             Upload Document
                         </FluentButton>
                     }
+                </div>
+            </FluentTab>
+
+            <FluentTab Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
+                <div class="rota-tab-content">
+                    <UserRotaProfileTab UserId="@user.Id" />
                 </div>
             </FluentTab>
 

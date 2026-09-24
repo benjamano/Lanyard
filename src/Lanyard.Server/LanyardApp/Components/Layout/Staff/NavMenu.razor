@@ -77,6 +77,12 @@
                     <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
                     <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
+
+                <FluentNavCategory Title="Rota" IconRest="@(new Icons.Regular.Size20.People())"
+                                   IconActive="@(new Icons.Filled.Size20.People())">
+                    <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
+                    <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
+                </FluentNavCategory>
             }
 
             @if (_isAdmin)

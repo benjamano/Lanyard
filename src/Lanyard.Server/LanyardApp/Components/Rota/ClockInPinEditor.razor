@@ -1,0 +1,162 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IClockInPinService _clockInPinService
+
+<div class="pin-editor">
+    <FluentText Style="color: var(--neutral-foreground-hint);">
+        @if (SetByManager)
+        {
+            <text>The 4-6 digit PIN this person types on the clock-in terminal after tapping their name. Only the person and their managers should know it.</text>
+        }
+        else
+        {
+            <text>The 4-6 digit PIN you type on the clock-in terminal after tapping your name. Keep it to yourself.</text>
+        }
+    </FluentText>
+
+    @if (status is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
+            @if (status.HasPin)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">PIN set</FluentBadge>
+                <FluentText Style="color: var(--neutral-foreground-hint);">
+                    on @status.SetDate!.Value.ToLocalTime().ToString("d MMM yyyy")
+                </FluentText>
+            }
+            else
+            {
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Warning">No PIN set</FluentBadge>
+            }
+        </FluentStack>
+
+        <EditForm EditContext="@_editContext" OnValidSubmit="SetPinAsync">
+            <DataAnnotationsValidator />
+            <div class="pin-editor-fields">
+                <FluentTextInput @bind-Value="model.Pin" Label="@(status.HasPin ? "New PIN" : "PIN")" Required="true"
+                                 TextInputType="TextInputType.Password" Width="100%"
+                                 Message="@_editContext.GetValidationMessage(() => model.Pin)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error" />
+                <FluentTextInput @bind-Value="model.ConfirmPin" Label="Confirm PIN" Required="true"
+                                 TextInputType="TextInputType.Password" Width="100%"
+                                 Message="@_editContext.GetValidationMessage(() => model.ConfirmPin)"
+                                 MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error" />
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" Disabled="@isBusy"
+                              IconStart="@(new Icons.Regular.Size20.Key())">
+                    @(isBusy ? "Saving..." : (status.HasPin ? "Change PIN" : "Set PIN"))
+                </FluentButton>
+                @if (status.HasPin)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@ClearPinAsync">
+                        Remove PIN
+                    </FluentButton>
+                }
+            </FluentStack>
+        </EditForm>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    // True when a manager is setting someone else's PIN from the user editor - recorded as
+    // SetByUserId so "who set this" is answerable later.
+    [Parameter]
+    public bool SetByManager { get; set; }
+
+    private ClockInPinStatus? status;
+    private PinModel model = new();
+    private EditContext _editContext = default!;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        _editContext = new EditContext(model);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<ClockInPinStatus> result = await _clockInPinService.GetStatusAsync(UserId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load PIN status: {result.Error}");
+        }
+
+        status = result.IsSuccess ? result.Data : new ClockInPinStatus(false, null);
+    }
+
+    private async Task SetPinAsync()
+    {
+        isBusy = true;
+
+        string? setByUserId = null;
+
+        if (SetByManager)
+        {
+            Result<string> currentUser = await _securityService.GetCurrentUserIdAsync();
+            setByUserId = currentUser.IsSuccess ? currentUser.Data : null;
+        }
+
+        Result<bool> result = await _clockInPinService.SetPinAsync(UserId, model.Pin, setByUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to set PIN: {result.Error}");
+            return;
+        }
+
+        model = new PinModel();
+        _editContext = new EditContext(model);
+        _toastService.ShowSuccess("PIN saved.");
+        await LoadAsync();
+    }
+
+    private async Task ClearPinAsync()
+    {
+        isBusy = true;
+
+        Result<bool> result = await _clockInPinService.ClearPinAsync(UserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to remove PIN: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("PIN removed.");
+        await LoadAsync();
+    }
+
+    private class PinModel
+    {
+        [Required(ErrorMessage = "Enter a PIN.")]
+        [RegularExpression(@"^\d{4,6}$", ErrorMessage = "A PIN must be 4 to 6 digits.")]
+        public string Pin { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Confirm the PIN.")]
+        [Compare(nameof(Pin), ErrorMessage = "The PINs don't match.")]
+        public string ConfirmPin { get; set; } = string.Empty;
+    }
+}

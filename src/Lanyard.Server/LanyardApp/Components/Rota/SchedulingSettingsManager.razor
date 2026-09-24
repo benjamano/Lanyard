@@ -1,0 +1,132 @@
+@using System.Globalization
+@using Lanyard.Application.Services.Scheduling
+
+@inject ISchedulingSettingsService _schedulingSettingsService
+
+<div class="scheduling-settings">
+    <FluentCard Height="auto" Class="mt-2">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentText Typo="Typography.H4">Rota Settings</FluentText>
+
+            @if (settings is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else
+            {
+                <div class="settings-fields">
+                    <div class="settings-field">
+                        <FluentSelect TOption="MonthOption" TValue="string" Items="@months" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => x.Number.ToString())" @bind-Value="financialYearStartMonth"
+                                      Label="Holiday year starts in" Width="100%" />
+                        <div class="settings-hint">Time-off allowances reset on this date. The UK tax year starts on 6 April.</div>
+                    </div>
+                    <div class="settings-field">
+                        <FluentNumberInput TValue="int" Label="Day of the month" @bind-Value="financialYearStartDay" Width="100%" />
+                    </div>
+                    <div class="settings-field">
+                        <FluentNumberInput TValue="double" Label="Hours in a working day" @bind-Value="hoursPerDay" Width="100%" />
+                        <div class="settings-hint">Used to show holiday allowances in days as well as hours.</div>
+                    </div>
+                    <div class="settings-field">
+                        <FluentNumberInput TValue="int" Label="Shift reminder lead time (hours)" @bind-Value="shiftReminderLeadHours" Width="100%" />
+                        <div class="settings-hint">How far ahead of a shift staff are emailed a reminder.</div>
+                    </div>
+                </div>
+
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                              Disabled="@isSaving" OnClick="@SaveAsync">
+                    @(isSaving ? "Saving..." : "Save Settings")
+                </FluentButton>
+            }
+        </FluentStack>
+    </FluentCard>
+
+    <FluentCard Height="auto" Class="mt-3">
+        <ContractRequirementEditor CompanyId="@CompanyId" Title="Default contract requirements" />
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    private record MonthOption(int Number, string Name);
+
+    private static readonly List<MonthOption> months = Enumerable.Range(1, 12)
+        .Select(m => new MonthOption(m, CultureInfo.GetCultureInfo("en-GB").DateTimeFormat.GetMonthName(m)))
+        .ToList();
+
+    private CompanySchedulingSettings? settings;
+    private string financialYearStartMonth = "4";
+    private int financialYearStartDay = 6;
+    private double hoursPerDay = 8;
+    private int shiftReminderLeadHours = 24;
+    private bool isSaving;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        settings = null;
+
+        Result<CompanySchedulingSettings> result = await _schedulingSettingsService.GetSettingsAsync(CompanyId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Failed to load rota settings: {result.Error}");
+            settings = new CompanySchedulingSettings { CompanyId = CompanyId };
+        }
+        else
+        {
+            settings = result.Data;
+        }
+
+        financialYearStartMonth = settings.FinancialYearStartMonth.ToString();
+        financialYearStartDay = settings.FinancialYearStartDay;
+        hoursPerDay = (double)settings.HoursPerDay;
+        shiftReminderLeadHours = settings.ShiftReminderLeadHours;
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSaving = false;
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        CompanySchedulingSettings toSave = new()
+        {
+            CompanyId = CompanyId,
+            FinancialYearStartMonth = int.TryParse(financialYearStartMonth, out int month) ? month : 4,
+            FinancialYearStartDay = financialYearStartDay,
+            HoursPerDay = (decimal)hoursPerDay,
+            ShiftReminderLeadHours = shiftReminderLeadHours
+        };
+
+        Result<CompanySchedulingSettings> result = await _schedulingSettingsService.SaveSettingsAsync(scopeResult.Data, toSave);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save rota settings: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess("Rota settings saved.");
+        await LoadAsync();
+    }
+}

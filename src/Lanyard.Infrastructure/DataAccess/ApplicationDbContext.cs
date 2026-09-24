@@ -81,6 +81,11 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
+        public DbSet<StaffPosition> StaffPositions { get; set; }
+        public DbSet<UserPosition> UserPositions { get; set; }
+        public DbSet<ContractRequirement> ContractRequirements { get; set; }
+        public DbSet<UserClockInPin> UserClockInPins { get; set; }
+        public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -258,6 +263,42 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.
+            modelBuilder.Entity<StaffPosition>()
+                .HasIndex(x => new { x.CompanyId, x.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<UserPosition>()
+                .HasIndex(x => new { x.UserId, x.StaffPositionId })
+                .IsUnique();
+
+            // ContractRequirement holds three tiers in one table, distinguished by which of
+            // StaffPositionId / UserId is set. As with CompanyOnboardingSettings, Postgres
+            // treats every NULL as distinct so one composite unique index can't express "one
+            // company-default row per company" - three partial indexes, one per tier, do.
+            modelBuilder.Entity<ContractRequirement>()
+                .HasIndex(x => x.CompanyId)
+                .IsUnique()
+                .HasFilter("\"StaffPositionId\" IS NULL AND \"UserId\" IS NULL");
+
+            modelBuilder.Entity<ContractRequirement>()
+                .HasIndex(x => x.StaffPositionId)
+                .IsUnique()
+                .HasFilter("\"StaffPositionId\" IS NOT NULL");
+
+            modelBuilder.Entity<ContractRequirement>()
+                .HasIndex(x => new { x.CompanyId, x.UserId })
+                .IsUnique()
+                .HasFilter("\"UserId\" IS NOT NULL");
+
+            modelBuilder.Entity<UserClockInPin>()
+                .HasIndex(x => x.UserId)
+                .IsUnique();
+
+            modelBuilder.Entity<CompanySchedulingSettings>()
+                .HasIndex(x => x.CompanyId)
+                .IsUnique();
         }
     }
 }
