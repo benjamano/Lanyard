@@ -567,7 +567,7 @@
             });
         }
 
-        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistSummariesAsync();
 
         if (playlistResult.IsSuccess)
         {

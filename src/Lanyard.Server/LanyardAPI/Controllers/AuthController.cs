@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
@@ -63,6 +64,7 @@ namespace Lanyard.API.Controllers
 
                 case SignInOutcomeKind.Success:
                     await _signInManager.SignInWithClaimsAsync(attempt.User!, dto.RememberMe, attempt.Claims!);
+                    UserCultureCookie.Append(Response, attempt.User!.PreferredCulture);
                     return Ok(new { message = "Login successful", username = attempt.User!.UserName });
 
                 default:
@@ -89,6 +91,7 @@ namespace Lanyard.API.Controllers
 
                 case SignInOutcomeKind.Success:
                     await _signInManager.SignInWithClaimsAsync(attempt.User!, rememberMe, attempt.Claims!);
+                    UserCultureCookie.Append(Response, attempt.User!.PreferredCulture);
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     {
@@ -159,6 +162,7 @@ namespace Lanyard.API.Controllers
             }
 
             await _signInManager.SignInWithClaimsAsync(user, rememberMe, extraClaims);
+            UserCultureCookie.Append(Response, user.PreferredCulture);
             await HttpContext.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
