@@ -1,4 +1,3 @@
-using Lanyard.Infrastructure.Enum;
 ﻿using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
@@ -7,6 +6,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
