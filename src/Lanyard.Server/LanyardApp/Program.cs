@@ -1,4 +1,5 @@
-﻿using Lanyard.App.Components;
+﻿using Amazon.S3;
+using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.ApplicationRoles;
@@ -76,6 +77,13 @@ builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+
+// One bucket client for the whole process. FileService is scoped and used to build its own
+// AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IAmazonS3>(_ => S3StorageClientFactory.CreateFromEnvironment());
+}
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();

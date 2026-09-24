@@ -338,5 +338,18 @@
       "A scene running for a kiosk that is offline no longer queries the database on every step.",
       "Kiosk client 1.0.40 is required for the batched messages; older kiosks keep working via the previous per-channel message until they auto-update on their next restart."
     ]
+  },
+  {
+    "version": "1.3.24",
+    "releaseDate": "2026-09-24",
+    "summary": "Kiosk videos and music now stream instead of being buffered; the File Manager's root folder shows only root files.",
+    "details": [
+      "Kiosk \"Play a Video\" steps now stream the video straight from storage. Previously the server loaded the entire file into memory and pushed it to the kiosk screen as inline text on every step, which for a large video meant hundreds of megabytes of work per step per kiosk.",
+      "Seeking or looping in a video or song no longer re-downloads the whole file: the server now asks storage for just the bytes the player requests.",
+      "File downloads, music and kiosk videos are now cacheable by the browser for a day, so thumbnails and repeated plays don't re-fetch the same bytes.",
+      "The File Manager, file pickers and image grid now show only the files and folders that actually live in the selected folder. The root folder used to list every file in every folder.",
+      "The image picker no longer reloads its folder (and flashes its spinner) every time the surrounding page re-renders.",
+      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation."
+    ]
   }
 ]
