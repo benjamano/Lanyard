@@ -395,7 +395,7 @@
             { IsOpen: true } => ("On the clock", BadgeColor.Informative),
             { NeedsReview: true } => ("Needs review", BadgeColor.Warning),
             { IsApproved: true } => ("Approved", BadgeColor.Success),
-            _ => ("Awaiting approval", BadgeColor.Subtle)
+            _ => ("Awaiting approval", BadgeColor.Brand)
         };
 
         builder.OpenComponent<FluentBadge>(0);
