@@ -7,7 +7,10 @@
 @using Lanyard.Infrastructure.DTO.Scheduling
 @using Lanyard.Infrastructure.Enum
 
+@implements IDisposable
+
 @inject ITimeOffService _timeOffService
+@inject ITimeOffEventBus _timeOffEventBus
 @inject ITimeOffPolicyService _timeOffPolicyService
 @inject ISchedulingSettingsService _schedulingSettingsService
 
@@ -176,6 +179,9 @@
         scope = scopeResult.Data;
         currentUserId = userResult.IsSuccess ? userResult.Data : null;
 
+        // A request sent from someone's phone (or decided by another manager) shows up here live.
+        _timeOffEventBus.OnChanged += OnTimeOffChanged;
+
         if (scope.IsAdmin)
         {
             Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
@@ -227,7 +233,6 @@
         }
 
         loadedLocationId = location;
-        views = null;
 
         Result<List<TimeOffRequestView>> result = await _timeOffService.GetRequestsForLocationAsync(scope, location, filter);
         Result<int> pending = await _timeOffService.CountPendingAsync(scope, location);
@@ -242,6 +247,22 @@
         views = result.Data ?? [];
         pendingCount = pending.IsSuccess ? pending.Data : 0;
     }
+
+    private void OnTimeOffChanged(int changedLocationId)
+    {
+        if (changedLocationId != loadedLocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => _timeOffEventBus.OnChanged -= OnTimeOffChanged;
 
     private async Task SetFilterAsync(TimeOffListFilter value)
     {

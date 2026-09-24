@@ -38,7 +38,7 @@ public class TimeOffServiceTests
 
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
         TimeOffPolicyService policy = new(factory, NullLogger<TimeOffPolicyService>.Instance);
-        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
 
         List<TimeOffType> types = (await policy.GetTypesAsync(company.Id)).Data!;
         TimeOffType holiday = types.Single(x => x.Name == "Paid holiday");
@@ -516,7 +516,7 @@ public class TimeOffServiceTests
         (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
-        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
 
         Result<TimeOffBalances> result = await service.GetBalancesAsync(user.Id, company.Id, Today);
 
@@ -540,5 +540,54 @@ public class TimeOffServiceTests
         TimeOffRequestView tom = result.Data!.Single(v => v.Request.UserId == colleague.Id);
         Assert.AreEqual(16m, amy.Balance!.RemainingHours);
         Assert.AreEqual(40m, tom.Balance!.RemainingHours);
+    }
+    [TestMethod]
+    public async Task CountPendingForNavAsync_CountsTheManagersOwnLocationOnly()
+    {
+        Setup setup = await SetupAsync();
+        Location elsewhere = new() { CompanyId = setup.Company.Id, Name = "Wisbech", IsActive = true };
+
+        await using (ApplicationDbContext ctx = new(setup.Options))
+        {
+            ctx.Locations.Add(elsewhere);
+            await ctx.SaveChangesAsync();
+        }
+
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 10, 1), new(2026, 10, 1), 8, TimeOffStatus.Pending);
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 10, 5), new(2026, 10, 5), 8, TimeOffStatus.Approved);
+
+        await using (ApplicationDbContext ctx = new(setup.Options))
+        {
+            ctx.TimeOffRequests.Add(new TimeOffRequest
+            {
+                Id = Guid.NewGuid(), UserId = "someone-else", TimeOffTypeId = setup.Holiday.Id, LocationId = elsewhere.Id,
+                StartDate = new(2026, 10, 1), EndDate = new(2026, 10, 1), Hours = 8, Status = TimeOffStatus.Pending
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.AreEqual(1, (await setup.Service.CountPendingForNavAsync(SchedulingTestHelpers.ManagerScopeFor(setup.Location), Manager)).Data);
+        Assert.AreEqual(0, (await setup.Service.CountPendingForNavAsync(SchedulingTestHelpers.ManagerScopeFor(setup.Location), setup.User.Id)).Data, "A manager's own request doesn't count.");
+        Assert.AreEqual(0, (await setup.Service.CountPendingForNavAsync(SchedulingTestHelpers.StaffScopeFor(setup.Location), Manager)).Data);
+        Assert.AreEqual(2, (await setup.Service.CountPendingForNavAsync(SchedulingTestHelpers.AdminScope, Manager)).Data, "An admin with no location sees every location.");
+    }
+
+    [TestMethod]
+    public async Task RequestsAndDecisionsTellOpenPagesThatTimeOffChanged()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
+        TimeOffEventBus bus = new();
+        List<int> published = [];
+        bus.OnChanged += published.Add;
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), bus, new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffType holiday = (await new TimeOffPolicyService(factory, NullLogger<TimeOffPolicyService>.Instance).GetTypesAsync(company.Id)).Data!.First();
+
+        Result<TimeOffSubmitResult> submitted = await service.SubmitAsync(user.Id, location.Id, Draft(holiday, new(2026, 10, 12), new(2026, 10, 12), 8));
+        await service.DecideAsync(SchedulingTestHelpers.ManagerScopeFor(location), submitted.Data!.Request.Id, true, null, Manager);
+
+        CollectionAssert.AreEqual(new[] { location.Id, location.Id }, published);
     }
 }

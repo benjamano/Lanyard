@@ -22,7 +22,7 @@
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size20.Flash())" />
-            <FluentText Typo="Typography.PaneHeader">@_steps[_currentStepIndex]</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">@_steps[_currentStepIndex]</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
@@ -46,7 +46,7 @@
 
                 @if (_triggerTypeString == AutomationTriggerType.Scheduled.ToString())
                 {
-                    <FluentText Typo="Typography.Body" Color="Color.Default">
+                    <FluentText Color="Color.Default">
                         A scheduled rule isn't triggered by this client - it's only recorded as a label on the execution log.
                     </FluentText>
                 }
@@ -80,7 +80,7 @@
                                       Label="At time (server local)"
                                       Style="width: 100%;" />
 
-                    <FluentText Typo="Typography.Body" Color="Color.Default">Days of week (leave all unticked to run every day)</FluentText>
+                    <FluentText Color="Color.Default">Days of week (leave all unticked to run every day)</FluentText>
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
                         @foreach (DayOfWeek day in _allDaysOfWeek)
                         {

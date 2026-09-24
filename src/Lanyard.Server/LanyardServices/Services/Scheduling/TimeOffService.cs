@@ -13,6 +13,7 @@ namespace Lanyard.Application.Services.Scheduling;
 public class TimeOffService(
     IDbContextFactory<ApplicationDbContext> factory,
     ISchedulingSettingsService settingsService,
+    ITimeOffEventBus eventBus,
     TimeProvider timeProvider,
     ILogger<TimeOffService> logger) : ITimeOffService
 {
@@ -20,6 +21,7 @@ public class TimeOffService(
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ISchedulingSettingsService _settingsService = settingsService;
+    private readonly ITimeOffEventBus _eventBus = eventBus;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<TimeOffService> _logger = logger;
 
@@ -130,6 +132,7 @@ public class TimeOffService(
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("User {UserId} cancelled time-off request {RequestId}", userId, requestId);
+            _eventBus.Publish(request.LocationId);
 
             return Result<bool>.Ok(true);
         }
@@ -314,6 +317,48 @@ public class TimeOffService(
         }
     }
 
+    public async Task<Result<int>> CountPendingForNavAsync(LocationScope scope, string? viewerUserId)
+    {
+        try
+        {
+            if (!scope.IsAdmin && !scope.IsManager)
+            {
+                return Result<int>.Ok(0);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IQueryable<TimeOffRequest> pending = ctx.TimeOffRequests
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Status == TimeOffStatus.Pending);
+
+            // A manager's own request is waiting on someone else, not on them.
+            if (!scope.IsAdmin && viewerUserId is not null)
+            {
+                pending = pending.Where(x => x.UserId != viewerUserId);
+            }
+
+            // The location they signed in to - the one the Time Off Requests page opens on. Only an
+            // Admin with no location of their own sees every location's total.
+            if (scope.LocationId is int locationId)
+            {
+                pending = pending.Where(x => x.LocationId == locationId);
+            }
+            else if (!scope.IsAdmin)
+            {
+                return Result<int>.Ok(0);
+            }
+
+            return Result<int>.Ok(await pending.CountAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to count pending time-off requests for the nav");
+            return Result<int>.Fail($"Failed to count pending requests: {ex.Message}");
+        }
+    }
+
     public async Task<Result<TimeOffRequest>> DecideAsync(LocationScope scope, Guid requestId, bool approve, string? reason, string deciderUserId)
     {
         try
@@ -389,6 +434,7 @@ public class TimeOffService(
                     await ctx.SaveChangesAsync();
 
                     _logger.LogInformation("Time-off request {RequestId} cut short after {Today} by {DeciderUserId}", requestId, today, deciderUserId);
+                    _eventBus.Publish(request.LocationId);
 
                     return Result<TimeOffRequest>.Ok(withdrawn);
                 }
@@ -403,6 +449,7 @@ public class TimeOffService(
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("Time-off request {RequestId} {Decision} by {DeciderUserId}", requestId, approve ? "approved" : "rejected", deciderUserId);
+            _eventBus.Publish(request.LocationId);
 
             return Result<TimeOffRequest>.Ok(request);
         }
@@ -539,6 +586,7 @@ public class TimeOffService(
             }
 
             request.TimeOffType = context.Type;
+            _eventBus.Publish(locationId);
 
             _logger.LogInformation(recordedByManager
                     ? "Manager {RequestedBy} recorded time off {RequestId} for {UserId}"

@@ -37,6 +37,11 @@ public interface ITimeOffService
 
     Task<Result<int>> CountPendingAsync(LocationScope scope, int locationId);
 
+    // The "waiting for approval" count for the nav: requests at the location the manager signed in
+    // to (every location for an Admin signed in without one), leaving out a manager's own requests
+    // since those wait on someone else; 0 for anyone who isn't a manager.
+    Task<Result<int>> CountPendingForNavAsync(LocationScope scope, string? viewerUserId);
+
     // Approve a pending request, or reject a pending one - or an approved one that hasn't ended
     // yet, to withdraw it. Rejecting needs a reason, which the person sees.
     Task<Result<TimeOffRequest>> DecideAsync(LocationScope scope, Guid requestId, bool approve, string? reason, string deciderUserId);

@@ -33,7 +33,7 @@
         <TitleTemplate>
             <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8">
                 <FluentIcon Value="@(new Icons.Regular.Size20.FolderOpen())" />
-                <FluentText Typo="Typography.PaneHeader">Select File</FluentText>
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Select File</FluentText>
             </FluentStack>
         </TitleTemplate>
         <ChildContent>
@@ -110,7 +110,7 @@
 
                 <FluentDivider class="my-2" />
 
-                <FluentText Typo="Typography.Body">Or upload a new file here</FluentText>
+                <FluentText>Or upload a new file here</FluentText>
                 <FileUploader Id="file-picker-uploader" SelectedFolderId="@currentFolderId"
                               MaximumFileCount="@MaximumFileCount" Label="Upload a file"
                               Accept="@BuildAcceptAttribute()"

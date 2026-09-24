@@ -67,7 +67,7 @@
 
 <FluentCard Height="auto">
     <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-log">
-        <FluentText Typo="Typography.PaneHeader">Execution Log</FluentText>
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Execution Log</FluentText>
         <FluentStack VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Horizontal">
             <FluentSwitch @bind-Value="_showFailuresOnly" @bind-Value:after="StateHasChanged">
                 Failures only

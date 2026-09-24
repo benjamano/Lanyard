@@ -39,24 +39,24 @@
                         </div>
                         <FluentStack Orientation="Orientation.Horizontal">
                             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
-                                <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="@GetPlaylistNameStyle(playlist.Id)">
+                                <FluentText Weight="TextWeight.Bold" Style="@GetPlaylistNameStyle(playlist.Id)">
                                     @playlist.Name
                                 </FluentText>
                                 @if (!string.IsNullOrEmpty(playlist.Description))
                                 {
-                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                    <FluentText Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                                         @playlist.Description
                                     </FluentText>
                                 }
                                 else if (playlist.CreateByUser is not null)
                                 {
-                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <FluentText Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                         @playlist.CreateByUser.UserName
                                     </FluentText>
                                 }
                                 else
                                 {
-                                    <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <FluentText Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                         @playlist.CreateDate.ToString("g")
                                     </FluentText>
                                 }
@@ -79,10 +79,10 @@
                         <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Custom" CustomColor="white" />
                     </div>
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
-                        <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <FluentText Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             All Songs
                         </FluentText>
-                        <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <FluentText Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             All Songs inside Lanyard
                         </FluentText>
                     </FluentStack>
@@ -98,10 +98,10 @@
                                 <FluentIcon Value="@(new Icons.Regular.Size24.Add())" Color="Color.Custom" CustomColor="white" />
                             </div>
                             <FluentStack Orientation="Orientation.Vertical" VerticalGap="4" Style="overflow: hidden; flex: 1;">
-                                <FluentText Typo="Typography.Body" Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <FluentText Weight="TextWeight.Bold" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     New Playlist
                                 </FluentText>
-                                <FluentText Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <FluentText Style="color: var(--neutral-foreground-hint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     Create a New Playlist
                                 </FluentText>
                             </FluentStack>

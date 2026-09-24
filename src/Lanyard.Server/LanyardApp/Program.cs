@@ -101,6 +101,7 @@ builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
+builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();

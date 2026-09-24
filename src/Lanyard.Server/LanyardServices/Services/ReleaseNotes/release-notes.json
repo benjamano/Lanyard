@@ -365,7 +365,9 @@
       "Managers can record time off for someone directly, including past dates, for example when someone calls in sick.",
       "Time-off types (Paid holiday, Unpaid leave and Sickness to start with) are managed under Manage > Rota > Time Off Types. Each type can be paid or unpaid, and can count against an allowance or not.",
       "Allowances are set per holiday year as a company default, per position or for one person, in days or hours - for example 28 days of holiday for everyone, 30 for Managers, and unlimited unpaid leave for Customer Service Advisors. The holiday year starts on 6 April unless changed in Rota Settings.",
-      "Approved and requested time off now appears on the Rota Builder beside that person's shifts. Scheduling someone on a day they're off shows a warning, and nobody gets a \"not enough shifts\" warning for a week they're off entirely."
+      "Approved and requested time off now appears on the Rota Builder beside that person's shifts. Scheduling someone on a day they're off shows a warning, and nobody gets a \"not enough shifts\" warning for a week they're off entirely.",
+      "Managers now see how many time-off requests are waiting for them next to Time Off Requests in the menu, and on the Rota heading when it's collapsed. It updates as soon as someone asks for, cancels or gets a decision on time off - no refresh needed.",
+      "Section headings on several pages and dialogs (including Onboarding, Staff Document Types, Roles, the What's New dialog, and the music and projection dialogs) show as headings again instead of plain text."
     ]
   }
 ]

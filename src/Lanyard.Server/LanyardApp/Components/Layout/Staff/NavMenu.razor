@@ -1,10 +1,14 @@
 ﻿@using Lanyard.App.Components.Dialogs
 @using Lanyard.Shared.DTO
+@using Lanyard.Application.Services.Scheduling
+@implements IDisposable
 
 @inject NavigationManager NavigationManager
 @inject ISecurityService SecurityService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IReleaseNotesService ReleaseNotesService
+@inject ITimeOffService TimeOffService
+@inject ITimeOffEventBus TimeOffEventBus
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
@@ -79,11 +83,19 @@
                     <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
 
-                <FluentNavCategory Title="Rota" IconRest="@(new Icons.Regular.Size20.People())"
+                <FluentNavCategory Title="@RotaTitle" IconRest="@(new Icons.Regular.Size20.People())"
                                    IconActive="@(new Icons.Filled.Size20.People())">
                     <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All">Time Off Requests</FluentNavItem>
+                    <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All" Tooltip="@PendingTooltip">
+                        <span class="nav-item-with-count">
+                            Time Off Requests
+                            @if (_pendingTimeOff > 0)
+                            {
+                                <FluentCounterBadge Count="@_pendingTimeOff" OverflowCount="99" aria-label="@PendingTooltip" />
+                            }
+                        </span>
+                    </FluentNavItem>
                     <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
@@ -186,6 +198,18 @@
     private string? _displayName;
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
+    private int _pendingTimeOff;
+
+    // The category header only takes plain text, so the count goes in the title too - otherwise it
+    // would be hidden whenever the Rota group is collapsed.
+    private string RotaTitle => _pendingTimeOff > 0 ? $"Rota ({_pendingTimeOff})" : "Rota";
+
+    private string? PendingTooltip => _pendingTimeOff switch
+    {
+        0 => null,
+        1 => "1 time-off request waiting for approval",
+        _ => $"{_pendingTimeOff} time-off requests waiting for approval"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -205,6 +229,15 @@
             string? name = await SecurityService.GetCurrentUserName();
             _displayName = name?.Length > 20 ? name[..20] + "…" : name;
 
+            if (_isManager)
+            {
+                await RefreshPendingTimeOffAsync();
+
+                // Live: a request made on someone's phone, or decided on the requests page, updates
+                // the count here without a reload.
+                TimeOffEventBus.OnChanged += OnTimeOffChanged;
+            }
+
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
             if (releaseNotesResult.IsSuccess)
             {
@@ -213,6 +246,33 @@
             }
         }
     }
+
+    private async Task RefreshPendingTimeOffAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            return;
+        }
+
+        Result<string> me = await SecurityService.GetCurrentUserIdAsync();
+        Result<int> count = await TimeOffService.CountPendingForNavAsync(scope.Data, me.IsSuccess ? me.Data : null);
+        _pendingTimeOff = count.IsSuccess ? count.Data : 0;
+    }
+
+    // Raised on whichever circuit made the change; recounting is one small query, so every open
+    // manager nav simply recounts rather than working out whether the location is theirs.
+    private void OnTimeOffChanged(int locationId)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshPendingTimeOffAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => TimeOffEventBus.OnChanged -= OnTimeOffChanged;
 
     // /api/auth/logout is a controller endpoint, not an @page, so it must not be reached through
     // Href: Blazor's interactive router intercepts the anchor click, pushes the URL into history,
