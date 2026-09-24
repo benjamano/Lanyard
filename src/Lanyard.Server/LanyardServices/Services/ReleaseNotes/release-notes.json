@@ -309,5 +309,14 @@
       "Editing the subject or body only changes the email sent to that one new user - the shared company/location welcome email template is left untouched.",
       "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
     ]
+  },
+  {
+    "version": "1.3.22",
+    "releaseDate": "2026-09-24",
+    "summary": "Emails now show your company logo in place of the \"Lanyard\" heading.",
+    "details": [
+      "Removed the \"Lanyard\" text heading from the top of every email sent by the app.",
+      "Emails now show the company's logo at the top when one has been uploaded, and the Lanyard logo only when the company has no logo of its own."
+    ]
   }
 ]
