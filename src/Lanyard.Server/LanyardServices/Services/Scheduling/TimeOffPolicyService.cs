@@ -25,23 +25,13 @@ public class TimeOffPolicyService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<TimeOffType> types = await ctx.TimeOffTypes
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.CompanyId == companyId)
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.Name)
-                .ToListAsync();
-
-            if (types.Count == 0)
-            {
-                types = await SeedDefaultTypesAsync(ctx, companyId);
-            }
+            List<TimeOffType> types = await EnsureDefaultTypesAsync(ctx, companyId, _logger);
 
             return Result<List<TimeOffType>>.Ok(includeInactive ? types : types.Where(x => x.IsActive).ToList());
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to retrieve time-off types");
             return Result<List<TimeOffType>>.Fail($"Failed to retrieve time-off types: {ex.Message}");
         }
     }
@@ -124,6 +114,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to save the time-off type");
             return Result<TimeOffType>.Fail($"Failed to save the time-off type: {ex.Message}");
         }
     }
@@ -153,6 +144,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to archive the time-off type");
             return Result<bool>.Fail($"Failed to archive the time-off type: {ex.Message}");
         }
     }
@@ -170,6 +162,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to retrieve allowances");
             return Result<List<TimeOffAllowance>>.Fail($"Failed to retrieve allowances: {ex.Message}");
         }
     }
@@ -225,6 +218,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to save the allowance");
             return Result<TimeOffAllowance>.Fail($"Failed to save the allowance: {ex.Message}");
         }
     }
@@ -255,6 +249,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to remove the allowance");
             return Result<bool>.Fail($"Failed to remove the allowance: {ex.Message}");
         }
     }
@@ -269,6 +264,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to work out allowances");
             return Result<Dictionary<Guid, ResolvedAllowance>>.Fail($"Failed to work out allowances: {ex.Message}");
         }
     }
@@ -290,6 +286,7 @@ public class TimeOffPolicyService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to work out allowances");
             return Result<Dictionary<Guid, ResolvedAllowance>>.Fail($"Failed to work out allowances: {ex.Message}");
         }
     }
@@ -300,6 +297,7 @@ public class TimeOffPolicyService(
     {
         List<Guid> typeIds = await ctx.TimeOffTypes
             .AsNoTracking()
+            .TagWithCallSite()
             .Where(x => x.CompanyId == companyId && x.IsActive)
             .Select(x => x.Id)
             .ToListAsync();
@@ -313,6 +311,50 @@ public class TimeOffPolicyService(
                     || (userId != null && x.UserId == userId)))
             .ToListAsync();
 
+        return Coalesce(typeIds, rows, positionId, userId);
+    }
+
+    // The same resolution for many people at once, in a fixed number of queries - the manager's
+    // request list needs every requester's balance and mustn't query per person.
+    internal static async Task<Dictionary<string, Dictionary<Guid, ResolvedAllowance>>> ResolveForUsersCoreAsync(
+        ApplicationDbContext ctx, int companyId, IReadOnlyCollection<string> userIds)
+    {
+        List<string> ids = userIds.Distinct().ToList();
+
+        Dictionary<string, Guid> primaryByUser = (await ctx.UserPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => ids.Contains(x.UserId) && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == companyId)
+                .Select(x => new { x.UserId, x.StaffPositionId })
+                .ToListAsync())
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g => g.First().StaffPositionId);
+
+        List<Guid> positionIds = primaryByUser.Values.Distinct().ToList();
+
+        List<Guid> typeIds = await ctx.TimeOffTypes
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId && x.IsActive)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        List<TimeOffAllowance> rows = await ctx.TimeOffAllowances
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId
+                && ((x.StaffPositionId == null && x.UserId == null)
+                    || (x.StaffPositionId != null && positionIds.Contains(x.StaffPositionId.Value))
+                    || (x.UserId != null && ids.Contains(x.UserId))))
+            .ToListAsync();
+
+        return ids.ToDictionary(
+            id => id,
+            id => Coalesce(typeIds, rows, primaryByUser.TryGetValue(id, out Guid p) ? p : null, id));
+    }
+
+    private static Dictionary<Guid, ResolvedAllowance> Coalesce(List<Guid> typeIds, List<TimeOffAllowance> rows, Guid? positionId, string? userId)
+    {
         Dictionary<Guid, ResolvedAllowance> result = [];
 
         foreach (Guid typeId in typeIds)
@@ -374,8 +416,24 @@ public class TimeOffPolicyService(
     // The starting set every company gets. Allowance amounts are deliberately not seeded: how
     // much holiday people get is company policy (and differs by position), so it's set on the
     // Time Off Types page rather than guessed here.
-    private async Task<List<TimeOffType>> SeedDefaultTypesAsync(ApplicationDbContext ctx, int companyId)
+    //
+    // Shared with TimeOffService so a balance asked for before anyone has opened the types list
+    // still sees the defaults.
+    internal static async Task<List<TimeOffType>> EnsureDefaultTypesAsync(ApplicationDbContext ctx, int companyId, ILogger logger)
     {
+        List<TimeOffType> existing = await ctx.TimeOffTypes
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.CompanyId == companyId)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .ToListAsync();
+
+        if (existing.Count > 0)
+        {
+            return existing;
+        }
+
         List<TimeOffType> defaults =
         [
             new() { Id = Guid.NewGuid(), CompanyId = companyId, Name = "Paid holiday", IsPaid = true, DeductsFromAllowance = true, SortOrder = 0 },
@@ -389,7 +447,7 @@ public class TimeOffPolicyService(
         try
         {
             await ctx.SaveChangesAsync();
-            _logger.LogInformation("Created the default time-off types for company {CompanyId}", companyId);
+            logger.LogInformation("Created the default time-off types for company {CompanyId}", companyId);
             return defaults;
         }
         catch (DbUpdateException)

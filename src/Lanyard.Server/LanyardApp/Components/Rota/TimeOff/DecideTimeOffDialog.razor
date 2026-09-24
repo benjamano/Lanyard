@@ -19,6 +19,14 @@
                 }
             </div>
 
+            @if (IsCutShort)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    This time off has already started. Days up to and including today stay as taken; from
+                    @Today.AddDays(1).ToString("ddd d MMM", RotaFormat.Uk) onwards is withdrawn@(View.Request.TimeOffType?.DeductsFromAllowance == true ? " and goes back on their allowance" : string.Empty).
+                </FluentMessageBar>
+            }
+
             @foreach (string warning in View.Warnings)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
@@ -36,7 +44,7 @@
     </ChildContent>
     <ActionTemplate>
         <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">
-            @(isBusy ? "Saving..." : Approve ? "Approve" : IsWithdraw ? "Withdraw approval" : "Reject")
+            @(isBusy ? "Saving..." : Approve ? "Approve" : IsCutShort ? "Cut short" : IsWithdraw ? "Withdraw approval" : "Reject")
         </FluentButton>
         <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
     </ActionTemplate>
@@ -61,7 +69,11 @@
 
     private bool IsWithdraw => !Approve && View.Request.Status == TimeOffStatus.Approved;
 
-    private string Title => Approve ? "Approve time off" : IsWithdraw ? "Withdraw approved time off" : "Reject time off";
+    private static DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    private bool IsCutShort => IsWithdraw && View.Request.StartDate <= Today;
+
+    private string Title => Approve ? "Approve time off" : IsCutShort ? "Cut time off short" : IsWithdraw ? "Withdraw approved time off" : "Reject time off";
 
     private async Task SaveAsync()
     {
@@ -91,7 +103,7 @@
             return;
         }
 
-        _toastService.ShowSuccess(Approve ? "Approved." : IsWithdraw ? "Approval withdrawn." : "Rejected.");
+        _toastService.ShowSuccess(Approve ? "Approved." : IsCutShort ? "Cut short from tomorrow." : IsWithdraw ? "Approval withdrawn." : "Rejected.");
         await Dialog.CloseAsync(true);
     }
 }

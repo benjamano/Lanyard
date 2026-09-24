@@ -78,6 +78,11 @@
     font-size: 0.9rem;
 }
 
+.request-card ::deep .request-own {
+    color: var(--colorNeutralForeground3);
+    font-style: italic;
+}
+
 .request-actions {
     display: flex;
     gap: 8px;

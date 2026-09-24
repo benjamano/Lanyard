@@ -118,9 +118,9 @@
             return;
         }
 
+        Result<List<TimeOffType>> typeResult = await _timeOffPolicyService.GetTypesAsync(companyId);
         Result<TimeOffBalances> balanceResult = await _timeOffService.GetBalancesAsync(userId, companyId, Today);
         Result<List<TimeOffRequest>> requestResult = await _timeOffService.GetRequestsForUserAsync(userId, Today.AddDays(-90));
-        Result<List<TimeOffType>> typeResult = await _timeOffPolicyService.GetTypesAsync(companyId);
 
         if (!balanceResult.IsSuccess || !requestResult.IsSuccess || !typeResult.IsSuccess)
         {

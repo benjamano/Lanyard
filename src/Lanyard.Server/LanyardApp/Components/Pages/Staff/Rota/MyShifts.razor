@@ -4,6 +4,8 @@
 
 @using Lanyard.App.Components.Rota
 @using Lanyard.App.Components.Rota.TimeOff
+@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
 
 <PageTitle>My Shifts</PageTitle>
 
@@ -34,12 +36,28 @@
     private string? activeTabId;
 
     // /rota/time-off opens straight on the Time off tab (it's what the nav's "Time Off" link and any
-    // "your request was decided" link point at). Set once: re-applying it on every render would
-    // snap the tab back when the person clicks another one.
+    // "your request was decided" link point at). /rota and /rota/time-off are the same component,
+    // so moving between them reuses this instance without re-initialising it - the tab follows the
+    // address on every navigation instead. Clicking a tab doesn't navigate, so it never snaps back.
     protected override void OnInitialized()
     {
-        activeTabId = new Uri(_navigationManager.Uri).AbsolutePath.TrimEnd('/').EndsWith("/time-off", StringComparison.OrdinalIgnoreCase)
-            ? "time-off"
-            : "shifts";
+        activeTabId = TabFor(_navigationManager.Uri);
+        _navigationManager.LocationChanged += OnLocationChanged;
     }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        string tab = TabFor(e.Location);
+
+        if (tab != activeTabId)
+        {
+            activeTabId = tab;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string TabFor(string uri) =>
+        new Uri(uri).AbsolutePath.TrimEnd('/').EndsWith("/time-off", StringComparison.OrdinalIgnoreCase) ? "time-off" : "shifts";
+
+    public void Dispose() => _navigationManager.LocationChanged -= OnLocationChanged;
 }

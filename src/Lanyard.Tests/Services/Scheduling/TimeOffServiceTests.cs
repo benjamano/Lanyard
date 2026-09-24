@@ -426,4 +426,119 @@ public class TimeOffServiceTests
 
         Assert.AreEqual(new DateOnly(2026, 10, 1), result.Data!.Single().Request.StartDate);
     }
+    [TestMethod]
+    public async Task DecideAsync_AManagerCannotDecideTheirOwnRequestButAnAdminCan()
+    {
+        Setup setup = await SetupAsync();
+        TimeOffRequest own = await SeedRequestAsync(setup, setup.Holiday, new(2026, 10, 1), new(2026, 10, 1), 8, TimeOffStatus.Pending);
+
+        Result<TimeOffRequest> asManager = await setup.Service.DecideAsync(SchedulingTestHelpers.ManagerScopeFor(setup.Location), own.Id, true, null, setup.User.Id);
+        Result<TimeOffRequest> asAdmin = await setup.Service.DecideAsync(SchedulingTestHelpers.AdminScope, own.Id, true, null, setup.User.Id);
+
+        Assert.IsFalse(asManager.IsSuccess);
+        StringAssert.Contains(asManager.Error, "your own time off");
+        Assert.IsTrue(asAdmin.IsSuccess, asAdmin.Error);
+    }
+
+    [TestMethod]
+    public async Task RecordForUserAsync_AManagerCannotRecordTheirOwnTimeOff()
+    {
+        Setup setup = await SetupAsync();
+
+        Result<TimeOffSubmitResult> result = await setup.Service.RecordForUserAsync(
+            SchedulingTestHelpers.ManagerScopeFor(setup.Location), setup.User.Id, setup.Location.Id, Draft(setup.Holiday, Today, Today, 8), setup.User.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task DecideAsync_WithdrawingLeaveThatHasStartedKeepsTheDaysAlreadyTaken()
+    {
+        Setup setup = await SetupAsync();
+        TimeOffRequest started = await SeedRequestAsync(setup, setup.Holiday, Today.AddDays(-2), Today.AddDays(2), 40, TimeOffStatus.Approved);
+
+        Result<TimeOffRequest> result = await setup.Service.DecideAsync(
+            SchedulingTestHelpers.ManagerScopeFor(setup.Location), started.Id, false, "Needed back for the half-term rush", Manager);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext ctx = new(setup.Options);
+        List<TimeOffRequest> rows = await ctx.TimeOffRequests.OrderBy(x => x.StartDate).ToListAsync();
+
+        Assert.AreEqual(2, rows.Count);
+        Assert.AreEqual(TimeOffStatus.Approved, rows[0].Status);
+        Assert.AreEqual(Today.AddDays(-2), rows[0].StartDate);
+        Assert.AreEqual(Today, rows[0].EndDate);
+        Assert.AreEqual(24m, rows[0].Hours);
+
+        Assert.AreEqual(TimeOffStatus.Rejected, rows[1].Status);
+        Assert.AreEqual(Today.AddDays(1), rows[1].StartDate);
+        Assert.AreEqual(Today.AddDays(2), rows[1].EndDate);
+        Assert.AreEqual(16m, rows[1].Hours);
+        Assert.AreEqual("Needed back for the half-term rush", rows[1].DecisionReason);
+
+        TimeOffBalance balance = (await setup.Service.GetBalancesAsync(setup.User.Id, setup.Company.Id, Today)).Data!.Balances.Single(b => b.Type.Id == setup.Holiday.Id);
+        Assert.AreEqual(24m, balance.ApprovedHours);
+    }
+
+    [TestMethod]
+    public async Task DecideAsync_NothingToWithdrawOnceOnlyTodayIsLeft()
+    {
+        Setup setup = await SetupAsync();
+        TimeOffRequest endsToday = await SeedRequestAsync(setup, setup.Holiday, Today.AddDays(-2), Today, 24, TimeOffStatus.Approved);
+
+        Result<TimeOffRequest> result = await setup.Service.DecideAsync(
+            SchedulingTestHelpers.ManagerScopeFor(setup.Location), endsToday.Id, false, "Too late", Manager);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "already been taken");
+    }
+
+    [TestMethod]
+    public async Task RecordForUserAsync_OverAllowanceWarningIgnoresOtherPendingRequests()
+    {
+        Setup setup = await SetupAsync(holidayHours: 224m);
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 5, 4), new(2026, 5, 29), 160, TimeOffStatus.Approved);
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 11, 2), new(2026, 11, 10), 56, TimeOffStatus.Pending);
+        TimeOffRequestDraft threeDays = Draft(setup.Holiday, new(2026, 10, 12), new(2026, 10, 14), 24);
+
+        Result<TimeOffPreview> staff = await setup.Service.PreviewAsync(setup.User.Id, setup.Company.Id, threeDays);
+        Result<TimeOffPreview> manager = await setup.Service.PreviewAsync(setup.User.Id, setup.Company.Id, threeDays, forManager: true);
+
+        Assert.AreEqual(1, staff.Data!.Warnings.Count, "Staff are warned against pending requests too.");
+        Assert.AreEqual(0, manager.Data!.Warnings.Count, "Approved total would be 23 of 28 days.");
+    }
+
+    [TestMethod]
+    public async Task GetBalancesAsync_CreatesTheDefaultTypesIfNoneExistYet()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TestClock(Now), NullLogger<TimeOffService>.Instance);
+
+        Result<TimeOffBalances> result = await service.GetBalancesAsync(user.Id, company.Id, Today);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEqual(new[] { "Paid holiday", "Unpaid leave" }, result.Data!.Balances.Select(b => b.Type.Name).ToArray());
+    }
+
+    [TestMethod]
+    public async Task GetRequestsForLocationAsync_WorksOutEachPersonsBalanceSeparately()
+    {
+        Setup setup = await SetupAsync(holidayHours: 40m);
+        UserProfile colleague = await SchedulingTestHelpers.SeedUserAsync(setup.Options, setup.Location, "Tom");
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 8, 3), new(2026, 8, 5), 24, TimeOffStatus.Approved);
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 10, 12), new(2026, 10, 13), 16, TimeOffStatus.Pending);
+        await SeedRequestAsync(setup, setup.Holiday, new(2026, 10, 19), new(2026, 10, 20), 16, TimeOffStatus.Pending, colleague.Id);
+
+        Result<List<TimeOffRequestView>> result = await setup.Service.GetRequestsForLocationAsync(
+            SchedulingTestHelpers.ManagerScopeFor(setup.Location), setup.Location.Id, TimeOffListFilter.Pending);
+
+        TimeOffRequestView amy = result.Data!.Single(v => v.Request.UserId == setup.User.Id);
+        TimeOffRequestView tom = result.Data!.Single(v => v.Request.UserId == colleague.Id);
+        Assert.AreEqual(16m, amy.Balance!.RemainingHours);
+        Assert.AreEqual(40m, tom.Balance!.RemainingHours);
+    }
 }

@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Lanyard.Application.Services.Scheduling;
 
@@ -35,12 +36,17 @@ public class TimeOffService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
+            // A company's types are created on first use; a balance can be the first thing asked
+            // for (the Time off tab loads it before the types list), so make sure they exist.
+            await TimeOffPolicyService.EnsureDefaultTypesAsync(ctx, companyId, _logger);
+
             List<TimeOffBalance> balances = await BalancesForYearAsync(ctx, userId, companyId, year);
 
             return Result<TimeOffBalances>.Ok(new TimeOffBalances(year, settings.HoursPerDay, balances));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to work out your time-off balance");
             return Result<TimeOffBalances>.Fail($"Failed to work out your time-off balance: {ex.Message}");
         }
     }
@@ -69,6 +75,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to check the request");
             return Result<TimeOffPreview>.Fail($"Failed to check the request: {ex.Message}");
         }
     }
@@ -81,6 +88,12 @@ public class TimeOffService(
         if (!SchedulingAccess.CanManageLocation(scope, locationId))
         {
             return Result<TimeOffSubmitResult>.Fail("You can only record time off for people at your own location.");
+        }
+
+        // Recording saves straight as approved, so recording your own would skip approval.
+        if (userId == managerUserId && !scope.IsAdmin)
+        {
+            return Result<TimeOffSubmitResult>.Fail("You can't record your own time off. Request it from My Shifts, or ask another manager.");
         }
 
         return await CreateAsync(userId, locationId, draft, requestedBy: managerUserId, recordedByManager: true);
@@ -122,6 +135,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to cancel the request");
             return Result<bool>.Fail($"Failed to cancel the request: {ex.Message}");
         }
     }
@@ -144,6 +158,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to retrieve your time off");
             return Result<List<TimeOffRequest>>.Fail($"Failed to retrieve your time off: {ex.Message}");
         }
     }
@@ -159,7 +174,7 @@ public class TimeOffService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Location? location = await ctx.Locations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == locationId);
+            Location? location = await ctx.Locations.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == locationId);
 
             if (location is null)
             {
@@ -205,20 +220,27 @@ public class TimeOffService(
                     .ToListAsync();
             }
 
-            Dictionary<(string UserId, DateOnly YearStart), List<TimeOffBalance>> balanceCache = [];
+            // Balances and rota days for everyone in the list are fetched in a fixed number of
+            // queries up front, not per request.
+            List<string> requesterIds = requests.Select(x => x.UserId).Distinct().ToList();
+            List<HolidayYear> years = requests.Select(x => HolidayYear.For(settings, x.StartDate)).Distinct().ToList();
+
+            Dictionary<(string UserId, DateOnly YearStart), List<TimeOffBalance>> balancesByUserYear = requests.Count > 0
+                ? await BalancesForUsersAsync(ctx, location.CompanyId, requesterIds, years)
+                : [];
+
+            ILookup<string, DateOnly> shiftDaysByUser = requests.Count > 0
+                ? await ShiftDaysForUsersAsync(ctx, requesterIds, requests.Min(x => x.StartDate), requests.Max(x => x.EndDate))
+                : Enumerable.Empty<(string, DateOnly)>().ToLookup(x => x.Item1, x => x.Item2);
+
             List<TimeOffRequestView> views = [];
 
             foreach (TimeOffRequest request in requests)
             {
                 HolidayYear year = HolidayYear.For(settings, request.StartDate);
 
-                if (!balanceCache.TryGetValue((request.UserId, year.Start), out List<TimeOffBalance>? balances))
-                {
-                    balances = await BalancesForYearAsync(ctx, request.UserId, location.CompanyId, year);
-                    balanceCache[(request.UserId, year.Start)] = balances;
-                }
-
-                TimeOffBalance? balance = balances.FirstOrDefault(x => x.Type.Id == request.TimeOffTypeId);
+                TimeOffBalance? balance = balancesByUserYear.GetValueOrDefault((request.UserId, year.Start))?
+                    .FirstOrDefault(x => x.Type.Id == request.TimeOffTypeId);
                 string name = RotaNames.For(request.User);
                 List<string> warnings = [];
 
@@ -240,7 +262,7 @@ public class TimeOffService(
 
                 if (request.Status is TimeOffStatus.Pending or TimeOffStatus.Approved)
                 {
-                    List<DateOnly> shiftDays = await ShiftDaysAsync(ctx, request.UserId, request.StartDate, request.EndDate);
+                    List<DateOnly> shiftDays = shiftDaysByUser[request.UserId].Where(request.Covers).ToList();
 
                     if (shiftDays.Count > 0)
                     {
@@ -262,6 +284,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to retrieve time-off requests");
             return Result<List<TimeOffRequestView>>.Fail($"Failed to retrieve time-off requests: {ex.Message}");
         }
     }
@@ -286,6 +309,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to count pending requests");
             return Result<int>.Fail($"Failed to count pending requests: {ex.Message}");
         }
     }
@@ -310,6 +334,13 @@ public class TimeOffService(
                 return Result<TimeOffRequest>.Fail("You can only decide time off for your own location.");
             }
 
+            // Nobody approves their own leave. Admins are the exception, since someone has to be
+            // able to decide the most senior person's.
+            if (request.UserId == deciderUserId && !scope.IsAdmin)
+            {
+                return Result<TimeOffRequest>.Fail("You can't decide your own time off. Another manager or an admin needs to.");
+            }
+
             string? trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
 
             if (trimmedReason?.Length > MaxNotesLength)
@@ -328,17 +359,38 @@ public class TimeOffService(
             }
             else
             {
+                DateOnly today = Today;
+
+                // An approved request can be withdrawn while any of it is still to come. Once only
+                // today (or nothing) is left, it has been taken.
                 bool canReject = request.Status == TimeOffStatus.Pending
-                    || (request.Status == TimeOffStatus.Approved && request.EndDate >= Today);
+                    || (request.Status == TimeOffStatus.Approved && request.EndDate > today);
 
                 if (!canReject)
                 {
-                    return Result<TimeOffRequest>.Fail("This request can't be rejected any more.");
+                    return Result<TimeOffRequest>.Fail(request.Status == TimeOffStatus.Approved
+                        ? "This time off has already been taken, so there's nothing left to withdraw."
+                        : "This request can't be rejected any more.");
                 }
 
                 if (trimmedReason is null)
                 {
                     return Result<TimeOffRequest>.Fail("Give a reason - the person will see it.");
+                }
+
+                if (request.Status == TimeOffStatus.Approved && request.StartDate <= today)
+                {
+                    // Already under way: the days up to and including today stay as taken, and
+                    // only the rest is withdrawn - recorded as its own rejected request so the
+                    // person sees exactly which days were cancelled and why.
+                    TimeOffRequest withdrawn = CutShort(request, today, trimmedReason, deciderUserId);
+                    ctx.TimeOffRequests.Add(withdrawn);
+
+                    await ctx.SaveChangesAsync();
+
+                    _logger.LogInformation("Time-off request {RequestId} cut short after {Today} by {DeciderUserId}", requestId, today, deciderUserId);
+
+                    return Result<TimeOffRequest>.Ok(withdrawn);
                 }
 
                 request.Status = TimeOffStatus.Rejected;
@@ -356,6 +408,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to save the decision");
             return Result<TimeOffRequest>.Fail($"Failed to save the decision: {ex.Message}");
         }
     }
@@ -370,8 +423,42 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to retrieve time off");
             return Result<List<TimeOffRequest>>.Fail($"Failed to retrieve time off: {ex.Message}");
         }
+    }
+
+    // Splits an approved request that has started: the original keeps the days up to and including
+    // today (with a proportional share of the hours), and a new Rejected request holds the rest.
+    private TimeOffRequest CutShort(TimeOffRequest request, DateOnly today, string reason, string deciderUserId)
+    {
+        int totalDays = request.DayCount;
+        int keptDays = today.DayNumber - request.StartDate.DayNumber + 1;
+        decimal keptHours = Math.Round(request.Hours * keptDays / totalDays, 2);
+
+        TimeOffRequest withdrawn = new()
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.UserId,
+            TimeOffTypeId = request.TimeOffTypeId,
+            LocationId = request.LocationId,
+            StartDate = today.AddDays(1),
+            EndDate = request.EndDate,
+            Hours = request.Hours - keptHours,
+            Notes = request.Notes,
+            Status = TimeOffStatus.Rejected,
+            RequestedDateUtc = request.RequestedDateUtc,
+            RequestedByUserId = request.RequestedByUserId,
+            DecidedByUserId = deciderUserId,
+            DecidedDateUtc = UtcNow,
+            DecisionReason = reason,
+            TimeOffType = request.TimeOffType
+        };
+
+        request.EndDate = today;
+        request.Hours = keptHours;
+
+        return withdrawn;
     }
 
     // Shared with RotaService, which reads time off inside its own context.
@@ -391,7 +478,7 @@ public class TimeOffService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Location? location = await ctx.Locations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == locationId && x.IsActive);
+            Location? location = await ctx.Locations.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == locationId && x.IsActive);
 
             if (location is null)
             {
@@ -436,7 +523,20 @@ public class TimeOffService(
             };
 
             ctx.TimeOffRequests.Add(request);
-            await ctx.SaveChangesAsync();
+
+            try
+            {
+                await ctx.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation })
+            {
+                // Two requests for the same days raced past the overlap check above; the
+                // exclusion constraint on TimeOffRequests kept only the first.
+                _logger.LogWarning("Overlapping time-off request for {UserId} refused by the database: {Error}", userId, ex.InnerException.Message);
+                return Result<TimeOffSubmitResult>.Fail(recordedByManager
+                    ? "They already have time off booked or requested for some of those days."
+                    : "You already have time off booked or requested for some of those days.");
+            }
 
             request.TimeOffType = context.Type;
 
@@ -449,6 +549,7 @@ public class TimeOffService(
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to save the request");
             return Result<TimeOffSubmitResult>.Fail($"Failed to save the request: {ex.Message}");
         }
     }
@@ -460,7 +561,7 @@ public class TimeOffService(
     private async Task<(string? Error, DraftContext? Context)> ValidateDraftAsync(
         ApplicationDbContext ctx, string userId, int companyId, CompanySchedulingSettings settings, TimeOffRequestDraft draft, bool recordedByManager)
     {
-        TimeOffType? type = await ctx.TimeOffTypes.AsNoTracking()
+        TimeOffType? type = await ctx.TimeOffTypes.AsNoTracking().TagWithCallSite()
             .FirstOrDefaultAsync(x => x.Id == draft.TimeOffTypeId && x.CompanyId == companyId && x.IsActive);
 
         if (type is null)
@@ -505,7 +606,7 @@ public class TimeOffService(
                     $"Make one request up to {year.End.ToString("d MMMM", RotaFormat.Uk)} and another from {nextStart.ToString("d MMMM", RotaFormat.Uk)}.", null);
         }
 
-        TimeOffRequest? clash = await ctx.TimeOffRequests.AsNoTracking()
+        TimeOffRequest? clash = await ctx.TimeOffRequests.AsNoTracking().TagWithCallSite()
             .Where(x => x.UserId == userId
                 && (x.Status == TimeOffStatus.Pending || x.Status == TimeOffStatus.Approved)
                 && x.StartDate <= draft.EndDate && x.EndDate >= draft.StartDate)
@@ -534,7 +635,9 @@ public class TimeOffService(
                     ? $"No {type.Name.ToLower()} allowance is set for this person."
                     : $"No {type.Name.ToLower()} allowance has been set for you yet. Your manager will check it.");
             }
-            else if (balance?.RemainingAfterPendingHours is decimal left && left - draft.Hours < 0)
+            // Staff are warned against everything they've asked for, pending included. A manager
+            // recording time off approves it outright, so only what's already approved counts.
+            else if ((recordedByManager ? balance?.RemainingHours : balance?.RemainingAfterPendingHours) is decimal left && left - draft.Hours < 0)
             {
                 decimal over = draft.Hours - left;
                 string pendingNote = balance.PendingHours > 0 ? ", counting your other pending requests" : string.Empty;
@@ -557,42 +660,64 @@ public class TimeOffService(
         return (null, new DraftContext(type, year, balance, warnings));
     }
 
-    private async Task<List<TimeOffBalance>> BalancesForYearAsync(ApplicationDbContext ctx, string userId, int companyId, HolidayYear year)
+    private static async Task<List<TimeOffBalance>> BalancesForYearAsync(ApplicationDbContext ctx, string userId, int companyId, HolidayYear year)
+    {
+        Dictionary<(string UserId, DateOnly YearStart), List<TimeOffBalance>> all = await BalancesForUsersAsync(ctx, companyId, [userId], [year]);
+
+        return all[(userId, year.Start)];
+    }
+
+    // Balances for many people and holiday years in a fixed number of queries: types, allowances
+    // (via the batched resolver) and one grouped read of live requests.
+    private static async Task<Dictionary<(string UserId, DateOnly YearStart), List<TimeOffBalance>>> BalancesForUsersAsync(
+        ApplicationDbContext ctx, int companyId, IReadOnlyCollection<string> userIds, IReadOnlyCollection<HolidayYear> years)
     {
         List<TimeOffType> types = await ctx.TimeOffTypes
             .AsNoTracking()
+            .TagWithCallSite()
             .Where(x => x.CompanyId == companyId && x.IsActive && x.DeductsFromAllowance)
             .OrderBy(x => x.SortOrder)
             .ThenBy(x => x.Name)
             .ToListAsync();
 
-        Guid? primaryPositionId = await ctx.UserPositions
-            .AsNoTracking()
-            .Where(x => x.UserId == userId && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == companyId)
-            .Select(x => (Guid?)x.StaffPositionId)
-            .FirstOrDefaultAsync();
+        Dictionary<string, Dictionary<Guid, ResolvedAllowance>> allowances =
+            await TimeOffPolicyService.ResolveForUsersCoreAsync(ctx, companyId, userIds);
 
-        Dictionary<Guid, ResolvedAllowance> allowances = await TimeOffPolicyService.ResolveCoreAsync(ctx, companyId, primaryPositionId, userId);
-
+        List<string> ids = userIds.Distinct().ToList();
         List<Guid> typeIds = types.Select(x => x.Id).ToList();
+        DateOnly from = years.Min(x => x.Start);
+        DateOnly to = years.Max(x => x.End);
 
-        var totals = await ctx.TimeOffRequests
+        var live = await ctx.TimeOffRequests
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => x.UserId == userId
+            .Where(x => ids.Contains(x.UserId)
                 && typeIds.Contains(x.TimeOffTypeId)
                 && (x.Status == TimeOffStatus.Approved || x.Status == TimeOffStatus.Pending)
-                && x.StartDate >= year.Start && x.StartDate <= year.End)
-            .GroupBy(x => new { x.TimeOffTypeId, x.Status })
-            .Select(g => new { g.Key.TimeOffTypeId, g.Key.Status, Hours = g.Sum(x => x.Hours) })
+                && x.StartDate >= from && x.StartDate <= to)
+            .Select(x => new { x.UserId, x.TimeOffTypeId, x.Status, x.StartDate, x.Hours })
             .ToListAsync();
 
-        return types.Select(type => new TimeOffBalance(
-                type,
-                allowances.GetValueOrDefault(type.Id) ?? ResolvedAllowance.None(type.Id),
-                totals.Where(x => x.TimeOffTypeId == type.Id && x.Status == TimeOffStatus.Approved).Sum(x => x.Hours),
-                totals.Where(x => x.TimeOffTypeId == type.Id && x.Status == TimeOffStatus.Pending).Sum(x => x.Hours)))
-            .ToList();
+        Dictionary<(string UserId, DateOnly YearStart), List<TimeOffBalance>> result = [];
+
+        foreach (string userId in ids)
+        {
+            Dictionary<Guid, ResolvedAllowance> userAllowances = allowances.GetValueOrDefault(userId) ?? [];
+
+            foreach (HolidayYear year in years)
+            {
+                var inYear = live.Where(x => x.UserId == userId && year.Contains(x.StartDate)).ToList();
+
+                result[(userId, year.Start)] = types.Select(type => new TimeOffBalance(
+                        type,
+                        userAllowances.GetValueOrDefault(type.Id) ?? ResolvedAllowance.None(type.Id),
+                        inYear.Where(x => x.TimeOffTypeId == type.Id && x.Status == TimeOffStatus.Approved).Sum(x => x.Hours),
+                        inYear.Where(x => x.TimeOffTypeId == type.Id && x.Status == TimeOffStatus.Pending).Sum(x => x.Hours)))
+                    .ToList();
+            }
+        }
+
+        return result;
     }
 
     // Days in [from, to] on which the person has a published, active shift anywhere.
@@ -609,6 +734,26 @@ public class TimeOffService(
             .ToListAsync();
 
         return starts.Select(RotaTime.LocalDate).Distinct().Order().ToList();
+    }
+
+    // Local dates of published, active shifts for several people across [from, to], in one query.
+    private static async Task<ILookup<string, DateOnly>> ShiftDaysForUsersAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateOnly from, DateOnly to)
+    {
+        DateTime fromUtc = RotaTime.StartOfDayUtc(from);
+        DateTime toUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
+
+        var shifts = await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => userIds.Contains(x.UserId) && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= fromUtc && x.StartUtc < toUtc)
+            .Select(x => new { x.UserId, x.StartUtc })
+            .ToListAsync();
+
+        return shifts
+            .Select(x => (x.UserId, Day: RotaTime.LocalDate(x.StartUtc)))
+            .Distinct()
+            .OrderBy(x => x.Day)
+            .ToLookup(x => x.UserId, x => x.Day);
     }
 
     private static string DayList(List<DateOnly> days)

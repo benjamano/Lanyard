@@ -104,17 +104,21 @@
                         <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
                     }
 
-                    @if (request.Status == TimeOffStatus.Pending)
+                    @if (IsOwnRequest(request) && request.IsLive)
+                    {
+                        <FluentText Class="request-own">This is your own request. Another manager or an admin needs to decide it.</FluentText>
+                    }
+                    else if (request.Status == TimeOffStatus.Pending)
                     {
                         <div class="request-actions">
                             <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Checkmark())" OnClick="@(() => DecideAsync(view, true))">Approve</FluentButton>
                             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@(() => DecideAsync(view, false))">Reject</FluentButton>
                         </div>
                     }
-                    else if (request.Status == TimeOffStatus.Approved && request.EndDate >= Today)
+                    else if (request.Status == TimeOffStatus.Approved && request.EndDate > Today)
                     {
                         <div class="request-actions">
-                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => DecideAsync(view, false))">Withdraw approval</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => DecideAsync(view, false))">@(request.StartDate <= Today ? "Cut short" : "Withdraw approval")</FluentButton>
                         </div>
                     }
                 </section>
@@ -147,6 +151,9 @@
     private int? loadedLocationId;
 
     private DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    // Managers can't decide their own leave (the service refuses it too); admins can.
+    private bool IsOwnRequest(TimeOffRequest request) => request.UserId == currentUserId && scope?.IsAdmin != true;
 
     private string EmptyText => filter switch
     {

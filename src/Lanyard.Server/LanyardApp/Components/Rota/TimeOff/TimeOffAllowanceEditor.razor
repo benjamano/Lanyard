@@ -103,9 +103,19 @@
     private bool inDays = true;
     private bool isSaving;
 
+    // Which tier is loaded. Only a different tier reloads: the parent re-renders for unrelated
+    // reasons (ticking a position checkbox, say), and reloading then would wipe unsaved edits.
+    private (int CompanyId, Guid? PositionId, string? UserId, Guid? PrimaryPositionId)? loadedFor;
+
     protected override async Task OnParametersSetAsync()
     {
-        await LoadAsync();
+        var wanted = (CompanyId, PositionId, UserId, PrimaryPositionId);
+
+        if (loadedFor != wanted)
+        {
+            loadedFor = wanted;
+            await LoadAsync();
+        }
     }
 
     private string ModeLabel(string mode) => mode switch
