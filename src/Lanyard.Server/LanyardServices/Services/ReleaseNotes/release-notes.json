@@ -290,5 +290,15 @@
       "Added a Staff Document Types link to the Manage nav menu, which was previously missing even for Admins.",
       "Fixed the Staff Document Types list rendering as a fixed-column table, which squashed the reminder-days input taller than its own row and clipped long names on a phone - it's now a plain list that wraps and resizes properly on any screen."
     ]
+  },
+  {
+    "version": "1.3.20",
+    "releaseDate": "2026-09-24",
+    "summary": "Smoother login and home page loads.",
+    "details": [
+      "The login company picker and the sign-in form no longer reload (and briefly blank out) a moment after the page first appears.",
+      "The home page no longer fetches your home screen dashboard settings and company branding twice on every load.",
+      "Fixed the \"your home screen dashboard is no longer available\" notice never actually appearing when the dashboard you had chosen was deleted."
+    ]
   }
 ]

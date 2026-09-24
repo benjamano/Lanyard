@@ -117,20 +117,22 @@ else
     // prerender pass resolved that is cheap to serialise is carried across so the interactive pass
     // skips the scope, branding and home-screen-selection lookups. The Dashboard itself is not
     // persisted - its widgets hold a back-reference to it, so the graph is cyclic - only its id is,
-    // and that one query is repeated.
-    [PersistentState]
+    // and that one query is repeated. Initialized is only set once both lookups succeeded, so a
+    // failed prerender-time lookup is retried on the interactive pass rather than persisted.
+    // SkipLastSnapshot: after a circuit pause/resume the page re-resolves everything fresh.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public bool Initialized { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public string? CompanyLogoUrl { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public Guid? HomeScreenDashboardId { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public bool PersonalDashboardUnavailable { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public bool HomeScreenIsOrganisationDefault { get; set; }
 
     protected override async Task OnInitializedAsync()
@@ -141,12 +143,12 @@ else
             return;
         }
 
-        Task logoTask = GetCurrentCompanyLogoUrlAsync();
-        Task homeScreenTask = LoadHomeScreenDashboardAsync();
+        Task<bool> logoTask = GetCurrentCompanyLogoUrlAsync();
+        Task<bool> homeScreenTask = LoadHomeScreenDashboardAsync();
 
-        await Task.WhenAll(logoTask, homeScreenTask);
+        bool[] results = await Task.WhenAll(logoTask, homeScreenTask);
 
-        Initialized = true;
+        Initialized = results.All(x => x);
     }
 
     // Fired here rather than in OnInitializedAsync so the user sees it exactly once - that method
@@ -161,14 +163,14 @@ else
         }
     }
 
-    private async Task LoadHomeScreenDashboardAsync()
+    private async Task<bool> LoadHomeScreenDashboardAsync()
     {
         Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
 
         if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
         {
             _logger.LogWarning("Failed to resolve the current user for the home screen dashboard: {Error}", userIdResult.Error);
-            return;
+            return false;
         }
 
         // Resolves the user's own choice, then the organisation-wide default an Admin or Manager
@@ -178,7 +180,7 @@ else
         if (!selectionResult.IsSuccess || selectionResult.Data is null)
         {
             _logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", selectionResult.Error);
-            return;
+            return false;
         }
 
         // Set when the user had picked a dashboard that has since been deleted. The selection has
@@ -189,6 +191,7 @@ else
         HomeScreenDashboardId = selectionResult.Data.DashboardId;
 
         await LoadHomeScreenDashboardWidgetsAsync();
+        return true;
     }
 
     private async Task LoadHomeScreenDashboardWidgetsAsync()
@@ -214,14 +217,14 @@ else
         _homeScreenDashboard = dashboard;
     }
 
-    private async Task GetCurrentCompanyLogoUrlAsync()
+    private async Task<bool> GetCurrentCompanyLogoUrlAsync()
     {
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
         if (!scopeResult.Success || scopeResult.Data is not { CompanyId: int companyId })
         {
             _logger.LogWarning("Failed to resolve the current location scope for the home page logo: {Error}", scopeResult.Error);
-            return;
+            return false;
         }
 
         Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
@@ -229,11 +232,12 @@ else
         if (!branding.Success || branding.Data is null)
         {
             _logger.LogWarning("Failed to get company branding for company {CompanyId}: {Error}", companyId, branding.Error);
-            return;
+            return false;
         }
 
         CompanyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
             ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
             : null;
+        return true;
     }
 }

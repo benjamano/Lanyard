@@ -138,25 +138,35 @@ else
     // picker briefly collapsing back to "Loading companies..."). It is all public, pre-login data.
     // LoadedForCompanyId is the guard: the skip only applies while the company in the query string
     // still matches what the state was loaded for, so switching company in-circuit reloads as normal.
-    [PersistentState]
+    // StateLoaded is only set once a load fully succeeded, so a failed prerender-time lookup is
+    // retried on the interactive pass instead of being persisted as "done".
+    // SkipLastSnapshot: after a circuit pause/resume the page reloads fresh rather than reusing the
+    // last snapshot - only the prerender -> interactive hand-off is worth bridging.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public bool StateLoaded { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public int? LoadedForCompanyId { get; set; }
 
-    [PersistentState]
+    // Set when the company in the query string was rejected (stale/deactivated id) and the page
+    // fell back to the picker. CompanyId is re-bound from the URL on every parameter set, so the
+    // skip path needs this to reproduce the fallback without re-querying.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool RequestedCompanyRejected { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public List<LoginLocationOption> LocationOptions { get; set; } = [];
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public List<LoginCompanyOption> CompanyOptions { get; set; } = [];
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public string? SelectedAccentColor { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public string? SelectedLogoUrl { get; set; }
 
-    [PersistentState]
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public string? BackgroundImageUrl { get; set; }
 
     // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
@@ -181,18 +191,32 @@ else
         {
             // Data already in hand for this company (restored from the prerender pass, or loaded
             // earlier in this circuit). Only the theme still needs applying - see OnAfterRenderAsync.
-            _pendingThemeColor = CompanyId is null || SelectedAccentColor is null
+            if (RequestedCompanyRejected)
+            {
+                CompanyId = null;
+            }
+
+            _pendingThemeColor = CompanyId is null
                 ? BrandConstants.PrimaryColorHex
                 : BrandConstants.ResolveAccentColor(SelectedAccentColor);
             return;
         }
 
-        StateLoaded = true;
-        LoadedForCompanyId = CompanyId;
+        int? requestedCompanyId = CompanyId;
+
+        // Reset per-company state before the first await so a switch never shows (or submits) the
+        // previous company's locations or branding while the new company's are still loading.
+        StateLoaded = false;
+        RequestedCompanyRejected = false;
+        LocationOptions = [];
+        SelectedAccentColor = null;
+        SelectedLogoUrl = null;
+        BackgroundImageUrl = null;
 
         if (CompanyId is null)
         {
-            await LoadCompanyOptionsAsync();
+            StateLoaded = await LoadCompanyOptionsAsync();
+            LoadedForCompanyId = null;
             _pendingThemeColor = BrandConstants.PrimaryColorHex;
             return;
         }
@@ -203,8 +227,9 @@ else
         {
             // Stale/invalid company id in the URL - fall back to the company picker.
             CompanyId = null;
-            LoadedForCompanyId = null;
-            await LoadCompanyOptionsAsync();
+            RequestedCompanyRejected = true;
+            StateLoaded = await LoadCompanyOptionsAsync();
+            LoadedForCompanyId = requestedCompanyId;
             _pendingThemeColor = BrandConstants.PrimaryColorHex;
             return;
         }
@@ -222,6 +247,8 @@ else
         if (result.IsSuccess)
         {
             LocationOptions = result.Data!;
+            LoadedForCompanyId = requestedCompanyId;
+            StateLoaded = true;
         }
     }
 
@@ -246,14 +273,17 @@ else
         await ThemeService.SetThemeAsync(_pendingThemeColor);
     }
 
-    private async Task LoadCompanyOptionsAsync()
+    private async Task<bool> LoadCompanyOptionsAsync()
     {
         Result<List<LoginCompanyOption>> result = await _companyLocationService.GetLoginCompanyOptionsAsync();
 
-        if (result.IsSuccess)
+        if (!result.IsSuccess)
         {
-            CompanyOptions = result.Data!;
+            return false;
         }
+
+        CompanyOptions = result.Data!;
+        return true;
     }
 
     private void SelectCompany(int companyId)
