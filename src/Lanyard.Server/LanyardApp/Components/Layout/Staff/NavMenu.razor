@@ -83,7 +83,7 @@
                     <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
 
-                <FluentNavCategory Title="@RotaTitle" IconRest="@(new Icons.Regular.Size20.People())"
+                <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@PendingTooltip" IconRest="@(new Icons.Regular.Size20.People())"
                                    IconActive="@(new Icons.Filled.Size20.People())">
                     <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
@@ -200,9 +200,15 @@
     private IEnumerable<ReleaseNote> _releaseNotes = [];
     private int _pendingTimeOff;
 
-    // The category header only takes plain text, so the count goes in the title too - otherwise it
-    // would be hidden whenever the Rota group is collapsed.
-    private string RotaTitle => _pendingTimeOff > 0 ? $"Rota ({_pendingTimeOff})" : "Rota";
+    // The category header only takes plain text, so its badge is drawn by a global style from this
+    // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
+    // whenever the Rota group is collapsed. Null leaves the attribute off, and with it the badge.
+    private string? PendingCountAttribute => _pendingTimeOff switch
+    {
+        0 => null,
+        > 99 => "99+",
+        _ => _pendingTimeOff.ToString()
+    };
 
     private string? PendingTooltip => _pendingTimeOff switch
     {

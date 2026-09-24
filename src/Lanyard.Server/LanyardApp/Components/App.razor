@@ -122,6 +122,33 @@
         .theme-colour-swatch {
         background: var(--theme-colour);
         }
+
+        /* Nav category badges. FluentNavCategory only takes a plain-text Title, so a count on a
+        category header (e.g. Rota's time-off requests waiting for approval) is set as a
+        data-pending-count attribute, which lands on the category's button, and drawn here to
+        match FluentCounterBadge. Global because the button is rendered by Fluent, so NavMenu's
+        scoped CSS can't reach it. The badge sits just before the expand chevron. */
+        button.fluent-navcategoryitem[data-pending-count]::after {
+        content: attr(data-pending-count);
+        order: 1;
+        margin-inline-start: auto;
+        box-sizing: border-box;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10000px;
+        background: var(--colorBrandBackground);
+        color: var(--colorNeutralForegroundOnBrand, #fff);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+        }
+
+        button.fluent-navcategoryitem[data-pending-count] .expand-icon {
+        order: 2;
+        margin-inline-start: 0;
+        }
     </style>
 
     <script src="@Assets["js/bootCloak.js"]"></script>
