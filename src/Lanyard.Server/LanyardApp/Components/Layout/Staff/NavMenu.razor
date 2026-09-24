@@ -35,6 +35,11 @@
                 My Shifts
             </FluentNavItem>
 
+            <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
+                           IconActive="@(new Icons.Filled.Size20.CalendarPerson())">
+                Time Off
+            </FluentNavItem>
+
             @if (_canPostAnnouncements)
             {
                 <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
@@ -78,6 +83,8 @@
                                    IconActive="@(new Icons.Filled.Size20.People())">
                     <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
+                    <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All">Time Off Requests</FluentNavItem>
+                    <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>

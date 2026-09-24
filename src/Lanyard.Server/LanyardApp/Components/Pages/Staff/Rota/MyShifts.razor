@@ -1,24 +1,45 @@
 @page "/rota"
+@page "/rota/time-off"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
 @using Lanyard.App.Components.Rota
+@using Lanyard.App.Components.Rota.TimeOff
 
 <PageTitle>My Shifts</PageTitle>
 
 <div class="p-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
-        <FluentTabs>
-            <FluentTab Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
+        <FluentTabs @bind-ActiveTabId="activeTabId">
+            <FluentTab Id="shifts" Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
                 <div class="pt-3">
                     <MyShiftsList WeeksAhead="6" />
                 </div>
             </FluentTab>
-            <FluentTab Header="My hours" IconStart="@(new Icons.Regular.Size20.Clock())">
+            <FluentTab Id="hours" Header="My hours" IconStart="@(new Icons.Regular.Size20.Clock())" DeferredLoading="true">
                 <div class="pt-3">
                     <MyHoursList Weeks="3" />
+                </div>
+            </FluentTab>
+            <FluentTab Id="time-off" Header="Time off" IconStart="@(new Icons.Regular.Size20.CalendarPerson())" DeferredLoading="true">
+                <div class="pt-3">
+                    <MyTimeOffPanel />
                 </div>
             </FluentTab>
         </FluentTabs>
     </FluentStack>
 </div>
+
+@code {
+    private string? activeTabId;
+
+    // /rota/time-off opens straight on the Time off tab (it's what the nav's "Time Off" link and any
+    // "your request was decided" link point at). Set once: re-applying it on every render would
+    // snap the tab back when the person clicks another one.
+    protected override void OnInitialized()
+    {
+        activeTabId = new Uri(_navigationManager.Uri).AbsolutePath.TrimEnd('/').EndsWith("/time-off", StringComparison.OrdinalIgnoreCase)
+            ? "time-off"
+            : "shifts";
+    }
+}

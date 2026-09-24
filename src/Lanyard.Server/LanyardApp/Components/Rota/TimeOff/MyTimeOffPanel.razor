@@ -1,0 +1,189 @@
+@inject ITimeOffService _timeOffService
+@inject ITimeOffPolicyService _timeOffPolicyService
+
+<div class="my-time-off">
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (balances is null || requests is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="my-time-off-header">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Your allowance</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="@OpenRequestAsync">
+                Request time off
+            </FluentButton>
+        </div>
+
+        <TimeOffBalanceCards Balances="@balances" />
+
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Class="my-time-off-subhead">Your requests</FluentText>
+
+        @if (requests.Count == 0)
+        {
+            <FluentCard Height="auto">
+                <FluentText>You haven't asked for any time off yet.</FluentText>
+            </FluentCard>
+        }
+        else
+        {
+            <div class="time-off-list">
+                @foreach (TimeOffRequest request in requests)
+                {
+                    <div class="time-off-item">
+                        <div class="time-off-main">
+                            <div class="time-off-dates">@TimeOffFormat.DateRange(request.StartDate, request.EndDate)</div>
+                            <div class="time-off-meta">
+                                @request.TimeOffType?.Name · @TimeOffFormat.DaysAndHours(request.Hours, balances.HoursPerDay)
+                            </div>
+                            @if (request.Notes is string requestNotes)
+                            {
+                                <div class="time-off-note">“@requestNotes”</div>
+                            }
+                            @if (request.Status == TimeOffStatus.Rejected && request.DecisionReason is string reason)
+                            {
+                                <div class="time-off-note">Manager: “@reason”</div>
+                            }
+                        </div>
+                        <div class="time-off-side">
+                            <FluentBadge Appearance="BadgeAppearance.Filled" Color="@request.Status.Color()">@request.Status.Label()</FluentBadge>
+                            @if (CanCancel(request))
+                            {
+                                @if (confirmingCancelId == request.Id)
+                                {
+                                    <div class="time-off-confirm">
+                                        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => CancelAsync(request))">Cancel it</FluentButton>
+                                        <FluentButton Disabled="@isBusy" OnClick="@(() => confirmingCancelId = null)">Keep</FluentButton>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => confirmingCancelId = request.Id)">Cancel request</FluentButton>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private LocationScope? scope;
+    private string? userId;
+    private TimeOffBalances? balances;
+    private List<TimeOffRequest>? requests;
+    private List<TimeOffType> types = [];
+    private string? loadError;
+    private bool isBusy;
+    private Guid? confirmingCancelId;
+
+    private DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data?.CompanyId is null || scopeResult.Data.LocationId is null)
+        {
+            loadError = "Sign in to a location to see and request time off.";
+            return;
+        }
+
+        if (!userResult.IsSuccess || string.IsNullOrEmpty(userResult.Data))
+        {
+            loadError = "Couldn't work out who you are. Refresh the page and try again.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        userId = userResult.Data;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope?.CompanyId is not int companyId || userId is null)
+        {
+            return;
+        }
+
+        Result<TimeOffBalances> balanceResult = await _timeOffService.GetBalancesAsync(userId, companyId, Today);
+        Result<List<TimeOffRequest>> requestResult = await _timeOffService.GetRequestsForUserAsync(userId, Today.AddDays(-90));
+        Result<List<TimeOffType>> typeResult = await _timeOffPolicyService.GetTypesAsync(companyId);
+
+        if (!balanceResult.IsSuccess || !requestResult.IsSuccess || !typeResult.IsSuccess)
+        {
+            loadError = balanceResult.Error ?? requestResult.Error ?? typeResult.Error;
+            return;
+        }
+
+        balances = balanceResult.Data;
+        types = typeResult.Data ?? [];
+
+        // Upcoming first (soonest at the top), then the recent past, newest first.
+        List<TimeOffRequest> all = requestResult.Data ?? [];
+        requests = all.Where(r => r.EndDate >= Today).OrderBy(r => r.StartDate)
+            .Concat(all.Where(r => r.EndDate < Today).OrderByDescending(r => r.StartDate))
+            .ToList();
+    }
+
+    private bool CanCancel(TimeOffRequest request) =>
+        request.Status == TimeOffStatus.Pending || (request.Status == TimeOffStatus.Approved && request.StartDate > Today);
+
+    private async Task OpenRequestAsync()
+    {
+        if (scope?.CompanyId is not int companyId || scope.LocationId is not int locationId || balances is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<RequestTimeOffDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RequestTimeOffDialog.CompanyId), companyId);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.LocationId), locationId);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.Types), types);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.HoursPerDay), balances.HoursPerDay);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.CurrentUserId), userId);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task CancelAsync(TimeOffRequest request)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+        Result<bool> result = await _timeOffService.CancelAsync(userId, request.Id);
+        isBusy = false;
+        confirmingCancelId = null;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't cancel the request.");
+            return;
+        }
+
+        _toastService.ShowSuccess("Request cancelled.");
+        await LoadAsync();
+    }
+}

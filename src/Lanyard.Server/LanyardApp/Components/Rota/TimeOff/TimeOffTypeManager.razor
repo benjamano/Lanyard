@@ -1,0 +1,171 @@
+@inject ITimeOffPolicyService _timeOffPolicyService
+
+<FluentCard Height="auto">
+    <div class="type-manager">
+        <FluentText Typo="Typography.H4">Time-off types</FluentText>
+        <FluentText Class="type-manager-intro">
+            The kinds of time off staff can ask for. Types that count against an allowance need an allowance set, below or per position.
+        </FluentText>
+
+        @if (types is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else
+        {
+            <div class="type-list">
+                @foreach (TimeOffType type in types)
+                {
+                    <div class="type-row @(type.IsActive ? string.Empty : "is-archived")">
+                        <div class="type-info">
+                            <div class="type-name">@type.Name</div>
+                            @if (type.Description is string typeDescription)
+                            {
+                                <div class="type-description">@typeDescription</div>
+                            }
+                            <div class="type-badges">
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(type.IsPaid ? BadgeColor.Success : BadgeColor.Subtle)">@(type.IsPaid ? "Paid" : "Unpaid")</FluentBadge>
+                                @if (type.DeductsFromAllowance)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Uses allowance</FluentBadge>
+                                }
+                                @if (!type.IsActive)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Subtle">Archived</FluentBadge>
+                                }
+                            </div>
+                        </div>
+                        <div class="type-actions">
+                            @if (confirmingArchiveId == type.Id)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => ArchiveAsync(type))">Archive</FluentButton>
+                                <FluentButton OnClick="@(() => confirmingArchiveId = null)">Keep</FluentButton>
+                            }
+                            else
+                            {
+                                <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit" OnClick="@(() => OpenEditorAsync(type))" />
+                                @if (type.IsActive)
+                                {
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Archive())" Title="Archive" OnClick="@(() => confirmingArchiveId = type.Id)" />
+                                }
+                                else
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => RestoreAsync(type))">Restore</FluentButton>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div>
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())" OnClick="@(() => OpenEditorAsync(null))">
+                    New type
+                </FluentButton>
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private List<TimeOffType>? types;
+    private Guid? confirmingArchiveId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<TimeOffType>> result = await _timeOffPolicyService.GetTypesAsync(CompanyId, includeInactive: true);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load time-off types: {result.Error}");
+        }
+
+        types = result.Data ?? [];
+    }
+
+    private async Task OpenEditorAsync(TimeOffType? type)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditTimeOffTypeDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditTimeOffTypeDialog.CompanyId), CompanyId);
+            options.Parameters.Add(nameof(AddEditTimeOffTypeDialog.Existing), type);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task ArchiveAsync(TimeOffType type)
+    {
+        confirmingArchiveId = null;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError("Couldn't confirm your location. Refresh the page and try again.");
+            return;
+        }
+
+        Result<bool> result = await _timeOffPolicyService.DeactivateTypeAsync(scope.Data, type.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't archive the type.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"{type.Name} archived. Existing requests keep it.");
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RestoreAsync(TimeOffType type)
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            return;
+        }
+
+        Result<TimeOffType> result = await _timeOffPolicyService.SaveTypeAsync(scope.Data, new TimeOffType
+        {
+            Id = type.Id,
+            CompanyId = type.CompanyId,
+            Name = type.Name,
+            Description = type.Description,
+            IsPaid = type.IsPaid,
+            DeductsFromAllowance = type.DeductsFromAllowance,
+            IsActive = true
+        });
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't restore the type.");
+            return;
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+}

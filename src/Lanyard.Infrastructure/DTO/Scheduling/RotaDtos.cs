@@ -18,6 +18,11 @@ public record RotaStaffRow(
     bool IsLocationMember)
 {
     public string DisplayName => RotaNames.For(User);
+
+    // Pending and approved time off overlapping the range, with its type, shown beside the shifts.
+    public List<TimeOffRequest> TimeOff { get; init; } = [];
+
+    public TimeOffRequest? TimeOffOn(DateOnly day) => TimeOff.FirstOrDefault(x => x.Covers(day));
 }
 
 public record RotaRangeView(

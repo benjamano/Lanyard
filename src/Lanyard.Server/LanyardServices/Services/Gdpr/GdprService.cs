@@ -293,6 +293,34 @@ public class GdprService : IGdprService
                 pin.SetByUserId = null;
             }
 
+            // Decisions and records this person made on other people's time off keep their
+            // outcome but lose the name. Their own requests are removed in RemoveOwnedRecordsAsync.
+            List<TimeOffRequest> timeOffActedOn = await ctx.TimeOffRequests
+                .Where(x => x.UserId != userId && (x.DecidedByUserId == userId || x.RequestedByUserId == userId))
+                .ToListAsync();
+
+            foreach (TimeOffRequest request in timeOffActedOn)
+            {
+                if (request.DecidedByUserId == userId)
+                {
+                    request.DecidedByUserId = null;
+                }
+
+                if (request.RequestedByUserId == userId)
+                {
+                    request.RequestedByUserId = null;
+                }
+            }
+
+            List<TimeOffAllowance> allowancesUpdated = await ctx.TimeOffAllowances
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (TimeOffAllowance allowance in allowancesUpdated)
+            {
+                allowance.UpdatedByUserId = null;
+            }
+
             // Shift and timesheet history is retained (6 years), so it's re-pointed at the
             // placeholder account rather than deleted; future shifts are cancelled and an open
             // time entry is closed. Must run before the user row is
@@ -354,6 +382,20 @@ public class GdprService : IGdprService
                 .ToListAsync();
 
             ctx.ContractRequirements.RemoveRange(personalContracts);
+
+            // Leave requests and personal allowances are the person's own records (see
+            // DATA_RETENTION.md), so they go rather than being anonymised.
+            List<TimeOffRequest> timeOffRequests = await ctx.TimeOffRequests
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.TimeOffRequests.RemoveRange(timeOffRequests);
+
+            List<TimeOffAllowance> personalAllowances = await ctx.TimeOffAllowances
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.TimeOffAllowances.RemoveRange(personalAllowances);
 
             await ctx.SaveChangesAsync();
 

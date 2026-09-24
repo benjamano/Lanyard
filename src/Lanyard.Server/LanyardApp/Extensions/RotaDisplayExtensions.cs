@@ -41,6 +41,38 @@ public static class RotaDisplayExtensions
         _ => BadgeColor.Danger
     };
 
+    public static string Label(this TimeOffStatus status) => status switch
+    {
+        TimeOffStatus.Pending => "Waiting for approval",
+        TimeOffStatus.Approved => "Approved",
+        TimeOffStatus.Rejected => "Rejected",
+        _ => "Cancelled"
+    };
+
+    public static BadgeColor Color(this TimeOffStatus status) => status switch
+    {
+        TimeOffStatus.Pending => BadgeColor.Warning,
+        TimeOffStatus.Approved => BadgeColor.Success,
+        TimeOffStatus.Rejected => BadgeColor.Danger,
+        _ => BadgeColor.Subtle
+    };
+
+    // "18 days left of 28 (2026/27)", "Unlimited", "No allowance set".
+    public static string Summary(this TimeOffBalance balance, decimal hoursPerDay)
+    {
+        if (balance.Allowance.IsUnlimited)
+        {
+            return "Unlimited";
+        }
+
+        if (!balance.Allowance.IsConfigured)
+        {
+            return "No allowance set";
+        }
+
+        return $"{TimeOffFormat.Days(balance.RemainingHours ?? 0, hoursPerDay)} left of {TimeOffFormat.Days(balance.Allowance.Hours, hoursPerDay)}";
+    }
+
     public static string DayLabel(this DateOnly date) => date.ToString("ddd d MMM", Uk);
 
     public static string RangeLabel(DateOnly from, DateOnly to)

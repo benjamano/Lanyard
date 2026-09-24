@@ -103,6 +103,8 @@ builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralT
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
+builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
+builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();

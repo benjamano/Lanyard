@@ -1,0 +1,97 @@
+@inject ITimeOffService _timeOffService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(Approve ? (Icon)new Icons.Regular.Size24.CheckmarkCircle() : new Icons.Regular.Size24.DismissCircle())" />
+            <FluentText As="@TextTag.H3">@Title</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="decide-dialog">
+            <div class="decide-summary">
+                <div class="decide-name">@View.DisplayName</div>
+                <div>@View.Request.TimeOffType?.Name · @TimeOffFormat.DateRange(View.Request.StartDate, View.Request.EndDate)</div>
+                <div class="decide-muted">@TimeOffFormat.DaysAndHours(View.Request.Hours, View.HoursPerDay)</div>
+                @if (View.Request.Notes is string requestNotes)
+                {
+                    <div class="decide-muted">“@requestNotes”</div>
+                }
+            </div>
+
+            @foreach (string warning in View.Warnings)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+            }
+
+            <FluentTextArea @bind-Value="reason" Rows="3" Maxlength="500" Style="width: 100%;"
+                            Label="@(Approve ? "Note (optional)" : "Reason (they'll see this)")"
+                            Placeholder="@(Approve ? string.Empty : "e.g. We're short that weekend - could you take the week after?")" />
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">
+            @(isBusy ? "Saving..." : Approve ? "Approve" : IsWithdraw ? "Withdraw approval" : "Reject")
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required TimeOffRequestView View { get; set; }
+
+    [Parameter]
+    public bool Approve { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string DeciderUserId { get; set; }
+
+    private string? reason;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private bool IsWithdraw => !Approve && View.Request.Status == TimeOffStatus.Approved;
+
+    private string Title => Approve ? "Approve time off" : IsWithdraw ? "Withdraw approved time off" : "Reject time off";
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        if (!Approve && string.IsNullOrWhiteSpace(reason))
+        {
+            errorMessage = "Give a reason - they'll see it.";
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            errorMessage = "Couldn't confirm your location. Refresh the page and try again.";
+            return;
+        }
+
+        isBusy = true;
+        Result<TimeOffRequest> result = await _timeOffService.DecideAsync(scope.Data, View.Request.Id, Approve, reason, DeciderUserId);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Approve ? "Approved." : IsWithdraw ? "Approval withdrawn." : "Rejected.");
+        await Dialog.CloseAsync(true);
+    }
+}

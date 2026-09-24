@@ -41,6 +41,10 @@
                 DateOnly cellDay = day;
 
                 <div class="rota-day-cell @(day == Today ? "is-today" : string.Empty)" role="gridcell">
+                    @if (row.TimeOffOn(day) is TimeOffRequest timeOff)
+                    {
+                        <TimeOffChip Request="@timeOff" />
+                    }
                     @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == day))
                     {
                         <ShiftChip Shift="@shift" OnClick="@OnEdit" />

@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 ﻿using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
@@ -497,5 +498,45 @@ public class GdprServiceTests
         Assert.AreEqual(admin.Id, attributed.UserId);
         Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, attributed.CreateByUserId);
         Assert.IsNull(attributed.PublishedByUserId);
+    }
+    [TestMethod]
+    public async Task EraseUserDataAsync_RemovesOwnTimeOffAndClearsTheirNameFromOthersDecisions()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid typeId = Guid.NewGuid();
+        Guid ownRequestId = Guid.NewGuid();
+        Guid decidedByTargetId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user" });
+            ctx.TimeOffTypes.Add(new TimeOffType { Id = typeId, CompanyId = 1, Name = "Paid holiday" });
+
+            ctx.TimeOffRequests.Add(new TimeOffRequest { Id = ownRequestId, UserId = target.Id, TimeOffTypeId = typeId, LocationId = 1, StartDate = new DateOnly(2026, 10, 1), EndDate = new DateOnly(2026, 10, 1), Hours = 8 });
+            ctx.TimeOffRequests.Add(new TimeOffRequest { Id = decidedByTargetId, UserId = admin.Id, TimeOffTypeId = typeId, LocationId = 1, StartDate = new DateOnly(2026, 10, 2), EndDate = new DateOnly(2026, 10, 2), Hours = 8, Status = TimeOffStatus.Approved, DecidedByUserId = target.Id });
+            ctx.TimeOffAllowances.Add(new TimeOffAllowance { Id = Guid.NewGuid(), CompanyId = 1, TimeOffTypeId = typeId, UserId = target.Id, AllowanceHours = 100 });
+            ctx.TimeOffAllowances.Add(new TimeOffAllowance { Id = Guid.NewGuid(), CompanyId = 1, TimeOffTypeId = typeId, AllowanceHours = 224, UpdatedByUserId = target.Id });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<ISecurityService> securityServiceMock = BuildSecurityServiceMock(isAdmin: true, admin);
+        GdprService service = BuildService(options, userManager, securityServiceMock);
+
+        Result<bool> result = await service.EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+
+        Assert.IsFalse(await verifyCtx.TimeOffRequests.AnyAsync(x => x.Id == ownRequestId));
+        Assert.IsNull((await verifyCtx.TimeOffRequests.SingleAsync(x => x.Id == decidedByTargetId)).DecidedByUserId);
+        Assert.IsFalse(await verifyCtx.TimeOffAllowances.AnyAsync(x => x.UserId == target.Id));
+        Assert.IsNull((await verifyCtx.TimeOffAllowances.SingleAsync()).UpdatedByUserId);
     }
 }
