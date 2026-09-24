@@ -313,7 +313,7 @@
   {
     "version": "1.3.22",
     "releaseDate": "2026-09-24",
-    "summary": "Performance quick wins: lighter page sessions, faster kiosk dashboards, and file/audio downloads no longer throttled.",
+    "summary": "Performance and reliability improvements across staff pages, kiosks, DMX lighting, music and file streaming.",
     "details": [
       "Moving the mouse or scrolling no longer sends a constant stream of activity pings to the server - the auto-logout timer now hears from the browser at most once every few seconds.",
       "File downloads, music streaming, image thumbnails, company logos and training certificates are no longer subject to the 25-requests-per-minute login rate limit, which had been shared by every kiosk and staff device behind a venue's network and could return \"Too many requests\" for large image folders or kiosks warming their song cache.",
@@ -323,40 +323,19 @@
       "Fixed a rare freeze of music playback control for all kiosks caused by the shuffle picker using a shared random-number generator from several places at once.",
       "Playing a single song no longer performs a pointless playlist lookup, and the music player's database connections are released promptly.",
       "The DMX scene list no longer loads every step of every scene just to show a step count.",
-      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
-    ]
-  },
-  {
-    "version": "1.3.23",
-    "releaseDate": "2026-09-24",
-    "summary": "DMX scenes and the virtual desk are far lighter on the server, the network and the kiosk.",
-    "details": [
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
       "Each DMX scene step now reaches the kiosk as a single message carrying every channel in the step, instead of one message per channel. Pushing the whole virtual desk live is likewise one message rather than 512.",
       "The kiosk no longer echoes every channel value it receives back to the server, which had been doubling all DMX traffic and server work.",
       "The virtual DMX desk now redraws at most about twenty times a second while a scene is running or a fader is dragged, instead of once per channel change, so it stays responsive during playback.",
       "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
       "A scene running for a kiosk that is offline no longer queries the database on every step.",
-      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart."
-    ]
-  },
-  {
-    "version": "1.3.24",
-    "releaseDate": "2026-09-24",
-    "summary": "Kiosk videos and music now stream instead of being buffered; the File Manager's root folder shows only root files.",
-    "details": [
+      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart.",
       "Kiosk \"Play a Video\" steps now stream the video straight from storage. Previously the server loaded the entire file into memory and pushed it to the kiosk screen as inline text on every step, which for a large video meant hundreds of megabytes of work per step per kiosk.",
       "Seeking or looping in a video or song no longer re-downloads the whole file: the server now asks storage for just the bytes the player requests.",
       "File downloads, music and kiosk videos are now cacheable by the browser for a day, so thumbnails and repeated plays don't re-fetch the same bytes.",
       "The File Manager, file pickers and image grid now show only the files and folders that actually live in the selected folder. The root folder used to list every file in every folder.",
       "The image picker no longer reloads its folder (and flashes its spinner) every time the surrounding page re-renders.",
-      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation."
-    ]
-  },
-  {
-    "version": "1.3.25",
-    "releaseDate": "2026-09-24",
-    "summary": "Database performance: new indexes, bounded automation history, and lighter training, dashboard and user queries.",
-    "details": [
+      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation.",
       "Added database indexes for the training assignment list (per user), the automation execution log (newest-first and per rule) and the song BPM backfill sweep, so those screens stay fast as the tables grow.",
       "Automation rule execution history is now kept for 90 days (configurable via Automation:ExecutionLog:RetentionDays) instead of forever.",
       "Opening a course, an assignment or a projection program now loads its sections, questions, attempts and parameters with separate queries instead of one multiplied result set that repeated the course text for every combination of rows.",
@@ -364,27 +343,13 @@
       "Training analytics rankings (top scores, fastest completions) are computed in the database and return only the top rows.",
       "Dashboard pickers (home screen settings, program flow, dashboard list) no longer load every widget of every dashboard just to show names.",
       "User lists used for name lookups and the \"is this the first user?\" check no longer load and track every account row.",
-      "Automation actions checking whether a kiosk is online now run a single existence query instead of loading every connected kiosk."
-    ]
-  },
-  {
-    "version": "1.3.26",
-    "releaseDate": "2026-09-24",
-    "summary": "The Music page stays smooth with large libraries, pages load with fewer repeated lookups, and your time-format preference no longer leaks to other users.",
-    "details": [
+      "Automation actions checking whether a kiosk is online now run a single existence query instead of loading every connected kiosk.",
       "The Music page's song list no longer redraws every row every second while a song is playing. With a large playlist this made the page sluggish; the list now only redraws when the songs, the selected kiosk or the playing track actually change.",
       "Opening the Music page now loads playlist names plus the songs of the first playlist only, rather than every song of every playlist twice.",
       "Playlist pickers (Music page, playlist widget, automation rule dialog) load names only.",
       "The current user's profile and location are looked up once per browser session instead of separately by the layout, footer, navigation menu, greeting card and page on every load.",
       "Fixed: choosing the 24-hour time format on your account page changed the date/time format for every other user until someone else loaded a page. The preference is now stored in a browser cookie set at login and applied per user; the app defaults to UK format.",
-      "Changing the time-format preference now takes effect immediately (the page reloads once) instead of on the next page someone happens to open."
-    ]
-  },
-  {
-    "version": "1.3.27",
-    "releaseDate": "2026-09-24",
-    "summary": "Live dashboards and kiosks do less redundant work: laser-game widgets, clocks, the Clients page and several page loads.",
-    "details": [
+      "Changing the time-format preference now takes effect immediately (the page reloads once) instead of on the next page someone happens to open.",
       "Fixed: the laser-game status widget counted down the shared game timer itself, so with several dashboards open the remaining time dropped several seconds per second for everyone. Each widget now works out the remaining time from the kiosk's last report.",
       "Laser-game status and scoreboard widgets now redraw at most about ten times a second during a game instead of once for every hit.",
       "The digital clock widget in millisecond mode updates ten times a second instead of twenty, and no longer restarts its timer every time the dashboard redraws.",
@@ -392,17 +357,9 @@
       "The Automation page, the automation rule status widget and the kiosk page now load their independent data in parallel.",
       "Song BPM analysis no longer queues the same song several times while a backlog is being processed.",
       "Kiosk song-cache reports now look up all song names with one query instead of one per cached song.",
-      "Removed two unused script libraries (Bootstrap's JavaScript bundle and an input-mask library) from every page load."
-    ]
-  },
-  {
-    "version": "1.3.28",
-    "releaseDate": "2026-09-24",
-    "summary": "Projection timing and kiosk connection reliability fixes, plus internal clean-up.",
-    "details": [
-      "Projection program steps now hold for their configured time. Each step used to run a few percent long because the timer counted its intended tick length rather than the time that actually passed.",
-      "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages.",
-      "The automation engine's first start-up check no longer blocks a server thread while it reads its enabled setting."
+      "Removed two unused script libraries (Bootstrap's JavaScript bundle and an input-mask library) from every page load.",
+      "Projection program steps now hold for exactly their configured time, including when a program is paused and resumed part-way through a step. Each step used to run a few percent long.",
+      "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages."
     ]
   }
 ]

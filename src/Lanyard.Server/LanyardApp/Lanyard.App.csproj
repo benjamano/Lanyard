@@ -9,7 +9,27 @@
 
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-	  <Version>1.3.28</Version>
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+	  <Version>1.3.22</Version>
+>>>>>>> fix/perf-dmx-batching
+>>>>>>> fix/perf-media-streaming
+>>>>>>> fix/perf-data-layer
+>>>>>>> fix/perf-session-and-music
+>>>>>>> fix/perf-render-churn
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
