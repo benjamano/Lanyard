@@ -1,3 +1,5 @@
+using Lanyard.Infrastructure.Enum;
+
 namespace Lanyard.Infrastructure.Models
 {
     // Company-scoped catalog of job positions (Customer Service Advisor, Supervisor, Manager...).
@@ -128,5 +130,74 @@ namespace Lanyard.Infrastructure.Models
         public int ShiftReminderLeadHours { get; set; } = 24;
 
         public DateTime UpdateDate { get; set; }
+    }
+
+    // One person working one stretch at one location. There is deliberately no week/month
+    // container: play2day plan a month ahead but change individual shifts at short notice, so
+    // "published" is a property of each shift, and a later publish only has to tell the people
+    // whose shifts actually changed.
+    //
+    // Publish lifecycle (see GetState):
+    //   PublishedDateUtc null                   -> draft, managers only
+    //   UpdateDate > PublishedDateUtc           -> edited since publish, re-notify on next publish
+    //   !IsActive && RemovalPending             -> removed after publish, not yet told
+    //
+    // Automated scheduling (future) plugs in by generating Shift rows through the same
+    // IRotaService.SaveShiftAsync validation; it would add StaffAvailability (user, weekday, time
+    // range) and LocationDemand (location, weekday, position, headcount) tables to read from,
+    // not change this one.
+    public class Shift
+    {
+        public Guid Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public Guid? StaffPositionId { get; set; }
+        public StaffPosition? StaffPosition { get; set; }
+
+        public DateTime StartUtc { get; set; }
+        public DateTime EndUtc { get; set; }
+
+        public int BreakMinutes { get; set; }
+
+        public string? Notes { get; set; }
+
+        public DateTime? PublishedDateUtc { get; set; }
+        public string? PublishedByUserId { get; set; }
+
+        public bool RemovalPending { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreateDate { get; set; }
+        public required string CreateByUserId { get; set; }
+        public DateTime? UpdateDate { get; set; }
+        public string? UpdateByUserId { get; set; }
+
+        public decimal PaidHours =>
+            Math.Max(0m, (decimal)(EndUtc - StartUtc).TotalMinutes - BreakMinutes) / 60m;
+
+        public ShiftState GetState()
+        {
+            if (!IsActive)
+            {
+                return RemovalPending ? ShiftState.RemovedPendingNotice : ShiftState.Removed;
+            }
+
+            if (PublishedDateUtc is null)
+            {
+                return ShiftState.Draft;
+            }
+
+            return UpdateDate is DateTime updated && updated > PublishedDateUtc
+                ? ShiftState.Changed
+                : ShiftState.Published;
+        }
+
+        public bool NeedsPublishing => GetState() is ShiftState.Draft or ShiftState.Changed or ShiftState.RemovedPendingNotice;
     }
 }

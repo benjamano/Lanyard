@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Lanyard.Application.Services.Scheduling;
+
 namespace Lanyard.Application.Services.Gdpr;
 
 public class GdprService : IGdprService
@@ -290,6 +292,11 @@ public class GdprService : IGdprService
             {
                 pin.SetByUserId = null;
             }
+
+            // Shift history is retained (6 years), so it's re-pointed at the placeholder account
+            // rather than deleted; future shifts are cancelled. Must run before the user row is
+            // deleted - Shift.UserId is a Restrict FK precisely so this can't be skipped silently.
+            await ShiftRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow);
 
             await ctx.SaveChangesAsync();
 

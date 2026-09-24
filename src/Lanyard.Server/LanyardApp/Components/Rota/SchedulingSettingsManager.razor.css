@@ -13,6 +13,6 @@
 }
 
 .settings-hint {
-    color: var(--neutral-foreground-hint);
+    color: var(--colorNeutralForeground3);
     font-size: 0.8rem;
 }

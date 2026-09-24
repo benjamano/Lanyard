@@ -96,6 +96,7 @@ builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
+builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();

@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -475,6 +476,15 @@ public class SecurityService : ISecurityService
             if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
             {
                 return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+            }
+
+            // Shift history outlives the account (docs/DATA_RETENTION.md), and Shift.UserId is a
+            // Restrict FK so the delete below would fail rather than cascade it away. Re-point it
+            // to the placeholder account first and cancel anything still in the future.
+            await using (ApplicationDbContext shiftCtx = _factory.CreateDbContext())
+            {
+                await ShiftRetention.DetachUserAsync(shiftCtx, userId, DateTime.UtcNow);
+                await shiftCtx.SaveChangesAsync();
             }
 
             IdentityResult result = await _userManager.DeleteAsync(user);

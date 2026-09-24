@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-// The two authorisation questions every scheduling service asks, kept in one place so the
+// The authorisation questions every scheduling service asks, kept in one place so the
 // rule can't drift between positions, PINs, contracts and settings:
 //  - may this caller edit company-level configuration for company X?
 //  - may this caller change something about user Y?
@@ -16,6 +16,11 @@ internal static class SchedulingAccess
 {
     public static bool CanManageCompany(LocationScope scope, int companyId) =>
         scope.IsAdmin || scope.CompanyId == companyId;
+
+    // The rota is per location, and a Manager builds the rota for the location they logged in
+    // under - the same rule CourseService applies to training (see the location-scoping skill).
+    public static bool CanManageLocation(LocationScope scope, int locationId) =>
+        scope.IsAdmin || scope.LocationId == locationId;
 
     public static async Task<bool> CanManageUserAsync(ApplicationDbContext ctx, LocationScope scope, string userId)
     {

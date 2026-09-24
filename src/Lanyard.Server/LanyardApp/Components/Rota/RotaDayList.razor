@@ -1,0 +1,119 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@* Phone layout for both the week and month views: a grid of 7-31 columns can't be read at 390px,
+   so the manager picks a day from a strip and edits that day as a list. *@
+<div class="day-list">
+    <div class="day-strip" role="tablist" aria-label="Choose a day">
+        @foreach (DateOnly day in Days)
+        {
+            DateOnly thisDay = day;
+            int count = View.Rows.Sum(r => r.Shifts.Count(s => s.IsActive && s.LocalDate() == day));
+
+            <button type="button" role="tab" aria-selected="@(day == selectedDate ? "true" : "false")"
+                    class="day-strip-button @(day == selectedDate ? "is-selected" : string.Empty) @(day == Today ? "is-today" : string.Empty)"
+                    @onclick="@(() => selectedDate = thisDay)">
+                <span class="day-strip-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
+                <span class="day-strip-number">@day.Day</span>
+                <span class="day-strip-count">@(count > 0 ? count.ToString() : "–")</span>
+            </button>
+        }
+    </div>
+
+    <div class="day-list-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            @selectedDate.ToString("dddd d MMMM", RotaDisplayExtensions.Uk)
+        </FluentText>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                      OnClick="@(() => OnAdd.InvokeAsync(new RotaCellRef(null, selectedDate)))">
+            Add shift
+        </FluentButton>
+    </div>
+
+    @if (WeekWarnings.Count > 0)
+    {
+        <details class="day-list-warnings">
+            <summary>
+                <FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Warning" />
+                @WeekWarnings.Count contract @(WeekWarnings.Count == 1 ? "warning" : "warnings") this week
+            </summary>
+            <ul>
+                @foreach ((RotaStaffRow row, ContractWarning warning) in WeekWarnings)
+                {
+                    <li><strong>@row.DisplayName:</strong> @warning.Message</li>
+                }
+            </ul>
+        </details>
+    }
+
+    @if (RowsOnDay.Count == 0)
+    {
+        <FluentText Class="day-list-empty">Nobody is scheduled at @View.LocationName on this day.</FluentText>
+    }
+    else
+    {
+        <div class="day-list-rows">
+            @foreach (RotaStaffRow row in RowsOnDay)
+            {
+                <div class="day-list-row">
+                    <div class="day-list-name">
+                        <span>@row.DisplayName</span>
+                        @if (row.PrimaryPosition?.StaffPosition is StaffPosition position)
+                        {
+                            <span class="day-list-position">@position.Name</span>
+                        }
+                    </div>
+                    <div class="day-list-shifts">
+                        @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == selectedDate))
+                        {
+                            <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required RotaRangeView View { get; set; }
+
+    [Parameter]
+    public DateOnly Today { get; set; }
+
+    [Parameter]
+    public EventCallback<RotaCellRef> OnAdd { get; set; }
+
+    [Parameter]
+    public EventCallback<Shift> OnEdit { get; set; }
+
+    private DateOnly selectedDate;
+
+    private List<DateOnly> Days =>
+        Enumerable.Range(0, View.To.DayNumber - View.From.DayNumber + 1).Select(i => View.From.AddDays(i)).ToList();
+
+    private List<RotaStaffRow> RowsOnDay =>
+        View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate)).ToList();
+
+    private List<(RotaStaffRow Row, ContractWarning Warning)> WeekWarnings
+    {
+        get
+        {
+            DateOnly weekStart = Lanyard.Infrastructure.Enum.RotaTime.GetWeekStart(selectedDate);
+
+            return View.Rows
+                .SelectMany(r => r.Warnings.Where(w => w.WeekStart == weekStart).Select(w => (r, w)))
+                .ToList();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Keep the chosen day when the data reloads (e.g. after saving a shift); only reset it
+        // when it falls outside the new range.
+        if (selectedDate < View.From || selectedDate > View.To)
+        {
+            selectedDate = Today >= View.From && Today <= View.To ? Today : View.From;
+        }
+    }
+}

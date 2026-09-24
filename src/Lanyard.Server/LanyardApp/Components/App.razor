@@ -107,12 +107,20 @@
         body included, so a body-anchored dark rule in a .razor.css silently never matches. An element sets both
         `--swatch-light` and `--swatch-dark` inline (the palette values are per-item data,
         not styling) and this global rule picks whichever the current theme calls for. */
+        .theme-colour,
         .theme-colour-swatch {
-        background: var(--swatch-light);
+        --theme-colour: var(--swatch-light);
         }
 
+        [data-theme="dark"] .theme-colour,
         [data-theme="dark"] .theme-colour-swatch {
-        background: var(--swatch-dark);
+        --theme-colour: var(--swatch-dark);
+        }
+
+        /* .theme-colour only resolves --theme-colour (for a scoped stylesheet to use as a border,
+        tint, etc.); .theme-colour-swatch also paints it as the background. */
+        .theme-colour-swatch {
+        background: var(--theme-colour);
         }
     </style>
 

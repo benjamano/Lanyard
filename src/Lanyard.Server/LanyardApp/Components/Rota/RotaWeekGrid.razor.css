@@ -1,0 +1,125 @@
+/* Scrolls sideways rather than squashing seven day columns below a readable width; the phone
+   layout doesn't use this grid at all (see RotaDayList). */
+.rota-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.rota-week-grid {
+    display: grid;
+    grid-template-columns: minmax(170px, 210px) repeat(7, minmax(118px, 1fr));
+    min-width: 1000px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+    border-left: 1px solid var(--colorNeutralStroke2);
+}
+
+.rota-corner,
+.rota-day-header,
+.rota-name-cell,
+.rota-day-cell {
+    border-right: 1px solid var(--colorNeutralStroke2);
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    padding: 6px;
+    min-width: 0;
+}
+
+.rota-corner,
+.rota-day-header {
+    background: var(--colorNeutralBackground3);
+    font-weight: 600;
+}
+
+.rota-corner {
+    display: flex;
+    align-items: flex-end;
+}
+
+.rota-day-header {
+    display: flex;
+    flex-direction: column;
+}
+
+.rota-day-name {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.rota-day-number {
+    font-size: 0.95rem;
+}
+
+.rota-day-header.is-today,
+.rota-day-cell.is-today {
+    background: color-mix(in srgb, var(--colorBrandBackground) 7%, transparent);
+}
+
+.rota-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.rota-name-cell.has-warning {
+    box-shadow: inset 3px 0 0 #bc4b09;
+}
+
+.rota-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.rota-name-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+    min-width: 0;
+}
+
+.rota-position-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.rota-position-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rota-hours {
+    font-variant-numeric: tabular-nums;
+}
+
+.rota-day-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 64px;
+}
+
+/* Quiet until hovered so a full grid of "+" buttons doesn't compete with the shifts, but always
+   present (not hover-only) so it works on a touch screen. */
+.rota-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 26px;
+    margin-top: auto;
+    border: 1px dashed transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--colorNeutralForeground3);
+    cursor: pointer;
+    opacity: 0.45;
+}
+
+.rota-day-cell:hover .rota-add,
+.rota-add:focus-visible {
+    opacity: 1;
+    border-color: var(--colorNeutralStroke1);
+}

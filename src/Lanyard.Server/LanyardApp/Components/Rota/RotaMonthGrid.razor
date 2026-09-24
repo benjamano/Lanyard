@@ -1,0 +1,94 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+<div class="rota-month-scroll">
+    <div class="rota-month-grid" style="@GridColumns" role="grid" aria-label="@($"Rota for {View.From.ToString("MMMM yyyy", RotaDisplayExtensions.Uk)}")">
+        <div class="month-corner" role="columnheader">Staff</div>
+        @foreach (DateOnly day in Days)
+        {
+            <div class="month-day-header @DayClasses(day)" role="columnheader" title="@day.DayLabel()">
+                <span class="month-day-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)[..2]</span>
+                <span class="month-day-number">@day.Day</span>
+            </div>
+        }
+
+        @foreach (RotaStaffRow row in View.Rows)
+        {
+            decimal monthHours = row.Shifts.Where(s => s.IsActive && s.LocalDate() >= View.From && s.LocalDate() <= View.To).Sum(s => s.PaidHours);
+
+            <div class="month-name-cell @(row.Warnings.Count > 0 ? "has-warning" : string.Empty)" role="rowheader">
+                <div class="month-name">
+                    @if (row.PrimaryPosition?.StaffPosition is StaffPosition position)
+                    {
+                        <span class="month-position-dot theme-colour-swatch" style="@PositionColours.CssVariables(position.ColorIndex)"
+                              title="@position.Name" aria-hidden="true"></span>
+                    }
+                    <span class="month-name-text">@row.DisplayName</span>
+                </div>
+                <div class="month-name-meta">
+                    <span title="Paid hours at this location this month">@RotaDisplayExtensions.FormatHours(monthHours)</span>
+                    <ContractWarningBadge Warnings="@row.Warnings" IncludeWeek="true" />
+                </div>
+            </div>
+
+            @foreach (DateOnly day in Days)
+            {
+                DateOnly cellDay = day;
+
+                <div class="month-day-cell @DayClasses(day)" role="gridcell">
+                    @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == day))
+                    {
+                        <ShiftChip Shift="@shift" Compact="true" OnClick="@OnEdit" />
+                    }
+                    @if (row.IsLocationMember)
+                    {
+                        <button type="button" class="month-add" title="@($"Add a shift for {row.DisplayName} on {day.DayLabel()}")"
+                                @onclick="@(() => OnAdd.InvokeAsync(new RotaCellRef(row.User.Id, cellDay)))">
+                            <FluentIcon Value="@(new Icons.Regular.Size12.Add())" />
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required RotaRangeView View { get; set; }
+
+    [Parameter]
+    public DateOnly Today { get; set; }
+
+    [Parameter]
+    public EventCallback<RotaCellRef> OnAdd { get; set; }
+
+    [Parameter]
+    public EventCallback<Shift> OnEdit { get; set; }
+
+    private List<DateOnly> Days =>
+        Enumerable.Range(0, View.To.DayNumber - View.From.DayNumber + 1).Select(i => View.From.AddDays(i)).ToList();
+
+    private string GridColumns => $"grid-template-columns: minmax(150px, 180px) repeat({Days.Count}, 64px);";
+
+    private string DayClasses(DateOnly day)
+    {
+        List<string> classes = [];
+
+        if (day.DayOfWeek == DayOfWeek.Monday)
+        {
+            classes.Add("week-start");
+        }
+
+        if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            classes.Add("weekend");
+        }
+
+        if (day == Today)
+        {
+            classes.Add("is-today");
+        }
+
+        return string.Join(' ', classes);
+    }
+}

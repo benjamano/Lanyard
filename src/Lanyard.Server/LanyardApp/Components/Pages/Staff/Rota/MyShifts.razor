@@ -1,0 +1,13 @@
+@page "/rota"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using Lanyard.App.Components.Rota
+
+<PageTitle>My Shifts</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
+        <MyShiftsList WeeksAhead="6" />
+    </FluentStack>
+</div>

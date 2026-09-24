@@ -16,11 +16,9 @@
                         <FluentAppBarItem Href="/" Match="NavLinkMatch.All" IconRest="new Icons.Regular.Size28.Home()"
                                           IconActive="new Icons.Filled.Size28.Home()" Text="Home" />
 
-                        <AuthorizeView Roles="Admin,CanClockIn" Context="clockInAuthContext">
-                            <FluentAppBarItem Href="/rota/clockin" Match="NavLinkMatch.All"
-                                              IconRest="new Icons.Regular.Size28.Clock()" IconActive="new Icons.Filled.Size28.Clock()"
-                                              Text="Clock In" />
-                        </AuthorizeView>
+                        <FluentAppBarItem Href="/rota" Match="NavLinkMatch.All"
+                                          IconRest="new Icons.Regular.Size28.CalendarLtr()" IconActive="new Icons.Filled.Size28.CalendarLtr()"
+                                          Text="Shifts" />
                         <FluentAppBarItem Href="/training" Match="NavLinkMatch.Prefix"
                                           IconRest="new Icons.Regular.Size28.Book()" IconActive="new Icons.Filled.Size28.Book()"
                                           Text="Training" />

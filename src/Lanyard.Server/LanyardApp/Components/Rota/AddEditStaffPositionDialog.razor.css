@@ -20,9 +20,9 @@
     padding: 0;
     cursor: pointer;
     /* Colour comes from the global .theme-colour-swatch rule in App.razor (theme-dependent). */
-    box-shadow: 0 0 0 1px var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.15));
+    box-shadow: 0 0 0 1px var(--colorNeutralStroke2);
 }
 
 .colour-option-selected {
-    border-color: var(--neutral-foreground-rest, #1f1f1f);
+    border-color: var(--colorNeutralForeground1);
 }
