@@ -9,7 +9,11 @@
 
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-	  <Version>1.3.24</Version>
+<<<<<<< HEAD
+	  <Version>1.3.22</Version>
+=======
+	  <Version>1.3.22</Version>
+>>>>>>> fix/perf-dmx-batching
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

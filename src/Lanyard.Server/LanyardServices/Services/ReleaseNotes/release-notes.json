@@ -313,7 +313,7 @@
   {
     "version": "1.3.22",
     "releaseDate": "2026-09-24",
-    "summary": "Performance quick wins: lighter page sessions, faster kiosk dashboards, and file/audio downloads no longer throttled.",
+    "summary": "Performance and reliability improvements across staff pages, kiosks, DMX lighting, music and file streaming.",
     "details": [
       "Moving the mouse or scrolling no longer sends a constant stream of activity pings to the server - the auto-logout timer now hears from the browser at most once every few seconds.",
       "File downloads, music streaming, image thumbnails, company logos and training certificates are no longer subject to the 25-requests-per-minute login rate limit, which had been shared by every kiosk and staff device behind a venue's network and could return \"Too many requests\" for large image folders or kiosks warming their song cache.",
@@ -323,27 +323,13 @@
       "Fixed a rare freeze of music playback control for all kiosks caused by the shuffle picker using a shared random-number generator from several places at once.",
       "Playing a single song no longer performs a pointless playlist lookup, and the music player's database connections are released promptly.",
       "The DMX scene list no longer loads every step of every scene just to show a step count.",
-      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
-    ]
-  },
-  {
-    "version": "1.3.23",
-    "releaseDate": "2026-09-24",
-    "summary": "DMX scenes and the virtual desk are far lighter on the server, the network and the kiosk.",
-    "details": [
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
       "Each DMX scene step now reaches the kiosk as a single message carrying every channel in the step, instead of one message per channel. Pushing the whole virtual desk live is likewise one message rather than 512.",
       "The kiosk no longer echoes every channel value it receives back to the server, which had been doubling all DMX traffic and server work.",
       "The virtual DMX desk now redraws at most about twenty times a second while a scene is running or a fader is dragged, instead of once per channel change, so it stays responsive during playback.",
       "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
       "A scene running for a kiosk that is offline no longer queries the database on every step.",
-      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart."
-    ]
-  },
-  {
-    "version": "1.3.24",
-    "releaseDate": "2026-09-24",
-    "summary": "Kiosk videos and music now stream instead of being buffered; the File Manager's root folder shows only root files.",
-    "details": [
+      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart.",
       "Kiosk \"Play a Video\" steps now stream the video straight from storage. Previously the server loaded the entire file into memory and pushed it to the kiosk screen as inline text on every step, which for a large video meant hundreds of megabytes of work per step per kiosk.",
       "Seeking or looping in a video or song no longer re-downloads the whole file: the server now asks storage for just the bytes the player requests.",
       "File downloads, music and kiosk videos are now cacheable by the browser for a day, so thumbnails and repeated plays don't re-fetch the same bytes.",
