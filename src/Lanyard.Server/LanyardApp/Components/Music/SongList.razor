@@ -7,7 +7,7 @@
 @using Lanyard.Infrastructure.Models;
 @using Microsoft.EntityFrameworkCore
 
-@inject ApplicationDbContext _context
+@inject IDbContextFactory<ApplicationDbContext> _dbFactory
 @inject INotificationService _toastService
 @inject MusicPlayerService _player
 @inject ISongAnalysisQueue _songAnalysisQueue
@@ -242,6 +242,10 @@
 
         try
         {
+            // A fresh context per operation: an injected DbContext lives for the whole circuit
+            // and its change tracker grows with every song added.
+            await using ApplicationDbContext _context = await _dbFactory.CreateDbContextAsync();
+
             Song? existingSong = await _context.Songs
                 .Where(x => x.Id == song.Id)
                 .FirstOrDefaultAsync();

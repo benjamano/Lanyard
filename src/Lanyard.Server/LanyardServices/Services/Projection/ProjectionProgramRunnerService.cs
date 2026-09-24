@@ -216,9 +216,15 @@ public class ProjectionProgramRunnerService(
     private async Task HoldStepAsync(RunningProgram run, ProjectionProgramStep step, CancellationToken token)
     {
         int holdMilliseconds = step.HoldForMilliseconds == 0 ? DefaultHoldMilliseconds : step.HoldForMilliseconds;
-        int elapsed = 0;
+        TimeSpan hold = TimeSpan.FromMilliseconds(holdMilliseconds);
 
-        while (elapsed < holdMilliseconds)
+        // Measures real elapsed time. Adding the nominal tick length each loop made every
+        // hold run long by the timer's overshoot per tick (a few percent, compounding over a
+        // program).
+        System.Diagnostics.Stopwatch sinceLastTick = System.Diagnostics.Stopwatch.StartNew();
+        TimeSpan elapsed = TimeSpan.Zero;
+
+        while (elapsed < hold)
         {
             token.ThrowIfCancellationRequested();
 
@@ -227,13 +233,19 @@ public class ProjectionProgramRunnerService(
                 return;
             }
 
-            await Task.Delay(TickMilliseconds, token);
+            TimeSpan remaining = hold - elapsed;
+            int delayMs = (int)Math.Clamp(Math.Ceiling(remaining.TotalMilliseconds), 1, TickMilliseconds);
+
+            await Task.Delay(delayMs, token);
+
+            TimeSpan tick = sinceLastTick.Elapsed;
+            sinceLastTick.Restart();
 
             // Paused time doesn't count toward the hold, so resuming continues the step
             // from where it left off rather than restarting it or advancing immediately.
             if (!run.IsPaused)
             {
-                elapsed += TickMilliseconds;
+                elapsed += tick;
             }
         }
     }

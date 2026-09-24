@@ -60,8 +60,8 @@ public class AutomationEngineService(
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
-    private bool _initializedEnabled = false;
-    private readonly object _initLock = new();
+    private volatile bool _initializedEnabled = false;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public ChannelReader<GameStatusTransitionEvent> Reader => _transitionChannel.Reader;
     public bool IsEnabled => _isEnabled;
@@ -147,26 +147,34 @@ public class AutomationEngineService(
         }
     }
 
-    private void EnsureEnabledInitialized(CancellationToken ct)
+    private async Task EnsureEnabledInitializedAsync(CancellationToken ct)
     {
-        // Initialize enabled flag from DB on first call (thread-safe one-time init)
-        if (!_initializedEnabled)
+        // One-time read of the enabled flag. The three hosted services can arrive here
+        // together on startup; this used to block a thread-pool thread on the DB call
+        // (GetAwaiter().GetResult()) while holding a lock the others were waiting on.
+        if (_initializedEnabled)
         {
-            lock (_initLock)
+            return;
+        }
+
+        await _initLock.WaitAsync(ct);
+        try
+        {
+            if (!_initializedEnabled)
             {
-                if (!_initializedEnabled)
-                {
-                    _initializedEnabled = true;
-                    // Fire-and-forget init; result stored in _isEnabled
-                    InitializeEnabledAsync(ct).GetAwaiter().GetResult();
-                }
+                await InitializeEnabledAsync(ct);
+                _initializedEnabled = true;
             }
+        }
+        finally
+        {
+            _initLock.Release();
         }
     }
 
     public async Task ProcessTransitionAsync(GameStatusTransitionEvent ev, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {
@@ -211,7 +219,7 @@ public class AutomationEngineService(
     /// </remarks>
     public async Task ProcessIdleRulesAsync(DateTime nowUtc, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {
@@ -308,7 +316,7 @@ public class AutomationEngineService(
     /// </remarks>
     public async Task ProcessScheduledRulesAsync(DateTime nowLocal, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {

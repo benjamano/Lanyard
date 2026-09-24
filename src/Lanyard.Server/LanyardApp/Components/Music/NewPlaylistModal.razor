@@ -1,10 +1,11 @@
 ﻿@using System.ComponentModel.DataAnnotations
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
+@using Microsoft.EntityFrameworkCore
 @using Lanyard.Infrastructure.Models
 
 @inject INotificationService ToastService
-@inject ApplicationDbContext _context
+@inject IDbContextFactory<ApplicationDbContext> _dbFactory
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -89,8 +90,9 @@
                 CreateDate = DateTime.UtcNow
             };
 
-            _context.Playlists.Add(playlist);
-            await _context.SaveChangesAsync();
+            await using ApplicationDbContext context = await _dbFactory.CreateDbContextAsync();
+            context.Playlists.Add(playlist);
+            await context.SaveChangesAsync();
 
             ToastService.ShowSuccess($"Playlist '{playlist.Name}' created successfully!");
             await Dialog.CloseAsync(playlist);

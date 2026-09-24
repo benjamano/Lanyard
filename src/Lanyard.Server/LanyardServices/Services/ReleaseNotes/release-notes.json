@@ -394,5 +394,15 @@
       "Kiosk song-cache reports now look up all song names with one query instead of one per cached song.",
       "Removed two unused script libraries (Bootstrap's JavaScript bundle and an input-mask library) from every page load."
     ]
+  },
+  {
+    "version": "1.3.28",
+    "releaseDate": "2026-09-24",
+    "summary": "Projection timing and kiosk connection reliability fixes, plus internal clean-up.",
+    "details": [
+      "Projection program steps now hold for their configured time. Each step used to run a few percent long because the timer counted its intended tick length rather than the time that actually passed.",
+      "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages.",
+      "The automation engine's first start-up check no longer blocks a server thread while it reads its enabled setting."
+    ]
   }
 ]

@@ -146,7 +146,9 @@ builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardSer
 
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
-builder.Services.AddSignalR();
+// Kiosks report lists (cached songs, screens, devices) in single messages; a few hundred
+// cached songs overflow the 32 KB default and the hub silently drops the connection.
+builder.Services.AddSignalR(options => options.MaximumReceiveMessageSize = 256 * 1024);
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -288,11 +290,6 @@ builder.Services.AddControllers();
 
 // Add HttpClient
 builder.Services.AddHttpClient();
-builder.Services.AddScoped(sp =>
-{
-    NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
-});
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddHttpClient<IEmailService, EmailService>(client =>

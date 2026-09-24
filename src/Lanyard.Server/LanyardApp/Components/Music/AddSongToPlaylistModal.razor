@@ -2,7 +2,7 @@
 @using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Infrastructure.Models
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext _context
+@inject IDbContextFactory<ApplicationDbContext> _dbFactory
 @inject INotificationService ToastService
 
 <FluentDialogBody>
@@ -74,7 +74,8 @@
 
         try
         {
-            Playlists = await _context.Playlists
+            await using ApplicationDbContext context = await _dbFactory.CreateDbContextAsync();
+            Playlists = await context.Playlists
                 .AsNoTracking()
                 .Where(p => p.DeleteDate == null)
                 .OrderByDescending(p => p.CreateDate)
