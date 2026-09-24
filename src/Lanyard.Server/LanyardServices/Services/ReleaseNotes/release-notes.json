@@ -325,5 +325,18 @@
       "The DMX scene list no longer loads every step of every scene just to show a step count.",
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
+  },
+  {
+    "version": "1.3.23",
+    "releaseDate": "2026-09-24",
+    "summary": "DMX scenes and the virtual desk are far lighter on the server, the network and the kiosk.",
+    "details": [
+      "Each DMX scene step now reaches the kiosk as a single message carrying every channel in the step, instead of one message per channel. Pushing the whole virtual desk live is likewise one message rather than 512.",
+      "The kiosk no longer echoes every channel value it receives back to the server, which had been doubling all DMX traffic and server work.",
+      "The virtual DMX desk now redraws at most about twenty times a second while a scene is running or a fader is dragged, instead of once per channel change, so it stays responsive during playback.",
+      "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
+      "A scene running for a kiosk that is offline no longer queries the database on every step.",
+      "Kiosk client 1.0.40 is required for the batched messages; older kiosks keep working via the previous per-channel message until they auto-update on their next restart."
+    ]
   }
 ]
