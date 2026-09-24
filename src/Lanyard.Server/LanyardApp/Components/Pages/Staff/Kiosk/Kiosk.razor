@@ -124,7 +124,12 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
             return;
         }
 
-        Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
+        // The program and the client's settings are independent reads; overlap them.
+        Task<Result<ProjectionProgram>> programTask = _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
+        Task<Result<IEnumerable<ClientProjectionSettings>>> settingsTask = _clientService.GetClientProjectionSettingsAsync(clientGuid);
+        await Task.WhenAll(programTask, settingsTask);
+
+        Result<ProjectionProgram> getResult = programTask.Result;
 
         if (!getResult.IsSuccess || getResult.Data is null)
         {
@@ -135,7 +140,7 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
         projectionProgram = getResult.Data;
 
-        Result<IEnumerable<ClientProjectionSettings>> settingsResult = await _clientService.GetClientProjectionSettingsAsync(clientGuid);
+        Result<IEnumerable<ClientProjectionSettings>> settingsResult = settingsTask.Result;
 
         if (settingsResult.IsSuccess && settingsResult.Data is not null)
         {
