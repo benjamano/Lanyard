@@ -176,9 +176,10 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     private void HandleCurrentStepChanged(ProjectionProgramStep? step)
     {
+        // No explicit StateHasChanged: an EventCallback invoked on a component already
+        // re-renders it once the handler returns, so calling it here rendered the whole
+        // kiosk page (and every widget under it) twice per step.
         CurrentStep = step;
-
-        StateHasChanged();
     }
 
     private void HandlePauseChanged(bool paused)

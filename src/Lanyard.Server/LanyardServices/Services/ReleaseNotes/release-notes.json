@@ -309,5 +309,21 @@
       "Editing the subject or body only changes the email sent to that one new user - the shared company/location welcome email template is left untouched.",
       "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
     ]
+  },
+  {
+    "version": "1.3.22",
+    "releaseDate": "2026-09-24",
+    "summary": "Performance quick wins: lighter page sessions, faster kiosk dashboards, and file/audio downloads no longer throttled.",
+    "details": [
+      "Moving the mouse or scrolling no longer sends a constant stream of activity pings to the server - the auto-logout timer now hears from the browser at most once every few seconds.",
+      "File downloads, music streaming, image thumbnails, company logos and training certificates are no longer subject to the 25-requests-per-minute login rate limit, which had been shared by every kiosk and staff device behind a venue's network and could return \"Too many requests\" for large image folders or kiosks warming their song cache.",
+      "Kiosk dashboard steps no longer reload the dashboard from the database every time the kiosk screen refreshes (including on every pause/resume) - only when the step actually switches to a different dashboard.",
+      "The kiosk page no longer renders every widget twice on each program step.",
+      "The clock-in screen's second-by-second timers are now properly stopped when you leave the page instead of running in the background for the rest of your session.",
+      "Fixed a rare freeze of music playback control for all kiosks caused by the shuffle picker using a shared random-number generator from several places at once.",
+      "Playing a single song no longer performs a pointless playlist lookup, and the music player's database connections are released promptly.",
+      "The DMX scene list no longer loads every step of every scene just to show a step count.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
+    ]
   }
 ]

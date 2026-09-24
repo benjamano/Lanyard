@@ -385,7 +385,11 @@ app.Use(async (context, next) =>
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers().RequireRateLimiting("ip-fixed");
+// The "ip-fixed" limiter (25/min per IP) is a brute-force guard for the auth endpoints and is
+// applied on AuthController itself. It must not cover the file/audio/logo/certificate
+// controllers: kiosks and staff behind one venue NAT share an IP, and a thumbnail grid or a
+// kiosk warming its song cache burns through 25 requests in seconds.
+app.MapControllers();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
