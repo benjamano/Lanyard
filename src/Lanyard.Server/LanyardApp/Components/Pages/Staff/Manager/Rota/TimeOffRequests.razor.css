@@ -52,7 +52,9 @@
 
 .request-dates {
     font-weight: 600;
-    color: var(--colorBrandForeground1);
+    /* Mixed with the foreground token: the brand foreground doesn't lighten in this app's dark
+       theme, and plain brand blue on a dark card is hard to read. */
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
 }
 
 .request-facts {

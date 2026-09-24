@@ -32,7 +32,7 @@
                 <TimeOffTypeManager CompanyId="@SelectedCompany.Id" OnChanged="@(() => allowanceKey++)" />
 
                 <FluentCard Height="auto">
-                    <TimeOffAllowanceEditor @key="@($"{SelectedCompany.Id}-{allowanceKey}")" CompanyId="@SelectedCompany.Id" Title="Company default allowances" />
+                    <TimeOffAllowanceEditor @key="@($"{SelectedCompany.Id}-{allowanceKey}")" CompanyId="@SelectedCompany.Id" Title="Company default allowances" TitleSize="TextSize.Size500" />
                 </FluentCard>
 
                 <FluentText Style="color: var(--colorNeutralForeground3);">

@@ -6,7 +6,7 @@
 <div class="allowance-editor">
     @if (!string.IsNullOrWhiteSpace(Title))
     {
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">@Title</FluentText>
+        <FluentText Weight="TextWeight.Semibold" Size="@TitleSize">@Title</FluentText>
     }
 
     <FluentText Class="allowance-intro">
@@ -87,6 +87,11 @@
 
     [Parameter]
     public EventCallback OnSaved { get; set; }
+
+    // Size400 when it sits under another heading (position expander, user editor); Size500 when
+    // it's a section of its own.
+    [Parameter]
+    public TextSize TitleSize { get; set; } = TextSize.Size400;
 
     private ContractTier Tier => UserId is not null ? ContractTier.User : PositionId is not null ? ContractTier.Position : ContractTier.Company;
 
