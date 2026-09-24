@@ -191,6 +191,13 @@ namespace Lanyard.Infrastructure.Migrations
                 column: "StaffPositionId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_UserPositions_UserId",
+                table: "UserPositions",
+                column: "UserId",
+                unique: true,
+                filter: "\"IsPrimary\"");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserPositions_UserId_StaffPositionId",
                 table: "UserPositions",
                 columns: new[] { "UserId", "StaffPositionId" },

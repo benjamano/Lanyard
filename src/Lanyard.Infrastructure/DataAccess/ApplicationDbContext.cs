@@ -273,6 +273,13 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => new { x.UserId, x.StaffPositionId })
                 .IsUnique();
 
+            // "Exactly one primary position per user" is what the tier resolution relies on;
+            // enforce it in the database rather than trusting every writer to keep it.
+            modelBuilder.Entity<UserPosition>()
+                .HasIndex(x => x.UserId)
+                .IsUnique()
+                .HasFilter("\"IsPrimary\"");
+
             // ContractRequirement holds three tiers in one table, distinguished by which of
             // StaffPositionId / UserId is set. As with CompanyOnboardingSettings, Postgres
             // treats every NULL as distinct so one composite unique index can't express "one

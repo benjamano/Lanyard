@@ -3,17 +3,13 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Lanyard.Application.Services.Scheduling;
 
 public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factory) : IStaffPositionService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
-
-    // Company catalogs are company policy, so a manager may edit them for any company they
-    // logged in under; admins see everything. Same rule as onboarding/staff document types.
-    private static bool CanManageCompany(LocationScope scope, int companyId) =>
-        scope.IsAdmin || scope.CompanyId == companyId;
 
     public async Task<Result<List<StaffPosition>>> GetPositionsAsync(int companyId, bool includeInactive = false)
     {
@@ -41,7 +37,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
     {
         try
         {
-            if (!CanManageCompany(scope, position.CompanyId))
+            if (!SchedulingAccess.CanManageCompany(scope, position.CompanyId))
             {
                 return Result<StaffPosition>.Fail("You can only manage positions for your own company.");
             }
@@ -57,20 +53,38 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
 
             // Pre-checked here because EF InMemory (tests) doesn't enforce the unique index; the
             // index remains the guard against a race between two managers.
-            bool duplicate = await ctx.StaffPositions
-                .AnyAsync(x => x.CompanyId == position.CompanyId && x.Id != position.Id && x.Name.ToLower() == name.ToLower());
+            StaffPosition? sameName = await ctx.StaffPositions
+                .FirstOrDefaultAsync(x => x.CompanyId == position.CompanyId && x.Id != position.Id && x.Name.ToLower() == name.ToLower());
 
-            if (duplicate)
+            if (sameName is not null && sameName.IsActive)
             {
                 return Result<StaffPosition>.Fail($"A position called \"{name}\" already exists for this company.");
             }
 
+            StaffPosition saved;
+
             if (position.Id == Guid.Empty)
             {
-                position.Id = Guid.NewGuid();
-                position.Name = name;
-                position.IsActive = true;
-                ctx.StaffPositions.Add(position);
+                // Deactivation is soft, and the (CompanyId, Name) index covers inactive rows too,
+                // so "create X" where an inactive X exists brings the old row back rather than
+                // reserving the name forever. Assignments it had before deactivation reappear.
+                if (sameName is not null)
+                {
+                    sameName.Name = name;
+                    sameName.Description = position.Description;
+                    sameName.ColorIndex = position.ColorIndex;
+                    sameName.SortOrder = position.SortOrder;
+                    sameName.IsActive = true;
+                    saved = sameName;
+                }
+                else
+                {
+                    position.Id = Guid.NewGuid();
+                    position.Name = name;
+                    position.IsActive = true;
+                    ctx.StaffPositions.Add(position);
+                    saved = position;
+                }
             }
             else
             {
@@ -87,13 +101,14 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
                 existing.ColorIndex = position.ColorIndex;
                 existing.SortOrder = position.SortOrder;
                 existing.IsActive = position.IsActive;
+                saved = existing;
             }
 
             await ctx.SaveChangesAsync();
 
-            return Result<StaffPosition>.Ok(position);
+            return Result<StaffPosition>.Ok(saved);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             return Result<StaffPosition>.Fail("A position with that name already exists for this company.");
         }
@@ -116,12 +131,43 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
                 return Result<bool>.Fail("Position not found.");
             }
 
-            if (!CanManageCompany(scope, position.CompanyId))
+            if (!SchedulingAccess.CanManageCompany(scope, position.CompanyId))
             {
                 return Result<bool>.Fail("You can only manage positions for your own company.");
             }
 
             position.IsActive = false;
+
+            // Anyone whose primary this was would otherwise be left with no active primary, and
+            // their contract/allowance tier would silently fall back to the company default.
+            // Hand primary to another active position they hold (if any) so the change is a
+            // real, visible one rather than an accidental downgrade.
+            List<UserPosition> primariesHere = await ctx.UserPositions
+                .Where(x => x.StaffPositionId == positionId && x.IsPrimary)
+                .ToListAsync();
+
+            if (primariesHere.Count > 0)
+            {
+                List<string> affectedUserIds = primariesHere.Select(x => x.UserId).ToList();
+
+                List<UserPosition> alternatives = await ctx.UserPositions
+                    .Include(x => x.StaffPosition)
+                    .Where(x => affectedUserIds.Contains(x.UserId) && x.StaffPositionId != positionId && x.StaffPosition!.IsActive)
+                    .OrderBy(x => x.StaffPosition!.SortOrder)
+                    .ToListAsync();
+
+                foreach (UserPosition primary in primariesHere)
+                {
+                    primary.IsPrimary = false;
+
+                    UserPosition? replacement = alternatives.FirstOrDefault(x => x.UserId == primary.UserId);
+
+                    if (replacement is not null)
+                    {
+                        replacement.IsPrimary = true;
+                    }
+                }
+            }
 
             await ctx.SaveChangesAsync();
 
@@ -162,17 +208,19 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
         {
             List<Guid> distinctIds = positionIds.Distinct().ToList();
 
-            if (distinctIds.Count == 0 && primaryPositionId is not null)
-            {
-                return Result<List<UserPosition>>.Fail("The primary position must be one of the selected positions.");
-            }
-
             if (primaryPositionId is Guid primary && !distinctIds.Contains(primary))
             {
                 return Result<List<UserPosition>>.Fail("The primary position must be one of the selected positions.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Checked against the *user*, not the selection - an empty selection ("remove all
+            // positions") must be authorised just as strictly as adding one.
+            if (!await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
+            {
+                return Result<List<UserPosition>>.Fail("You can only manage positions for staff in your own company.");
+            }
 
             List<StaffPosition> positions = await ctx.StaffPositions
                 .AsNoTracking()
@@ -184,8 +232,6 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
                 return Result<List<UserPosition>>.Fail("One or more of the selected positions no longer exists.");
             }
 
-            // All positions in one set must share a company, and it must be one the caller may
-            // manage - a manager can't hand someone a position from a company they don't belong to.
             List<int> companyIds = positions.Select(x => x.CompanyId).Distinct().ToList();
 
             if (companyIds.Count > 1)
@@ -193,7 +239,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
                 return Result<List<UserPosition>>.Fail("Positions from different companies cannot be combined.");
             }
 
-            if (companyIds.Count == 1 && !CanManageCompany(scope, companyIds[0]))
+            if (companyIds.Count == 1 && !SchedulingAccess.CanManageCompany(scope, companyIds[0]))
             {
                 return Result<List<UserPosition>>.Fail("You can only assign positions from your own company.");
             }

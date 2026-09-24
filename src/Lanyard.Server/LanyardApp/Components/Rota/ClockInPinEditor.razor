@@ -107,15 +107,26 @@
     {
         isBusy = true;
 
-        string? setByUserId = null;
+        Result<bool> result;
 
         if (SetByManager)
         {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
             Result<string> currentUser = await _securityService.GetCurrentUserIdAsync();
-            setByUserId = currentUser.IsSuccess ? currentUser.Data : null;
-        }
 
-        Result<bool> result = await _clockInPinService.SetPinAsync(UserId, model.Pin, setByUserId);
+            if (!scopeResult.IsSuccess || scopeResult.Data is null || !currentUser.IsSuccess || string.IsNullOrEmpty(currentUser.Data))
+            {
+                isBusy = false;
+                _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error ?? currentUser.Error}");
+                return;
+            }
+
+            result = await _clockInPinService.SetPinForUserAsync(scopeResult.Data, UserId, model.Pin, currentUser.Data);
+        }
+        else
+        {
+            result = await _clockInPinService.SetOwnPinAsync(UserId, model.Pin);
+        }
 
         isBusy = false;
 
@@ -135,7 +146,25 @@
     {
         isBusy = true;
 
-        Result<bool> result = await _clockInPinService.ClearPinAsync(UserId);
+        Result<bool> result;
+
+        if (SetByManager)
+        {
+            Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+            if (!scopeResult.IsSuccess || scopeResult.Data is null)
+            {
+                isBusy = false;
+                _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+                return;
+            }
+
+            result = await _clockInPinService.ClearPinForUserAsync(scopeResult.Data, UserId);
+        }
+        else
+        {
+            result = await _clockInPinService.ClearOwnPinAsync(UserId);
+        }
 
         isBusy = false;
 

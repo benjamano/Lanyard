@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
@@ -21,7 +22,19 @@ public partial class ClockInPinService(
     [GeneratedRegex(@"^\d{4,6}$")]
     private static partial Regex PinFormat();
 
-    public async Task<Result<bool>> SetPinAsync(string userId, string pin, string? setByUserId)
+    public Task<Result<bool>> SetOwnPinAsync(string userId, string pin) =>
+        SetPinCoreAsync(null, userId, pin, null);
+
+    public Task<Result<bool>> ClearOwnPinAsync(string userId) =>
+        ClearPinCoreAsync(null, userId);
+
+    public Task<Result<bool>> SetPinForUserAsync(LocationScope scope, string userId, string pin, string setByUserId) =>
+        SetPinCoreAsync(scope, userId, pin, setByUserId);
+
+    public Task<Result<bool>> ClearPinForUserAsync(LocationScope scope, string userId) =>
+        ClearPinCoreAsync(scope, userId);
+
+    private async Task<Result<bool>> SetPinCoreAsync(LocationScope? scope, string userId, string pin, string? setByUserId)
     {
         try
         {
@@ -31,6 +44,11 @@ public partial class ClockInPinService(
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (scope is not null && !await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
+            {
+                return Result<bool>.Fail("You can only set PINs for staff in your own company.");
+            }
 
             bool userExists = await ctx.Users.AnyAsync(x => x.Id == userId);
 
@@ -71,11 +89,16 @@ public partial class ClockInPinService(
         }
     }
 
-    public async Task<Result<bool>> ClearPinAsync(string userId)
+    private async Task<Result<bool>> ClearPinCoreAsync(LocationScope? scope, string userId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            if (scope is not null && !await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
+            {
+                return Result<bool>.Fail("You can only remove PINs for staff in your own company.");
+            }
 
             UserClockInPin? existing = await ctx.UserClockInPins.FirstOrDefaultAsync(x => x.UserId == userId);
 

@@ -12,9 +12,6 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
 
-    private static bool CanManageCompany(LocationScope scope, int companyId) =>
-        scope.IsAdmin || scope.CompanyId == companyId;
-
     public async Task<Result<ContractRequirement?>> GetTierAsync(int companyId, Guid? positionId, string? userId)
     {
         try
@@ -35,7 +32,7 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
     {
         try
         {
-            if (!CanManageCompany(scope, row.CompanyId))
+            if (!SchedulingAccess.CanManageCompany(scope, row.CompanyId))
             {
                 return Result<ContractRequirement?>.Fail("You can only edit contract requirements for your own company.");
             }
@@ -61,6 +58,26 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
                 if (!positionInCompany)
                 {
                     return Result<ContractRequirement?>.Fail("That position does not belong to this company.");
+                }
+            }
+
+            // An override row is validated against what it will actually combine with: a user
+            // minimum of 50 h over an inherited company maximum of 40 h passes the single-row
+            // check above but produces a contract that every week both under- and over-shoots.
+            if (row.IsOverrideTier)
+            {
+                ResolvedContract parent = await ResolveParentAsync(ctx, row);
+
+                decimal? effectiveMin = row.MinHoursPerWeek ?? parent.MinHoursPerWeek.Value;
+                decimal? effectiveMax = row.MaxHoursPerWeek ?? parent.MaxHoursPerWeek.Value;
+
+                if (effectiveMin is decimal min && effectiveMax is decimal max && min > max)
+                {
+                    string minSource = row.MinHoursPerWeek is null ? $"inherited from the {TierLabel(parent.MinHoursPerWeek.Source)}" : "set here";
+                    string maxSource = row.MaxHoursPerWeek is null ? $"inherited from the {TierLabel(parent.MaxHoursPerWeek.Source)}" : "set here";
+
+                    return Result<ContractRequirement?>.Fail(
+                        $"Minimum hours per week ({min:0.##} h, {minSource}) cannot exceed the maximum ({max:0.##} h, {maxSource}).");
                 }
             }
 
@@ -150,11 +167,16 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Dictionary<string, Guid> primaryPositionByUser = await ctx.UserPositions
+            // One primary per user is enforced by a partial unique index on UserPositions, but a
+            // grouped read costs nothing and means a bad row could only ever affect one person.
+            Dictionary<string, Guid> primaryPositionByUser = (await ctx.UserPositions
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => ids.Contains(x.UserId) && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == companyId)
-                .ToDictionaryAsync(x => x.UserId, x => x.StaffPositionId);
+                .Select(x => new { x.UserId, x.StaffPositionId })
+                .ToListAsync())
+                .GroupBy(x => x.UserId)
+                .ToDictionary(g => g.Key, g => g.First().StaffPositionId);
 
             List<Guid> positionIds = primaryPositionByUser.Values.Distinct().ToList();
 
@@ -185,6 +207,39 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
             return Result<Dictionary<string, ResolvedContract>>.Fail($"Failed to resolve contract requirements: {ex.Message}");
         }
     }
+
+    // The chain *below* an override row: company for a position row; the user's primary
+    // position plus company for a user row.
+    private static async Task<ResolvedContract> ResolveParentAsync(ApplicationDbContext ctx, ContractRequirement row)
+    {
+        Guid? positionId = row.StaffPositionId;
+
+        if (row.UserId is string userId)
+        {
+            positionId = await ctx.UserPositions
+                .AsNoTracking()
+                .Where(x => x.UserId == userId && x.IsPrimary && x.StaffPosition!.IsActive && x.StaffPosition.CompanyId == row.CompanyId)
+                .Select(x => (Guid?)x.StaffPositionId)
+                .FirstOrDefaultAsync();
+        }
+
+        List<ContractRequirement> rows = await ctx.ContractRequirements
+            .AsNoTracking()
+            .Where(x => x.CompanyId == row.CompanyId
+                && ((x.StaffPositionId == null && x.UserId == null)
+                    || (positionId != null && x.StaffPositionId == positionId)))
+            .ToListAsync();
+
+        return Coalesce(rows, positionId, null);
+    }
+
+    private static string TierLabel(ContractTier tier) => tier switch
+    {
+        ContractTier.User => "user",
+        ContractTier.Position => "position",
+        ContractTier.Company => "company default",
+        _ => "default"
+    };
 
     private static async Task<ContractRequirement?> FindTierAsync(ApplicationDbContext ctx, int companyId, Guid? positionId, string? userId, bool track)
     {

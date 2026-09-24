@@ -14,7 +14,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260924103530_AddStaffSchedulingCore")]
+    [Migration("20260924181841_AddStaffSchedulingCore")]
     partial class AddStaffSchedulingCore
     {
         /// <inheritdoc />
@@ -1861,6 +1861,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"IsPrimary\"");
 
                     b.HasIndex("UserId", "StaffPositionId")
                         .IsUnique();

@@ -273,4 +273,85 @@ public class ContractRequirementServiceTests
         Assert.AreEqual(2, positionTier.Data!.MinShiftsPerWeek);
         Assert.AreEqual(3, userTier.Data!.MinShiftsPerWeek);
     }
+    [TestMethod]
+    public async Task SaveTierAsync_RejectsUserMinimumAboveInheritedMaximum()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        await SeedTierAsync(options, company.Id, null, null, maxHours: 40);
+
+        Result<ContractRequirement?> result = await GetService(options).SaveTierAsync(SchedulingTestHelpers.AdminScope,
+            new ContractRequirement { CompanyId = company.Id, UserId = user.Id, MinHoursPerWeek = 50 });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "inherited from the company default");
+    }
+
+    [TestMethod]
+    public async Task SaveTierAsync_RejectsPositionMaximumBelowInheritedMinimum()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition manager = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Manager");
+        await SeedTierAsync(options, company.Id, null, null, minHours: 30);
+
+        Result<ContractRequirement?> result = await GetService(options).SaveTierAsync(SchedulingTestHelpers.AdminScope,
+            new ContractRequirement { CompanyId = company.Id, StaffPositionId = manager.Id, MaxHoursPerWeek = 20 });
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SaveTierAsync_UserTierValidatesAgainstPrimaryPositionNotCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        StaffPosition manager = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Manager");
+        await MakePrimaryAsync(options, user.Id, manager.Id);
+        await SeedTierAsync(options, company.Id, null, null, maxHours: 40);
+        await SeedTierAsync(options, company.Id, manager.Id, null, maxHours: 60);
+
+        // 50 h exceeds the company's 40 h but not the primary position's 60 h, which is what applies.
+        Result<ContractRequirement?> result = await GetService(options).SaveTierAsync(SchedulingTestHelpers.AdminScope,
+            new ContractRequirement { CompanyId = company.Id, UserId = user.Id, MinHoursPerWeek = 50 });
+
+        Assert.IsTrue(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SaveTierAsync_AllowsOverrideThatRaisesBothBounds()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        await SeedTierAsync(options, company.Id, null, null, minHours: 10, maxHours: 40);
+
+        Result<ContractRequirement?> result = await GetService(options).SaveTierAsync(SchedulingTestHelpers.AdminScope,
+            new ContractRequirement { CompanyId = company.Id, UserId = user.Id, MinHoursPerWeek = 45, MaxHoursPerWeek = 50 });
+
+        Assert.IsTrue(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task ResolveForUsersAsync_ToleratesDuplicatePrimaryRows()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
+        StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
+
+        // The partial unique index prevents this in Postgres; EF InMemory doesn't enforce it, which
+        // is exactly what lets the test check the read side copes rather than throwing.
+        await MakePrimaryAsync(options, user.Id, csa.Id);
+        await MakePrimaryAsync(options, user.Id, supervisor.Id);
+        await SeedTierAsync(options, company.Id, null, null, minShifts: 1);
+
+        Result<Dictionary<string, ResolvedContract>> result = await GetService(options).ResolveForUsersAsync([user.Id], company.Id);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.AreEqual(1, result.Data![user.Id].MinShiftsPerWeek.Value);
+    }
 }

@@ -72,38 +72,6 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
         }
     }
 
-    public async Task<Result<int>> ResolveCompanyIdForUserAsync(string userId)
-    {
-        try
-        {
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            List<int> companyIds = await ctx.UserLocationMemberships
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Where(x => x.UserId == userId && x.Location!.IsActive && x.Location.Company!.IsActive)
-                .Select(x => x.Location!.CompanyId)
-                .Distinct()
-                .ToListAsync();
-
-            if (companyIds.Count == 0)
-            {
-                return Result<int>.Fail("This user doesn't belong to an active company yet - add them to a location first.");
-            }
-
-            if (companyIds.Count > 1)
-            {
-                return Result<int>.Fail("This user belongs to more than one company, so their rota settings can't be resolved.");
-            }
-
-            return Result<int>.Ok(companyIds[0]);
-        }
-        catch (Exception ex)
-        {
-            return Result<int>.Fail($"Failed to resolve the user's company: {ex.Message}");
-        }
-    }
-
     private static string? Validate(CompanySchedulingSettings settings)
     {
         if (settings.FinancialYearStartMonth is < 1 or > 12)
@@ -111,8 +79,10 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             return "Financial year start month must be between 1 and 12.";
         }
 
-        // 2024 is a leap year, so 29 February is accepted as a start day.
-        int daysInMonth = DateTime.DaysInMonth(2024, settings.FinancialYearStartMonth);
+        // Validated against a non-leap year on purpose: a holiday year that starts on 29 February
+        // has no start date three years in four, and the allowance rollover would have to invent
+        // one. 28 February is the latest February start allowed.
+        int daysInMonth = DateTime.DaysInMonth(2023, settings.FinancialYearStartMonth);
 
         if (settings.FinancialYearStartDay < 1 || settings.FinancialYearStartDay > daysInMonth)
         {
@@ -121,7 +91,7 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
 
         if (settings.HoursPerDay is <= 0 or > 24)
         {
-            return "Hours per day must be between 0 and 24.";
+            return "Hours per day must be greater than 0 and at most 24.";
         }
 
         if (settings.ShiftReminderLeadHours is < 1 or > 168)

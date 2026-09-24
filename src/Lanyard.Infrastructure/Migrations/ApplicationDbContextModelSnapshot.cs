@@ -1859,6 +1859,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("StaffPositionId");
 
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"IsPrimary\"");
+
                     b.HasIndex("UserId", "StaffPositionId")
                         .IsUnique();
 

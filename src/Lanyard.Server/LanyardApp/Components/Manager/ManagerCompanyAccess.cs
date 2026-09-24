@@ -7,8 +7,8 @@ namespace Lanyard.App.Components.Manager;
 
 // "Which companies may the current user configure?" - Admins every company, a Manager only the
 // companies their own location memberships belong to. GetCompaniesAsync() is unconditional and
-// would otherwise leak every other company's catalogs. Extracted from StaffDocumentTypes.razor so
-// the Rota pages (Positions, Rota Settings) share it instead of copying the two-branch lookup.
+// would otherwise leak every other company's catalogs. Shared by the Staff Document Types,
+// Onboarding and Rota (Positions, Rota Settings) pages so the rule lives in one place.
 internal static class ManagerCompanyAccess
 {
     public static async Task<List<Company>> GetCompaniesForCurrentUserAsync(

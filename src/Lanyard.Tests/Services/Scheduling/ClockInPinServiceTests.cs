@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -27,7 +28,7 @@ public class ClockInPinServiceTests
         (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
 
-        Result<bool> result = await GetService(options).SetPinAsync(user.Id, pin, null);
+        Result<bool> result = await GetService(options).SetOwnPinAsync(user.Id, pin);
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -39,7 +40,7 @@ public class ClockInPinServiceTests
         (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
 
-        Result<bool> result = await GetService(options).SetPinAsync(user.Id, "1234", "manager-id");
+        Result<bool> result = await GetService(options).SetPinForUserAsync(SchedulingTestHelpers.AdminScope, user.Id, "1234", "manager-id");
 
         Assert.IsTrue(result.IsSuccess);
 
@@ -58,8 +59,8 @@ public class ClockInPinServiceTests
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         ClockInPinService service = GetService(options);
 
-        await service.SetPinAsync(user.Id, "1234", null);
-        await service.SetPinAsync(user.Id, "5678", null);
+        await service.SetOwnPinAsync(user.Id, "1234");
+        await service.SetOwnPinAsync(user.Id, "5678");
 
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(1, await ctx.UserClockInPins.CountAsync());
@@ -72,7 +73,7 @@ public class ClockInPinServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
 
-        Result<bool> result = await GetService(options).SetPinAsync("nobody", "1234", null);
+        Result<bool> result = await GetService(options).SetOwnPinAsync("nobody", "1234");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -84,7 +85,7 @@ public class ClockInPinServiceTests
         (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         ClockInPinService service = GetService(options);
-        await service.SetPinAsync(user.Id, "246810", null);
+        await service.SetOwnPinAsync(user.Id, "246810");
 
         Result<bool> result = await service.VerifyPinAsync(user.Id, "246810");
 
@@ -100,7 +101,7 @@ public class ClockInPinServiceTests
         UserProfile withPin = await SchedulingTestHelpers.SeedUserAsync(options, location, "Ann");
         UserProfile withoutPin = await SchedulingTestHelpers.SeedUserAsync(options, location, "Bob");
         ClockInPinService service = GetService(options);
-        await service.SetPinAsync(withPin.Id, "1234", null);
+        await service.SetOwnPinAsync(withPin.Id, "1234");
 
         Result<bool> wrong = await service.VerifyPinAsync(withPin.Id, "9999");
         Result<bool> none = await service.VerifyPinAsync(withoutPin.Id, "1234");
@@ -118,10 +119,10 @@ public class ClockInPinServiceTests
         (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         ClockInPinService service = GetService(options);
-        await service.SetPinAsync(user.Id, "1234", null);
+        await service.SetOwnPinAsync(user.Id, "1234");
 
-        Result<bool> first = await service.ClearPinAsync(user.Id);
-        Result<bool> second = await service.ClearPinAsync(user.Id);
+        Result<bool> first = await service.ClearOwnPinAsync(user.Id);
+        Result<bool> second = await service.ClearOwnPinAsync(user.Id);
 
         Assert.IsTrue(first.IsSuccess);
         Assert.IsTrue(second.IsSuccess);
@@ -139,12 +140,75 @@ public class ClockInPinServiceTests
         ClockInPinService service = GetService(options);
 
         Result<ClockInPinStatus> before = await service.GetStatusAsync(user.Id);
-        await service.SetPinAsync(user.Id, "1234", null);
+        await service.SetOwnPinAsync(user.Id, "1234");
         Result<ClockInPinStatus> after = await service.GetStatusAsync(user.Id);
 
         Assert.IsFalse(before.Data!.HasPin);
         Assert.IsNull(before.Data.SetDate);
         Assert.IsTrue(after.Data!.HasPin);
         Assert.IsNotNull(after.Data.SetDate);
+    }
+    [TestMethod]
+    public async Task SetPinForUserAsync_RejectsManagerFromOtherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (_, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+
+        Result<bool> result = await GetService(options).SetPinForUserAsync(
+            SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id, "1234", "other-manager");
+
+        Assert.IsFalse(result.IsSuccess);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(0, await ctx.UserClockInPins.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task SetPinForUserAsync_AllowsManagerOfUsersCompanyAndRecordsSetBy()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+
+        Result<bool> result = await GetService(options).SetPinForUserAsync(
+            SchedulingTestHelpers.ManagerScopeFor(location), user.Id, "1234", "manager-id");
+
+        Assert.IsTrue(result.IsSuccess);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual("manager-id", (await ctx.UserClockInPins.SingleAsync()).SetByUserId);
+    }
+
+    [TestMethod]
+    public async Task ClearPinForUserAsync_RejectsManagerFromOtherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (_, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        ClockInPinService service = GetService(options);
+        await service.SetOwnPinAsync(user.Id, "1234");
+
+        Result<bool> result = await service.ClearPinForUserAsync(SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue((await service.VerifyPinAsync(user.Id, "1234")).Data);
+    }
+
+    [TestMethod]
+    public async Task SetOwnPinAsync_ClearsSetByUserId()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        ClockInPinService service = GetService(options);
+        await service.SetPinForUserAsync(SchedulingTestHelpers.AdminScope, user.Id, "1234", "manager-id");
+
+        await service.SetOwnPinAsync(user.Id, "5678");
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.IsNull((await ctx.UserClockInPins.SingleAsync()).SetByUserId);
     }
 }

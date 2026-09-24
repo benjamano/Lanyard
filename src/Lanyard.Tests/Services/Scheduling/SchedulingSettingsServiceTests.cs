@@ -57,6 +57,7 @@ public class SchedulingSettingsServiceTests
     [DataRow(0, 1)]
     [DataRow(4, 31)]
     [DataRow(2, 30)]
+    [DataRow(2, 29)]
     public async Task SaveSettingsAsync_RejectsInvalidFinancialYearStart(int month, int day)
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
@@ -69,15 +70,28 @@ public class SchedulingSettingsServiceTests
     }
 
     [TestMethod]
-    public async Task SaveSettingsAsync_AcceptsTwentyNinthOfFebruary()
+    public async Task SaveSettingsAsync_AcceptsTwentyEighthOfFebruary()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
         (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
 
         Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
-            new CompanySchedulingSettings { CompanyId = company.Id, FinancialYearStartMonth = 2, FinancialYearStartDay = 29 });
+            new CompanySchedulingSettings { CompanyId = company.Id, FinancialYearStartMonth = 2, FinancialYearStartDay = 28 });
 
         Assert.IsTrue(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SaveSettingsAsync_RejectsZeroHoursPerDay()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+
+        Result<CompanySchedulingSettings> result = await GetService(options).SaveSettingsAsync(SchedulingTestHelpers.AdminScope,
+            new CompanySchedulingSettings { CompanyId = company.Id, HoursPerDay = 0 });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "greater than 0");
     }
 
     [TestMethod]
@@ -91,54 +105,5 @@ public class SchedulingSettingsServiceTests
             SchedulingTestHelpers.ManagerScopeFor(otherLocation), new CompanySchedulingSettings { CompanyId = company.Id });
 
         Assert.IsFalse(result.IsSuccess);
-    }
-
-    [TestMethod]
-    public async Task ResolveCompanyIdForUserAsync_ReturnsTheUsersCompany()
-    {
-        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
-        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
-        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
-
-        Result<int> result = await GetService(options).ResolveCompanyIdForUserAsync(user.Id);
-
-        Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(company.Id, result.Data);
-    }
-
-    [TestMethod]
-    public async Task ResolveCompanyIdForUserAsync_FailsWhenUserHasNoLocation()
-    {
-        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
-
-        await using (ApplicationDbContext ctx = new(options))
-        {
-            ctx.Users.Add(new UserProfile { Id = "lonely", UserName = "lonely" });
-            await ctx.SaveChangesAsync();
-        }
-
-        Result<int> result = await GetService(options).ResolveCompanyIdForUserAsync("lonely");
-
-        Assert.IsFalse(result.IsSuccess);
-    }
-
-    [TestMethod]
-    public async Task ResolveCompanyIdForUserAsync_FailsWhenUserSpansCompanies()
-    {
-        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
-        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
-        (_, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
-        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
-
-        await using (ApplicationDbContext ctx = new(options))
-        {
-            ctx.UserLocationMemberships.Add(new UserLocationMembership { UserId = user.Id, LocationId = otherLocation.Id, CreateDate = DateTime.UtcNow });
-            await ctx.SaveChangesAsync();
-        }
-
-        Result<int> result = await GetService(options).ResolveCompanyIdForUserAsync(user.Id);
-
-        Assert.IsFalse(result.IsSuccess);
-        StringAssert.Contains(result.Error, "more than one company");
     }
 }

@@ -1,7 +1,6 @@
 @using Lanyard.Application.Services.Scheduling
 
 @inject IStaffPositionService _staffPositionService
-@inject ISchedulingSettingsService _schedulingSettingsService
 
 <div class="rota-profile">
     @if (isLoading)
@@ -11,10 +10,11 @@
             <FluentText>Loading...</FluentText>
         </FluentStack>
     }
-    else if (companyId is null)
+    else if (CompanyId is null)
     {
         <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
-            @(companyError ?? "This user's company could not be resolved.")
+            This user isn't a member of exactly one active company, so their rota profile can't be edited yet. Add them to a
+            location under the Account tab first.
         </FluentMessageBar>
     }
     else
@@ -58,7 +58,7 @@
         <FluentDivider Style="width: 100%;" />
 
         <section class="rota-profile-section">
-            <ContractRequirementEditor @key="@SavedPrimaryPositionId" CompanyId="@companyId.Value" UserId="@UserId"
+            <ContractRequirementEditor @key="@SavedPrimaryPositionId" CompanyId="@CompanyId.Value" UserId="@UserId"
                                        PrimaryPositionId="@SavedPrimaryPositionId" Title="Contract requirements for this person" />
         </section>
 
@@ -75,9 +75,12 @@
     [Parameter, EditorRequired]
     public required string UserId { get; set; }
 
+    // Resolved by the user editor (it already needs the user's company for the Documents tab);
+    // null when the user is in no company or more than one, which this tab can't act on.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
     private bool isLoading = true;
-    private int? companyId;
-    private string? companyError;
 
     private List<StaffPosition> companyPositions = [];
     private List<UserPosition> userPositions = [];
@@ -102,19 +105,13 @@
     {
         isLoading = true;
 
-        Result<int> companyResult = await _schedulingSettingsService.ResolveCompanyIdForUserAsync(UserId);
-
-        if (!companyResult.IsSuccess)
+        if (CompanyId is null)
         {
-            companyId = null;
-            companyError = companyResult.Error;
             isLoading = false;
             return;
         }
 
-        companyId = companyResult.Data;
-
-        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(companyId.Value);
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(CompanyId.Value);
         Result<List<UserPosition>> userPositionsResult = await _staffPositionService.GetUserPositionsAsync(UserId);
 
         companyPositions = positionsResult.IsSuccess ? positionsResult.Data ?? [] : [];

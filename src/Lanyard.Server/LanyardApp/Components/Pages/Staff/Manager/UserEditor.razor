@@ -187,7 +187,14 @@ else
 
             <FluentTab Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
                 <div class="rota-tab-content">
-                    <UserRotaProfileTab UserId="@user.Id" />
+                    @if (isLoadingDocuments)
+                    {
+                        <FluentSpinner />
+                    }
+                    else
+                    {
+                        <UserRotaProfileTab UserId="@user.Id" CompanyId="@userCompanyId" />
+                    }
                 </div>
             </FluentTab>
 
@@ -235,6 +242,7 @@ else
     private bool isDeleting;
 
     private bool isLoadingDocuments = true;
+    private int? userCompanyId;
     private List<StaffDocumentType>? documentTypes;
     private List<StaffDocument>? staffDocuments;
 
@@ -293,6 +301,10 @@ else
         isLoadingDocuments = true;
 
         Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(user.Id);
+
+        // Also feeds the Rota tab - a user in no company (or two) has no single company to
+        // resolve positions, contracts and allowances against.
+        userCompanyId = brandingResult.IsSuccess ? brandingResult.Data?.CompanyId : null;
 
         if (!brandingResult.IsSuccess || brandingResult.Data is null)
         {
