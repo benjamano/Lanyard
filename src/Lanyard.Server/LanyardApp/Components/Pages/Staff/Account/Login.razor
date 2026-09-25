@@ -3,6 +3,7 @@
 
 @inject NavigationManager Navigation
 @inject IThemeService ThemeService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Login</PageTitle>
 
@@ -271,6 +272,7 @@ else
         _appliedThemeColor = _pendingThemeColor;
 
         await ThemeService.SetThemeAsync(_pendingThemeColor);
+        await JSRuntime.InvokeVoidAsync("lanyardSetStatusBarColor", _pendingThemeColor);
     }
 
     private async Task<bool> LoadCompanyOptionsAsync()
