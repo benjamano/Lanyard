@@ -503,9 +503,10 @@
   {
     "version": "1.4.9",
     "releaseDate": "2026-09-25",
-    "summary": "The phone's status bar now matches your company's colour.",
+    "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour.",
     "details": [
-      "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar."
+      "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
+      "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge."
     ]
   }
 ]
