@@ -329,7 +329,8 @@
       "The virtual DMX desk now redraws at most about twenty times a second while a scene is running or a fader is dragged, instead of once per channel change, so it stays responsive during playback.",
       "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
       "A scene running for a kiosk that is offline no longer queries the database on every step.",
-      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart."
+      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }
 ]
