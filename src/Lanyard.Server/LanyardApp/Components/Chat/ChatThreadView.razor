@@ -1,0 +1,653 @@
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@implements IAsyncDisposable
+
+@inject IChatService ChatService
+@inject IChatEventBus ChatEvents
+@inject IChatPresence Presence
+@inject IJSRuntime JS
+
+@* One open conversation: its messages (newest at the bottom, older ones on demand), the message
+   box, and the conversation's menu. Stays live: new messages, edits and removals appear as they
+   happen, and while it's open its messages count as read and don't send push notifications. *@
+<div class="thread">
+    <header class="thread-header">
+        @if (ShowBack)
+        {
+            <button type="button" class="thread-icon-button" aria-label="Back to conversations" title="Back" @onclick="() => OnBack.InvokeAsync()">
+                <FluentIcon Value="@(new Icons.Regular.Size24.ArrowLeft())" Color="Color.Custom" CustomColor="currentColor" />
+            </button>
+        }
+        <div class="thread-title">
+            <div class="thread-name">
+                @(thread?.Title ?? "Loading...")
+                @if (thread?.IsMuted == true)
+                {
+                    <FluentIcon Value="@(new Icons.Regular.Size16.AlertOff())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" Title="Muted" />
+                }
+            </div>
+            @if (thread is { Conversation.Kind: ChatConversationKind.Group })
+            {
+                <div class="thread-subtitle" title="@string.Join(", ", thread.Members.Select(m => m.Name))">
+                    @thread.Members.Count people · @string.Join(", ", thread.Members.Where(m => m.UserId != UserId).Select(m => m.Name.Split(' ')[0]).Take(4))@(thread.Members.Count > 5 ? "…" : string.Empty)
+                </div>
+            }
+        </div>
+        @if (thread is not null)
+        {
+            <div class="thread-menu">
+                <button type="button" class="thread-icon-button" aria-label="Conversation options" title="Options" aria-expanded="@menuOpen" @onclick="() => menuOpen = !menuOpen">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.MoreVertical())" Color="Color.Custom" CustomColor="currentColor" />
+                </button>
+                @if (menuOpen)
+                {
+                    <div class="menu-backdrop" @onclick="() => menuOpen = false"></div>
+                    <div class="menu" role="menu">
+                        <button type="button" role="menuitem" @onclick="ToggleMuteAsync">@(thread.IsMuted ? "Turn notifications back on" : "Mute notifications")</button>
+                        @if (thread.Conversation.Kind == ChatConversationKind.Group)
+                        {
+                            <button type="button" role="menuitem" @onclick="AddPeopleAsync">Add people</button>
+                            <button type="button" role="menuitem" @onclick="RenameAsync">Rename group</button>
+                            <button type="button" role="menuitem" class="danger" @onclick="LeaveAsync">Leave group</button>
+                        }
+                        else if (thread.OtherUserId is not null)
+                        {
+                            <button type="button" role="menuitem" class="danger" @onclick="ToggleBlockAsync">@(thread.BlockedByMe ? $"Unblock {thread.Title}" : $"Block {thread.Title}")</button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </header>
+
+    <div class="thread-messages" @ref="scroller">
+        @if (loadError is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+        }
+        else if (thread is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Style="padding: 24px;">
+                <FluentSpinner />
+            </FluentStack>
+        }
+        else
+        {
+            @if (hasOlder)
+            {
+                <div class="thread-older">
+                    <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@loadingOlder" OnClick="LoadOlderAsync">
+                        @(loadingOlder ? "Loading..." : "Show earlier messages")
+                    </FluentButton>
+                </div>
+            }
+            else if (messages.Count == 0)
+            {
+                <div class="thread-empty">
+                    @(thread.Conversation.Kind == ChatConversationKind.Direct
+                        ? $"This is the start of your conversation with {thread.Title}."
+                        : $"This is the start of {thread.Title}.")
+                </div>
+            }
+
+            @for (int i = 0; i < messages.Count; i++)
+            {
+                ChatMessageView view = messages[i];
+                ChatMessageView? previous = i > 0 ? messages[i - 1] : null;
+                DateTime local = RotaTime.ToVenueLocal(view.Message.CreateUtc);
+                bool newDay = previous is null || RotaTime.LocalDate(previous.Message.CreateUtc) != DateOnly.FromDateTime(local);
+                bool startsRun = newDay || previous!.Message.AuthorUserId != view.Message.AuthorUserId
+                    || view.Message.CreateUtc - previous.Message.CreateUtc > TimeSpan.FromMinutes(10);
+
+                @if (newDay)
+                {
+                    <div class="thread-day"><span>@DayLabel(DateOnly.FromDateTime(local))</span></div>
+                }
+
+                <div class="msg @(view.IsMine ? "is-mine" : string.Empty) @(startsRun ? "starts-run" : string.Empty)" @key="view.Message.Id">
+                    @if (startsRun && !view.IsMine)
+                    {
+                        <div class="msg-author">@view.AuthorName</div>
+                    }
+                    <div class="msg-line">
+                        <div class="msg-bubble @(view.Message.IsDeleted ? "is-deleted" : string.Empty)">
+                            @if (view.ReplyTo is ChatReplyPreview reply)
+                            {
+                                <div class="msg-reply">
+                                    <span class="msg-reply-author">@reply.AuthorName</span>
+                                    <span class="msg-reply-text">@(reply.IsDeleted ? "Message deleted" : reply.Text)</span>
+                                </div>
+                            }
+                            @if (view.Message.IsDeleted)
+                            {
+                                <div class="msg-body">@(view.Message.DeletedByUserId is null ? "Message deleted" : "Removed by a manager")</div>
+                            }
+                            else
+                            {
+                                <div class="msg-body">@((MarkupString)view.Message.BodyHtml)</div>
+                            }
+                            <div class="msg-meta">
+                                @local.ToString("HH:mm", RotaFormat.Uk)@(view.Message.EditedUtc is not null && !view.Message.IsDeleted ? " · edited" : string.Empty)
+                            </div>
+                        </div>
+                        @if (!view.Message.IsDeleted)
+                        {
+                            <div class="msg-actions">
+                                <button type="button" class="thread-icon-button msg-action-button" aria-label="Message options" title="Options"
+                                        @onclick="() => messageMenu = messageMenu == view.Message.Id ? null : view.Message.Id">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.MoreHorizontal())" Color="Color.Custom" CustomColor="currentColor" />
+                                </button>
+                                @if (messageMenu == view.Message.Id)
+                                {
+                                    <div class="menu-backdrop" @onclick="() => messageMenu = null"></div>
+                                    <div class="menu msg-menu" role="menu">
+                                        @if (thread.CannotPostReason is null)
+                                        {
+                                            <button type="button" role="menuitem" @onclick="() => ReplyTo(view)">Reply</button>
+                                        }
+                                        @if (view.IsMine)
+                                        {
+                                            @if (thread.CannotPostReason is null)
+                                            {
+                                                <button type="button" role="menuitem" @onclick="() => EditAsync(view)">Edit</button>
+                                            }
+                                            <button type="button" role="menuitem" class="danger" @onclick="() => DeleteAsync(view)">Delete</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" role="menuitem" class="danger" @onclick="() => ReportAsync(view)">Report</button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <ChatComposer @ref="composer" Submit="SubmitAsync" OnCancelContext="CancelContext"
+                  DisabledReason="@thread?.CannotPostReason" Context="@composerContext" ContextIsEdit="@(editing is not null)"
+                  Placeholder="@(thread is null ? "Write a message" : $"Message {thread.Title}")" />
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required Guid ConversationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public bool ShowBack { get; set; }
+
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    // The person left the group (or it's otherwise no longer theirs): the page goes back to the inbox.
+    [Parameter]
+    public EventCallback OnGone { get; set; }
+
+    private ChatThread? thread;
+    private List<ChatMessageView> messages = [];
+    private bool hasOlder;
+    private bool loadingOlder;
+    private string? loadError;
+    private Guid loadedId;
+    private IDisposable? presence;
+
+    private ChatComposer? composer;
+    private ChatMessageView? replyingTo;
+    private ChatMessageView? editing;
+    private bool menuOpen;
+    private Guid? messageMenu;
+
+    private ElementReference scroller;
+    private bool scrollToBottom;
+    private double? keepFromHeight;
+
+    // Whether the page is actually on screen. Only then does the conversation count as being
+    // read (no push, marked read); a tab in the background or a locked phone doesn't.
+    private bool pageVisible = true;
+    private DotNetObjectReference<ChatThreadView>? dotNetRef;
+
+    private string? composerContext => editing is not null ? "Editing your message"
+        : replyingTo is not null ? $"Replying to {replyingTo.AuthorName}: {ChatHtml.Preview(replyingTo.Message.BodyText, 60)}"
+        : null;
+
+    protected override void OnInitialized()
+    {
+        ChatEvents.OnChanged += OnChatEvent;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConversationId == loadedId)
+        {
+            return;
+        }
+
+        bool switching = loadedId != Guid.Empty;
+
+        loadedId = ConversationId;
+        thread = null;
+        messages = [];
+        replyingTo = null;
+        editing = null;
+        menuOpen = false;
+        messageMenu = null;
+
+        // The same composer stays on screen when switching conversation; whatever was typed (or
+        // loaded for editing) belongs to the old one and must not be sent to the new one.
+        if (switching && composer is not null)
+        {
+            await composer.ClearAsync();
+        }
+
+        presence?.Dispose();
+        presence = pageVisible ? Presence.Enter(UserId, ConversationId) : null;
+
+        await LoadLatestAsync(scroll: true);
+    }
+
+    private async Task LoadLatestAsync(bool scroll)
+    {
+        // Reload as far back as the reader has scrolled (up to the page limit), so edits and
+        // removals of older messages show too, not just the newest page.
+        int take = Math.Clamp(messages.Count, 50, 200);
+
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        thread = result.Data;
+
+        // Keep anything older the reader had scrolled back to; take the newest page as it now is.
+        DateTime? oldestFetched = result.Data.Messages.FirstOrDefault()?.Message.CreateUtc;
+        List<ChatMessageView> older = oldestFetched is DateTime cutoff ? messages.Where(x => x.Message.CreateUtc < cutoff).ToList() : [];
+
+        hasOlder = older.Count > 0 ? hasOlder : result.Data.HasOlder;
+        messages = [.. older, .. result.Data.Messages];
+        scrollToBottom = scrollToBottom || scroll;
+
+        if (pageVisible)
+        {
+            await ChatService.MarkReadAsync(UserId, ConversationId);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnVisibilityChanged(bool visible)
+    {
+        if (visible == pageVisible)
+        {
+            return;
+        }
+
+        pageVisible = visible;
+        presence?.Dispose();
+        presence = null;
+
+        if (visible)
+        {
+            // Back on screen: count as reading again and catch up.
+            presence = Presence.Enter(UserId, ConversationId);
+            await LoadLatestAsync(scroll: false);
+            StateHasChanged();
+        }
+    }
+
+    private void OnChatEvent(ChatEvent chatEvent)
+    {
+        if (chatEvent.ConversationId != ConversationId || (chatEvent.MemberUserIds.Count > 0 && !chatEvent.MemberUserIds.Contains(UserId)))
+        {
+            return;
+        }
+
+        if (chatEvent.Kind == ChatEventKind.Read)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            bool nearBottom = true;
+
+            try
+            {
+                nearBottom = await JS.InvokeAsync<bool>("lanyardChat.isNearBottom", scroller);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            await LoadLatestAsync(scroll: nearBottom && chatEvent.Kind == ChatEventKind.MessagePosted);
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                dotNetRef = DotNetObjectReference.Create(this);
+                bool visible = await JS.InvokeAsync<bool>("lanyardChat.watchVisibility", dotNetRef);
+
+                if (!visible)
+                {
+                    await OnVisibilityChanged(false);
+                }
+            }
+
+            if (keepFromHeight is double height)
+            {
+                keepFromHeight = null;
+                await JS.InvokeVoidAsync("lanyardChat.keepPosition", scroller, height);
+            }
+            else if (scrollToBottom && thread is not null)
+            {
+                scrollToBottom = false;
+                await JS.InvokeVoidAsync("lanyardChat.scrollToBottom", scroller);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task LoadOlderAsync()
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        loadingOlder = true;
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc);
+        loadingOlder = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load earlier messages.");
+            return;
+        }
+
+        try
+        {
+            keepFromHeight = await JS.InvokeAsync<double>("lanyardChat.scrollHeight", scroller);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        messages = [.. result.Data.Messages, .. messages];
+        hasOlder = result.Data.HasOlder;
+    }
+
+    private async Task<bool> SubmitAsync(string html)
+    {
+        if (editing is ChatMessageView edited)
+        {
+            Result<bool> saved = await ChatService.EditAsync(UserId, edited.Message.Id, html);
+
+            if (!saved.IsSuccess)
+            {
+                _toastService.ShowError(saved.Error ?? "Couldn't edit the message.");
+                return false;
+            }
+
+            editing = null;
+            await InvokeAsync(StateHasChanged);
+            return true;
+        }
+
+        Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id);
+
+        if (!sent.IsSuccess)
+        {
+            _toastService.ShowError(sent.Error ?? "Couldn't send the message.");
+            return false;
+        }
+
+        replyingTo = null;
+        scrollToBottom = true;
+        await InvokeAsync(StateHasChanged);
+        return true;
+    }
+
+    private void CancelContext()
+    {
+        if (editing is not null)
+        {
+            _ = composer?.ClearAsync();
+        }
+
+        editing = null;
+        replyingTo = null;
+    }
+
+    private async Task ReplyTo(ChatMessageView view)
+    {
+        messageMenu = null;
+        editing = null;
+        replyingTo = view;
+
+        if (composer is not null)
+        {
+            await composer.FocusAsync();
+        }
+    }
+
+    private async Task EditAsync(ChatMessageView view)
+    {
+        messageMenu = null;
+        replyingTo = null;
+        editing = view;
+
+        if (composer is not null)
+        {
+            await composer.SetHtmlAsync(view.Message.BodyHtml);
+        }
+    }
+
+    private async Task DeleteAsync(ChatMessageView view)
+    {
+        messageMenu = null;
+
+        if (!await ConfirmAsync("Delete message", "Delete this message for everyone in the conversation?", "Delete"))
+        {
+            return;
+        }
+
+        Result<bool> deleted = await ChatService.DeleteOwnAsync(UserId, view.Message.Id);
+
+        if (!deleted.IsSuccess)
+        {
+            _toastService.ShowError(deleted.Error ?? "Couldn't delete the message.");
+        }
+    }
+
+    private async Task ReportAsync(ChatMessageView view)
+    {
+        messageMenu = null;
+
+        await _dialogService.ShowDialogAsync<ReportMessageDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ReportMessageDialog.Message), view);
+            options.Parameters.Add(nameof(ReportMessageDialog.UserId), UserId);
+            options.Parameters.Add(nameof(ReportMessageDialog.IsDirect), thread?.Conversation.Kind == ChatConversationKind.Direct);
+        });
+    }
+
+    private async Task ToggleMuteAsync()
+    {
+        menuOpen = false;
+
+        if (thread is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await ChatService.SetMutedAsync(UserId, ConversationId, !thread.IsMuted);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change notifications.");
+            return;
+        }
+
+        _toastService.ShowInfo(thread.IsMuted ? "Notifications are back on for this conversation." : "Muted. Messages still show here, without notifications.");
+        await LoadLatestAsync(scroll: false);
+    }
+
+    private async Task ToggleBlockAsync()
+    {
+        menuOpen = false;
+
+        if (thread?.OtherUserId is not string other)
+        {
+            return;
+        }
+
+        if (!thread.BlockedByMe && !await ConfirmAsync($"Block {thread.Title}",
+                $"{thread.Title} won't be able to message you, and you won't be able to message them. You'll both still see each other in groups. They aren't told.", "Block"))
+        {
+            return;
+        }
+
+        Result<bool> result = thread.BlockedByMe ? await ChatService.UnblockAsync(UserId, other) : await ChatService.BlockAsync(UserId, other);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change that.");
+            return;
+        }
+
+        await LoadLatestAsync(scroll: false);
+    }
+
+    private async Task AddPeopleAsync()
+    {
+        menuOpen = false;
+
+        if (thread is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<NewConversationDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(NewConversationDialog.UserId), UserId);
+            options.Parameters.Add(nameof(NewConversationDialog.CompanyId), CompanyId);
+            options.Parameters.Add(nameof(NewConversationDialog.AddToConversationId), ConversationId);
+            options.Parameters.Add(nameof(NewConversationDialog.ExistingMemberIds), thread.Members.Select(m => m.UserId).ToList());
+        });
+
+        if (!result.Cancelled)
+        {
+            await LoadLatestAsync(scroll: false);
+        }
+    }
+
+    private async Task RenameAsync()
+    {
+        menuOpen = false;
+
+        DialogResult result = await _dialogService.ShowDialogAsync<TextPromptDialog>(options =>
+        {
+            options.Width = "420px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(TextPromptDialog.Title), "Rename group");
+            options.Parameters.Add(nameof(TextPromptDialog.Label), "Group name");
+            options.Parameters.Add(nameof(TextPromptDialog.Value), thread?.Title);
+            options.Parameters.Add(nameof(TextPromptDialog.ConfirmText), "Rename");
+        });
+
+        if (result.Cancelled || result.Value is not string name)
+        {
+            return;
+        }
+
+        Result<bool> renamed = await ChatService.RenameGroupAsync(UserId, ConversationId, name);
+
+        if (!renamed.IsSuccess)
+        {
+            _toastService.ShowError(renamed.Error ?? "Couldn't rename the group.");
+        }
+    }
+
+    private async Task LeaveAsync()
+    {
+        menuOpen = false;
+
+        if (!await ConfirmAsync("Leave group", $"Leave {thread?.Title}? You'll stop getting its messages. Someone in it can add you back.", "Leave"))
+        {
+            return;
+        }
+
+        Result<bool> left = await ChatService.LeaveGroupAsync(UserId, ConversationId);
+
+        if (!left.IsSuccess)
+        {
+            _toastService.ShowError(left.Error ?? "Couldn't leave the group.");
+            return;
+        }
+
+        await OnGone.InvokeAsync();
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message, string confirmText)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = title;
+            options.Width = "440px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), message);
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), confirmText);
+        });
+
+        return !result.Cancelled && result.Value is true;
+    }
+
+    private static string DayLabel(DateOnly day)
+    {
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+
+        return day == today ? "Today"
+            : day == today.AddDays(-1) ? "Yesterday"
+            : day.ToString(day.Year == today.Year ? "dddd d MMMM" : "d MMMM yyyy", RotaFormat.Uk);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        ChatEvents.OnChanged -= OnChatEvent;
+        presence?.Dispose();
+
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.unwatchVisibility");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        dotNetRef?.Dispose();
+    }
+}

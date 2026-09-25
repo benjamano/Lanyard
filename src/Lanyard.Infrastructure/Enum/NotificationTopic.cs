@@ -12,5 +12,10 @@ public enum NotificationTopic
     OpenShift = 4,
     SwapRequest = 5,
     ShiftClaimDecided = 6,
-    ShiftClaimPending = 7
+    ShiftClaimPending = 7,
+    DirectMessage = 8,
+    GroupMessage = 9,
+    ChatUnreadEmail = 10,
+    ChatReport = 11,
+    ChatReportReviewed = 12
 }

@@ -1,0 +1,144 @@
+@implements IAsyncDisposable
+
+@inject IJSRuntime JS
+
+@* The message box: Quill with bold, italic, lists and links. Enter sends (Shift+Enter for a new
+   line); on a phone the return key adds a line and the Send button sends. *@
+<div class="composer">
+    @if (Context is not null)
+    {
+        <div class="composer-context">
+            <FluentIcon Value="@(ContextIsEdit ? (Icon)new Icons.Regular.Size16.Edit() : new Icons.Regular.Size16.ArrowReply())" Color="Color.Custom" CustomColor="currentColor" />
+            <span class="composer-context-text">@Context</span>
+            <button type="button" class="composer-context-cancel" aria-label="Cancel" title="Cancel" @onclick="CancelContextAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Dismiss())" Color="Color.Custom" CustomColor="currentColor" />
+            </button>
+        </div>
+    }
+
+    @if (DisabledReason is not null)
+    {
+        <div class="composer-disabled">@DisabledReason</div>
+    }
+
+    <div class="composer-row @(DisabledReason is not null ? "is-hidden" : string.Empty)">
+        <div class="composer-box">
+            <div @ref="toolbar" class="composer-toolbar">
+                <span class="ql-formats">
+                    <button type="button" class="ql-bold" aria-label="Bold"></button>
+                    <button type="button" class="ql-italic" aria-label="Italic"></button>
+                    <button type="button" class="ql-strike" aria-label="Strikethrough"></button>
+                </span>
+                <span class="ql-formats">
+                    <button type="button" class="ql-list" value="bullet" aria-label="Bulleted list"></button>
+                    <button type="button" class="ql-list" value="ordered" aria-label="Numbered list"></button>
+                    <button type="button" class="ql-link" aria-label="Link"></button>
+                </span>
+            </div>
+            <div @ref="host" class="composer-editor"></div>
+        </div>
+        <button type="button" class="composer-send" aria-label="Send" title="Send" @onclick="SendAsync">
+            <FluentIcon Value="@(new Icons.Filled.Size24.Send())" Color="Color.Custom" CustomColor="currentColor" />
+        </button>
+    </div>
+</div>
+
+@code {
+    // Called with the composer's HTML; returns true when the message was sent (the box then clears).
+    [Parameter, EditorRequired]
+    public required Func<string, Task<bool>> Submit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelContext { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Write a message";
+
+    // Shown instead of the box when the person can't post (suspended, blocked).
+    [Parameter]
+    public string? DisabledReason { get; set; }
+
+    // "Replying to Tom: ..." or "Editing your message", above the box.
+    [Parameter]
+    public string? Context { get; set; }
+
+    [Parameter]
+    public bool ContextIsEdit { get; set; }
+
+    private ElementReference host;
+    private ElementReference toolbar;
+    private DotNetObjectReference<ChatComposer>? dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        dotNetRef = DotNetObjectReference.Create(this);
+
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.init", host, toolbar, dotNetRef, Placeholder);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public async Task<bool> OnSubmit(string html) => await Submit(html);
+
+    private async Task SendAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.send", host);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private Task CancelContextAsync() => OnCancelContext.InvokeAsync();
+
+    public async Task SetHtmlAsync(string html)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.setHtml", host, html);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async Task ClearAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.clear", host);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async Task FocusAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.focus", host);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

@@ -9,4 +9,9 @@ public interface INotificationPreferenceService
     Task<Result<List<TopicPreference>>> GetForUserAsync(string userId);
 
     Task<Result<TopicPreference>> SaveAsync(string userId, NotificationTopic topic, bool push, bool email);
+
+    // Whether chat pushes include the message text (UserProfile.ShowMessagePreviews).
+    Task<Result<bool>> GetShowMessagePreviewsAsync(string userId);
+
+    Task<Result<bool>> SetShowMessagePreviewsAsync(string userId, bool show);
 }

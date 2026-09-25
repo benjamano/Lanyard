@@ -27,6 +27,8 @@ public static class PushContentBuilder
             TimeSpan.FromDays(3)),
         TimeOffDecidedPayload decided => Decided(decided),
         _ when ShiftClaimNotices.Handles(payload) => FromNotice(payload),
+        ChatMessagePayload chat => ChatMessage(chat),
+        _ when ChatNotices.Handles(payload) => FromChatNotice(payload),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -104,6 +106,24 @@ public static class PushContentBuilder
 
         return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag,
             urgent ? PushMessageUrgency.High : PushMessageUrgency.Normal, TimeSpan.FromDays(2));
+    }
+
+    // "Tom Hughes" / "Tom Hughes in Weekend crew", with the message (or just that there is one,
+    // for anyone who has turned message text off - Preview is empty then). Same tag per
+    // conversation, so a burst of messages shows as one notification that keeps updating.
+    private static PushContent ChatMessage(ChatMessagePayload chat)
+    {
+        string title = chat.IsGroup ? $"{chat.AuthorName} in {chat.ConversationName}" : chat.AuthorName;
+        string body = string.IsNullOrWhiteSpace(chat.Preview) ? "New message" : chat.Preview;
+
+        return new PushContent(title, body, $"/chat/{chat.ConversationId}", $"chat-{chat.ConversationId:N}", PushMessageUrgency.High, TimeSpan.FromDays(1));
+    }
+
+    private static PushContent FromChatNotice(NotificationPayload payload)
+    {
+        Notice notice = ChatNotices.For(payload);
+
+        return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag, PushMessageUrgency.Normal, TimeSpan.FromDays(2));
     }
 
     private static string Count(int count, string one, string many) => $"{count} {(count == 1 ? one : many)}";

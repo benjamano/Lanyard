@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Chat;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -34,12 +35,16 @@ public static class ScheduleRetention
 
     public record Snapshot(List<ShiftFields> Shifts, List<TimeEntryFields> TimeEntries, List<TerminalFields> Terminals, List<ClaimFields> Claims)
     {
-        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count;
+        // Chat history is detached in the same step (ChatRetention), so one snapshot undoes both.
+        public ChatRetention.Snapshot Chat { get; init; } = ChatRetention.Snapshot.Empty;
+
+        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count + Chat.Count;
     }
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
 
-    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc)
+    // eraseDirectMessages: a GDPR erasure also empties the direct messages the person sent.
+    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc, bool eraseDirectMessages = false)
     {
         List<Shift> shifts = await ctx.Shifts
             .Where(x => x.UserId == userId || x.CreateByUserId == userId || x.UpdateByUserId == userId || x.PublishedByUserId == userId)
@@ -78,11 +83,16 @@ public static class ScheduleRetention
 
         claims.AddRange(linked.Where(x => claims.All(c => c.Id != x.Id)));
 
+        ChatRetention.Snapshot chat = await ChatRetention.DetachUserAsync(ctx, userId, nowUtc, eraseDirectMessages);
+
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
             entries.Select(x => new TimeEntryFields(x.Id, x.UserId, x.ClockOutUtc, x.ClockOutMethod, x.NeedsReview, x.ReviewReason, x.CreateByUserId, x.UpdateByUserId, x.ApprovedByUserId)).ToList(),
             terminals.Select(x => new TerminalFields(x.Id, x.CreatedByUserId, x.RevokedByUserId)).ToList(),
-            claims.Select(x => new ClaimFields(x.Id, x.UserId, x.Status, x.DecidedByUserId, x.DecidedUtc, x.DecisionReason)).ToList());
+            claims.Select(x => new ClaimFields(x.Id, x.UserId, x.Status, x.DecidedByUserId, x.DecidedUtc, x.DecisionReason)).ToList())
+        {
+            Chat = chat
+        };
 
         // Pick-ups, call-offs and swaps are kept as rota history like the shifts, anonymised. Any
         // still waiting are withdrawn: the person can no longer work or give up a shift.
@@ -203,6 +213,8 @@ public static class ScheduleRetention
         {
             return;
         }
+
+        await ChatRetention.RestoreAsync(ctx, snapshot.Chat);
 
         List<Guid> shiftIds = snapshot.Shifts.Select(x => x.Id).ToList();
         Dictionary<Guid, Shift> shifts = await ctx.Shifts.Where(x => shiftIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id);

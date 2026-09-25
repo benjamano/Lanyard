@@ -1,0 +1,47 @@
+.report-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.report-quote {
+    padding: 10px 12px;
+    border-left: 4px solid var(--colorNeutralStroke1);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+    overflow-wrap: anywhere;
+}
+
+.report-author {
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.report-reasons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.report-reasons legend {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.report-reason,
+.report-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.report-reason input,
+.report-block input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--colorBrandBackground);
+}

@@ -54,15 +54,23 @@ public class NotificationDeliverer(
                 ? NotificationTopics.Default(job.Topic)
                 : new TopicPreference(job.Topic, saved.Push, saved.Email);
 
+            NotificationTopicInfo info = NotificationTopics.Get(job.Topic);
+
             // Each channel is independent: a failed email doesn't stop the push, or the other way round.
-            if (preference.Email)
+            // Some topics only have one channel (chat messages push; the unread summary emails).
+            if (preference.Email && info.EmailAvailable)
             {
                 await SendEmailAsync(job, user);
             }
 
-            if (preference.Push && _pushSender.IsConfigured)
+            if (preference.Push && info.PushAvailable && _pushSender.IsConfigured)
             {
-                PushContent content = PushContentBuilder.Build(job.Payload, RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime));
+                // Lock-screen privacy: someone who has turned message text off gets "New message".
+                NotificationPayload payload = job.Payload is ChatMessagePayload chat && !user.ShowMessagePreviews
+                    ? chat with { Preview = string.Empty }
+                    : job.Payload;
+
+                PushContent content = PushContentBuilder.Build(payload, RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime));
                 PushSendSummary summary = await _pushSender.SendToUserAsync(user.Id, content, cancellationToken: cancellationToken);
 
                 if (summary.Devices > 0)
@@ -111,6 +119,8 @@ public class NotificationDeliverer(
                     EmailBranding.Link(_emailOptions, "/rota/time-off"), logoUrl, accent),
 
                 _ when ShiftClaimNotices.Handles(job.Payload) => await SendNoticeAsync(user, ShiftClaimNotices.For(job.Payload), logoUrl, accent),
+
+                _ when ChatNotices.Handles(job.Payload) => await SendNoticeAsync(user, ChatNotices.For(job.Payload), logoUrl, accent),
 
                 _ => Result<bool>.Fail($"No delivery for {job.Payload.GetType().Name}.")
             };

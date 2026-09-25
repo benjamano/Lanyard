@@ -1,0 +1,118 @@
+@inject IChatModerationService Moderation
+
+@* A manager's decision on one report: dismiss it, or take action - remove the message for everyone
+   and/or stop its author posting for a while. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentText As="@TextTag.H3">@(Dismiss ? "Dismiss report" : "Take action")</FluentText>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="resolve-dialog">
+            @if (!Dismiss)
+            {
+                <label class="resolve-option">
+                    <input type="checkbox" checked="@removeMessage" disabled="@(!View.MessageStillVisible)" @onchange="() => removeMessage = !removeMessage" />
+                    <span>
+                        Remove the message for everyone
+                        @if (!View.MessageStillVisible)
+                        {
+                            <span class="resolve-hint">(already gone)</span>
+                        }
+                    </span>
+                </label>
+
+                <label class="resolve-option">
+                    <input type="checkbox" checked="@suspend" @onchange="() => suspend = !suspend" />
+                    <span>Stop @View.ReportedName posting in chat</span>
+                </label>
+
+                @if (suspend)
+                {
+                    <div class="resolve-lengths" role="radiogroup" aria-label="How long">
+                        @foreach ((int? days, string label) in Lengths)
+                        {
+                            <label class="resolve-length">
+                                <input type="radio" name="suspend-length" checked="@(suspendDays == days)" @onchange="() => suspendDays = days" />
+                                @label
+                            </label>
+                        }
+                    </div>
+                    <div class="resolve-hint">They can still read messages. They aren't told who reported them.</div>
+                }
+            }
+            else
+            {
+                <FluentText>The message stays, and nothing happens to @View.ReportedName. @View.ReporterName is told the report has been reviewed.</FluentText>
+            }
+
+            <FluentTextArea @bind-Value="outcome" Rows="3" Maxlength="500" Style="width: 100%;"
+                            Label="Note for other managers (optional, not shown to either person)" />
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(isBusy || (!Dismiss && !removeMessage && !suspend))" OnClick="SaveAsync">
+            @(isBusy ? "Saving..." : Dismiss ? "Dismiss" : "Save")
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required ChatReportView View { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string ReviewerUserId { get; set; }
+
+    [Parameter]
+    public bool Dismiss { get; set; }
+
+    private static readonly (int?, string)[] Lengths = [(1, "1 day"), (7, "7 days"), (30, "30 days"), (null, "Until I lift it")];
+
+    private bool removeMessage = true;
+    private bool suspend;
+    private int? suspendDays = 7;
+    private string? outcome;
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        removeMessage = View.MessageStillVisible;
+    }
+
+    private async Task SaveAsync()
+    {
+        isBusy = true;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            isBusy = false;
+            errorMessage = scope.Error ?? "Couldn't confirm your location.";
+            return;
+        }
+
+        Result<bool> result = await Moderation.ResolveAsync(scope.Data, View.Report.Id,
+            !Dismiss && removeMessage, !Dismiss && suspend, suspendDays, outcome, ReviewerUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

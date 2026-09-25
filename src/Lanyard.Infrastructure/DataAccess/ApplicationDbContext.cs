@@ -97,6 +97,12 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppInstallation> AppInstallations { get; set; }
         public DbSet<ShiftClaim> ShiftClaims { get; set; }
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
+        public DbSet<ChatConversation> ChatConversations { get; set; }
+        public DbSet<ChatMember> ChatMembers { get; set; }
+        public DbSet<ChatMessage> ChatMessages { get; set; }
+        public DbSet<ChatBlock> ChatBlocks { get; set; }
+        public DbSet<ChatReport> ChatReports { get; set; }
+        public DbSet<ChatSuspension> ChatSuspensions { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -554,6 +560,118 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<LocationSchedulingSettings>()
                 .HasIndex(x => x.LocationId)
                 .IsUnique();
+
+            // ---- Chat ----
+            // One direct conversation per pair of people.
+            modelBuilder.Entity<ChatConversation>()
+                .HasIndex(x => x.DirectKey)
+                .IsUnique()
+                .HasFilter("\"DirectKey\" IS NOT NULL");
+
+            modelBuilder.Entity<ChatConversation>()
+                .HasIndex(x => new { x.CompanyId, x.LastMessageUtc });
+
+            modelBuilder.Entity<ChatConversation>()
+                .HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatMember>()
+                .HasIndex(x => new { x.ConversationId, x.UserId })
+                .IsUnique();
+
+            modelBuilder.Entity<ChatMember>()
+                .HasIndex(x => x.UserId);
+
+            modelBuilder.Entity<ChatMember>()
+                .HasOne(x => x.Conversation)
+                .WithMany()
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A deleted person simply stops being a member. What they wrote is kept, re-pointed to
+            // the placeholder account (ChatRetention), which is why the message and report user
+            // keys below are Restrict: that step can't be skipped silently.
+            modelBuilder.Entity<ChatMember>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasIndex(x => new { x.ConversationId, x.CreateUtc });
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(x => x.Conversation)
+                .WithMany()
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(x => x.Author)
+                .WithMany()
+                .HasForeignKey(x => x.AuthorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(x => x.ReplyTo)
+                .WithMany()
+                .HasForeignKey(x => x.ReplyToMessageId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ChatBlock>()
+                .HasIndex(x => new { x.BlockerUserId, x.BlockedUserId })
+                .IsUnique();
+
+            modelBuilder.Entity<ChatBlock>()
+                .HasOne(x => x.Blocker)
+                .WithMany()
+                .HasForeignKey(x => x.BlockerUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ChatBlock>()
+                .HasOne(x => x.Blocked)
+                .WithMany()
+                .HasForeignKey(x => x.BlockedUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ChatReport>()
+                .HasIndex(x => new { x.LocationId, x.Status });
+
+            // The snapshot outlives the message: removing a message keeps its report.
+            modelBuilder.Entity<ChatReport>()
+                .HasOne(x => x.Message)
+                .WithMany()
+                .HasForeignKey(x => x.MessageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatReport>()
+                .HasOne(x => x.Reporter)
+                .WithMany()
+                .HasForeignKey(x => x.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatReport>()
+                .HasOne(x => x.Reported)
+                .WithMany()
+                .HasForeignKey(x => x.ReportedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatReport>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatSuspension>()
+                .HasIndex(x => new { x.UserId, x.CompanyId });
+
+            modelBuilder.Entity<ChatSuspension>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // CourseAssignments is filtered by UserId on every home-page load (outstanding
             // training card), the MyTraining widget/page and every bulk-assign duplicate check,

@@ -84,4 +84,53 @@ public class NotificationPreferenceService(
             return Result<TopicPreference>.Fail($"Couldn't save that setting: {ex.Message}");
         }
     }
+
+    public async Task<Result<bool>> GetShowMessagePreviewsAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool? show = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == userId)
+                .Select(x => (bool?)x.ShowMessagePreviews)
+                .FirstOrDefaultAsync();
+
+            return show is bool value ? Result<bool>.Ok(value) : Result<bool>.Fail("Account not found.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading the message-preview setting for {UserId}", userId);
+
+            return Result<bool>.Fail($"Couldn't load that setting: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetShowMessagePreviewsAsync(string userId, bool show)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users.FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user is null)
+            {
+                return Result<bool>.Fail("Account not found.");
+            }
+
+            user.ShowMessagePreviews = show;
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(show);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving the message-preview setting for {UserId}", userId);
+
+            return Result<bool>.Fail($"Couldn't save that setting: {ex.Message}");
+        }
+    }
 }
