@@ -73,7 +73,10 @@ builder.Services.AddOpenTelemetry()
 
 // Add Razor Components with Interactive Server
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    // Circuit hub only (not the kiosk hub). Pinging every 5s lets the browser's 15s server timeout
+    // (wwwroot/js/blazorStart.js) spot a socket that died silently while a phone was backgrounded.
+    .AddHubOptions(options => options.KeepAliveInterval = TimeSpan.FromSeconds(5));
 
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
