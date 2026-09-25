@@ -5,7 +5,6 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -46,7 +45,6 @@ public class DmxServiceTests
                 Mock.Of<IDbContextFactory<ApplicationDbContext>>(),
                 hubContext.Object,
                 Mock.Of<ILogger<DmxService>>(),
-                Mock.Of<IMemoryCache>(),
                 scopeFactory.Object);
         }
     }

@@ -358,6 +358,8 @@
       "Song BPM analysis no longer queues the same song several times while a backlog is being processed.",
       "Kiosk song-cache reports now look up all song names with one query instead of one per cached song.",
       "Removed two unused script libraries (Bootstrap's JavaScript bundle and an input-mask library) from every page load.",
+      "Projection program steps now hold for exactly their configured time, including when a program is paused and resumed part-way through a step. Each step used to run a few percent long.",
+      "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages.",
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }

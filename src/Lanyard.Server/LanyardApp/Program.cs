@@ -146,7 +146,11 @@ builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardSer
 
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
-builder.Services.AddSignalR();
+// Kiosks report lists (cached songs, screens, devices) in single messages; a few hundred
+// cached songs overflow the 32 KB default and the hub drops the connection. Raised for the
+// kiosk hub only: global HubOptions would also apply to every Blazor circuit.
+builder.Services.AddSignalR()
+    .AddHubOptions<SignalRControlHub>(options => options.MaximumReceiveMessageSize = 256 * 1024);
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -285,14 +289,6 @@ builder.Services.AddCascadingAuthenticationState();
 
 // Add Controllers for API endpoints
 builder.Services.AddControllers();
-
-// Add HttpClient
-builder.Services.AddHttpClient();
-builder.Services.AddScoped(sp =>
-{
-    NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
-});
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
