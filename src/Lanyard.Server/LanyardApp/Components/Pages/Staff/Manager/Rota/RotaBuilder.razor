@@ -1,0 +1,481 @@
+@page "/manage/rota"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@implements IAsyncDisposable
+
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaService _rotaService
+@inject IJSRuntime JS
+
+<PageTitle>Rota</PageTitle>
+
+<div class="rota-builder">
+    <div class="rota-toolbar">
+        <div class="rota-toolbar-row">
+            @if (locationOptions.Count > 1)
+            {
+                <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                              OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                              Label="Location" Width="260px" />
+            }
+
+            <div class="rota-nav">
+                <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronLeft())" Title="@(monthView ? "Previous month" : "Previous week")"
+                              OnClick="@(() => MoveAsync(-1))" />
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@GoToTodayAsync">Today</FluentButton>
+                <FluentButton IconStart="@(new Icons.Regular.Size20.ChevronRight())" Title="@(monthView ? "Next month" : "Next week")"
+                              OnClick="@(() => MoveAsync(1))" />
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Class="rota-range-label">@RangeLabel</FluentText>
+            </div>
+
+            <div class="rota-view-toggle" role="group" aria-label="Rota view">
+                <FluentButton Appearance="@(monthView ? ButtonAppearance.Outline : ButtonAppearance.Primary)" OnClick="@(() => SetViewAsync(false))">Week</FluentButton>
+                <FluentButton Appearance="@(monthView ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetViewAsync(true))">Month</FluentButton>
+            </div>
+        </div>
+
+        <div class="rota-toolbar-row">
+            <FluentCheckbox Label="Show staff without a position" Value="@includeAllMembers" ValueChanged="@OnIncludeAllChanged" />
+
+            <div class="rota-actions">
+                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Copy())"
+                              Disabled="@(view is null || isBusy)" OnClick="@CopyAsync">
+                    @(monthView ? "Copy from 4 weeks earlier" : "Copy last week")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Send())"
+                              Disabled="@(view is null || isBusy || view.UnpublishedChangeCount == 0)" OnClick="@PublishAsync">
+                    @(view is { UnpublishedChangeCount: > 0 } ? $"Publish {view.UnpublishedChangeCount} {(view.UnpublishedChangeCount == 1 ? "change" : "changes")}" : "Publish")
+                </FluentButton>
+            </div>
+        </div>
+
+        @if (view is not null)
+        {
+            <FluentText Class="rota-status">
+                @view.LocationName ·
+                @if (view.UnpublishedChangeCount == 0)
+                {
+                    <span>everything in this @(monthView ? "month" : "week") is published.</span>
+                }
+                else
+                {
+                    <span>@view.UnpublishedChangeCount unpublished @(view.UnpublishedChangeCount == 1 ? "change" : "changes") affecting @view.PeopleWithUnpublishedChanges @(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people").</span>
+                }
+            </FluentText>
+        }
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (view is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (view.Rows.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText Weight="TextWeight.Semibold">Nobody to schedule yet</FluentText>
+                <FluentText>
+                    The rota lists staff who hold a position. Give people positions on the Rota tab of their profile under
+                    Manage &gt; Users, or tick "Show staff without a position" above.
+                </FluentText>
+            </FluentStack>
+        </FluentCard>
+    }
+    else if (isNarrowViewport)
+    {
+        <RotaDayList View="@view" Today="@today" OnAdd="@OpenAddAsync" OnEdit="@OpenEditAsync" />
+    }
+    else if (monthView)
+    {
+        <RotaMonthGrid View="@view" Today="@today" OnAdd="@OpenAddAsync" OnEdit="@OpenEditAsync" />
+    }
+    else
+    {
+        <RotaWeekGrid View="@view" WeekStart="@view.From" Today="@today" OnAdd="@OpenAddAsync" OnEdit="@OpenEditAsync" />
+    }
+
+    <div class="rota-legend" aria-label="Key">
+        <span><span class="legend-chip legend-draft"></span> Draft (staff can't see it yet)</span>
+        <span><span class="legend-chip legend-published"></span> Published</span>
+        <span><span class="legend-chip legend-published legend-changed"></span> Changed since publishing</span>
+        <span><span class="legend-chip legend-removed"></span> Removed (staff told on next publish)</span>
+        <span><FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Warning" /> Contract not met that week</span>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ViewQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateQuery { get; set; }
+
+    private record LocationOption(int Id, string Name);
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private bool monthView;
+    private DateOnly anchor;
+    private DateOnly today;
+    private bool includeAllMembers;
+
+    private RotaRangeView? view;
+    private string? loadError;
+    private bool isBusy;
+    private string? loadedKey;
+
+    private bool isNarrowViewport;
+    private DotNetObjectReference<RotaBuilder>? _viewportRef;
+
+    private DateOnly From => monthView ? new DateOnly(anchor.Year, anchor.Month, 1) : RotaTime.GetWeekStart(anchor);
+    private DateOnly To => monthView ? From.AddMonths(1).AddDays(-1) : From.AddDays(6);
+
+    private string RangeLabel => monthView
+        ? From.ToString("MMMM yyyy", RotaDisplayExtensions.Uk)
+        : RotaDisplayExtensions.RangeLabel(From, To);
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // A Manager builds the rota for the location they signed in under (the same rule the
+        // service enforces); an Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int scopeLocationId)
+        {
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        monthView = string.Equals(ViewQuery, "month", StringComparison.OrdinalIgnoreCase);
+        anchor = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed) ? parsed : today;
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                ? own
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to build a rota for yet.";
+            return;
+        }
+
+        string key = $"{locationId}|{From}|{To}|{includeAllMembers}";
+
+        if (key != loadedKey)
+        {
+            await LoadAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _viewportRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("viewportWatcher.init", _viewportRef, 700);
+        }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isNarrow)
+    {
+        isNarrowViewport = isNarrow;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        loadedKey = $"{location}|{From}|{To}|{includeAllMembers}";
+
+        Result<RotaRangeView> result = await _rotaService.GetRangeViewAsync(scope, location, From, To, includeAllMembers);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            view = null;
+            return;
+        }
+
+        loadError = null;
+        view = result.Data;
+    }
+
+    // All navigation goes through the URL so the page is linkable and back/forward work;
+    // OnParametersSetAsync then loads whatever the URL now describes.
+    private void Navigate(int? location, bool month, DateOnly date)
+    {
+        string viewName = month ? "month" : "week";
+        _navigationManager.NavigateTo($"/manage/rota?location={location}&view={viewName}&date={date:yyyy-MM-dd}");
+    }
+
+    private Task MoveAsync(int direction)
+    {
+        DateOnly target = monthView ? From.AddMonths(direction) : From.AddDays(7 * direction);
+        Navigate(locationId, monthView, target);
+        return Task.CompletedTask;
+    }
+
+    private Task GoToTodayAsync()
+    {
+        Navigate(locationId, monthView, today);
+        return Task.CompletedTask;
+    }
+
+    private Task SetViewAsync(bool month)
+    {
+        // Switching week -> month keeps the month the current week starts in; month -> week
+        // opens the first week of the month, or this week if it's the current month.
+        DateOnly target = month ? From : (today >= From && today <= To ? today : From);
+        Navigate(locationId, month, target);
+        return Task.CompletedTask;
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            Navigate(id, monthView, anchor);
+        }
+    }
+
+    private async Task OnIncludeAllChanged(bool value)
+    {
+        includeAllMembers = value;
+        await LoadAsync();
+    }
+
+    private async Task OpenAddAsync(RotaCellRef cell)
+    {
+        if (view is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditShiftDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditShiftDialog.View), view);
+            options.Parameters.Add(nameof(AddEditShiftDialog.DefaultDate), cell.Date);
+            options.Parameters.Add(nameof(AddEditShiftDialog.DefaultUserId), cell.UserId);
+        });
+
+        // Reload even on Cancel/Escape: "Save & add another" may have saved shifts first.
+        await LoadAsync();
+        _ = result;
+    }
+
+    private async Task OpenEditAsync(Shift shift)
+    {
+        if (view is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditShiftDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditShiftDialog.View), view);
+            options.Parameters.Add(nameof(AddEditShiftDialog.Existing), shift);
+            options.Parameters.Add(nameof(AddEditShiftDialog.DefaultDate), shift.LocalDate());
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        if (view is null || scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        int offsetDays = monthView ? 28 : 7;
+        DateOnly sourceFrom = From.AddDays(-offsetDays);
+        DateOnly sourceTo = To.AddDays(-offsetDays);
+
+        bool confirmed = await ConfirmAsync("Copy shifts",
+            $"Copy every shift from {RotaDisplayExtensions.RangeLabel(sourceFrom, sourceTo)} into {RangeLabel} as drafts? " +
+            "Anyone who already has a shift at the same time is skipped, and nothing is published until you choose to.",
+            "Copy shifts");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        string? actingUserId = await GetActingUserIdAsync();
+
+        if (actingUserId is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+
+        Result<CopyRangeResult> result = await _rotaService.CopyRangeAsync(scope, location, From, To, offsetDays, actingUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Couldn't copy shifts: {result.Error}");
+            return;
+        }
+
+        if (result.Data.Copied == 0 && result.Data.Skipped.Count == 0)
+        {
+            _toastService.ShowInfo("There were no shifts to copy.");
+        }
+        else if (result.Data.Copied == 0)
+        {
+            _toastService.ShowInfo("Nothing new to copy - everyone already has shifts at those times.");
+        }
+        else
+        {
+            _toastService.ShowSuccess($"Copied {result.Data.Copied} {(result.Data.Copied == 1 ? "shift" : "shifts")} as drafts.");
+        }
+
+        if (result.Data.Skipped.Count > 0)
+        {
+            string shown = string.Join(" ", result.Data.Skipped.Take(3));
+            string more = result.Data.Skipped.Count > 3 ? $" ...and {result.Data.Skipped.Count - 3} more." : string.Empty;
+            _toastService.ShowWarning($"Skipped {result.Data.Skipped.Count}: {shown}{more}");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task PublishAsync()
+    {
+        if (view is null || scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        bool confirmed = await ConfirmAsync("Publish rota",
+            $"Publish {view.UnpublishedChangeCount} {(view.UnpublishedChangeCount == 1 ? "change" : "changes")} for {view.PeopleWithUnpublishedChanges} " +
+            $"{(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people")} in {RangeLabel}? New shifts appear under their My Shifts page straight away.",
+            "Publish");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        string? actingUserId = await GetActingUserIdAsync();
+
+        if (actingUserId is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+
+        Result<PublishResult> result = await _rotaService.PublishRangeAsync(scope, location, From, To, actingUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Couldn't publish the rota: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Published {result.Data.ShiftCount} {(result.Data.ShiftCount == 1 ? "change" : "changes")} for {result.Data.PeopleAffected} {(result.Data.PeopleAffected == 1 ? "person" : "people")}.");
+
+        await LoadAsync();
+    }
+
+    // Copies and publishes are stamped with who did them; if that can't be established, stop
+    // rather than write rows with a blank author.
+    private async Task<string?> GetActingUserIdAsync()
+    {
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            _toastService.ShowError($"Couldn't confirm who you are - try reloading the page. {actingUser.Error}");
+            return null;
+        }
+
+        return actingUser.Data;
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message, string confirmText)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = title;
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), message);
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), confirmText);
+        });
+
+        return !result.Cancelled && result.Value is true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("viewportWatcher.dispose");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
+        _viewportRef?.Dispose();
+    }
+}

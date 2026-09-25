@@ -1,0 +1,84 @@
+.my-shifts {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 720px;
+}
+
+.my-shifts-week {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.my-shifts-week-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.my-shifts-week-header ::deep .my-shifts-week-hours {
+    color: var(--colorNeutralForeground3);
+}
+
+.my-shift {
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    padding: 10px 12px;
+    border-left: 5px solid var(--theme-colour);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--theme-colour) 9%, transparent);
+}
+
+.my-shift.is-today {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-colour) 60%, transparent);
+}
+
+.my-shift-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    line-height: 1.1;
+}
+
+.my-shift-weekday,
+.my-shift-month {
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.my-shift-date {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.my-shift-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.my-shift-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.my-shift-meta,
+.my-shift-notes {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.my-shift-notes {
+    font-style: italic;
+}

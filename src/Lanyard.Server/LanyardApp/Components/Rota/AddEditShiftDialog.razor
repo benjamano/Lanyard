@@ -1,0 +1,294 @@
+@using System.Globalization
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaService _rotaService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarAdd())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "Add shift" : "Edit shift")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="shift-dialog">
+            @if (Existing is not null && Existing.GetState() is ShiftState.Published or ShiftState.Changed)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    This shift is published, so @SelectedName sees any change straight away. They'll be told about it when you next publish.
+                </FluentMessageBar>
+            }
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <FluentSelect TOption="StaffOption" TValue="string" Items="@staffOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
+                          Value="@userId" ValueChanged="@OnStaffChanged" Label="Staff member" Width="100%" />
+
+            <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaDisplayExtensions.Uk" Style="width: 100%;" />
+
+            <div class="shift-dialog-times">
+                <FluentTimePicker @bind-Value="startTime" RenderStyle="DatePickerRenderStyle.Native" Label="Start" />
+                <FluentTimePicker @bind-Value="endTime" RenderStyle="DatePickerRenderStyle.Native" Label="End" />
+            </div>
+
+            <div class="shift-dialog-hint">@DurationHint</div>
+
+            <FluentNumberInput TValue="int" @bind-Value="breakMinutes" Label="Unpaid break (minutes)" Width="100%" />
+
+            <FluentSelect TOption="PositionOption" TValue="string" Items="@positionOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id)"
+                          @bind-Value="positionId" Label="Position" Width="100%" />
+
+            <FluentTextInput @bind-Value="notes" Label="Notes" Placeholder="e.g. Covering the party room" Width="100%" />
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <div class="shift-dialog-actions">
+            @if (confirmingDelete)
+            {
+                <FluentText>Remove this shift?</FluentText>
+                <FluentButton Appearance="ButtonAppearance.Primary" Color="Color.Error" Disabled="@isBusy" OnClick="@DeleteAsync">
+                    Remove
+                </FluentButton>
+                <FluentButton Disabled="@isBusy" OnClick="@(() => confirmingDelete = false)">Keep</FluentButton>
+            }
+            else
+            {
+                @if (Existing is not null)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                  Disabled="@isBusy" OnClick="@(() => confirmingDelete = true)" Class="shift-dialog-delete">
+                        Remove
+                    </FluentButton>
+                }
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => SaveAsync(false))">
+                    @(isBusy ? "Saving..." : "Save")
+                </FluentButton>
+                @if (Existing is null)
+                {
+                    <FluentButton Disabled="@isBusy" OnClick="@(() => SaveAsync(true))">Save &amp; add another</FluentButton>
+                }
+                <FluentButton Disabled="@isBusy" OnClick="@CloseAsync">Cancel</FluentButton>
+            }
+        </div>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required RotaRangeView View { get; set; }
+
+    [Parameter]
+    public Shift? Existing { get; set; }
+
+    [Parameter]
+    public DateOnly DefaultDate { get; set; }
+
+    [Parameter]
+    public string? DefaultUserId { get; set; }
+
+    private record StaffOption(string UserId, string Name);
+    private record PositionOption(string Id, string Name);
+
+    private List<StaffOption> staffOptions = [];
+    private List<PositionOption> positionOptions = [];
+
+    private string? userId;
+    private DateTime? date;
+    private TimeOnly startTime = new(9, 0);
+    private TimeOnly endTime = new(17, 0);
+    private int breakMinutes;
+    private string positionId = string.Empty;
+    private string? notes;
+
+    private string? errorMessage;
+    private bool isBusy;
+    private bool confirmingDelete;
+    private bool savedSomething;
+
+    private string SelectedName => staffOptions.FirstOrDefault(x => x.UserId == userId)?.Name ?? "this person";
+
+    private bool EndsNextDay => endTime <= startTime;
+
+    private string DurationHint
+    {
+        get
+        {
+            TimeSpan length = EndsNextDay ? endTime.ToTimeSpan() + TimeSpan.FromDays(1) - startTime.ToTimeSpan() : endTime - startTime;
+            decimal paid = Math.Max(0m, (decimal)length.TotalMinutes - breakMinutes) / 60m;
+            string overnight = EndsNextDay ? " Ends the next day." : string.Empty;
+
+            return $"{RotaDisplayExtensions.FormatHours(paid)} paid.{overnight}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        staffOptions = View.Rows
+            .Where(r => r.IsLocationMember || r.User.Id == Existing?.UserId)
+            .Select(r => new StaffOption(r.User.Id, r.DisplayName))
+            .ToList();
+
+        positionOptions = [new PositionOption(string.Empty, "No position"), .. View.Positions.Select(p => new PositionOption(p.Id.ToString(), p.Name))];
+
+        // A shift can keep a position that's since been archived; list it so the select isn't blank
+        // and saving other edits doesn't silently drop (or trip over) it.
+        if (Existing?.StaffPosition is StaffPosition current && View.Positions.All(p => p.Id != current.Id))
+        {
+            positionOptions.Add(new PositionOption(current.Id.ToString(), $"{current.Name} (archived)"));
+        }
+
+        if (Existing is not null)
+        {
+            userId = Existing.UserId;
+            date = RotaTime.LocalDate(Existing.StartUtc).ToDateTime(TimeOnly.MinValue);
+            startTime = RotaTime.LocalTime(Existing.StartUtc);
+            endTime = RotaTime.LocalTime(Existing.EndUtc);
+            breakMinutes = Existing.BreakMinutes;
+            positionId = Existing.StaffPositionId?.ToString() ?? string.Empty;
+            notes = Existing.Notes;
+        }
+        else
+        {
+            date = DefaultDate.ToDateTime(TimeOnly.MinValue);
+            OnStaffChanged(DefaultUserId ?? staffOptions.FirstOrDefault()?.UserId);
+        }
+    }
+
+    // Picking a person pre-selects their primary position - by far the usual case - while still
+    // letting the manager tag the shift as something else.
+    private void OnStaffChanged(string? newUserId)
+    {
+        userId = newUserId;
+
+        Guid? primary = View.Rows.FirstOrDefault(r => r.User.Id == newUserId)?.PrimaryPosition?.StaffPositionId;
+
+        if (primary is Guid id && View.Positions.Any(p => p.Id == id))
+        {
+            positionId = id.ToString();
+        }
+    }
+
+    private async Task SaveAsync(bool addAnother)
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            errorMessage = "Choose who the shift is for.";
+            return;
+        }
+
+        if (date is null)
+        {
+            errorMessage = "Choose a date.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = scopeResult.Error ?? actingUser.Error ?? "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        DateOnly day = DateOnly.FromDateTime(date.Value);
+
+        Shift shift = new()
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            LocationId = View.LocationId,
+            UserId = userId,
+            StaffPositionId = Guid.TryParse(positionId, out Guid parsed) ? parsed : null,
+            StartUtc = RotaTime.ToUtc(day, startTime),
+            EndUtc = RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime),
+            BreakMinutes = breakMinutes,
+            Notes = notes,
+            CreateByUserId = actingUser.Data
+        };
+
+        Result<ShiftSaveResult> result = await _rotaService.SaveShiftAsync(scopeResult.Data, shift, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        foreach (string warning in result.Data.Warnings)
+        {
+            _toastService.ShowWarning(warning);
+        }
+
+        savedSomething = true;
+
+        if (addAnother)
+        {
+            _toastService.ShowSuccess($"Shift added for {SelectedName} on {day.DayLabel()}.");
+            notes = null;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (Existing is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = scopeResult.Error ?? actingUser.Error ?? "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        Result<bool> result = await _rotaService.DeleteShiftAsync(scopeResult.Data, Existing.Id, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            confirmingDelete = false;
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CloseAsync()
+    {
+        // After "Save & add another" the rota behind has changed, so report that even on Cancel.
+        if (savedSomething)
+        {
+            await Dialog.CloseAsync(true);
+        }
+        else
+        {
+            await Dialog.CancelAsync();
+        }
+    }
+}

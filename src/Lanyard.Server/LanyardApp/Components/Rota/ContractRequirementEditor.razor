@@ -10,7 +10,7 @@
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">@Title</FluentText>
     }
 
-    <FluentText Style="color: var(--neutral-foreground-hint);">
+    <FluentText Style="color: var(--colorNeutralForeground3);">
         @if (Tier == ContractTier.Company)
         {
             <text>The default for everyone at this company. Positions and individual staff can override any single value.</text>
@@ -56,7 +56,7 @@
             </FluentButton>
             @if (Tier != ContractTier.Company && hasOverrideRow)
             {
-                <FluentText Style="color: var(--neutral-foreground-hint);">Overrides in place</FluentText>
+                <FluentText Style="color: var(--colorNeutralForeground3);">Overrides in place</FluentText>
             }
         </FluentStack>
     }

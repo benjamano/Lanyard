@@ -1,0 +1,86 @@
+.rota-builder {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.rota-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rota-toolbar-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.rota-nav,
+.rota-actions,
+.rota-view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.rota-builder ::deep .rota-range-label {
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+.rota-builder ::deep .rota-status {
+    color: var(--colorNeutralForeground3);
+}
+
+.rota-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px 18px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.rota-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-chip {
+    position: relative;
+    display: inline-block;
+    width: 22px;
+    height: 12px;
+    border-left: 3px solid #2a78d6;
+    border-radius: 2px;
+    background: color-mix(in srgb, #2a78d6 16%, transparent);
+}
+
+.legend-draft {
+    background: transparent;
+    outline: 1px dashed #2a78d6;
+    outline-offset: -1px;
+}
+
+.legend-changed::after {
+    content: "";
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #d13438;
+}
+
+.legend-removed {
+    opacity: 0.5;
+    background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(128, 128, 128, 0.5) 3px 4px);
+}

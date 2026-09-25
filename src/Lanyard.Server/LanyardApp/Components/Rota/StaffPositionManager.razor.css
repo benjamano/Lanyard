@@ -12,7 +12,7 @@
     display: flex;
     flex-direction: column;
     padding: 12px 0;
-    border-bottom: 1px solid var(--neutral-stroke-divider-rest, rgba(0, 0, 0, 0.08));
+    border-bottom: 1px solid var(--colorNeutralStroke2);
 }
 
 .position-list-item:last-child {
@@ -49,7 +49,7 @@
 }
 
 .position-list-description {
-    color: var(--neutral-foreground-hint);
+    color: var(--colorNeutralForeground3);
     font-size: 0.85rem;
 }
 
@@ -64,5 +64,5 @@
     margin-top: 12px;
     padding: 12px;
     border-radius: 6px;
-    background: var(--neutral-layer-2, rgba(0, 0, 0, 0.03));
+    background: var(--colorNeutralBackground3);
 }

@@ -30,7 +30,11 @@ internal static class SchedulingTestHelpers
     }
 
     public static LocationScope ManagerScopeFor(Location location) =>
-        new(false, location.Id, location.CompanyId, location.Name);
+        new(false, location.Id, location.CompanyId, location.Name, IsManager: true);
+
+    // Signed in at the location but holding no Manager role - what a plain staff member's scope is.
+    public static LocationScope StaffScopeFor(Location location) =>
+        new(false, location.Id, location.CompanyId, location.Name, IsManager: false);
 
     public static async Task<(Company Company, Location Location)> SeedCompanyAsync(
         DbContextOptions<ApplicationDbContext> options, string companyName = "Play2Day", string locationName = "Ipswich")

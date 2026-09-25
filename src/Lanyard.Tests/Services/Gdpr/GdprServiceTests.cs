@@ -450,4 +450,52 @@ public class GdprServiceTests
         Result<bool> secondResult = await service.EraseUserDataAsync(target.Id);
         Assert.IsFalse(secondResult.IsSuccess);
     }
+
+    [TestMethod]
+    public async Task EraseUserDataAsync_RetainsPastShiftsUnderPlaceholderAndCancelsFutureOnes()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        UserManager<UserProfile> userManager = BuildUserManager(options);
+
+        UserProfile admin = await SeedUserAsync(userManager, "Ada", "Min", "admin@example.com");
+        UserProfile target = await SeedUserAsync(userManager);
+
+        Guid pastId = Guid.NewGuid();
+        Guid futureId = Guid.NewGuid();
+        Guid createdByTargetId = Guid.NewGuid();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Users.Add(new UserProfile { Id = ApplicationDbContext.SystemDeletedUserPlaceholderId, UserName = "deleted-user" });
+
+            ctx.Shifts.Add(new Shift { Id = pastId, LocationId = 1, UserId = target.Id, CreateByUserId = admin.Id, StartUtc = DateTime.UtcNow.AddDays(-7), EndUtc = DateTime.UtcNow.AddDays(-7).AddHours(8), PublishedDateUtc = DateTime.UtcNow.AddDays(-10) });
+            ctx.Shifts.Add(new Shift { Id = futureId, LocationId = 1, UserId = target.Id, CreateByUserId = admin.Id, StartUtc = DateTime.UtcNow.AddDays(7), EndUtc = DateTime.UtcNow.AddDays(7).AddHours(8), PublishedDateUtc = DateTime.UtcNow.AddDays(-1) });
+            ctx.Shifts.Add(new Shift { Id = createdByTargetId, LocationId = 1, UserId = admin.Id, CreateByUserId = target.Id, PublishedByUserId = target.Id, StartUtc = DateTime.UtcNow.AddDays(3), EndUtc = DateTime.UtcNow.AddDays(3).AddHours(4) });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<ISecurityService> securityServiceMock = BuildSecurityServiceMock(isAdmin: true, admin);
+        GdprService service = BuildService(options, userManager, securityServiceMock);
+
+        Result<bool> result = await service.EraseUserDataAsync(target.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+
+        await using ApplicationDbContext verifyCtx = new(options);
+
+        Shift past = await verifyCtx.Shifts.SingleAsync(x => x.Id == pastId);
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, past.UserId);
+        Assert.IsTrue(past.IsActive);
+
+        Shift future = await verifyCtx.Shifts.SingleAsync(x => x.Id == futureId);
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, future.UserId);
+        Assert.IsFalse(future.IsActive);
+        Assert.IsFalse(future.RemovalPending);
+
+        Shift attributed = await verifyCtx.Shifts.SingleAsync(x => x.Id == createdByTargetId);
+        Assert.AreEqual(admin.Id, attributed.UserId);
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, attributed.CreateByUserId);
+        Assert.IsNull(attributed.PublishedByUserId);
+    }
 }

@@ -86,6 +86,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
+        public DbSet<Shift> Shifts { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -304,6 +305,36 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
                 .IsUnique();
+
+            // The rota builder reads a location's date window; overlap checks and My Shifts read
+            // one person's date window.
+            modelBuilder.Entity<Shift>()
+                .HasIndex(x => new { x.LocationId, x.StartUtc });
+
+            modelBuilder.Entity<Shift>()
+                .HasIndex(x => new { x.UserId, x.StartUtc });
+
+            // Restrict, not the default Cascade: shift history is kept for 6 years
+            // (docs/DATA_RETENTION.md), so deleting a user must never silently take it with them.
+            // Both delete paths (SecurityService.DeleteUserAsync, GdprService) re-point a user's
+            // shifts to the placeholder account first via ShiftRetention.
+            modelBuilder.Entity<Shift>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Shift>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Shift>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // CourseAssignments is filtered by UserId on every home-page load (outstanding
             // training card), the MyTraining widget/page and every bulk-assign duplicate check,

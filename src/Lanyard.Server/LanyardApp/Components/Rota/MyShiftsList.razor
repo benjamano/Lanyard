@@ -1,0 +1,118 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaService _rotaService
+
+@if (shifts is null)
+{
+    <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentSpinner />
+        <FluentText>Loading...</FluentText>
+    </FluentStack>
+}
+else if (shifts.Count == 0)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
+            <FluentText Weight="TextWeight.Semibold">No shifts yet</FluentText>
+            <FluentText>You have no published shifts in the next @WeeksAhead weeks. When your manager publishes the rota, your shifts appear here.</FluentText>
+        </FluentStack>
+    </FluentCard>
+}
+else
+{
+    <div class="my-shifts">
+        @foreach (IGrouping<DateOnly, Shift> week in shifts.GroupBy(s => RotaTime.GetWeekStart(s.LocalDate())))
+        {
+            <section class="my-shifts-week">
+                <div class="my-shifts-week-header">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">@WeekLabel(week.Key)</FluentText>
+                    <FluentText Class="my-shifts-week-hours">@RotaDisplayExtensions.FormatHours(week.Sum(s => s.PaidHours))</FluentText>
+                </div>
+
+                @foreach (Shift shift in week)
+                {
+                    DateOnly day = shift.LocalDate();
+
+                    <div class="my-shift theme-colour @(day == today ? "is-today" : string.Empty)"
+                         style="@PositionColours.CssVariables(shift.StaffPosition?.ColorIndex)">
+                        <div class="my-shift-day">
+                            <span class="my-shift-weekday">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
+                            <span class="my-shift-date">@day.Day</span>
+                            <span class="my-shift-month">@day.ToString("MMM", RotaDisplayExtensions.Uk)</span>
+                        </div>
+                        <div class="my-shift-details">
+                            <div class="my-shift-time">
+                                @shift.TimeRange()
+                                @if (day == today)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Brand">Today</FluentBadge>
+                                }
+                            </div>
+                            <div class="my-shift-meta">
+                                @(shift.StaffPosition?.Name ?? "Shift") at @(shift.Location?.Name ?? "work")
+                                @if (shift.BreakMinutes > 0)
+                                {
+                                    <span> · @shift.BreakMinutes min break</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(shift.Notes))
+                            {
+                                <div class="my-shift-notes">@shift.Notes</div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int WeeksAhead { get; set; } = 6;
+
+    private List<Shift>? shifts;
+    private DateOnly today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userResult.IsSuccess || string.IsNullOrEmpty(userResult.Data))
+        {
+            _toastService.ShowError($"Couldn't load your shifts: {userResult.Error}");
+            shifts = [];
+            return;
+        }
+
+        // From the start of today, so a shift that's already under way still shows.
+        DateTime fromUtc = RotaTime.StartOfDayUtc(today);
+        DateTime toUtc = RotaTime.StartOfDayUtc(today.AddDays(WeeksAhead * 7));
+
+        Result<List<Shift>> result = await _rotaService.GetShiftsForUserAsync(userResult.Data, fromUtc, toUtc);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't load your shifts: {result.Error}");
+        }
+
+        shifts = result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    private string WeekLabel(DateOnly weekStart)
+    {
+        DateOnly thisWeek = RotaTime.GetWeekStart(today);
+
+        if (weekStart == thisWeek)
+        {
+            return "This week";
+        }
+
+        return weekStart == thisWeek.AddDays(7)
+            ? "Next week"
+            : $"Week of {weekStart.ToString("d MMMM", RotaDisplayExtensions.Uk)}";
+    }
+}

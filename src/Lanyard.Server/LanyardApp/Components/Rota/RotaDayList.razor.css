@@ -1,0 +1,121 @@
+.day-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.day-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+}
+
+.day-strip-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 52px;
+    padding: 6px 0;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-strip-button.is-today {
+    border-color: var(--colorBrandBackground);
+}
+
+.day-strip-button.is-selected {
+    background: var(--colorBrandBackground);
+    border-color: var(--colorBrandBackground);
+    color: #fff;
+}
+
+.day-strip-name {
+    font-size: 0.72rem;
+}
+
+.day-strip-number {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.day-strip-count {
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
+.day-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.day-list-warnings {
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: color-mix(in srgb, #bc4b09 10%, transparent);
+}
+
+.day-list-warnings summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.day-list-warnings ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
+.day-list-rows {
+    display: flex;
+    flex-direction: column;
+}
+
+.day-list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.day-list-row:last-child {
+    border-bottom: none;
+}
+
+.day-list-name {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-weight: 600;
+    flex-wrap: wrap;
+}
+
+.day-list-position {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.day-list-shifts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.day-list ::deep .day-list-empty {
+    color: var(--colorNeutralForeground3);
+}

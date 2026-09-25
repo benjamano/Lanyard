@@ -4,7 +4,7 @@
 @inject IClockInPinService _clockInPinService
 
 <div class="pin-editor">
-    <FluentText Style="color: var(--neutral-foreground-hint);">
+    <FluentText Style="color: var(--colorNeutralForeground3);">
         @if (SetByManager)
         {
             <text>The 4-6 digit PIN this person types on the clock-in terminal after tapping their name. Only the person and their managers should know it.</text>
@@ -28,7 +28,7 @@
             @if (status.HasPin)
             {
                 <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">PIN set</FluentBadge>
-                <FluentText Style="color: var(--neutral-foreground-hint);">
+                <FluentText Style="color: var(--colorNeutralForeground3);">
                     on @status.SetDate!.Value.ToLocalTime().ToString("d MMM yyyy")
                 </FluentText>
             }

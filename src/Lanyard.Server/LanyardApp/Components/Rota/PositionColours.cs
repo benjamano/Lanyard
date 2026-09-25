@@ -19,6 +19,11 @@ internal static class PositionColours
     public static string CssVariables(int colorIndex) =>
         $"--swatch-light: {Light(colorIndex)}; --swatch-dark: {Dark(colorIndex)};";
 
+    // A shift with no position gets a neutral grey rather than borrowing a palette slot that
+    // belongs to a real position.
+    public static string CssVariables(int? colorIndex) =>
+        colorIndex is int index ? CssVariables(index) : "--swatch-light: #8a8886; --swatch-dark: #a19f9d;";
+
     private static int Mod(int colorIndex) =>
         ((colorIndex % Count) + Count) % Count;
 }

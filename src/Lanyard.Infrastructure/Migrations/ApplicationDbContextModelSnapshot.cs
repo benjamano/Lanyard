@@ -1588,6 +1588,73 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ProjectionProgramStepTemplateParameters");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Shift", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BreakMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublishedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PublishedDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("RemovalPending")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("LocationId", "StartUtc");
+
+                    b.HasIndex("UserId", "StartUtc");
+
+                    b.ToTable("Shifts");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2893,6 +2960,32 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Template");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Shift", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+
+                    b.Navigation("StaffPosition");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Song", b =>

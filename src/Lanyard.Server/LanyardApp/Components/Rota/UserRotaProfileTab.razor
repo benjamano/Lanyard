@@ -24,7 +24,7 @@
 
             @if (companyPositions.Count == 0)
             {
-                <FluentText Style="color: var(--neutral-foreground-hint);">
+                <FluentText Style="color: var(--colorNeutralForeground3);">
                     No positions have been set up for this company yet. Add some under Manage &gt; Rota &gt; Positions.
                 </FluentText>
             }
@@ -43,7 +43,7 @@
                     <FluentSelect TOption="StaffPosition" TValue="string" Items="@SelectedPositions" OptionText="@(x => x.Name)"
                                   OptionValue="@(x => x.Id.ToString())" @bind-Value="primaryPositionId"
                                   Label="Primary position" Width="100%" />
-                    <FluentText Style="color: var(--neutral-foreground-hint);">
+                    <FluentText Style="color: var(--colorNeutralForeground3);">
                         Contract requirements and time-off allowances follow the primary position.
                     </FluentText>
                 }

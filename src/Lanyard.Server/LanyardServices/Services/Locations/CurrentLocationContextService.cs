@@ -34,9 +34,10 @@ public class CurrentLocationContextService(
             }
 
             bool isAdmin = authState.User.IsInRole("Admin");
+            bool isManager = authState.User.IsInRole("Manager");
             string? locationIdClaim = authState.User.FindFirst(LocationClaimTypes.LocationId)?.Value;
 
-            string cacheKey = $"{isAdmin}|{locationIdClaim}";
+            string cacheKey = $"{isAdmin}|{isManager}|{locationIdClaim}";
 
             if (_cachedScope is not null
                 && _cachedScopeKey == cacheKey
@@ -45,7 +46,7 @@ public class CurrentLocationContextService(
                 return _cachedScope;
             }
 
-            Result<LocationScope> scope = await ResolveScopeAsync(isAdmin, locationIdClaim);
+            Result<LocationScope> scope = await ResolveScopeAsync(isAdmin, isManager, locationIdClaim);
 
             _cachedScopeKey = cacheKey;
             _cachedScope = scope;
@@ -59,7 +60,7 @@ public class CurrentLocationContextService(
         }
     }
 
-    private async Task<Result<LocationScope>> ResolveScopeAsync(bool isAdmin, string? locationIdClaim)
+    private async Task<Result<LocationScope>> ResolveScopeAsync(bool isAdmin, bool isManager, string? locationIdClaim)
     {
         {
 
@@ -98,7 +99,7 @@ public class CurrentLocationContextService(
             // write any location's data. An admin's LocationId is no longer branding-only though:
             // CourseService.GetCoursesAsync uses it to decide which location's courses to list
             // unless allLocations is set, so treat it as a real value when adding scoped reads.
-            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName()));
+            return Result<LocationScope>.Ok(new LocationScope(isAdmin, location.Id, location.CompanyId, location.GetDisplayName(), isManager));
         }
     }
 }
