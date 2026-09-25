@@ -6,7 +6,8 @@ public enum NotificationTopicGroup
 {
     Shifts,
     Cover,
-    TimeOff
+    TimeOff,
+    Chat
 }
 
 // How one topic is described in Notification settings, and what someone gets before they have
@@ -19,7 +20,9 @@ public record NotificationTopicInfo(
     string Description,
     bool DefaultPush,
     bool DefaultEmail,
-    bool ManagerOnly);
+    bool ManagerOnly,
+    bool PushAvailable = true,
+    bool EmailAvailable = true);
 
 // The effective choice for one topic: the person's saved row, or the default.
 public record TopicPreference(NotificationTopic Topic, bool Push, bool Email);
@@ -47,7 +50,20 @@ public static class NotificationTopics
         new(NotificationTopic.TimeOffDecided, NotificationTopicGroup.TimeOff,
             "Time off decisions", "Your time off is approved, rejected or changed by a manager.", DefaultPush: true, DefaultEmail: true, ManagerOnly: false),
         new(NotificationTopic.TimeOffRequested, NotificationTopicGroup.TimeOff,
-            "Time off requests", "Someone at your location asks for time off.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
+            "Time off requests", "Someone at your location asks for time off.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
+
+        // Chat messages come by push as they arrive; the email is one daily summary instead of one
+        // per message, so each is a single-channel topic.
+        new(NotificationTopic.DirectMessage, NotificationTopicGroup.Chat,
+            "Direct messages", "Someone sends you a message.", DefaultPush: true, DefaultEmail: false, ManagerOnly: false, EmailAvailable: false),
+        new(NotificationTopic.GroupMessage, NotificationTopicGroup.Chat,
+            "Group messages", "A new message in one of your groups.", DefaultPush: true, DefaultEmail: false, ManagerOnly: false, EmailAvailable: false),
+        new(NotificationTopic.ChatUnreadEmail, NotificationTopicGroup.Chat,
+            "Unread messages email", "A daily email when messages have been waiting for you for a day.", DefaultPush: false, DefaultEmail: true, ManagerOnly: false, PushAvailable: false),
+        new(NotificationTopic.ChatReportReviewed, NotificationTopicGroup.Chat,
+            "Your reports", "A manager has reviewed a message you reported.", DefaultPush: true, DefaultEmail: true, ManagerOnly: false),
+        new(NotificationTopic.ChatReport, NotificationTopicGroup.Chat,
+            "Reported messages", "Someone at your location reports a chat message.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
@@ -66,6 +82,7 @@ public static class NotificationTopics
         NotificationTopicGroup.Shifts => "Shifts",
         NotificationTopicGroup.Cover => "Cover and swaps",
         NotificationTopicGroup.TimeOff => "Time off",
+        NotificationTopicGroup.Chat => "Chat",
         _ => group.ToString()
     };
 }

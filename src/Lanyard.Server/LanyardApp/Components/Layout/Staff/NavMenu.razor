@@ -11,6 +11,8 @@
 @inject ITimeOffEventBus TimeOffEventBus
 @inject IShiftClaimService ShiftClaimService
 @inject IShiftClaimEventBus ShiftClaimEventBus
+@inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
+@inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
@@ -39,6 +41,17 @@
             <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
                            IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
                 My Shifts
+            </FluentNavItem>
+
+            <FluentNavItem Href="/chat" IconRest="@(new Icons.Regular.Size20.Chat())"
+                           IconActive="@(new Icons.Filled.Size20.Chat())">
+                <span class="nav-item-with-count">
+                    Chat
+                    @if (ChatUnread.Count > 0)
+                    {
+                        <FluentCounterBadge Count="@ChatUnread.Count" OverflowCount="99" aria-label="@($"{ChatUnread.Count} unread messages")" />
+                    }
+                </span>
             </FluentNavItem>
 
             <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
@@ -77,6 +90,15 @@
                     <FluentNavItem Href="/manage/staff-documents/types">Staff Document Types</FluentNavItem>
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
+                    <FluentNavItem Href="/manage/chat/reports" Match="NavLinkMatch.All">
+                        <span class="nav-item-with-count">
+                            Chat Reports
+                            @if (_openChatReports > 0)
+                            {
+                                <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
+                            }
+                        </span>
+                    </FluentNavItem>
                 </FluentNavCategory>
 
                 <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
@@ -212,6 +234,7 @@
     private int _pendingTimeOff;
     private int _pendingShiftRequests;
     private int? _shiftRequestsLocationId;
+    private int _openChatReports;
 
     // The category header only takes plain text, so its badge is drawn by a global style from this
     // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
@@ -255,6 +278,9 @@
 
         if (_isAuthenticated)
         {
+            ChatUnread.Changed += OnChatUnreadChanged;
+            await ChatUnread.StartAsync();
+
             string? name = await SecurityService.GetCurrentUserName();
             _displayName = name?.Length > 20 ? name[..20] + "…" : name;
 
@@ -262,6 +288,10 @@
             {
                 await RefreshPendingTimeOffAsync();
                 await RefreshPendingShiftRequestsAsync();
+
+                Result<LocationScope> reportScope = await _currentLocationContext.GetScopeAsync();
+                Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
+                _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
 
                 // Live: a request made on someone's phone, or decided on the requests page, updates
                 // the count here without a reload.
@@ -333,10 +363,13 @@
         });
     }
 
+    private void OnChatUnreadChanged() => _ = InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         TimeOffEventBus.OnChanged -= OnTimeOffChanged;
         ShiftClaimEventBus.OnChanged -= OnShiftClaimsChanged;
+        ChatUnread.Changed -= OnChatUnreadChanged;
     }
 
     // /api/auth/logout is a controller endpoint, not an @page, so it must not be reached through

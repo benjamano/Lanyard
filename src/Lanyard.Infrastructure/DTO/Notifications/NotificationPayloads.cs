@@ -69,4 +69,21 @@ public record ShiftClaimDecidedPayload(
     ShiftEmailLine? OtherShift,
     string? Reason) : NotificationPayload(LocationId);
 
+// A new chat message, for members who aren't looking at the conversation. Push only; Preview is
+// dropped at delivery for anyone who has turned message text off.
+public record ChatMessagePayload(Guid ConversationId, bool IsGroup, string ConversationName, string AuthorName, string Preview)
+    : NotificationPayload(0);
+
+// One conversation in the daily unread-messages email: its name and how many messages are waiting.
+public record ChatDigestLine(string ConversationName, int Count);
+
+// The daily email about messages left unread for a day. Names and counts only, never message text.
+public record ChatDigestPayload(List<ChatDigestLine> Lines) : NotificationPayload(0);
+
+// For managers: a chat message at their location was reported.
+public record ChatReportedPayload(int LocationId) : NotificationPayload(LocationId);
+
+// For the person who reported a message: a manager has dealt with it (not what they did).
+public record ChatReportReviewedPayload(int LocationId) : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);

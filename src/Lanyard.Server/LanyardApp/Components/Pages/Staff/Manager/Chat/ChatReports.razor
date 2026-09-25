@@ -1,0 +1,293 @@
+@page "/manage/chat/reports"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Chat
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Chat
+@using Lanyard.Infrastructure.DTO.Chat
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IChatModerationService Moderation
+
+<PageTitle>Chat Reports</PageTitle>
+
+@* Messages people at this location have reported. Each shows only the reported message as it was
+   when reported - never the conversation around it. *@
+<div class="reports-page">
+    <div class="reports-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="TerminalLocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+        <div class="reports-filters" role="group" aria-label="Which reports to show">
+            <FluentButton Appearance="@(openOnly ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="() => SetFilterAsync(true)">Open</FluentButton>
+            <FluentButton Appearance="@(!openOnly ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="() => SetFilterAsync(false)">Last 90 days</FluentButton>
+        </div>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (reports is null)
+    {
+        <FluentSpinner />
+    }
+    else if (reports.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentText>@(openOnly ? "No reports waiting." : "No reports in the last 90 days.")</FluentText>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="report-cards">
+            @foreach (ChatReportView view in reports)
+            {
+                ChatReport report = view.Report;
+                bool aboutMe = report.ReportedUserId == currentUserId && scope?.IsAdmin != true;
+
+                <section class="report-card">
+                    <div class="report-card-top">
+                        <div>
+                            <div class="report-who">@view.ReportedName</div>
+                            <div class="report-meta">Reported by @view.ReporterName · @RotaTime.ToVenueLocal(report.CreatedUtc).ToString("ddd d MMM, HH:mm", RotaFormat.Uk)</div>
+                        </div>
+                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="@StatusColor(report.Status)">@StatusLabel(report.Status)</FluentBadge>
+                    </div>
+
+                    <div class="report-reason">@ReasonLabel(report.Reason)@(view.WasDirectMessage ? " · direct message" : " · group message")</div>
+
+                    <div class="report-snapshot">
+                        <div class="report-snapshot-meta">Sent @RotaTime.ToVenueLocal(report.MessageSentUtc).ToString("ddd d MMM, HH:mm", RotaFormat.Uk)@(view.MessageStillVisible ? string.Empty : " · no longer visible")</div>
+                        <div class="report-snapshot-body">@((MarkupString)report.MessageHtmlSnapshot)</div>
+                    </div>
+
+                    @if (report.Details is string details)
+                    {
+                        <div class="report-details">“@details”</div>
+                    }
+
+                    @if (report.Status != ChatReportStatus.Open && report.Outcome is string outcome)
+                    {
+                        <div class="report-meta">Note: @outcome</div>
+                    }
+
+                    @if (report.Status == ChatReportStatus.Open)
+                    {
+                        @if (aboutMe)
+                        {
+                            <div class="report-meta">This report is about you, so another manager needs to review it.</div>
+                        }
+                        else
+                        {
+                            <div class="report-actions">
+                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="() => ResolveAsync(view, false)">Take action</FluentButton>
+                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => ResolveAsync(view, true)">Dismiss</FluentButton>
+                            </div>
+                        }
+                    }
+                </section>
+            }
+        </div>
+    }
+
+    @if (suspensions is { Count: > 0 })
+    {
+        <section class="suspensions">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Suspended from posting</FluentText>
+            <ul class="suspension-list">
+                @foreach (ChatSuspensionView suspension in suspensions)
+                {
+                    <li>
+                        <div>
+                            <div class="report-who">@suspension.Name</div>
+                            <div class="report-meta">
+                                @(suspension.Suspension.UntilUtc is DateTime until ? $"Until {RotaTime.ToVenueLocal(until).ToString("ddd d MMM, HH:mm", RotaFormat.Uk)}" : "Until lifted")
+                                · by @suspension.ImposedByName · @suspension.Suspension.Reason
+                            </div>
+                        </div>
+                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => LiftAsync(suspension)">Lift</FluentButton>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private string? currentUserId;
+    private List<TerminalLocationOption> locationOptions = [];
+    private Dictionary<int, int> companyByLocation = [];
+    private int? locationId;
+    private int? loadedLocationId;
+    private bool openOnly = true;
+    private List<ChatReportView>? reports;
+    private List<ChatSuspensionView>? suspensions;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        currentUserId = user.Data;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            locationOptions = locations.Data?.OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName())).ToList() ?? [];
+            companyByLocation = locations.Data?.ToDictionary(l => l.Id, l => l.CompanyId) ?? [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new TerminalLocationOption(own, scope.LocationDisplayName ?? "Your location")];
+
+            if (scope.CompanyId is int company)
+            {
+                companyByLocation[own] = company;
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own) ? own : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations yet.";
+            return;
+        }
+
+        if (locationId != loadedLocationId)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        loadedLocationId = location;
+
+        Result<List<ChatReportView>> result = await Moderation.GetReportsAsync(scope, location, openOnly);
+
+        if (!result.IsSuccess)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        reports = result.Data ?? [];
+
+        if (companyByLocation.TryGetValue(location, out int companyId))
+        {
+            suspensions = (await Moderation.GetSuspensionsAsync(scope, companyId)).Data;
+        }
+    }
+
+    private async Task SetFilterAsync(bool open)
+    {
+        openOnly = open;
+        await LoadAsync();
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            _navigationManager.NavigateTo($"/manage/chat/reports?location={id}");
+        }
+    }
+
+    private async Task ResolveAsync(ChatReportView view, bool dismiss)
+    {
+        if (currentUserId is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<ResolveReportDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ResolveReportDialog.View), view);
+            options.Parameters.Add(nameof(ResolveReportDialog.ReviewerUserId), currentUserId);
+            options.Parameters.Add(nameof(ResolveReportDialog.Dismiss), dismiss);
+        });
+
+        if (result.Value is true)
+        {
+            _toastService.ShowSuccess(dismiss ? "Report dismissed." : "Done. The person who reported it has been told it was reviewed.");
+            await LoadAsync();
+        }
+    }
+
+    private async Task LiftAsync(ChatSuspensionView suspension)
+    {
+        if (scope is null || currentUserId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await Moderation.LiftSuspensionAsync(scope, suspension.Suspension.Id, currentUserId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't lift the suspension.");
+            return;
+        }
+
+        _toastService.ShowSuccess($"{suspension.Name} can post in chat again.");
+        await LoadAsync();
+    }
+
+    private static string ReasonLabel(ChatReportReason reason) => reason switch
+    {
+        ChatReportReason.Harassment => "Harassment or bullying",
+        ChatReportReason.Inappropriate => "Offensive or inappropriate",
+        ChatReportReason.Spam => "Spam",
+        _ => "Something else"
+    };
+
+    private static string StatusLabel(ChatReportStatus status) => status switch
+    {
+        ChatReportStatus.Open => "Open",
+        ChatReportStatus.Dismissed => "Dismissed",
+        _ => "Action taken"
+    };
+
+    private static BadgeColor StatusColor(ChatReportStatus status) => status switch
+    {
+        ChatReportStatus.Open => BadgeColor.Warning,
+        ChatReportStatus.Dismissed => BadgeColor.Informative,
+        _ => BadgeColor.Success
+    };
+}

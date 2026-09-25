@@ -56,6 +56,28 @@ the placeholder account and any still waiting are withdrawn; their name is clear
 they made. Reasons are free text; managers and staff should avoid putting medical detail in them.
 `LocationSchedulingSettings` holds one switch per location and no personal data.
 
+### Chat
+
+Six tables hold chat: `ChatConversations`, `ChatMembers`, `ChatMessages`, `ChatBlocks`,
+`ChatReports` and `ChatSuspensions`. Messages are stored as sanitised HTML plus a plain-text copy.
+
+- **Direct messages are private to their two members.** No screen or service method shows one to
+  anybody else, Admins included. The only exception is a message a member reports: a snapshot of
+  that one message (`ChatReport.MessageHtmlSnapshot`) goes to the managers of the reporter's
+  location, and it outlives the message if the message is later deleted.
+- **Deleting a message** empties it (the row stays so replies and reports still point at
+  something).
+- **On account deletion** the person's memberships, blocks and suspensions go with the account.
+  What they wrote in groups is kept, attributed to the placeholder account, so the conversation
+  still makes sense to others; reports they made or that are about them keep their snapshot,
+  with the person re-pointed to the placeholder. A **GDPR erasure** also empties every direct
+  message they sent.
+- **Retention period: 2 years proposed, not yet enforced.** There is no automatic purge of old
+  messages or resolved reports yet; it belongs with the retention sweeper below.
+- The daily unread-messages email names conversations and counts only, never message text. Chat
+  pushes include the message text unless the person has turned that off
+  (`UserProfile.ShowMessagePreviews`).
+
 ### Push notifications and notification settings
 
 Push notifications carry the same content as the matching email, encrypted end to end: the browser

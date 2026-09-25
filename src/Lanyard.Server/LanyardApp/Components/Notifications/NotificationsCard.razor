@@ -142,13 +142,32 @@
                             <span class="notifications-topic-label">@info.Label</span>
                             <span class="notifications-topic-description">@info.Description</span>
                         </div>
-                        <FluentSwitch Value="@pref.Push" aria-label="@($"{info.Label} by push")"
-                                      ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, v, pref.Email))" />
-                        <FluentSwitch Value="@pref.Email" aria-label="@($"{info.Label} by email")"
-                                      ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, pref.Push, v))" />
+                        @if (info.PushAvailable)
+                        {
+                            <FluentSwitch Value="@pref.Push" aria-label="@($"{info.Label} by push")"
+                                          ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, v, pref.Email))" />
+                        }
+                        else
+                        {
+                            <span class="notifications-na" title="Email only">–</span>
+                        }
+                        @if (info.EmailAvailable)
+                        {
+                            <FluentSwitch Value="@pref.Email" aria-label="@($"{info.Label} by email")"
+                                          ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, pref.Push, v))" />
+                        }
+                        else
+                        {
+                            <span class="notifications-na" title="Push only">–</span>
+                        }
                     </div>
                 }
             }
+
+            <div class="notifications-preview">
+                <FluentSwitch Value="@showPreviews" ValueChanged="@SetShowPreviewsAsync" Label="Show message text in notifications" />
+                <span class="notifications-topic-description">Off: chat notifications just say who it's from, for when others can see your lock screen.</span>
+            </div>
 
             <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
                 Push goes to every device under "Your devices". Password, sign-in and invite emails always arrive.
@@ -180,6 +199,7 @@
     private bool bound;
     private List<PushDeviceView> devices = [];
     private List<TopicPreference> preferences = [];
+    private bool showPreviews = true;
     private ElementReference enableButton;
     private DotNetObjectReference<NotificationsCard>? dotNetRef;
 
@@ -215,6 +235,9 @@
 
             userId = user.Data;
             isManager = await _securityService.IsCurrentUserInRoleAsync("Admin") || await _securityService.IsCurrentUserInRoleAsync("Manager");
+
+            Result<bool> previews = await PreferenceService.GetShowMessagePreviewsAsync(userId);
+            showPreviews = !previews.IsSuccess || previews.Data;
 
             Result<List<TopicPreference>> prefs = await PreferenceService.GetForUserAsync(userId);
             preferences = prefs.Data ?? NotificationTopics.All.Select(x => NotificationTopics.Default(x.Topic)).ToList();
@@ -338,6 +361,19 @@
         }
 
         preferences = preferences.Select(x => x.Topic == topic ? saved.Data : x).ToList();
+    }
+
+    private async Task SetShowPreviewsAsync(bool value)
+    {
+        Result<bool> saved = await PreferenceService.SetShowMessagePreviewsAsync(userId!, value);
+
+        if (!saved.IsSuccess)
+        {
+            _toastService.ShowError(saved.Error ?? "Couldn't save that setting.");
+            return;
+        }
+
+        showPreviews = value;
     }
 
     public void Dispose()

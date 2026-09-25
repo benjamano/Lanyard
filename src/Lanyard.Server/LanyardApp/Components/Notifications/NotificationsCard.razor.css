@@ -138,3 +138,16 @@
 .notifications-topic-row ::deep fluent-switch {
     justify-self: center;
 }
+
+.notifications-na {
+    justify-self: center;
+    color: var(--colorNeutralForeground4);
+}
+
+.notifications-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 12px;
+    border-top: 1px solid var(--colorNeutralStroke3);
+}

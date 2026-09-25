@@ -411,5 +411,18 @@
       "New Manage > Rota > Shift Requests page for managers, with pick-ups, call-offs and agreed swaps waiting at their location, and the switch for whether pick-ups and swaps need approval. The Rota menu badge now counts these as well as time-off requests. Managers can't approve requests involving their own shifts.",
       "New notification settings for open shifts, swaps, decisions on your requests, and (for managers) requests to review. They come by push by default; email can be switched on for each."
     ]
+  },
+  {
+    "version": "1.4.7",
+    "releaseDate": "2026-09-25",
+    "summary": "Added chat: direct messages and group conversations, with reporting.",
+    "details": [
+      "New Chat page (in the menu, and on the phone's bottom bar in place of Account): message anyone at your company, or start a named group. Messages can be bold, italic, lists and links; press Enter to send and Shift+Enter for a new line.",
+      "Reply to a message, edit or delete your own, and mute a conversation. Unread counts show next to Chat and on each conversation, and new messages appear straight away.",
+      "Chat notifications come to your phone by push (not while you're looking at that conversation, and not for muted ones). If messages sit unread for a day you get one summary email naming the conversations - never what they say. Both can be switched off in Account > Notifications, where you can also hide message text on your lock screen.",
+      "Direct messages are private to the two people in them. Nobody else can read them, including managers and admins.",
+      "Report a message that's abusive or inappropriate. Your managers see that one message only - not the rest of the conversation - and the sender isn't told who reported it. You can block the sender at the same time; blocking stops direct messages both ways.",
+      "Managers review reports under Manage > Chat Reports: dismiss a report, remove the message for everyone, or stop the sender posting in chat for a day, a week, a month or until lifted. The person who reported it is told it's been reviewed."
+    ]
   }
 ]
