@@ -189,7 +189,8 @@ public class SecurityService : ISecurityService
             .ToListAsync();
     }
 
-    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds)
+    public async Task<Result<UserCreationResult>> CreateUserAsync(UserProfile user, List<int> locationIds,
+        string? welcomeEmailSubjectOverride = null, string? welcomeEmailBodyHtmlOverride = null)
     {
         try
         {
@@ -295,7 +296,8 @@ public class SecurityService : ISecurityService
                 // First of the (possibly several) locations the new hire was just added to -
                 // used only as a location-specific-override lookup key. TriggerOnboardingAsync
                 // falls back to the company-wide configuration when no override exists for it.
-                Result<bool> onboardingResult = await _onboardingService.TriggerOnboardingAsync(user.Id, locationIds.FirstOrDefault(), CancellationToken.None);
+                Result<bool> onboardingResult = await _onboardingService.TriggerOnboardingAsync(user.Id, locationIds.FirstOrDefault(), CancellationToken.None,
+                    welcomeEmailSubjectOverride, welcomeEmailBodyHtmlOverride);
 
                 if (!onboardingResult.IsSuccess)
                 {

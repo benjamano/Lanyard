@@ -23,6 +23,8 @@
             {
                 <FluentDatePicker TValue="DateTime?" @bind-Value="expiryDate" Label="Expiry Date"
                                   Culture="@UkCulture" Style="width: 100%;" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="reminderDate" Label="Reminder Date"
+                                  Culture="@UkCulture" Style="width: 100%;" />
             }
 
             <FluentInputFile Id="staff-document-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
@@ -59,6 +61,7 @@
 
     private string? selectedDocumentTypeId;
     private DateTime? expiryDate;
+    private DateTime? reminderDate;
     private int uploadProgressPercent;
     private bool isUploading;
 
@@ -110,7 +113,7 @@
         };
 
         Result<StaffDocument> uploadResult = await _staffDocumentService.UploadStaffDocumentAsync(
-            UserId, selectedDocumentType.Id, formFile, expiryDate, currentUserResult.Data, CancellationToken.None);
+            UserId, selectedDocumentType.Id, formFile, expiryDate, reminderDate, currentUserResult.Data, CancellationToken.None);
 
         uploadProgressPercent = 0;
         isUploading = false;

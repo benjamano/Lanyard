@@ -69,6 +69,13 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             {
                 _cache.Set(clientId, connectionId, TimeSpan.FromMinutes(10));
             }
+            else
+            {
+                // Cache the miss too, briefly. A DMX scene looping for a kiosk that has never
+                // connected otherwise hits the database on every step; the connect path
+                // overwrites this entry with the real connection id as soon as one exists.
+                _cache.Set(clientId, (string?)null, TimeSpan.FromSeconds(10));
+            }
 
             return Result<string?>.Ok(connectionId);
         }

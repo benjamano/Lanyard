@@ -1,3 +1,4 @@
+using Lanyard.API.Extensions;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
@@ -40,14 +41,17 @@ namespace Lanyard.API.Controllers
             // serves from local disk (dev) or the Railway bucket (prod).
             if (song.FileMetadataId is Guid fileMetadataId)
             {
-                Result<Stream> download = await _fileService.DownloadFileAsync(fileMetadataId, cancellationToken);
+                // Range requests are pushed down to the bucket so a seek fetches only the bytes
+                // asked for; the previous bucket stream couldn't seek, so every seek re-downloaded
+                // the whole song through the server.
+                Result<FileContent> download = await _fileService.OpenFileContentAsync(fileMetadataId, FileContentStreamingExtensions.ParseRequestedRange(Request), cancellationToken);
 
                 if (!download.Success || download.Data is null)
                 {
-                    return NotFound("Audio file not found.");
+                    return this.FileContentFailure(download.Error);
                 }
 
-                return File(download.Data, "audio/mpeg", enableRangeProcessing: true);
+                return await this.StreamFileContentAsync(download.Data, contentType: "audio/mpeg", cacheFor: TimeSpan.FromDays(1));
             }
 
             // Legacy / dev-scan songs store an absolute local path.

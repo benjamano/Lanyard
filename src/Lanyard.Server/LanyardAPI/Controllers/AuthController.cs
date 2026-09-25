@@ -14,6 +14,7 @@ namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("ip-fixed")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<UserProfile> _userManager;

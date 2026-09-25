@@ -159,6 +159,10 @@ else
                                                 {
                                                     <span> &middot; Expires @doc.ExpiryDate.Value.Date.ToString("d MMM yyyy")</span>
                                                 }
+                                                @if (doc.ReminderDate is not null)
+                                                {
+                                                    <span> &middot; Reminder @doc.ReminderDate.Value.Date.ToString("d MMM yyyy")</span>
+                                                }
                                             </div>
                                         </div>
                                         <div class="documents-list-actions">

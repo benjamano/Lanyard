@@ -78,9 +78,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<GameResultPlayerScore> GameResultPlayerScores { get; set; }
         public DbSet<Announcement> Announcements { get; set; }
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
-        public DbSet<StaffDocumentReminderInterval> StaffDocumentReminderIntervals { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
-        public DbSet<StaffDocumentReminderSent> StaffDocumentReminderSents { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
 
@@ -225,13 +223,6 @@ namespace Lanyard.Infrastructure.DataAccess
             // with two document types of the same name via a race in the admin catalog UI.
             modelBuilder.Entity<StaffDocumentType>()
                 .HasIndex(x => new { x.CompanyId, x.Name })
-                .IsUnique();
-
-            // Snapshotting ExpiryDate into the key means re-uploading a renewed document with a
-            // new expiry date naturally makes every interval eligible to fire again, without
-            // needing to hunt down and delete old StaffDocumentReminderSent rows.
-            modelBuilder.Entity<StaffDocumentReminderSent>()
-                .HasIndex(x => new { x.StaffDocumentId, x.ReminderIntervalId, x.ExpiryDateSnapshot })
                 .IsUnique();
 
             // One company-wide row (LocationId IS NULL) plus at most one row per location

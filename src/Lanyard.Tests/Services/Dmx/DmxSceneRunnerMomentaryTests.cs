@@ -83,6 +83,22 @@ public class DmxSceneRunnerMomentaryTests
         return (clientId, sceneId);
     }
 
+    // Momentary release is a single batched write (one hub message to the kiosk) containing
+    // every channel the scene touched, each set to 0 - not one call per channel.
+    private static void VerifyResetBatchSentOnce(Mock<IDmxService> dmxServiceMock, Guid clientId, params int[] expectedChannels)
+    {
+        dmxServiceMock.Verify(
+            d => d.UpdateChannelValuesAsync(
+                clientId,
+                It.Is<IReadOnlyList<DmxChannel>>(batch =>
+                    batch.Count == expectedChannels.Length
+                    && batch.All(c => c.Value == 0)
+                    && expectedChannels.All(ch => batch.Any(c => c.Address == ch)))),
+            Times.Once);
+
+        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, It.IsAny<int>(), It.IsAny<byte>()), Times.Never);
+    }
+
     private static async Task WaitForSceneToStopAsync(DmxSceneRunnerService runner, Guid clientId)
     {
         // The loop runs on a background task; poll briefly rather than asserting
@@ -120,9 +136,7 @@ public class DmxSceneRunnerMomentaryTests
 
         await WaitForSceneToStopAsync(runner, clientId);
 
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 1, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 2, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 3, 0), Times.Once);
+        VerifyResetBatchSentOnce(dmxServiceMock, clientId, 1, 2, 3);
     }
 
     [TestMethod]
@@ -145,9 +159,7 @@ public class DmxSceneRunnerMomentaryTests
 
         await WaitForSceneToStopAsync(runner, clientId);
 
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 1, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 2, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 3, 0), Times.Once);
+        VerifyResetBatchSentOnce(dmxServiceMock, clientId, 1, 2, 3);
     }
 
     [TestMethod]
@@ -174,6 +186,9 @@ public class DmxSceneRunnerMomentaryTests
 
         await WaitForSceneToStopAsync(runner, clientId);
 
+        dmxServiceMock.Verify(
+            d => d.UpdateChannelValuesAsync(clientId, It.Is<IReadOnlyList<DmxChannel>>(batch => batch.Any(c => c.Value == 0))),
+            Times.Never);
         dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, It.IsAny<int>(), 0), Times.Never);
     }
 
@@ -197,8 +212,6 @@ public class DmxSceneRunnerMomentaryTests
 
         await WaitForSceneToStopAsync(runner, clientId);
 
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 1, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 2, 0), Times.Once);
-        dmxServiceMock.Verify(d => d.UpdateChannelValue(clientId, 3, 0), Times.Once);
+        VerifyResetBatchSentOnce(dmxServiceMock, clientId, 1, 2, 3);
     }
 }

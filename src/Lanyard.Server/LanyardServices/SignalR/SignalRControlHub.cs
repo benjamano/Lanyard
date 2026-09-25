@@ -521,7 +521,7 @@ public class SignalRControlHub(
 
     public async Task QueueChanged(List<Guid> queue)
     {
-        _logger.LogInformation("Client {ConnectionId} reported queue change: {Queue}", Context.ConnectionId, queue);
+        _logger.LogDebug("Client {ConnectionId} reported queue change: {Queue}", Context.ConnectionId, queue);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)
@@ -537,7 +537,7 @@ public class SignalRControlHub(
 
     public async Task UpdateDmxChannelValue(int channelAddress, byte value)
     {
-        _logger.LogInformation("Client {ConnectionId} reported DMX channel update: Address {ChannelAddress}, Value {Value}", Context.ConnectionId, channelAddress, value);
+        _logger.LogDebug("Client {ConnectionId} reported DMX channel update: Address {ChannelAddress}, Value {Value}", Context.ConnectionId, channelAddress, value);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)

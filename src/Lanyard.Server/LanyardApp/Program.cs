@@ -1,4 +1,5 @@
-﻿using Lanyard.App.Components;
+﻿using Amazon.S3;
+using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.ApplicationRoles;
@@ -76,6 +77,13 @@ builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+
+// One bucket client for the whole process. FileService is scoped and used to build its own
+// AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IAmazonS3>(_ => S3StorageClientFactory.CreateFromEnvironment());
+}
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
@@ -385,7 +393,11 @@ app.Use(async (context, next) =>
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers().RequireRateLimiting("ip-fixed");
+// The "ip-fixed" limiter (25/min per IP) is a brute-force guard for the auth endpoints and is
+// applied on AuthController itself. It must not cover the file/audio/logo/certificate
+// controllers: kiosks and staff behind one venue NAT share an IP, and a thumbnail grid or a
+// kiosk warming its song cache burns through 25 requests in seconds.
+app.MapControllers();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
