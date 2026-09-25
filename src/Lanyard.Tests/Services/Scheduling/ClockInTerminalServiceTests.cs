@@ -97,6 +97,23 @@ public class ClockInTerminalServiceTests
     }
 
     [TestMethod]
+    public async Task GetActiveSessionAsync_AlsoUpdatesLastSeen_SoAWallTabletStaysCurrent()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        TestClock clock = new(new DateTime(2026, 10, 5, 9, 0, 0));
+        ClockInTerminalService service = GetService(options, clock);
+        Result<PairedTerminal> paired = await service.PairAsync(location.Id, "Front desk", "manager");
+
+        // The page was loaded once; after that only its regular check runs.
+        clock.Advance(TimeSpan.FromDays(3));
+        Assert.IsTrue((await service.GetActiveSessionAsync(paired.Data!.Terminal.Id)).IsSuccess);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(new DateTime(2026, 10, 8, 9, 0, 0), (await ctx.ClockInTerminals.SingleAsync()).LastSeenUtc);
+    }
+
+    [TestMethod]
     public async Task PairAsync_RejectsBlankName()
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
