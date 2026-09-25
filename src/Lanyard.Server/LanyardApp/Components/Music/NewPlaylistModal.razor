@@ -1,10 +1,11 @@
 ﻿@using System.ComponentModel.DataAnnotations
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DataAccess
+@using Microsoft.EntityFrameworkCore
 @using Lanyard.Infrastructure.Models
 
 @inject INotificationService ToastService
-@inject ApplicationDbContext _context
+@inject IPlaylistService _playlistService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -82,15 +83,15 @@
 
         try
         {
-            Playlist playlist = new Playlist
-            {
-                Name = model.Name,
-                Description = model.Description,
-                CreateDate = DateTime.UtcNow
-            };
+            Result<Playlist> createResult = await _playlistService.CreatePlaylistAsync(model.Name, model.Description);
 
-            _context.Playlists.Add(playlist);
-            await _context.SaveChangesAsync();
+            if (!createResult.IsSuccess || createResult.Data is null)
+            {
+                ToastService.ShowError($"Error creating playlist: {createResult.Error}");
+                return;
+            }
+
+            Playlist playlist = createResult.Data;
 
             ToastService.ShowSuccess($"Playlist '{playlist.Name}' created successfully!");
             await Dialog.CloseAsync(playlist);

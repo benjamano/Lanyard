@@ -21,7 +21,6 @@ public class MusicPlayerService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MusicPlayerService> _logger;
     private readonly object _lock = new();
-    private static readonly Random _rng = new();
 
     private readonly Dictionary<Guid, ClientMusicState> _stateByClientId = [];
 
@@ -100,7 +99,7 @@ public class MusicPlayerService
 
     public async Task<Result<bool>> SetCurrentPlaylist(Guid clientId, Guid playlistId)
     {
-        ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
+        await using ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
 
         Playlist? playlist = await context.Playlists
             .AsNoTracking()
@@ -238,11 +237,19 @@ public class MusicPlayerService
     {
         ClientMusicState state = GetOrCreateState(clientId);
 
-        ApplicationDbContext _context = await _contextFactory.CreateDbContextAsync();
+        Playlist? playlist = null;
 
-        Playlist? playlist = await _context.Playlists
-            .Where(x => x.Id == playlistId)
-            .FirstOrDefaultAsync();
+        // Single-song plays pass Guid.Empty for the playlist - there is nothing to look up.
+        if (playlistId is Guid id && id != Guid.Empty)
+        {
+            await using ApplicationDbContext context = await _contextFactory.CreateDbContextAsync();
+
+            playlist = await context.Playlists
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == id)
+                .FirstOrDefaultAsync();
+        }
 
         lock (_lock)
         {
@@ -364,7 +371,7 @@ public class MusicPlayerService
             int nextIndex;
             do
             {
-                nextIndex = _rng.Next(0, state.Queue.Count);
+                nextIndex = Random.Shared.Next(0, state.Queue.Count);
             } while (nextIndex == state.QueueIndex);
 
             return nextIndex;
@@ -398,7 +405,7 @@ public class MusicPlayerService
             int previousIndex;
             do
             {
-                previousIndex = _rng.Next(0, state.Queue.Count);
+                previousIndex = Random.Shared.Next(0, state.Queue.Count);
             } while (previousIndex == state.QueueIndex);
 
             return previousIndex;
@@ -487,7 +494,7 @@ public class MusicPlayerService
 
         if (GetShuffleEnabled(clientId))
         {
-            playlistSongs = [.. playlistSongs.OrderBy(_ => _rng.Next())];
+            playlistSongs = [.. playlistSongs.OrderBy(_ => Random.Shared.Next())];
         }
 
         if (song == null)

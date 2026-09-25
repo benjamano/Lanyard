@@ -30,11 +30,20 @@ public class DmxSignalRController(ILogger<DmxSignalRController> logger, DmxContr
             }
         });
 
+        // Batched form: one message per scene step / desk push, applied to the frame in one go.
+        connection.On<List<DmxChannel>>("ReceiveDmxChannelValues", channels =>
+        {
+            _logger.LogDebug("Received {Count} DMX channel values", channels.Count);
+
+            _dmxController.SetChannels(channels);
+        });
+
+        // Single-channel form kept so a server that predates batching still drives the lights.
         connection.On<DmxChannel>("ReceiveDmxChannelValue", channel =>
         {
-            _logger.LogInformation("Received DMX channel value: Channel {Channel}, Value {Value}", channel.Address, channel.Value);
-            
-            _dmxController.SetChannel(channel.Address, (byte)channel.Value);
+            _logger.LogDebug("Received DMX channel value: Channel {Channel}, Value {Value}", channel.Address, channel.Value);
+
+            _dmxController.SetChannel(channel.Address, channel.Value);
         });
     }
 }

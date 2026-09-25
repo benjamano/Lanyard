@@ -60,8 +60,10 @@ public class AutomationEngineService(
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
-    private bool _initializedEnabled = false;
-    private readonly object _initLock = new();
+    // The one-time read of the enabled flag, shared by every caller. Cleared again if the read
+    // fails so a transient DB error at startup is retried on the next tick instead of leaving
+    // the engine disabled until the process restarts.
+    private Task<bool>? _initTask;
 
     public ChannelReader<GameStatusTransitionEvent> Reader => _transitionChannel.Reader;
     public bool IsEnabled => _isEnabled;
@@ -107,21 +109,25 @@ public class AutomationEngineService(
         _transitionChannel.Writer.TryWrite(ev);
     }
 
-    private async Task InitializeEnabledAsync(CancellationToken ct)
+    /// <returns>True when the setting was read; false when the read failed and should be retried.</returns>
+    private async Task<bool> InitializeEnabledAsync(CancellationToken ct)
     {
         try
         {
             await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
             AppSetting? setting = await ctx.AppSettings
                 .AsNoTracking()
+                .TagWithCallSite()
                 .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled", ct);
             _isEnabled = setting?.Value == "true";
             _logger.LogInformation("AutomationEngine initialized - enabled: {IsEnabled}", _isEnabled);
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read AutomationEngine.Enabled setting; defaulting to disabled");
+            _logger.LogError(ex, "Failed to read AutomationEngine.Enabled setting; treating the engine as disabled and retrying on the next evaluation");
             _isEnabled = false;
+            return false;
         }
     }
 
@@ -147,26 +153,22 @@ public class AutomationEngineService(
         }
     }
 
-    private void EnsureEnabledInitialized(CancellationToken ct)
+    private async Task EnsureEnabledInitializedAsync(CancellationToken ct)
     {
-        // Initialize enabled flag from DB on first call (thread-safe one-time init)
-        if (!_initializedEnabled)
+        // The three hosted services can arrive here together on startup. They all await the
+        // same cached task (a lost race at most issues one extra read, which is harmless), and
+        // no thread blocks on the DB call. The shared read isn't tied to any one caller's token.
+        Task<bool> initTask = LazyInitializer.EnsureInitialized(ref _initTask, () => InitializeEnabledAsync(CancellationToken.None));
+
+        if (!await initTask.WaitAsync(ct))
         {
-            lock (_initLock)
-            {
-                if (!_initializedEnabled)
-                {
-                    _initializedEnabled = true;
-                    // Fire-and-forget init; result stored in _isEnabled
-                    InitializeEnabledAsync(ct).GetAwaiter().GetResult();
-                }
-            }
+            Interlocked.CompareExchange(ref _initTask, null, initTask);
         }
     }
 
     public async Task ProcessTransitionAsync(GameStatusTransitionEvent ev, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {
@@ -211,7 +213,7 @@ public class AutomationEngineService(
     /// </remarks>
     public async Task ProcessIdleRulesAsync(DateTime nowUtc, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {
@@ -308,7 +310,7 @@ public class AutomationEngineService(
     /// </remarks>
     public async Task ProcessScheduledRulesAsync(DateTime nowLocal, CancellationToken ct)
     {
-        EnsureEnabledInitialized(ct);
+        await EnsureEnabledInitializedAsync(ct);
 
         if (!_isEnabled)
         {

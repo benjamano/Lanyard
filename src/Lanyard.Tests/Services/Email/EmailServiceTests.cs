@@ -167,11 +167,11 @@ namespace Lanyard.Tests.Services.Email
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
             Assert.Contains("#C8102E", handler.LastRequestBody);
-            Assert.Contains("Lanyard", handler.LastRequestBody);
+            Assert.DoesNotContain("/logo.png", handler.LastRequestBody);
         }
 
         [TestMethod]
-        public async Task SendSetPasswordEmailAsync_NoLogo_OmitsImageTag()
+        public async Task SendSetPasswordEmailAsync_NoCompanyLogoOrPublicBaseUrl_FallsBackToLanyardLogoOnLinkOrigin()
         {
             (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
 
@@ -183,7 +183,39 @@ namespace Lanyard.Tests.Services.Email
                 locationName: null);
 
             Assert.IsTrue(result.IsSuccess, result.Error);
-            Assert.DoesNotContain("<img", handler.LastRequestBody);
+            Assert.Contains("https://lanyard.example.com/logo.png", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendCourseRecurrenceReminderEmailAsync_NoCompanyLogo_FallsBackToLanyardLogoOnPublicBaseUrl()
+        {
+            EmailOptions options = ValidOptions();
+            options.PublicBaseUrl = "https://public.lanyard.example/";
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, options);
+
+            Result<bool> result = await service.SendCourseRecurrenceReminderEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "Fire Safety",
+                "https://lanyard.example.com/training/123",
+                logoUrl: null,
+                accentColorHex: "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.Contains("https://public.lanyard.example/logo.png", handler.LastRequestBody);
+        }
+
+        [TestMethod]
+        public async Task SendTwoFactorCodeEmailAsync_NoPublicBaseUrl_OmitsLogo()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTwoFactorCodeEmailAsync(
+                new UserProfile { UserName = "jdoe", Email = "jane@example.com" },
+                "123456");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            // The request body is JSON, which escapes "<" - so assert on the logo path, not the tag.
+            Assert.DoesNotContain("logo.png", handler.LastRequestBody);
         }
 
         [TestMethod]
@@ -233,7 +265,7 @@ namespace Lanyard.Tests.Services.Email
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.Contains("https://lanyard.example.com/api/companies/1/logo", handler.LastRequestBody);
             Assert.Contains("#C8102E", handler.LastRequestBody);
-            Assert.Contains("Lanyard", handler.LastRequestBody);
+            Assert.DoesNotContain("/logo.png", handler.LastRequestBody);
         }
 
         [TestMethod]

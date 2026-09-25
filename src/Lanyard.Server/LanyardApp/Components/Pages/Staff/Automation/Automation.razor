@@ -126,9 +126,10 @@
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Key == "AutomationEngine.Enabled");
         _engineEnabled = engineSetting?.Value == "true";
-        await LoadClientsAsync();
-        await LoadRulesAsync();
-        await LoadExecutionsAsync();
+
+        // Independent reads (each opens its own DbContext) - overlap them rather than paying
+        // three round-trips back to back.
+        await Task.WhenAll(LoadClientsAsync(), LoadRulesAsync(), LoadExecutionsAsync());
     }
 
     private async Task LoadRulesAsync()
