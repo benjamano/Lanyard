@@ -16,7 +16,7 @@
         Clients
     </FluentText>
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@clients.OrderBy(x => x.Name).AsQueryable()" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
@@ -61,6 +61,10 @@
 
 @code {
     private IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = Array.Empty<ClientConnectedWithCapabilitiesDTO>();
+
+    // Sorted once per load, not per render: the 1 s "last seen" tick re-renders the page, and
+    // a fresh OrderBy().AsQueryable() in the markup made the grid refetch its rows every second.
+    private IQueryable<ClientConnectedWithCapabilitiesDTO> _sortedClients = Enumerable.Empty<ClientConnectedWithCapabilitiesDTO>().AsQueryable();
 
     private PeriodicTimer? timer;
     private CancellationTokenSource? timerCancellation;
@@ -125,6 +129,7 @@
         if (result.IsSuccess)
         {
             clients = result.Data!;
+            _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
         }
         else if (showErrors)
         {

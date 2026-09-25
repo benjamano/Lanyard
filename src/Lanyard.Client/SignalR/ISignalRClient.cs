@@ -7,6 +7,5 @@ public interface ISignalRClient
 {
     Task Connect(List<Action<HubConnection>> registrations);
     Task SendLaserGameStatusAsync(LaserGameStatusDTO status);
-    Task SendDmxChannelValueAsync(int channel, byte value);
     Task<string> IssueKioskTokenAsync();
 }

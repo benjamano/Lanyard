@@ -329,7 +329,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AutomationRuleId");
+                    b.HasIndex("ExecutedAt");
+
+                    b.HasIndex("AutomationRuleId", "ExecutedAt");
 
                     b.ToTable("AutomationRuleExecutions");
                 });
@@ -824,6 +826,8 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.HasIndex("LocationId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("CourseAssignments");
                 });
@@ -1752,6 +1756,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BpmAnalysisStatus");
 
                     b.HasIndex("FileMetadataId");
 

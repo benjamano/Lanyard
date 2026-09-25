@@ -554,21 +554,28 @@ public class CourseAssignmentService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
+            // Only the newest assignment per (course, user) can start another cycle, and it has
+            // to be active and completed. All of that is expressed in SQL, so this returns a
+            // handful of rows rather than every assignment ever made for every recurring course
+            // (which was then grouped and filtered in memory, twice a day, forever).
             List<CourseAssignment> candidates = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Course)
-                .Where(x => x.Course!.RecurrenceMonths != null && x.Course.IsActive)
+                .Where(x => x.Course!.RecurrenceMonths != null && x.Course.IsActive
+                    && x.IsActive
+                    && x.CompletedDate != null
+                    && !ctx.CourseAssignments.Any(newer =>
+                        newer.CourseId == x.CourseId
+                        && newer.UserId == x.UserId
+                        && newer.AssignedDate > x.AssignedDate))
                 .ToListAsync();
 
             DateTime utcNow = DateTime.UtcNow;
 
+            // AddMonths with a per-row month count has no SQL translation; the set is small by now.
             List<CourseAssignment> dueAssignments = [.. candidates
-                .GroupBy(x => (x.CourseId, x.UserId))
-                .Select(group => group.OrderByDescending(x => x.AssignedDate).First())
-                .Where(latest => latest.IsActive
-                    && latest.CompletedDate.HasValue
-                    && latest.CompletedDate.Value.AddMonths(latest.Course!.RecurrenceMonths!.Value) <= utcNow)];
+                .Where(latest => latest.CompletedDate!.Value.AddMonths(latest.Course!.RecurrenceMonths!.Value) <= utcNow)];
 
             return Result<List<CourseAssignment>>.Ok(dueAssignments);
         }
@@ -637,18 +644,16 @@ public class CourseAssignmentService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<CourseAssignment> candidates = await ctx.CourseAssignments
-                .AsNoTracking()
-                .TagWithCallSite()
-                .Include(x => x.Course)
-                .Where(x => x.IsActive && x.CompletedDate == null && x.DueDate != null && x.DueSoonReminderSentDate == null)
-                .ToListAsync();
-
             DateTime utcNow = DateTime.UtcNow;
             DateTime threshold = utcNow.AddDays(daysThreshold);
 
-            List<CourseAssignment> dueSoon = [.. candidates
-                .Where(x => x.DueDate!.Value > utcNow && x.DueDate.Value <= threshold)];
+            List<CourseAssignment> dueSoon = await ctx.CourseAssignments
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Course)
+                .Where(x => x.IsActive && x.CompletedDate == null && x.DueSoonReminderSentDate == null
+                    && x.DueDate != null && x.DueDate > utcNow && x.DueDate <= threshold)
+                .ToListAsync();
 
             return Result<List<CourseAssignment>>.Ok(dueSoon);
         }

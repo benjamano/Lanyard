@@ -1,5 +1,4 @@
 ﻿@using Lanyard.Application.Services.Authentication
-@using System.Globalization
 
 @inject NavigationManager NavigationManager
 
@@ -164,6 +163,8 @@
 
     <Routes @rendermode="PageRenderMode" />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    @* Not unused: FluentNumberInput and Fluent's masked date/time inputs need window.IMask. Without
+       it they fetch it from unpkg.com, which the CSP blocks, and the page fails to render. *@
     <script src="https://cdn.jsdelivr.net/npm/imask@7.6.1/dist/imask.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
     <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js"></script>
@@ -174,7 +175,6 @@
         <script src="/_framework/aspnetcore-browser-refresh.js"></script>
     }
 
-    <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <ReconnectModal />
     <script src="@Assets["js/registerServiceWorker.js"]"></script>
 
@@ -187,7 +187,6 @@
 
 </html>
 
-@inject ISecurityService SecurityService
 
 @code {
     [CascadingParameter]
@@ -196,15 +195,8 @@
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
 
-    protected override async Task OnInitializedAsync()
-    {
-        Result<UserProfile> result = await SecurityService.GetCurrentUserProfileAsync();
-
-        if (result.IsSuccess && !string.IsNullOrEmpty(result.Data?.PreferredCulture))
-        {
-            CultureInfo culture = new CultureInfo(result.Data.PreferredCulture);
-            CultureInfo.DefaultThreadCurrentCulture = culture;
-            CultureInfo.DefaultThreadCurrentUICulture = culture;
-        }
-    }
+    // The per-user culture is applied by the request-localization middleware from the culture
+    // cookie (see UserCultureCookie) - nothing to look up here. The previous implementation
+    // queried the user's profile on every request and set CultureInfo.DefaultThreadCurrentCulture,
+    // a process-wide static, so whoever loaded a page last set the date format for everyone.
 }
