@@ -323,6 +323,13 @@
       "Fixed a rare freeze of music playback control for all kiosks caused by the shuffle picker using a shared random-number generator from several places at once.",
       "Playing a single song no longer performs a pointless playlist lookup, and the music player's database connections are released promptly.",
       "The DMX scene list no longer loads every step of every scene just to show a step count.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
+      "Each DMX scene step now reaches the kiosk as a single message carrying every channel in the step, instead of one message per channel. Pushing the whole virtual desk live is likewise one message rather than 512.",
+      "The kiosk no longer echoes every channel value it receives back to the server, which had been doubling all DMX traffic and server work.",
+      "The virtual DMX desk now redraws at most about twenty times a second while a scene is running or a fader is dragged, instead of once per channel change, so it stays responsive during playback.",
+      "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
+      "A scene running for a kiosk that is offline no longer queries the database on every step.",
+      "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart.",
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }
