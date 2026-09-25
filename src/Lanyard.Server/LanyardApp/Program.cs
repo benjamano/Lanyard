@@ -18,6 +18,7 @@ using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Branding;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -104,6 +105,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
