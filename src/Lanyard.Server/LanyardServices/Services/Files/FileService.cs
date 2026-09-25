@@ -30,11 +30,17 @@ public class FileService : IFileService
     private readonly IAmazonS3? _s3Client;
     private static readonly string[] _audioExtensions = [".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a", ".wma"];
 
+    public const string RangeNotSatisfiableError = "Requested range not satisfiable.";
+
+    // s3Client is the app-wide singleton registered in Program.cs outside Development (see
+    // S3StorageClientFactory); it is optional so the Development path and the unit tests can
+    // construct the service without one.
     public FileService(
         IDbContextFactory<ApplicationDbContext> dbFactory,
         ICurrentUserAccessor currentUserAccessor,
         ISongAnalysisQueue analysisQueue,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IAmazonS3? s3Client = null)
     {
         _dbFactory = dbFactory;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
@@ -47,31 +53,8 @@ public class FileService : IFileService
             return;
         }
 
-        string? endpointUrl = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_ENDPOINT_URL");
-        string? accessKey = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_ACCESS_KEY_ID");
-        string? secretKey = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_SECRET_ACCESS_KEY");
-        string? region = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_REGION");
-
-        if (string.IsNullOrWhiteSpace(endpointUrl))
-            throw new InvalidOperationException("RAILWAY_BUCKET_ENDPOINT_URL is required in production.");
-
-        if (string.IsNullOrWhiteSpace(accessKey))
-            throw new InvalidOperationException("RAILWAY_BUCKET_ACCESS_KEY_ID is required in production.");
-
-        if (string.IsNullOrWhiteSpace(secretKey))
-            throw new InvalidOperationException("RAILWAY_BUCKET_SECRET_ACCESS_KEY is required in production.");
-
         _bucketName = Environment.GetEnvironmentVariable("RAILWAY_BUCKET_NAME");
-
-        AmazonS3Config config = new()
-        {
-            ServiceURL = endpointUrl,
-            ForcePathStyle = true,
-            AuthenticationRegion = region ?? "auto",
-            UseHttp = false
-        };
-
-        _s3Client = new AmazonS3Client(accessKey, secretKey, config);
+        _s3Client = s3Client ?? throw new InvalidOperationException("IAmazonS3 is not registered. Outside Development, Program.cs must register S3StorageClientFactory.CreateFromEnvironment().");
     }
 
     private void EnsureS3Configured()
@@ -187,7 +170,7 @@ public class FileService : IFileService
                 filePath = key;
             }
 
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata metadata = new()
             {
@@ -251,7 +234,7 @@ public class FileService : IFileService
             if (string.IsNullOrWhiteSpace(newName))
                 return Result<FileMetadata>.Fail("New name is required.");
 
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
@@ -274,7 +257,7 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 
@@ -352,9 +335,12 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+            FileMetadata? file = await db.FileMetadata
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
 
             if (file == null)
                 return Result<FileMetadata>.Fail("File not found.");
@@ -371,10 +357,14 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+            // null means the root folder, not "everything": the old predicate returned every
+            // file in every folder for the root listing (and tracked them all).
             List<FileMetadata> files = await db.FileMetadata
-                .Where(f => !folderId.HasValue || f.FolderId == folderId)
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(f => f.FolderId == folderId)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<FileMetadata>>.Ok(files);
@@ -404,7 +394,7 @@ public class FileService : IFileService
             if (string.IsNullOrWhiteSpace(name))
                 return Result<Folder>.Fail("Folder name is required.");
 
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             Folder folder = new()
             {
@@ -440,7 +430,7 @@ public class FileService : IFileService
             if (string.IsNullOrWhiteSpace(newName))
                 return Result<Folder>.Fail("New name is required.");
 
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
 
@@ -463,7 +453,7 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
 
@@ -531,10 +521,13 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+            // null means top-level folders only, for the same reason as ListFilesAsync.
             List<Folder> folders = await db.Folders
-                .Where(f => !parentFolderId.HasValue || f.ParentFolderId == parentFolderId)
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(f => f.ParentFolderId == parentFolderId)
                 .ToListAsync(cancellationToken);
 
             return Result<IReadOnlyList<Folder>>.Ok(folders);
@@ -549,9 +542,12 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            Folder? folder = await db.Folders.FindAsync(new object[] { folderId }, cancellationToken);
+            Folder? folder = await db.Folders
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == folderId, cancellationToken);
 
             if (folder == null)
                 return Result<Folder>.Fail("Folder not found.");
@@ -568,9 +564,12 @@ public class FileService : IFileService
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
-            FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
+            FileMetadata? file = await db.FileMetadata
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
 
             if (_isDevelopment)
             {
@@ -603,11 +602,101 @@ public class FileService : IFileService
         }
     }
 
+    public async Task<Result<FileContent>> OpenFileContentAsync(Guid fileId, FileByteRange? range, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+            FileMetadata? file = await db.FileMetadata
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+
+            if (file == null)
+                return Result<FileContent>.Fail("File not found.");
+
+            if (_isDevelopment)
+            {
+                if (!File.Exists(file.FilePath))
+                    return Result<FileContent>.Fail("File not found.");
+
+                // Seekable, so the HTTP layer's own range processing serves any Range request.
+                FileStream stream = new(file.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024, useAsync: true);
+
+                return Result<FileContent>.Ok(new FileContent
+                {
+                    Stream = stream,
+                    Metadata = file,
+                    TotalLength = stream.Length
+                });
+            }
+
+            EnsureS3Configured();
+
+            GetObjectRequest request = new()
+            {
+                BucketName = _bucketName,
+                Key = file.FilePath
+            };
+
+            // The bucket stream can't seek, so the only way to honour a Range request is to ask
+            // the bucket for exactly those bytes. Without this every seek in a video or song
+            // re-downloaded the entire object through the server.
+            if (range is FileByteRange requested)
+            {
+                request.ByteRange = requested.End.HasValue
+                    ? new ByteRange(requested.Start, requested.End.Value)
+                    : new ByteRange($"bytes={requested.Start}-");
+            }
+
+            GetObjectResponse response = await _s3Client!.GetObjectAsync(request, cancellationToken);
+
+            (long totalLength, long? rangeStart, long? rangeEnd) = ParseContentRange(response.ContentRange, response.ContentLength, file.FileSize);
+
+            return Result<FileContent>.Ok(new FileContent
+            {
+                Stream = response.ResponseStream,
+                Metadata = file,
+                TotalLength = totalLength,
+                RangeStart = rangeStart,
+                RangeEnd = rangeEnd,
+                Owner = response
+            });
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            return Result<FileContent>.Fail(RangeNotSatisfiableError);
+        }
+        catch (Exception ex)
+        {
+            return Result<FileContent>.Fail($"Failed to open file: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Reads an S3 Content-Range header ("bytes 0-99/1000"). A full-object response has no
+    /// Content-Range, in which case the object's length comes from the response (or the
+    /// metadata row as a last resort) and no range is reported.
+    /// </summary>
+    public static (long totalLength, long? rangeStart, long? rangeEnd) ParseContentRange(string? contentRange, long? contentLength, long fallbackLength)
+    {
+        if (!string.IsNullOrWhiteSpace(contentRange)
+            && System.Net.Http.Headers.ContentRangeHeaderValue.TryParse(contentRange, out System.Net.Http.Headers.ContentRangeHeaderValue? parsed)
+            && parsed.HasRange)
+        {
+            long total = parsed.HasLength ? parsed.Length!.Value : fallbackLength;
+            return (total, parsed.From, parsed.To);
+        }
+
+        return (contentLength is > 0 ? contentLength.Value : fallbackLength, null, null);
+    }
+
     public async Task<Result<FileMetadata>> MoveFileAsync(Guid fileId, Guid? destinationFolderId, CancellationToken cancellationToken)
     {
         try
         {
-            ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+            await using ApplicationDbContext db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
             FileMetadata? file = await db.FileMetadata.FindAsync(new object[] { fileId }, cancellationToken);
 

@@ -45,13 +45,13 @@ namespace Lanyard.API.Controllers
             if (!ClientRequestAuthorization.IsAuthorized(HttpContext, _clientSecretValidator))
                 return Unauthorized();
 
-            Result<Stream> result = await _fileService.DownloadFileAsync(id, cancellationToken);
+            // One metadata lookup (was two), Range requests honoured against the bucket, and a
+            // cache header so a thumbnail grid or a kiosk isn't re-fetching the same bytes.
+            Result<FileContent> result = await _fileService.OpenFileContentAsync(id, FileContentStreamingExtensions.ParseRequestedRange(Request), cancellationToken);
             if (!result.Success || result.Data == null)
-                return NotFound(Result<string>.Fail("File not found."));
-            Result<FileMetadata> meta = await _fileService.GetFileMetadataAsync(id, cancellationToken);
-            string fileName = meta.Data?.FileName ?? "file.bin";
-            string contentType = meta.Data?.ContentType ?? "application/octet-stream";
-            return File(result.Data, contentType, fileName);
+                return this.FileContentFailure(result.Error);
+
+            return await this.StreamFileContentAsync(result.Data, downloadFileName: result.Data.Metadata.FileName ?? "file.bin", cacheFor: TimeSpan.FromDays(1));
         }
 
         [HttpGet("list")]

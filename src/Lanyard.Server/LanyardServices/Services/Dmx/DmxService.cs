@@ -5,7 +5,6 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -14,20 +13,26 @@ namespace Lanyard.Application.Services;
 public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
     IHubContext<SignalRControlHub> hubContext,
     ILogger<DmxService> logger,
-    IMemoryCache cache,
     IServiceScopeFactory scopeFactory) : IDmxService, IDmxClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<DmxService> _logger = logger;
-    private readonly IMemoryCache _cache = cache;
 
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
 
     private readonly Dictionary<Guid, ClientDmxState> _stateByClientId = [];
     private readonly object _lock = new();
 
-    public event Action<Guid, int, byte>? OnChannelValueChanged;
+    public event Action<Guid, IReadOnlyList<DmxChannel>>? OnChannelValuesChanged;
+
+    /// <summary>
+    /// SignalR method the kiosk listens on for a batch of channel values. The kiosk applies
+    /// the whole batch to its DMX frame and sends one frame - it does not echo the values
+    /// back (the server already knows them and raises <see cref="OnChannelValuesChanged"/>
+    /// itself), which previously doubled every write into a second hub call + event.
+    /// </summary>
+    public const string ReceiveDmxChannelValuesMethod = "ReceiveDmxChannelValues";
 
     private sealed class ClientDmxState
     {
@@ -52,8 +57,18 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
-    public async Task UpdateChannelValue(Guid clientId, int channelAddress, byte value)
+    public Task UpdateChannelValue(Guid clientId, int channelAddress, byte value)
     {
+        return UpdateChannelValuesAsync(clientId, [new DmxChannel { Address = channelAddress, Value = value }]);
+    }
+
+    public async Task UpdateChannelValuesAsync(Guid clientId, IReadOnlyList<DmxChannel> channels)
+    {
+        if (channels.Count == 0)
+        {
+            return;
+        }
+
         // Keep the server-side universe in sync and notify subscribers (e.g. the
         // virtual desk) - previously only SetChannelValue (ingest) did this, so
         // server-originated changes were invisible to the UI and lost on reload.
@@ -61,20 +76,27 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
         {
             ClientDmxState state = GetOrCreateState(clientId);
 
-            state.ChannelValues[channelAddress] = value;
+            foreach (DmxChannel channel in channels)
+            {
+                state.ChannelValues[channel.Address] = channel.Value;
+            }
         }
 
-        OnChannelValueChanged?.Invoke(clientId, channelAddress, value);
+        // Raised outside the lock so subscribers can't deadlock against other channel writes.
+        OnChannelValuesChanged?.Invoke(clientId, channels);
 
+        // One scope + one connection lookup + one hub message per batch. A scene step used to
+        // pay all three per channel (512 of each for a full-desk push), and the kiosk echoed
+        // every one of them back as a hub call of its own.
         using IServiceScope scope = _scopeFactory.CreateScope();
-        IClientService _clientService = scope.ServiceProvider.GetRequiredService<IClientService>();
+        IClientService clientService = scope.ServiceProvider.GetRequiredService<IClientService>();
 
-        Result<string?> clientConnectionIdGetResult = await _clientService.GetClientCurrentConnectionIdAsync(clientId);
+        Result<string?> clientConnectionIdGetResult = await clientService.GetClientCurrentConnectionIdAsync(clientId);
 
-        if (clientConnectionIdGetResult.IsSuccess && clientConnectionIdGetResult.Data != null && !string.IsNullOrEmpty(clientConnectionIdGetResult.Data))
+        if (clientConnectionIdGetResult.IsSuccess && !string.IsNullOrEmpty(clientConnectionIdGetResult.Data))
         {
             string connectionId = clientConnectionIdGetResult.Data;
-            await _hubContext.Clients.Client(connectionId).SendAsync("ReceiveDmxChannelValue", new DmxChannel { Address = channelAddress, Value = value });
+            await _hubContext.Clients.Client(connectionId).SendAsync(ReceiveDmxChannelValuesMethod, channels);
         }
     }
 
@@ -88,20 +110,7 @@ public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
         }
 
         // Raised outside the lock so subscribers can't deadlock against other channel writes.
-        OnChannelValueChanged?.Invoke(clientId, channelAddress, value);
-    }
-
-    private async Task ResetClientChannelValues(Guid clientId)
-    {
-        ClientDmxState state = GetOrCreateState(clientId);
-
-        foreach (KeyValuePair<int, byte> channelValue in state.ChannelValues)
-        {
-            if (channelValue.Value != 0)
-            {
-                await UpdateChannelValue(clientId, channelValue.Key, 0);
-            }
-        }
+        OnChannelValuesChanged?.Invoke(clientId, [new DmxChannel { Address = channelAddress, Value = value }]);
     }
 
     public async Task<Result<IEnumerable<DmxChannel>>> GetDmxChannelsAsync(Guid clientId)

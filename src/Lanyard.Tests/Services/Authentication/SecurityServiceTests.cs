@@ -137,6 +137,7 @@ namespace Lanyard.Tests.Services.Authentication
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(options));
 
             Mock<ICourseService> resolvedCourseServiceMock = courseServiceMock ?? new Mock<ICourseService>();
             if (courseServiceMock is null)
