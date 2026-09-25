@@ -28,8 +28,8 @@
             <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaFormat.Uk" Style="width: 100%;" />
 
             <div class="entry-times">
-                <FluentTimePicker @bind-Value="clockIn" RenderStyle="DatePickerRenderStyle.Native" Label="Clocked in" />
-                <FluentTimePicker @bind-Value="clockOut" RenderStyle="DatePickerRenderStyle.Native" Label="Clocked out" Disabled="@stillIn" />
+                <AnyTimePicker @bind-Value="clockIn" Label="Clocked in" />
+                <AnyTimePicker @bind-Value="clockOut" Label="Clocked out" Disabled="@stillIn" />
             </div>
 
             <FluentCheckbox @bind-Value="stillIn" Label="Still on the clock" />

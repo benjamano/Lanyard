@@ -48,8 +48,8 @@
             <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaDisplayExtensions.Uk" Style="width: 100%;" />
 
             <div class="shift-dialog-times">
-                <FluentTimePicker @bind-Value="startTime" RenderStyle="DatePickerRenderStyle.Native" Label="Start" />
-                <FluentTimePicker @bind-Value="endTime" RenderStyle="DatePickerRenderStyle.Native" Label="End" />
+                <AnyTimePicker @bind-Value="startTime" Label="Start" />
+                <AnyTimePicker @bind-Value="endTime" Label="End" />
             </div>
 
             <div class="shift-dialog-hint">@DurationHint</div>
