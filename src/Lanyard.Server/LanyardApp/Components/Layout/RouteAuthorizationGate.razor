@@ -51,7 +51,9 @@
 
         if (!_isAuthenticated)
         {
-            string returnUrl = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+            // Leading slash: the login only returns to a local URL (Url.IsLocalUrl), and
+            // ToBaseRelativePath gives "manage/users", which it rejects and sends home instead.
+            string returnUrl = Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
             Navigation.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
         }
     }

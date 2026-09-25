@@ -366,7 +366,8 @@
       "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages.",
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
       "Removed the \"Lanyard\" text heading from the top of every email sent by the app.",
-      "Emails now show the company's logo at the top when one has been uploaded, and the Lanyard logo only when the company has no logo of its own."
+      "Emails now show the company's logo at the top when one has been uploaded, and the Lanyard logo only when the company has no logo of its own.",
+      "After being signed out (for example by the auto-logout) and signing back in, you now return to the page you were on instead of the home page."
     ]
   }
 ]
