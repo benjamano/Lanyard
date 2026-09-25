@@ -372,7 +372,7 @@
   },
   {
     "version": "1.4.0",
-    "releaseDate": "2026-09-23",
+    "releaseDate": "2026-09-25",
     "summary": "Started the new Staff Scheduling system: positions, contract requirements, clock-in PINs and rota settings.",
     "details": [
       "Added a Positions catalog under Manage > Rota > Positions, where admins and managers define the jobs staff work (e.g. Customer Service Advisor, Supervisor), each with a colour that will identify it on the rota.",
@@ -384,7 +384,7 @@
   },
   {
     "version": "1.4.1",
-    "releaseDate": "2026-09-24",
+    "releaseDate": "2026-09-25",
     "summary": "Added the Rota Builder for planning and publishing shifts, and a My Shifts page for staff.",
     "details": [
       "Added a Rota Builder under Manage > Rota where managers plan shifts for their location a week or a whole month at a time, with each shift colour-coded by position.",
@@ -400,7 +400,7 @@
   },
   {
     "version": "1.4.2",
-    "releaseDate": "2026-09-24",
+    "releaseDate": "2026-09-25",
     "summary": "Added clock-in terminals, QR clock-in from your phone, and timesheets.",
     "details": [
       "A tablet at the venue can now be paired as a clock-in terminal under Manage > Rota > Clock-In Terminals. It shows who's on the rota today, by first name and surname initial; staff tap their name and enter their PIN to clock in or out.",
@@ -416,7 +416,7 @@
   },
   {
     "version": "1.4.3",
-    "releaseDate": "2026-09-24",
+    "releaseDate": "2026-09-25",
     "summary": "Added time-off requests, holiday allowances and approvals.",
     "details": [
       "Staff can request time off from the new Time off tab on My Shifts (or Time Off in the menu). It shows how much of each allowance is left this holiday year, what's booked and what's waiting for a decision.",
