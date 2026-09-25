@@ -72,13 +72,39 @@ public class MusicService(IDbContextFactory<ApplicationDbContext> factory, IHost
         }
     }
 
+    public async Task<Result<IReadOnlyDictionary<Guid, string>>> GetSongNamesAsync(IReadOnlyCollection<Guid> songIds)
+    {
+        try
+        {
+            if (songIds.Count == 0)
+            {
+                return Result<IReadOnlyDictionary<Guid, string>>.Ok(new Dictionary<Guid, string>());
+            }
+
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            Dictionary<Guid, string> names = await context.Songs
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(s => songIds.Contains(s.Id))
+                .Select(s => new { s.Id, s.Name })
+                .ToDictionaryAsync(s => s.Id, s => s.Name);
+
+            return Result<IReadOnlyDictionary<Guid, string>>.Ok(names);
+        }
+        catch (Exception ex)
+        {
+            return Result<IReadOnlyDictionary<Guid, string>>.Fail($"An error occurred while retrieving song names: {ex.Message}");
+        }
+    }
+
     public async Task<Result<Song>> GetSongAsync(Guid songId)
     {
         try
         {
-            ApplicationDbContext context = await _factory.CreateDbContextAsync();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
-            Song? song = await context.Songs.FirstOrDefaultAsync(s => s.Id == songId);
+            Song? song = await context.Songs.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(s => s.Id == songId);
 
             if (song == null)
             {

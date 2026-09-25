@@ -80,14 +80,18 @@
             return;
         }
 
-        Result<AutomationRule?> ruleResult = await _ruleService.GetRuleAsync(ruleId);
+        Task<Result<AutomationRule?>> ruleTask = _ruleService.GetRuleAsync(ruleId);
+        Task<Result<AutomationRuleExecution?>> executionTask = _logService.GetLatestExecutionForRuleAsync(ruleId);
+        await Task.WhenAll(ruleTask, executionTask);
+
+        Result<AutomationRule?> ruleResult = ruleTask.Result;
         if (ruleResult.IsSuccess && ruleResult.Data is AutomationRule rule)
         {
             _ruleName = rule.Name;
             _isEnabled = rule.IsEnabled;
         }
 
-        Result<AutomationRuleExecution?> executionResult = await _logService.GetLatestExecutionForRuleAsync(ruleId);
+        Result<AutomationRuleExecution?> executionResult = executionTask.Result;
         if (executionResult.IsSuccess && executionResult.Data is AutomationRuleExecution execution)
         {
             _lastRunAt = execution.ExecutedAt;
