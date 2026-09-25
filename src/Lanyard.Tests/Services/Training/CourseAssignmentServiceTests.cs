@@ -1395,4 +1395,109 @@ public class CourseAssignmentServiceTests
         Assert.IsTrue(result.Success, result.Error);
         Assert.IsNotNull(result.Data!.DueSoonReminderSentDate);
     }
+
+    // GetAssignmentsDueForRecurrenceAsync used to load every assignment of every recurring course
+    // and pick the latest per (course, user) in memory. The SQL form must keep the same rules:
+    // only the newest assignment counts, and it must be active and completed long enough ago.
+    private static async Task<Course> SeedRecurringCourseAsync(DbContextOptions<ApplicationDbContext> options, int recurrenceMonths)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Course course = new()
+        {
+            Id = Guid.NewGuid(),
+            Name = "Annual refresher",
+            PassMarkPercent = 80,
+            IsActive = true,
+            RecurrenceMonths = recurrenceMonths
+        };
+
+        ctx.Courses.Add(course);
+        await ctx.SaveChangesAsync();
+
+        return course;
+    }
+
+    private static async Task<CourseAssignment> SeedRecurrenceAssignmentAsync(
+        DbContextOptions<ApplicationDbContext> options, Guid courseId, string userId,
+        DateTime assignedDate, DateTime? completedDate, bool isActive = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        CourseAssignment assignment = new()
+        {
+            Id = Guid.NewGuid(),
+            CourseId = courseId,
+            UserId = userId,
+            AssignedDate = assignedDate,
+            CompletedDate = completedDate,
+            IsActive = isActive
+        };
+
+        ctx.CourseAssignments.Add(assignment);
+        await ctx.SaveChangesAsync();
+
+        return assignment;
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueForRecurrenceAsync_ReturnsLatestCompletedAssignment_WhenRecurrenceHasElapsed()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedRecurringCourseAsync(options, recurrenceMonths: 6);
+        UserProfile user = await SeedUserAsync(options);
+
+        CourseAssignment latest = await SeedRecurrenceAssignmentAsync(options, course.Id, user.Id,
+            assignedDate: DateTime.UtcNow.AddMonths(-8), completedDate: DateTime.UtcNow.AddMonths(-7));
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueForRecurrenceAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.HasCount(1, result.Data!);
+        Assert.AreEqual(latest.Id, result.Data![0].Id);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueForRecurrenceAsync_IgnoresOlderCycle_WhenANewerAssignmentExists()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedRecurringCourseAsync(options, recurrenceMonths: 6);
+        UserProfile user = await SeedUserAsync(options);
+
+        // Old cycle: completed long ago and would be "due" on its own.
+        await SeedRecurrenceAssignmentAsync(options, course.Id, user.Id,
+            assignedDate: DateTime.UtcNow.AddMonths(-20), completedDate: DateTime.UtcNow.AddMonths(-19));
+
+        // Current cycle: assigned later, not yet completed - nothing is due for this user.
+        await SeedRecurrenceAssignmentAsync(options, course.Id, user.Id,
+            assignedDate: DateTime.UtcNow.AddMonths(-2), completedDate: null);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueForRecurrenceAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
+
+    [TestMethod]
+    public async Task GetAssignmentsDueForRecurrenceAsync_ExcludesRecentCompletionsAndInactiveAssignments()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        CourseAssignmentService service = GetService(options);
+        Course course = await SeedRecurringCourseAsync(options, recurrenceMonths: 6);
+        UserProfile recent = await SeedUserAsync(options, "recent");
+        UserProfile unassigned = await SeedUserAsync(options, "unassigned");
+
+        await SeedRecurrenceAssignmentAsync(options, course.Id, recent.Id,
+            assignedDate: DateTime.UtcNow.AddMonths(-2), completedDate: DateTime.UtcNow.AddMonths(-1));
+
+        await SeedRecurrenceAssignmentAsync(options, course.Id, unassigned.Id,
+            assignedDate: DateTime.UtcNow.AddMonths(-9), completedDate: DateTime.UtcNow.AddMonths(-8), isActive: false);
+
+        Result<List<CourseAssignment>> result = await service.GetAssignmentsDueForRecurrenceAsync();
+
+        Assert.IsTrue(result.Success, result.Error);
+        Assert.IsEmpty(result.Data!);
+    }
 }
