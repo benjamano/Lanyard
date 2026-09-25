@@ -273,6 +273,24 @@ public class GdprService : IGdprService
                 folder.CreatedBy = null;
             }
 
+            List<ContractRequirement> updatedContracts = await ctx.ContractRequirements
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (ContractRequirement contract in updatedContracts)
+            {
+                contract.UpdatedByUserId = null;
+            }
+
+            List<UserClockInPin> pinsSetByUser = await ctx.UserClockInPins
+                .Where(x => x.SetByUserId == userId)
+                .ToListAsync();
+
+            foreach (UserClockInPin pin in pinsSetByUser)
+            {
+                pin.SetByUserId = null;
+            }
+
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
@@ -305,6 +323,27 @@ public class GdprService : IGdprService
                 .ToListAsync();
 
             ctx.UserLocationMemberships.RemoveRange(memberships);
+
+            // Scheduling rows that exist only because of this person: their positions, their
+            // clock-in PIN and any personal contract override. (Shifts and time entries, added by
+            // later scheduling work, are retained-and-anonymised instead - see DATA_RETENTION.md.)
+            List<UserPosition> userPositions = await ctx.UserPositions
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.UserPositions.RemoveRange(userPositions);
+
+            List<UserClockInPin> pins = await ctx.UserClockInPins
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.UserClockInPins.RemoveRange(pins);
+
+            List<ContractRequirement> personalContracts = await ctx.ContractRequirements
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.ContractRequirements.RemoveRange(personalContracts);
 
             await ctx.SaveChangesAsync();
 

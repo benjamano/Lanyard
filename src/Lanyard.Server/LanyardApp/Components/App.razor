@@ -99,6 +99,22 @@
         }
     </style>
 
+    <style>
+        /* Theme-aware colour swatch. The app's light/dark toggle is the data-theme attribute
+        on the body element (set by Fluent's IThemeService), which scoped .razor.css can never
+        reach - CSS isolation stamps its scope attribute onto every selector in a chain, the
+        body included, so a body-anchored dark rule in a .razor.css silently never matches. An element sets both
+        `--swatch-light` and `--swatch-dark` inline (the palette values are per-item data,
+        not styling) and this global rule picks whichever the current theme calls for. */
+        .theme-colour-swatch {
+        background: var(--swatch-light);
+        }
+
+        [data-theme="dark"] .theme-colour-swatch {
+        background: var(--swatch-dark);
+        }
+    </style>
+
     <script src="@Assets["js/bootCloak.js"]"></script>
 
     <link rel="manifest" href="manifest.webmanifest" />

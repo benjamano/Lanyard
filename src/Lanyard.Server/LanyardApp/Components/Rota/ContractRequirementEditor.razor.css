@@ -1,0 +1,27 @@
+.contract-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+/* Two columns where there is room, one on a phone - auto-fit collapses on its own. */
+.contract-editor-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.contract-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.contract-editor-hint {
+    color: var(--neutral-foreground-hint);
+    font-size: 0.8rem;
+}

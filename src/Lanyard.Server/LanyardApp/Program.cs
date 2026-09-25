@@ -10,6 +10,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.Services.StaffDocuments;
 using Lanyard.Application.Services.Onboarding;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Time;
@@ -100,6 +101,10 @@ builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextServic
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
+builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
+builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
+builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
+builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();

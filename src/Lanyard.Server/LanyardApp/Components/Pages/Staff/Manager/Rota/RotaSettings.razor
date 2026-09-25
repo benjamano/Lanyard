@@ -1,10 +1,10 @@
-@page "/manage/staff-documents/types"
+@page "/manage/rota/settings"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
 
 @using Lanyard.App.Components.Manager
-@using Lanyard.Infrastructure.Models
+@using Lanyard.App.Components.Rota
 
-<PageTitle>Staff Document Types</PageTitle>
+<PageTitle>Rota Settings</PageTitle>
 
 <div class="p-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
@@ -29,7 +29,7 @@
 
             @if (SelectedCompany is not null)
             {
-                <StaffDocumentTypeManager CompanyId="@SelectedCompany.Id" />
+                <SchedulingSettingsManager CompanyId="@SelectedCompany.Id" />
             }
         }
     </FluentStack>

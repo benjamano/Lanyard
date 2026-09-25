@@ -1,0 +1,27 @@
+@using Lanyard.App.Components.Rota
+
+@if (userId is null)
+{
+    <FluentSpinner />
+}
+else
+{
+    <ClockInPinEditor UserId="@userId" />
+}
+
+@code {
+    private string? userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> result = await _securityService.GetCurrentUserIdAsync();
+
+        if (!result.IsSuccess || string.IsNullOrEmpty(result.Data))
+        {
+            _toastService.ShowError($"Failed to load your account: {result.Error}");
+            return;
+        }
+
+        userId = result.Data;
+    }
+}
