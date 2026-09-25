@@ -469,4 +469,52 @@ public class ProjectionProgramRunnerServiceTests
 
         Assert.AreEqual(0, completedCount);
     }
+
+    [TestMethod]
+    public void ComputeHoldDelay_TrimsTheLastDelayWhilePlaying_ButNotWhilePaused()
+    {
+        TimeSpan hold = TimeSpan.FromMilliseconds(5000);
+        int fullTick = ProjectionProgramRunnerService.ComputeHoldDelayMilliseconds(hold, TimeSpan.Zero, isPaused: false);
+
+        // Playing, 3 ms left: sleep only what remains so the step ends on time.
+        Assert.AreEqual(3, ProjectionProgramRunnerService.ComputeHoldDelayMilliseconds(hold, TimeSpan.FromMilliseconds(4997), isPaused: false));
+
+        // Paused with 3 ms left: remaining never shrinks while paused, so a trimmed delay would
+        // spin every few milliseconds for the whole pause. It must sleep a full tick instead.
+        Assert.AreEqual(fullTick, ProjectionProgramRunnerService.ComputeHoldDelayMilliseconds(hold, TimeSpan.FromMilliseconds(4997), isPaused: true));
+        Assert.IsTrue(fullTick >= 100, "A paused hold must poll at the normal tick, not in a tight loop.");
+    }
+
+    [TestMethod]
+    public async Task Hold_ExcludesPausedTime_AndResumeMidTickDoesNotEndTheStepEarly()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        const int holdMs = 600;
+        const int pauseMs = 700;
+        Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: holdMs);
+
+        ProjectionProgramRunnerService runner = CreateRunner(options);
+
+        await runner.StartAsync(clientId, 0, programId, true, 0, false);
+        Assert.IsTrue(await WaitUntilAsync(() => runner.GetRunningState(clientId, 0) != null));
+        int firstIndex = runner.GetRunningState(clientId, 0)!.CurrentStepIndex;
+        System.Diagnostics.Stopwatch sinceStart = System.Diagnostics.Stopwatch.StartNew();
+
+        // Pause part-way through a tick, then resume part-way through a later one.
+        await Task.Delay(250);
+        runner.Pause(clientId, 0);
+        await Task.Delay(pauseMs);
+        runner.Resume(clientId, 0);
+
+        Assert.IsTrue(await WaitUntilAsync(() => runner.GetRunningState(clientId, 0)?.CurrentStepIndex != firstIndex));
+        long advancedAfterMs = sinceStart.ElapsedMilliseconds;
+
+        // Played time must still reach the full hold: wall time >= hold + pause (a small margin
+        // for timer resolution). Counting a straddled tick as played would end it up to a tick early.
+        Assert.IsTrue(advancedAfterMs >= holdMs + pauseMs - 60,
+            $"Step advanced after {advancedAfterMs} ms; expected at least {holdMs + pauseMs - 60} ms (hold {holdMs} + pause {pauseMs}).");
+
+        runner.Stop(clientId, 0);
+    }
 }
