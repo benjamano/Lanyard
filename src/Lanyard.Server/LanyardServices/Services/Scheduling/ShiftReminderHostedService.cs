@@ -89,7 +89,7 @@ public class ShiftReminderHostedService(
                 continue;
             }
 
-            _notifications.Enqueue([due.Shift.UserId], NotificationTopic.ShiftReminder, new ShiftReminderPayload(
+            _notifications.Enqueue([due.Shift.UserId!], NotificationTopic.ShiftReminder, new ShiftReminderPayload(
                 due.Shift.LocationId,
                 due.Shift.Location?.Name ?? "work",
                 RotaService.ToEmailLine(due.Shift)));

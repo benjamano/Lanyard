@@ -1,0 +1,110 @@
+.grabs {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 720px;
+}
+
+.grabs-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.grab-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.grab-card.is-unavailable {
+    background: var(--colorNeutralBackground2);
+}
+
+.grab-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.grab-kind {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.grab-shift {
+    font-weight: 600;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.grab-meta {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.grab-notes {
+    font-style: italic;
+}
+
+.grab-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px 12px;
+    flex-wrap: wrap;
+}
+
+.grab-offers {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+}
+
+.grab-offers li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+}
+
+.grab-offers li + li {
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.grab-offer-name {
+    font-weight: 600;
+}
+
+.grab-offer-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* Status badges keep their words on one line; the text beside them wraps instead. */
+.grab-card-top ::deep fluent-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* On a phone a long status ("Waiting for them to choose") would squeeze the shift into a narrow
+   column, so it sits above the shift instead. */
+@media (max-width: 480px) {
+    .grab-card-top {
+        flex-direction: column-reverse;
+        align-items: flex-start;
+        gap: 6px;
+    }
+}

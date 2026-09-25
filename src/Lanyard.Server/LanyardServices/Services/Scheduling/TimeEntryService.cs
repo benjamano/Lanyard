@@ -67,7 +67,7 @@ public class TimeEntryService(
                 .Include(x => x.User)
                 .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null
                     && x.StartUtc < dayEndUtc && x.EndUtc > stillClockableFrom
-                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                    && x.UserId != null && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
 
@@ -79,7 +79,7 @@ public class TimeEntryService(
                     && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .ToListAsync();
 
-            List<string> userIds = todaysShifts.Select(x => x.UserId).Concat(openHere.Select(x => x.UserId)).Distinct().ToList();
+            List<string> userIds = todaysShifts.Select(x => x.UserId!).Concat(openHere.Select(x => x.UserId)).Distinct().ToList();
 
             HashSet<string> clockedIn = (await ctx.TimeEntries
                 .AsNoTracking()
@@ -145,7 +145,7 @@ public class TimeEntryService(
                 // running counts as on now.
                 .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null
                     && x.StartUtc < dayEndUtc && x.EndUtc > dayStartUtc
-                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                    && x.UserId != null && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
 
@@ -166,17 +166,17 @@ public class TimeEntryService(
             List<DayBoardEntry> board = todaysShifts
                 .Where(x => x.User is not null)
                 .Select(shift => new DayBoardEntry(
-                    shift.UserId,
+                    shift.UserId!,
                     RotaNames.For(shift.User),
                     FirstNameOf(shift.User!),
                     shift.StaffPosition?.Name,
                     shift.StartUtc,
                     shift.EndUtc,
                     now < shift.StartUtc ? DayBoardStatus.Later : now < shift.EndUtc ? DayBoardStatus.OnNow : DayBoardStatus.Finished,
-                    clockedInHere.Contains(shift.UserId)))
+                    clockedInHere.Contains(shift.UserId!)))
                 .ToList();
 
-            HashSet<string> scheduled = todaysShifts.Select(x => x.UserId).ToHashSet();
+            HashSet<string> scheduled = todaysShifts.Select(x => x.UserId!).ToHashSet();
 
             board.AddRange(openHere
                 .Where(x => x.User is not null && !scheduled.Contains(x.UserId))
@@ -470,7 +470,7 @@ public class TimeEntryService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.User)
-                .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= startUtc && x.StartUtc < endUtc)
+                .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null && x.UserId != null && x.StartUtc >= startUtc && x.StartUtc < endUtc)
                 .ToListAsync();
 
             HashSet<Guid> workedShiftIds = entries.Where(x => x.ShiftId != null).Select(x => x.ShiftId!.Value).ToHashSet();
@@ -479,7 +479,7 @@ public class TimeEntryService(
                 .Select(e => (e.UserId, e.User, new TimesheetLine(RotaTime.LocalDate(e.ClockInUtc), e.Shift, e)))
                 .Concat(shifts
                     .Where(s => !workedShiftIds.Contains(s.Id))
-                    .Select(s => (s.UserId, s.User, new TimesheetLine(RotaTime.LocalDate(s.StartUtc), s, (TimeEntry?)null))))
+                    .Select(s => (s.UserId!, s.User, new TimesheetLine(RotaTime.LocalDate(s.StartUtc), s, (TimeEntry?)null))))
                 .ToList();
 
             List<TimesheetPerson> people = lines

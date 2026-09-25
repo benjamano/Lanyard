@@ -9,6 +9,8 @@
 @inject IReleaseNotesService ReleaseNotesService
 @inject ITimeOffService TimeOffService
 @inject ITimeOffEventBus TimeOffEventBus
+@inject IShiftClaimService ShiftClaimService
+@inject IShiftClaimEventBus ShiftClaimEventBus
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
@@ -83,10 +85,19 @@
                     <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
                 </FluentNavCategory>
 
-                <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@PendingTooltip" IconRest="@(new Icons.Regular.Size20.People())"
+                <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@RotaTooltip" IconRest="@(new Icons.Regular.Size20.People())"
                                    IconActive="@(new Icons.Filled.Size20.People())">
                     <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
                     <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
+                    <FluentNavItem Href="/manage/rota/requests" Match="NavLinkMatch.All" Tooltip="@ShiftRequestsTooltip">
+                        <span class="nav-item-with-count">
+                            Shift Requests
+                            @if (_pendingShiftRequests > 0)
+                            {
+                                <FluentCounterBadge Count="@_pendingShiftRequests" OverflowCount="99" aria-label="@ShiftRequestsTooltip" />
+                            }
+                        </span>
+                    </FluentNavItem>
                     <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All" Tooltip="@PendingTooltip">
                         <span class="nav-item-with-count">
                             Time Off Requests
@@ -199,16 +210,27 @@
     private ReleaseNote? _latestRelease;
     private IEnumerable<ReleaseNote> _releaseNotes = [];
     private int _pendingTimeOff;
+    private int _pendingShiftRequests;
 
     // The category header only takes plain text, so its badge is drawn by a global style from this
     // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
     // whenever the Rota group is collapsed. Null leaves the attribute off, and with it the badge.
-    private string? PendingCountAttribute => _pendingTimeOff switch
+    // It counts everything waiting in the group: time off and shift requests.
+    private string? PendingCountAttribute => (_pendingTimeOff + _pendingShiftRequests) switch
     {
         0 => null,
         > 99 => "99+",
-        _ => _pendingTimeOff.ToString()
+        int total => total.ToString()
     };
+
+    private string? ShiftRequestsTooltip => _pendingShiftRequests switch
+    {
+        0 => null,
+        1 => "1 pick-up, call-off or swap waiting for you",
+        _ => $"{_pendingShiftRequests} pick-ups, call-offs or swaps waiting for you"
+    };
+
+    private string? RotaTooltip => string.Join(" · ", new[] { PendingTooltip, ShiftRequestsTooltip }.Where(x => x is not null)) is { Length: > 0 } text ? text : null;
 
     private string? PendingTooltip => _pendingTimeOff switch
     {
@@ -238,10 +260,12 @@
             if (_isManager)
             {
                 await RefreshPendingTimeOffAsync();
+                await RefreshPendingShiftRequestsAsync();
 
                 // Live: a request made on someone's phone, or decided on the requests page, updates
                 // the count here without a reload.
                 TimeOffEventBus.OnChanged += OnTimeOffChanged;
+                ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
             }
 
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();
@@ -278,7 +302,34 @@
         });
     }
 
-    public void Dispose() => TimeOffEventBus.OnChanged -= OnTimeOffChanged;
+    private async Task RefreshPendingShiftRequestsAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            return;
+        }
+
+        Result<string> me = await SecurityService.GetCurrentUserIdAsync();
+        Result<int> count = await ShiftClaimService.CountPendingForNavAsync(scope.Data, me.IsSuccess ? me.Data : null);
+        _pendingShiftRequests = count.IsSuccess ? count.Data : 0;
+    }
+
+    private void OnShiftClaimsChanged(int locationId)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshPendingShiftRequestsAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        TimeOffEventBus.OnChanged -= OnTimeOffChanged;
+        ShiftClaimEventBus.OnChanged -= OnShiftClaimsChanged;
+    }
 
     // /api/auth/logout is a controller endpoint, not an @page, so it must not be reached through
     // Href: Blazor's interactive router intercepts the anchor click, pushes the URL into history,

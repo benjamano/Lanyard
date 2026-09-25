@@ -397,5 +397,19 @@
       "Managers can see on a person's Rota tab whether they have the app installed and notifications on.",
       "Lanyard has a new app icon for home screens, and installs properly on Android."
     ]
+  },
+  {
+    "version": "1.4.6",
+    "releaseDate": "2026-09-25",
+    "summary": "Added open shifts, call-offs and shift swaps.",
+    "details": [
+      "Managers can put a shift on the rota with nobody on it yet: choose \"Open shift\" as the staff member, or use the new Open shifts row at the top of the Rota Builder. When it's published, everyone who could work it (right position, not already working, not booked off) gets a notification.",
+      "If someone calls in sick, click their shift on the Rota Builder and choose \"Open up for cover\". They're taken off it and told, and it's offered to everyone who could cover.",
+      "Staff see open shifts under My Shifts > Up for grabs and can ask for one. By default a manager decides who gets it; each location can switch that off so the first person to pick it up gets it.",
+      "Staff can say \"Can't make it\" on one of their shifts, with a reason. A manager decides; if they agree, the shift becomes open and is offered to everyone who could cover it.",
+      "Staff can ask to swap a shift. Colleagues who could work it are told and can offer one of their own shifts in return; the person picks the offer they want. Where the location needs approval, a manager then approves the swap, and both shifts change hands at once.",
+      "New Manage > Rota > Shift Requests page for managers, with pick-ups, call-offs and agreed swaps waiting at their location, and the switch for whether pick-ups and swaps need approval. The Rota menu badge now counts these as well as time-off requests. Managers can't approve requests involving their own shifts.",
+      "New notification settings for open shifts, swaps, decisions on your requests, and (for managers) requests to review. They come by push by default; email can be switched on for each."
+    ]
   }
 ]

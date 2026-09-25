@@ -26,6 +26,7 @@ public static class PushContentBuilder
             PushMessageUrgency.Normal,
             TimeSpan.FromDays(3)),
         TimeOffDecidedPayload decided => Decided(decided),
+        _ when ShiftClaimNotices.Handles(payload) => FromNotice(payload),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -93,6 +94,16 @@ public static class PushContentBuilder
         }
 
         return new PushContent(title, body, "/rota/time-off", $"time-off-{decided.Start:yyyyMMdd}", PushMessageUrgency.Normal, TimeSpan.FromDays(3));
+    }
+
+    // Open shifts and pick-ups are time-sensitive: someone has called off and the gap needs filling.
+    private static PushContent FromNotice(NotificationPayload payload)
+    {
+        Notice notice = ShiftClaimNotices.For(payload);
+        bool urgent = payload is OpenShiftPayload or ShiftClaimPendingPayload or ShiftClaimDecidedPayload;
+
+        return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag,
+            urgent ? PushMessageUrgency.High : PushMessageUrgency.Normal, TimeSpan.FromDays(2));
     }
 
     private static string Line(ShiftEmailLine line)

@@ -38,4 +38,35 @@ public record TimeOffDecidedPayload(
     string? Reason,
     string? DecidedByName) : NotificationPayload(LocationId);
 
+// A shift nobody is working yet, sent to everyone who could pick it up.
+public record OpenShiftPayload(int LocationId, string LocationName, ShiftEmailLine Shift, bool NeedsApproval) : NotificationPayload(LocationId);
+
+// Someone is looking for a swap, sent to colleagues who could take their shift.
+public record SwapRequestedPayload(int LocationId, string LocationName, string RequesterName, ShiftEmailLine Shift, string? Note) : NotificationPayload(LocationId);
+
+// A colleague answered your swap request with one of their shifts.
+public record SwapOfferedPayload(int LocationId, string LocationName, string OffererName, ShiftEmailLine YourShift, ShiftEmailLine TheirShift) : NotificationPayload(LocationId);
+
+// For managers: a pick-up, call-off or swap waiting for their decision.
+public record ShiftClaimPendingPayload(
+    int LocationId,
+    string LocationName,
+    ShiftClaimKind Kind,
+    string PersonName,
+    ShiftEmailLine Shift,
+    string? OtherPersonName,
+    ShiftEmailLine? OtherShift,
+    string? Note) : NotificationPayload(LocationId);
+
+// For the person who asked: how their pick-up, call-off, swap or swap offer turned out. For a
+// swap, Shift is the one they now work (or would have) and OtherShift the one they gave away.
+public record ShiftClaimDecidedPayload(
+    int LocationId,
+    string LocationName,
+    ShiftClaimKind Kind,
+    bool Approved,
+    ShiftEmailLine Shift,
+    ShiftEmailLine? OtherShift,
+    string? Reason) : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);

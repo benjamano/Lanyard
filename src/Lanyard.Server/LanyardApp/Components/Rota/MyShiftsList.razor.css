@@ -82,3 +82,39 @@
 .my-shift-notes {
     font-style: italic;
 }
+
+.my-shift-request {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 4px;
+    font-size: 0.85rem;
+}
+
+/* Quiet text buttons that fit side by side on a phone: the shift is the point, the actions are
+   there when needed. */
+.my-shift-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 4px;
+}
+
+.my-shift-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+    cursor: pointer;
+}
+
+.my-shift-action:hover {
+    text-decoration: underline;
+}

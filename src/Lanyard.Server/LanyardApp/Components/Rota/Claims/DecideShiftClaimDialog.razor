@@ -1,0 +1,99 @@
+@inject IShiftClaimService _shiftClaimService
+
+@* Approving or turning down a pick-up, call-off or swap, with an optional note the person sees. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(Approve ? (Icon)new Icons.Regular.Size24.CheckmarkCircle() : new Icons.Regular.Size24.DismissCircle())" />
+            <FluentText As="@TextTag.H3">@Title</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="decide-dialog">
+            <div class="decide-summary">
+                @foreach (string line in Summary)
+                {
+                    <div>@line</div>
+                }
+            </div>
+
+            @if (Consequence is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">@Consequence</FluentMessageBar>
+            }
+
+            <FluentTextArea @bind-Value="reason" Rows="3" Maxlength="500" Style="width: 100%;"
+                            Label="@(Approve ? "Note (optional)" : "Reason (they'll see this)")"
+                            Placeholder="@(Approve ? string.Empty : "e.g. We're short that day - can you ask for a swap instead?")" />
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">
+            @(isBusy ? "Saving..." : ConfirmLabel)
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required Guid ClaimId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string DeciderUserId { get; set; }
+
+    [Parameter]
+    public bool Approve { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string Title { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string ConfirmLabel { get; set; }
+
+    [Parameter]
+    public List<string> Summary { get; set; } = [];
+
+    // What happens next, e.g. "The shift becomes open and everyone who could cover it is told."
+    [Parameter]
+    public string? Consequence { get; set; }
+
+    private string? reason;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private async Task SaveAsync()
+    {
+        isBusy = true;
+        errorMessage = null;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            isBusy = false;
+            errorMessage = scope.Error ?? "Couldn't confirm your location - try reloading the page.";
+            return;
+        }
+
+        Result<bool> result = await _shiftClaimService.DecideAsync(scope.Data, ClaimId, Approve, reason, DeciderUserId);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

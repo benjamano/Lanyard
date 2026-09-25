@@ -95,6 +95,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<UserPushSubscription> PushSubscriptions { get; set; }
         public DbSet<NotificationPreference> NotificationPreferences { get; set; }
         public DbSet<AppInstallation> AppInstallations { get; set; }
+        public DbSet<ShiftClaim> ShiftClaims { get; set; }
+        public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -518,6 +520,42 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Claims are rota history, kept and anonymised with the shifts (ScheduleRetention), so
+            // nothing cascades from the user.
+            modelBuilder.Entity<ShiftClaim>()
+                .HasIndex(x => new { x.ShiftId, x.Status });
+
+            modelBuilder.Entity<ShiftClaim>()
+                .HasIndex(x => new { x.UserId, x.Status });
+
+            modelBuilder.Entity<ShiftClaim>()
+                .HasOne(x => x.Shift)
+                .WithMany()
+                .HasForeignKey(x => x.ShiftId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ShiftClaim>()
+                .HasOne(x => x.OfferedShift)
+                .WithMany()
+                .HasForeignKey(x => x.OfferedShiftId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftClaim>()
+                .HasOne(x => x.ParentClaim)
+                .WithMany()
+                .HasForeignKey(x => x.ParentClaimId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ShiftClaim>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<LocationSchedulingSettings>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
         }
     }
 }

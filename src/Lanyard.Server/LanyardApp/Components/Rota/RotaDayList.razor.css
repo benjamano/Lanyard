@@ -119,3 +119,8 @@
 .day-list ::deep .day-list-empty {
     color: var(--colorNeutralForeground3);
 }
+
+.day-list-open {
+    background: var(--colorNeutralBackground2);
+    box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
+}

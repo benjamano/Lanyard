@@ -34,7 +34,14 @@ public record RotaRangeView(
     List<RotaStaffRow> Rows,
     List<StaffPosition> Positions,
     int UnpublishedChangeCount,
-    int PeopleWithUnpublishedChanges);
+    int PeopleWithUnpublishedChanges)
+{
+    // Shifts in the range with nobody on them yet (including open drafts).
+    public List<Shift> OpenShifts { get; init; } = [];
+
+    // Of UnpublishedChangeCount, how many are open shifts (they affect no one person).
+    public int UnpublishedOpenShiftCount { get; init; }
+}
 
 public record ShiftSaveResult(Shift Shift, List<string> Warnings);
 
@@ -42,8 +49,11 @@ public record PublishedChange(string UserId, List<Shift> New, List<Shift> Change
 
 public record PublishResult(List<PublishedChange> Changes)
 {
+    // Open shifts published (new or changed) by this publish, announced to everyone who could work them.
+    public List<Shift> OpenedShifts { get; init; } = [];
+
     public int PeopleAffected => Changes.Count;
-    public int ShiftCount => Changes.Sum(x => x.New.Count + x.Changed.Count + x.Removed.Count);
+    public int ShiftCount => Changes.Sum(x => x.New.Count + x.Changed.Count + x.Removed.Count) + OpenedShifts.Count;
 }
 
 public record CopyRangeResult(int Copied, List<string> Skipped);

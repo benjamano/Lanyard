@@ -87,9 +87,9 @@ public class RotaService(
                 ? memberIds.ToHashSet()
                 : memberPositions.Select(x => x.UserId).ToHashSet();
 
-            foreach (Shift shift in locationShifts)
+            foreach (Shift shift in locationShifts.Where(x => x.UserId is not null))
             {
-                rowUserIds.Add(shift.UserId);
+                rowUserIds.Add(shift.UserId!);
             }
 
             List<string> rowIds = rowUserIds.ToList();
@@ -112,7 +112,7 @@ public class RotaService(
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => x.IsActive
-                    && rowIds.Contains(x.UserId)
+                    && x.UserId != null && rowIds.Contains(x.UserId)
                     && companyLocationIds.Contains(x.LocationId)
                     && x.StartUtc >= windowStartUtc && x.StartUtc < windowEndUtc)
                 .ToListAsync();
@@ -146,8 +146,8 @@ public class RotaService(
             // Grouped once up front - each shift's venue-local week is worked out a single time,
             // instead of once per (person, week) pair inside the loops below.
             ILookup<(string UserId, DateOnly Week), Shift> companyShiftsByUserWeek =
-                companyShifts.ToLookup(x => (x.UserId, RotaTime.GetWeekStart(RotaTime.LocalDate(x.StartUtc))));
-            ILookup<string, Shift> locationShiftsByUser = locationShifts.ToLookup(x => x.UserId);
+                companyShifts.ToLookup(x => (x.UserId!, RotaTime.GetWeekStart(RotaTime.LocalDate(x.StartUtc))));
+            ILookup<string, Shift> locationShiftsByUser = locationShifts.Where(x => x.UserId is not null).ToLookup(x => x.UserId!);
             Dictionary<string, UserPosition> primaryByUser = memberPositions
                 .Where(x => x.IsPrimary)
                 .GroupBy(x => x.UserId)
@@ -221,7 +221,7 @@ public class RotaService(
             DateTime rangeStartUtc = RotaTime.StartOfDayUtc(from);
             DateTime rangeEndUtc = RotaTime.StartOfDayUtc(to.AddDays(1));
 
-            List<string> pendingUserIds = await PendingForRange(ctx, locationId, rangeStartUtc, rangeEndUtc)
+            List<string?> pendingUserIds = await PendingForRange(ctx, locationId, rangeStartUtc, rangeEndUtc)
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Select(x => x.UserId)
@@ -236,7 +236,11 @@ public class RotaService(
                 rows,
                 positions,
                 pendingUserIds.Count,
-                pendingUserIds.Distinct().Count()));
+                pendingUserIds.Where(x => x is not null).Distinct().Count())
+            {
+                OpenShifts = locationShifts.Where(x => x.UserId is null && x.IsActive).ToList(),
+                UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null)
+            });
         }
         catch (Exception ex)
         {
@@ -289,7 +293,7 @@ public class RotaService(
             // Membership only matters when choosing who works the shift. Someone who has since left
             // the location can still have an existing shift of theirs corrected (or removed) - the
             // shift dialog deliberately keeps them selectable for exactly that.
-            bool assigningPerson = existing is null || existing.UserId != shift.UserId;
+            bool assigningPerson = shift.UserId is not null && (existing is null || existing.UserId != shift.UserId);
 
             if (assigningPerson)
             {
@@ -318,7 +322,8 @@ public class RotaService(
                     return Result<ShiftSaveResult>.Fail("That position doesn't exist for this company.");
                 }
 
-                bool holdsPosition = await ctx.UserPositions.AnyAsync(x => x.UserId == shift.UserId && x.StaffPositionId == positionId);
+                bool holdsPosition = shift.UserId is null
+                    || await ctx.UserPositions.AnyAsync(x => x.UserId == shift.UserId && x.StaffPositionId == positionId);
 
                 if (!holdsPosition && position.IsActive)
                 {
@@ -331,7 +336,8 @@ public class RotaService(
             bool reassignPublished = existing is not null && existing.PublishedDateUtc is not null && existing.UserId != shift.UserId;
             Guid excludeId = existing is not null && !reassignPublished ? existing.Id : Guid.Empty;
 
-            string? overlap = await FindOverlapAsync(ctx, shift.UserId, shift.StartUtc, shift.EndUtc, excludeId);
+            // An open shift has nobody to clash with or be on holiday.
+            string? overlap = shift.UserId is null ? null : await FindOverlapAsync(ctx, shift.UserId, shift.StartUtc, shift.EndUtc, excludeId);
 
             if (overlap is not null)
             {
@@ -341,7 +347,9 @@ public class RotaService(
             // Time off never blocks a shift (the manager may have agreed a swap), but it's said out
             // loud so nobody is scheduled on their holiday by accident.
             DateOnly shiftDay = RotaTime.LocalDate(shift.StartUtc);
-            TimeOffRequest? timeOff = await TimeOffService.LiveTimeOffQuery(ctx, [shift.UserId], shiftDay, shiftDay).FirstOrDefaultAsync();
+            TimeOffRequest? timeOff = shift.UserId is null
+                ? null
+                : await TimeOffService.LiveTimeOffQuery(ctx, [shift.UserId], shiftDay, shiftDay).FirstOrDefaultAsync();
 
             if (timeOff is not null)
             {
@@ -360,7 +368,8 @@ public class RotaService(
                 if (existing is not null)
                 {
                     existing.IsActive = false;
-                    existing.RemovalPending = true;
+                    // Nobody to tell when the shift being replaced was an open one.
+                    existing.RemovalPending = existing.UserId is not null;
                     existing.UpdateDate = now;
                     existing.UpdateByUserId = actingUserId;
                 }
@@ -410,6 +419,12 @@ public class RotaService(
                 saved = existing;
             }
 
+            // Any pick-up, call-off or swap on the old version of this shift no longer matches it.
+            if (existing is not null && (reassignPublished || existing.UpdateDate == now))
+            {
+                await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [existing.Id], "A manager changed the shift.", now);
+            }
+
             await ctx.SaveChangesAsync();
 
             return Result<ShiftSaveResult>.Ok(new ShiftSaveResult(saved, warnings));
@@ -438,11 +453,15 @@ public class RotaService(
                 return Result<bool>.Fail("You can only edit the rota for your own location.");
             }
 
+            DateTime now = DateTime.UtcNow;
+
             shift.IsActive = false;
-            shift.RemovalPending = shift.PublishedDateUtc is not null;
-            shift.UpdateDate = DateTime.UtcNow;
+            // A published shift's person is told at the next publish; an open one has nobody to tell.
+            shift.RemovalPending = shift.PublishedDateUtc is not null && shift.UserId is not null;
+            shift.UpdateDate = now;
             shift.UpdateByUserId = actingUserId;
 
+            await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shift.Id], "A manager removed the shift.", now);
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
@@ -493,14 +512,14 @@ public class RotaService(
 
             // Everything the copies could collide with, in one query: the same people's active shifts
             // at any location across the target window, padded a day each side for overnight shifts.
-            List<string> sourceUserIds = source.Select(x => x.UserId).Distinct().ToList();
+            List<string> sourceUserIds = source.Where(x => x.UserId is not null).Select(x => x.UserId!).Distinct().ToList();
             DateTime targetStartUtc = RotaTime.StartOfDayUtc(targetFrom.AddDays(-1));
             DateTime targetEndUtc = RotaTime.StartOfDayUtc(targetTo.AddDays(2));
 
             List<Shift> occupied = await ctx.Shifts
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive && sourceUserIds.Contains(x.UserId) && x.StartUtc < targetEndUtc && x.EndUtc > targetStartUtc)
+                .Where(x => x.IsActive && x.UserId != null && sourceUserIds.Contains(x.UserId) && x.StartUtc < targetEndUtc && x.EndUtc > targetStartUtc)
                 .ToListAsync();
 
             List<string> skipped = [];
@@ -516,13 +535,14 @@ public class RotaService(
                 string who = RotaNames.For(original.User);
                 string when = startDate.ToString("ddd d MMM", RotaFormat.Uk);
 
-                if (!members.Contains(original.UserId))
+                // Open shifts copy as open shifts: nobody to check.
+                if (original.UserId is not null && !members.Contains(original.UserId))
                 {
                     skipped.Add($"{who} on {when}: no longer at this location.");
                     continue;
                 }
 
-                bool overlaps = occupied.Concat(added)
+                bool overlaps = original.UserId is not null && occupied.Concat(added)
                     .Any(x => x.UserId == original.UserId && x.StartUtc < endUtc && x.EndUtc > startUtc);
 
                 if (overlaps)
@@ -582,6 +602,7 @@ public class RotaService(
                     && (x.UpdateDate == null || x.UpdateDate <= x.PublishedDateUtc)
                     && x.StartUtc > nowUtc && x.StartUtc <= horizonUtc
                     && (x.ReminderSentForStartUtc == null || x.ReminderSentForStartUtc != x.StartUtc)
+                    && x.UserId != null
                     && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
@@ -696,13 +717,26 @@ public class RotaService(
 
             List<Shift> pending = await PendingForRange(ctx, locationId, startUtc, endUtc)
                 .Include(x => x.StaffPosition)
+                .Include(x => x.Location)
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
 
             DateTime now = DateTime.UtcNow;
             List<PublishedChange> changes = [];
 
-            foreach (IGrouping<string, Shift> group in pending.GroupBy(x => x.UserId))
+            // Open shifts have nobody to email; new or changed ones are announced to everyone who
+            // could pick them up instead (below).
+            List<Shift> opened = pending.Where(x => x.UserId is null && x.IsActive).ToList();
+
+            foreach (Shift shift in pending.Where(x => x.UserId is null))
+            {
+                shift.RemovalPending = false;
+                shift.PublishedDateUtc = now;
+                shift.PublishedByUserId = actingUserId;
+                shift.PublishedStartUtc = shift.StartUtc;
+            }
+
+            foreach (IGrouping<string, Shift> group in pending.Where(x => x.UserId is not null).GroupBy(x => x.UserId!))
             {
                 List<Shift> added = [];
                 List<Shift> changed = [];
@@ -734,7 +768,7 @@ public class RotaService(
 
             await ctx.SaveChangesAsync();
 
-            PublishResult result = new(changes);
+            PublishResult result = new(changes) { OpenedShifts = opened };
 
             // One email per person, listing only their own shifts that changed - so a last-minute
             // edit reaches just the people it touches. Queued, so the publish never waits on it.
@@ -755,6 +789,11 @@ public class RotaService(
                         change.New.Select(ToEmailLine).ToList(),
                         change.Changed.Select(ToEmailLine).ToList(),
                         change.Removed.Select(ToEmailLine).ToList()));
+                }
+
+                foreach (Shift shift in opened.Where(x => x.StartUtc > now))
+                {
+                    await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, []);
                 }
             }
             catch (Exception ex)

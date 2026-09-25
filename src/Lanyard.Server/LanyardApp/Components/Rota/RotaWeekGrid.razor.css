@@ -123,3 +123,13 @@
     opacity: 1;
     border-color: var(--colorNeutralStroke1);
 }
+
+/* The open-shifts row sits above everyone's rows, tinted so it reads as "not anyone's yet". */
+.rota-open-name,
+.rota-open-cell {
+    background: var(--colorNeutralBackground2);
+}
+
+.rota-open-name {
+    box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
+}

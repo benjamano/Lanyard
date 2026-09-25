@@ -47,6 +47,15 @@ nothing about them is stored, and a queued email is lost if the app restarts bef
 only record kept is `Shift.ReminderSentForStartUtc`, which stops a reminder being sent twice.
 Emails carry names, dates, shift times and any reason a manager gave - nothing more sensitive.
 
+### Open shifts, call-offs and swaps
+
+`ShiftClaims` records who asked to pick up, call off or swap a shift, the manager's decision and
+any reason given. It is rota history like the shifts themselves, so it is **kept and anonymised**
+with them when an account is deleted (`ScheduleRetention`): the person's claims are re-pointed to
+the placeholder account and any still waiting are withdrawn; their name is cleared from decisions
+they made. Reasons are free text; managers and staff should avoid putting medical detail in them.
+`LocationSchedulingSettings` holds one switch per location and no personal data.
+
 ### Push notifications and notification settings
 
 Push notifications carry the same content as the matching email, encrypted end to end: the browser

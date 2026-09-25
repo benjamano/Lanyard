@@ -195,6 +195,18 @@ public class EmailService : IEmailService
         return await SendResendEmailAsync(user.Id, user.Email, subject, html);
     }
 
+    public async Task<Result<bool>> SendNoticeEmailAsync(UserProfile user, string subject, IReadOnlyList<string> lines, string buttonLabel, string url, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send the notification to.");
+        }
+
+        string html = BuildNoticeHtml(user.GetGreetingName(), subject, lines, buttonLabel, url, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, subject, html);
+    }
+
     // Single decision point for the Resend HTTP call - the config check, request shape,
     // auth header, and error handling used to be copy-pasted into each Send*Async method above.
     private async Task<Result<bool>> SendResendEmailAsync(
@@ -511,6 +523,22 @@ public class EmailService : IEmailService
              <strong>{WebUtility.HtmlEncode(locationName)}</strong>{position}:
              <strong>{WebUtility.HtmlEncode(ShiftLineText(shift with { PositionName = null }))}</strong>.</p>
           {ButtonHtml(myShiftsUrl, "See my shifts", accentColorHex)}
+        </div>
+        """;
+    }
+
+    private static string BuildNoticeHtml(string greetingName, string heading, IReadOnlyList<string> lines, string buttonLabel, string url, string? logoUrl, string accentColorHex)
+    {
+        string body = string.Join(Environment.NewLine, lines.Select(line => $"  <p>{WebUtility.HtmlEncode(line)}</p>"));
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {LogoHtml(logoUrl)}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p><strong>{WebUtility.HtmlEncode(heading)}</strong></p>
+        {body}
+          {ButtonHtml(url, buttonLabel, accentColorHex)}
         </div>
         """;
     }

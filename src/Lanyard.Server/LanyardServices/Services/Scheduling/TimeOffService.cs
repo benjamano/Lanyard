@@ -869,8 +869,8 @@ public class TimeOffService(
         var shifts = await ctx.Shifts
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => userIds.Contains(x.UserId) && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= fromUtc && x.StartUtc < toUtc)
-            .Select(x => new { x.UserId, x.StartUtc })
+            .Where(x => x.UserId != null && userIds.Contains(x.UserId) && x.IsActive && x.PublishedDateUtc != null && x.StartUtc >= fromUtc && x.StartUtc < toUtc)
+            .Select(x => new { UserId = x.UserId!, x.StartUtc })
             .ToListAsync();
 
         return shifts

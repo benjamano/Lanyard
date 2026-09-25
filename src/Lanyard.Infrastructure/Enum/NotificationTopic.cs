@@ -8,5 +8,9 @@ public enum NotificationTopic
     RotaChanged = 0,
     ShiftReminder = 1,
     TimeOffRequested = 2,
-    TimeOffDecided = 3
+    TimeOffDecided = 3,
+    OpenShift = 4,
+    SwapRequest = 5,
+    ShiftClaimDecided = 6,
+    ShiftClaimPending = 7
 }

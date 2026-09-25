@@ -11,6 +11,26 @@
             </div>
         }
 
+        <div class="month-name-cell month-open-name" role="rowheader">
+            <div class="month-name"><span class="month-name-text">Open shifts</span></div>
+            <div class="month-name-meta"><span>@View.OpenShifts.Count(s => s.LocalDate() >= View.From && s.LocalDate() <= View.To) this month</span></div>
+        </div>
+        @foreach (DateOnly day in Days)
+        {
+            DateOnly cellDay = day;
+
+            <div class="month-day-cell month-open-cell @DayClasses(day)" role="gridcell">
+                @foreach (Shift shift in View.OpenShifts.Where(s => s.LocalDate() == day))
+                {
+                    <ShiftChip Shift="@shift" Compact="true" OnClick="@OnEdit" />
+                }
+                <button type="button" class="month-add" title="@($"Add an open shift on {day.DayLabel()}")"
+                        @onclick="@(() => OnAdd.InvokeAsync(new RotaCellRef(RotaCellRef.OpenShift, cellDay)))">
+                    <FluentIcon Value="@(new Icons.Regular.Size12.Add())" />
+                </button>
+            </div>
+        }
+
         @foreach (RotaStaffRow row in View.Rows)
         {
             decimal monthHours = row.Shifts.Where(s => s.IsActive && s.LocalDate() >= View.From && s.LocalDate() <= View.To).Sum(s => s.PaidHours);

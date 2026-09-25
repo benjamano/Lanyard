@@ -162,7 +162,9 @@ namespace Lanyard.Infrastructure.Models
         public required int LocationId { get; set; }
         public Location? Location { get; set; }
 
-        public required string UserId { get; set; }
+        // Null = an open shift: on the rota, but nobody is working it yet. Staff can pick it up from
+        // My Shifts (ShiftClaim), or a manager assigns someone.
+        public string? UserId { get; set; }
         public UserProfile? User { get; set; }
 
         public Guid? StaffPositionId { get; set; }

@@ -79,3 +79,10 @@
 .shift-chip-removed .shift-chip-position {
     text-decoration: line-through;
 }
+
+/* Open shift: striped, so "nobody on this yet" reads at a glance next to the solid chips. */
+.shift-chip-open {
+    background: repeating-linear-gradient(135deg,
+        color-mix(in srgb, var(--theme-colour) 20%, transparent) 0 6px,
+        transparent 6px 12px);
+}

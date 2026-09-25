@@ -1,6 +1,6 @@
 @using Lanyard.Infrastructure.Enum
 
-<button type="button" class="shift-chip theme-colour @StateClass @(Compact ? "shift-chip-compact" : string.Empty)"
+<button type="button" class="shift-chip theme-colour @StateClass @(Shift.UserId is null ? "shift-chip-open" : string.Empty) @(Compact ? "shift-chip-compact" : string.Empty)"
         style="@PositionColours.CssVariables(Shift.StaffPosition?.ColorIndex)"
         title="@Tooltip" aria-label="@Tooltip" disabled="@(!IsEditable)" @onclick="HandleClickAsync">
     <span class="shift-chip-time">@(Compact ? Shift.CompactTimeRange() : Shift.TimeRange())</span>
@@ -46,7 +46,9 @@
             string breakText = Shift.BreakMinutes > 0 ? $", {Shift.BreakMinutes} min break" : string.Empty;
             string notes = string.IsNullOrWhiteSpace(Shift.Notes) ? string.Empty : $". {Shift.Notes}";
 
-            return $"{Shift.TimeRange()} {position}{breakText}. {State.StateLabel()}{notes}";
+            string open = Shift.UserId is null ? " Open shift, nobody on it yet." : string.Empty;
+
+            return $"{Shift.TimeRange()} {position}{breakText}.{open} {State.StateLabel()}{notes}";
         }
     }
 
