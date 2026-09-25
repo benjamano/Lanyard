@@ -517,6 +517,9 @@
       "The DMX desk's client picker moves onto its own line on narrow phones.",
       "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read.",
       "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules."
+      "Fixed the \"Write a message\" placeholder in Chat staying visible under what you're typing on an Android phone until you pressed space.",
+      "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side.",
+      "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages."
     ]
   }
 ]
