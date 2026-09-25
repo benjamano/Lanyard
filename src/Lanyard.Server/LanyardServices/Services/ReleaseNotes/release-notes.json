@@ -499,5 +499,13 @@
       "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
       "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
+  },
+  {
+    "version": "1.4.9",
+    "releaseDate": "2026-09-25",
+    "summary": "The phone's status bar now matches your company's colour.",
+    "details": [
+      "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar."
+    ]
   }
 ]
