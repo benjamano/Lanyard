@@ -6,6 +6,7 @@
 @inject IChatService ChatService
 @inject IChatEventBus ChatEvents
 @inject IChatPresence Presence
+@inject Lanyard.Application.Services.Scheduling.IShiftClaimEventBus ShiftClaimEvents
 @inject IJSRuntime JS
 
 @* One open conversation: its messages (newest at the bottom, older ones on demand), the message
@@ -27,7 +28,13 @@
                     <FluentIcon Value="@(new Icons.Regular.Size16.AlertOff())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" Title="Muted" />
                 }
             </div>
-            @if (thread is { Conversation.Kind: ChatConversationKind.Group })
+            @if (thread is not null && IsChannel)
+            {
+                <div class="thread-subtitle">
+                    @(thread.Conversation.Kind == ChatConversationKind.CompanyChannel ? "Everyone at the company" : "Everyone at this location") · @thread.Members.Count people@(thread.Conversation.StaffCanPost ? string.Empty : " · only managers can post")
+                </div>
+            }
+            else if (thread is { Conversation.Kind: ChatConversationKind.Group })
             {
                 <div class="thread-subtitle" title="@string.Join(", ", thread.Members.Select(m => m.Name))">
                     @thread.Members.Count people · @string.Join(", ", thread.Members.Where(m => m.UserId != UserId).Select(m => m.Name.Split(' ')[0]).Take(4))@(thread.Members.Count > 5 ? "…" : string.Empty)
@@ -47,8 +54,11 @@
                         <button type="button" role="menuitem" @onclick="ToggleMuteAsync">@(thread.IsMuted ? "Turn notifications back on" : "Mute notifications")</button>
                         @if (thread.Conversation.Kind == ChatConversationKind.Group)
                         {
-                            <button type="button" role="menuitem" @onclick="AddPeopleAsync">Add people</button>
-                            <button type="button" role="menuitem" @onclick="RenameAsync">Rename group</button>
+                            @if (thread.CanManageGroup)
+                            {
+                                <button type="button" role="menuitem" @onclick="AddPeopleAsync">Add people</button>
+                                <button type="button" role="menuitem" @onclick="RenameAsync">Rename group</button>
+                            }
                             <button type="button" role="menuitem" class="danger" @onclick="LeaveAsync">Leave group</button>
                         }
                         else if (thread.OtherUserId is not null)
@@ -60,6 +70,40 @@
             </div>
         }
     </header>
+
+    @if (thread is { Pinned.Count: > 0 })
+    {
+        ChatMessageView top = thread.Pinned[0];
+
+        <div class="thread-pinned">
+            <button type="button" class="pinned-toggle" aria-expanded="@pinnedOpen" @onclick="() => pinnedOpen = !pinnedOpen">
+                <FluentIcon Value="@(new Icons.Filled.Size16.Pin())" Color="Color.Custom" CustomColor="var(--colorBrandForeground1)" />
+                <span class="pinned-summary">
+                    <strong>@top.AuthorName:</strong> @ChatHtml.Preview(top.Message.BodyText, 90)
+                </span>
+                @if (thread.Pinned.Count > 1)
+                {
+                    <span class="pinned-more">@(pinnedOpen ? "Hide" : $"+{thread.Pinned.Count - 1} more")</span>
+                }
+            </button>
+            @if (pinnedOpen)
+            {
+                <ul class="pinned-list">
+                    @foreach (ChatMessageView pin in thread.Pinned)
+                    {
+                        <li>
+                            <div class="pinned-meta">@pin.AuthorName · @RotaTime.ToVenueLocal(pin.Message.PinnedUtc ?? pin.Message.CreateUtc).ToString("ddd d MMM", RotaFormat.Uk)</div>
+                            <div class="msg-body">@((MarkupString)pin.Message.BodyHtml)</div>
+                            @if (thread.CanModerate)
+                            {
+                                <button type="button" class="pinned-unpin" @onclick="() => SetPinnedAsync(pin, false)">Unpin</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 
     <div class="thread-messages" @ref="scroller">
         @if (loadError is not null)
@@ -121,13 +165,31 @@
                             }
                             @if (view.Message.IsDeleted)
                             {
-                                <div class="msg-body">@(view.Message.DeletedByUserId is null ? "Message deleted" : "Removed by a manager")</div>
+                                <div class="msg-body">@(view.Message.DeletedByUserId is null || view.Message.DeletedByUserId == view.Message.AuthorUserId ? "Message deleted" : "Removed by a manager")</div>
+                            }
+                            else if (view.Card is ChatCardView card)
+                            {
+                                <div class="msg-card @(card.IsOpen ? "is-open" : string.Empty)">
+                                    <div class="msg-card-title">@card.Title</div>
+                                    <div class="msg-card-detail">@card.Detail</div>
+                                    <div class="msg-card-foot">
+                                        <span class="msg-card-status">@card.Status</span>
+                                        @if (card.IsOpen)
+                                        {
+                                            <a class="msg-card-action" href="@card.ActionUrl">@card.ActionLabel</a>
+                                        }
+                                    </div>
+                                </div>
                             }
                             else
                             {
                                 <div class="msg-body">@((MarkupString)view.Message.BodyHtml)</div>
                             }
                             <div class="msg-meta">
+                                @if (view.Message.IsPinned && !view.Message.IsDeleted)
+                                {
+                                    <span class="msg-pinned">Pinned · </span>
+                                }
                                 @local.ToString("HH:mm", RotaFormat.Uk)@(view.Message.EditedUtc is not null && !view.Message.IsDeleted ? " · edited" : string.Empty)
                             </div>
                         </div>
@@ -142,13 +204,17 @@
                                 {
                                     <div class="menu-backdrop" @onclick="() => messageMenu = null"></div>
                                     <div class="menu msg-menu" role="menu">
-                                        @if (thread.CannotPostReason is null)
+                                        @if (thread.CannotPostReason is null && view.Card is null)
                                         {
                                             <button type="button" role="menuitem" @onclick="() => ReplyTo(view)">Reply</button>
                                         }
+                                        @if (thread.CanModerate)
+                                        {
+                                            <button type="button" role="menuitem" @onclick="() => SetPinnedAsync(view, !view.Message.IsPinned)">@(view.Message.IsPinned ? "Unpin" : "Pin for everyone")</button>
+                                        }
                                         @if (view.IsMine)
                                         {
-                                            @if (thread.CannotPostReason is null)
+                                            @if (thread.CannotPostReason is null && view.Card is null)
                                             {
                                                 <button type="button" role="menuitem" @onclick="() => EditAsync(view)">Edit</button>
                                             }
@@ -156,6 +222,10 @@
                                         }
                                         else
                                         {
+                                            @if (thread.CanModerate)
+                                            {
+                                                <button type="button" role="menuitem" class="danger" @onclick="() => RemoveAsync(view)">Remove for everyone</button>
+                                            }
                                             <button type="button" role="menuitem" class="danger" @onclick="() => ReportAsync(view)">Report</button>
                                         }
                                     </div>
@@ -205,7 +275,14 @@
     private ChatMessageView? replyingTo;
     private ChatMessageView? editing;
     private bool menuOpen;
+
+    // The signed-in location: decides whether this person looks after a channel
+    // (ChatChannels.CanModerate), so it goes with every call that depends on that.
+    private LocationScope? scope;
     private Guid? messageMenu;
+    private bool pinnedOpen;
+
+    private bool IsChannel => thread?.Conversation.Kind is ChatConversationKind.LocationChannel or ChatConversationKind.CompanyChannel;
 
     private ElementReference scroller;
     private bool scrollToBottom;
@@ -223,6 +300,54 @@
     protected override void OnInitialized()
     {
         ChatEvents.OnChanged += OnChatEvent;
+        ShiftClaimEvents.OnChanged += OnShiftClaimsChanged;
+    }
+
+    // A location's channel shows open-shift and swap cards; when shifts change hands there, the
+    // cards' status changes with them.
+    private void OnShiftClaimsChanged(int locationId)
+    {
+        if (thread?.Conversation is not { Kind: ChatConversationKind.LocationChannel } channel || channel.LocationId != locationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadLatestAsync(scroll: false);
+            StateHasChanged();
+        });
+    }
+
+    private async Task SetPinnedAsync(ChatMessageView view, bool pinned)
+    {
+        messageMenu = null;
+        Result<bool> result = await ChatService.SetPinnedAsync(scope!, UserId, view.Message.Id, pinned);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change the pin.");
+            return;
+        }
+
+        _toastService.ShowSuccess(pinned ? "Pinned. Everyone in the channel has been told." : "Unpinned.");
+    }
+
+    private async Task RemoveAsync(ChatMessageView view)
+    {
+        messageMenu = null;
+
+        if (!await ConfirmAsync("Remove message", $"Remove {view.AuthorName}'s message for everyone? It shows as \"Removed by a manager\".", "Remove"))
+        {
+            return;
+        }
+
+        Result<bool> result = await ChatService.RemoveAsModeratorAsync(scope!, UserId, view.Message.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't remove the message.");
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -252,6 +377,8 @@
         presence?.Dispose();
         presence = pageVisible ? Presence.Enter(UserId, ConversationId) : null;
 
+        scope ??= (await _currentLocationContext.GetScopeAsync()).Data;
+
         await LoadLatestAsync(scroll: true);
     }
 
@@ -261,7 +388,7 @@
         // removals of older messages show too, not just the newest page.
         int take = Math.Clamp(messages.Count, 50, 200);
 
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take);
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take, scope: scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -375,7 +502,7 @@
         }
 
         loadingOlder = true;
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc);
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc, scope: scope);
         loadingOlder = false;
 
         if (!result.IsSuccess || result.Data is null)
@@ -400,7 +527,7 @@
     {
         if (editing is ChatMessageView edited)
         {
-            Result<bool> saved = await ChatService.EditAsync(UserId, edited.Message.Id, html);
+            Result<bool> saved = await ChatService.EditAsync(UserId, edited.Message.Id, html, scope);
 
             if (!saved.IsSuccess)
             {
@@ -413,7 +540,7 @@
             return true;
         }
 
-        Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id);
+        Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id, scope);
 
         if (!sent.IsSuccess)
         {
@@ -638,6 +765,7 @@
     public async ValueTask DisposeAsync()
     {
         ChatEvents.OnChanged -= OnChatEvent;
+        ShiftClaimEvents.OnChanged -= OnShiftClaimsChanged;
         presence?.Dispose();
 
         try

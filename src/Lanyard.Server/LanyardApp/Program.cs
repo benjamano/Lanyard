@@ -121,6 +121,7 @@ builder.Services.AddSingleton<IChatPresence, ChatPresence>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
+builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();

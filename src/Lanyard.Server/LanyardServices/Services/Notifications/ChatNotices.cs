@@ -11,7 +11,7 @@ public static class ChatNotices
     public const string ReportsUrl = "/manage/chat/reports";
 
     public static bool Handles(NotificationPayload payload) =>
-        payload is ChatDigestPayload or ChatReportedPayload or ChatReportReviewedPayload;
+        payload is ChatDigestPayload or ChatReportedPayload or ChatReportReviewedPayload or PinnedPostPayload;
 
     public static Notice For(NotificationPayload payload) => payload switch
     {
@@ -19,6 +19,11 @@ public static class ChatNotices
             digest.Lines.Sum(x => x.Count) == 1 ? "You have an unread message" : $"You have {digest.Lines.Sum(x => x.Count)} unread messages",
             [.. digest.Lines.Select(x => $"{x.ConversationName}: {x.Count} unread")],
             ChatUrl, "Open chat", "chat-digest"),
+
+        PinnedPostPayload pinned => new Notice(
+            $"New pinned post in {pinned.ChannelName}",
+            [$"{pinned.AuthorName}: {pinned.Preview}"],
+            $"{ChatUrl}/{pinned.ConversationId}", "Open chat", $"pinned-{pinned.ConversationId:N}"),
 
         ChatReportedPayload => new Notice(
             "A chat message was reported",

@@ -80,6 +80,10 @@ public record ChatDigestLine(string ConversationName, int Count);
 // The daily email about messages left unread for a day. Names and counts only, never message text.
 public record ChatDigestPayload(List<ChatDigestLine> Lines) : NotificationPayload(0);
 
+// A post pinned in a channel the person is in: news from their managers. Includes the text, as
+// pinned posts are announcements rather than conversation.
+public record PinnedPostPayload(Guid ConversationId, string ChannelName, string AuthorName, string Preview) : NotificationPayload(0);
+
 // For managers: a chat message at their location was reported.
 public record ChatReportedPayload(int LocationId) : NotificationPayload(LocationId);
 

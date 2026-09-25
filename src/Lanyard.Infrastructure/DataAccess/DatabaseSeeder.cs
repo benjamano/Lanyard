@@ -18,7 +18,6 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedManagerRoleId, "Manager", "SEED-ROLE-MANAGER-CS"),
         (ApplicationDbContext.SeedStaffRoleId, "Staff", "SEED-ROLE-STAFF-CS"),
         (ApplicationDbContext.SeedCanControlMusicRoleId, "CanControlMusic", "SEED-ROLE-CAN-CONTROL-MUSIC-CS"),
-        (ApplicationDbContext.SeedCanClockInRoleId, "CanClockIn", "SEED-ROLE-CAN-CLOCK-IN-CS"),
         (ApplicationDbContext.SeedCanManageDmxSystemsRoleId, "CanManageDmxSystems", "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS"),
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
         (ApplicationDbContext.SeedCanPostAnnouncementsRoleId, "CanPostAnnouncements", "SEED-ROLE-CAN-POST-ANNOUNCEMENTS-CS"),
@@ -130,8 +129,7 @@ public static class DatabaseSeeder
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedAdminRoleId },
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedManagerRoleId },
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedStaffRoleId },
-                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId },
-                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanClockInRoleId }
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId }
             );
 
             await context.SaveChangesAsync();

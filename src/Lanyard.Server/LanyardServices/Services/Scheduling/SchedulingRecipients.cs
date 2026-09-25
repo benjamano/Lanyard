@@ -28,4 +28,15 @@ internal static class SchedulingRecipients
             .Distinct()
             .ToListAsync();
     }
+
+    // Whether the person holds an active Admin or Manager role at all - the same roles and
+    // IsActive rule as above, for checks that aren't about one location (chat groups).
+    public static Task<bool> IsManagerOrAdminAsync(ApplicationDbContext ctx, string userId) =>
+        (from userRole in ctx.UserRoles
+         join role in ctx.Roles on userRole.RoleId equals role.Id
+         where userRole.UserId == userId && role.IsActive && (role.Name == AdminRole || role.Name == ManagerRole)
+         select userRole.UserId)
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync();
 }

@@ -77,4 +77,34 @@ public class ScheduleRetentionTests
         Assert.AreEqual("leaver", (await verify.TimeEntries.SingleAsync(x => x.Id == approvedByLeaver.Id)).ApprovedByUserId);
         Assert.AreEqual("leaver", (await verify.ClockInTerminals.SingleAsync()).CreatedByUserId);
     }
+
+    [TestMethod]
+    public async Task DetachUserAsync_ClearsTimesheetNotesOnlyForAGdprErasure()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        TimeEntry deleted = new() { Id = Guid.NewGuid(), UserId = "leaver", LocationId = 1, ClockInUtc = Now.AddDays(-1), ClockOutUtc = Now.AddDays(-1).AddHours(4), Notes = "Left early - appointment", IsActive = true };
+        TimeEntry erased = new() { Id = Guid.NewGuid(), UserId = "erased", LocationId = 1, ClockInUtc = Now.AddDays(-1), ClockOutUtc = Now.AddDays(-1).AddHours(4), Notes = "Left early - appointment", IsActive = true };
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.TimeEntries.AddRange(deleted, erased);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            await ScheduleRetention.DetachUserAsync(ctx, "leaver", Now);
+            await ScheduleRetention.DetachUserAsync(ctx, "erased", Now, gdprErasure: true);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using ApplicationDbContext verify = new(options);
+        TimeEntry keptNotes = await verify.TimeEntries.SingleAsync(x => x.Id == deleted.Id);
+        TimeEntry noNotes = await verify.TimeEntries.SingleAsync(x => x.Id == erased.Id);
+
+        Assert.AreEqual("Left early - appointment", keptNotes.Notes);
+        Assert.IsNull(noNotes.Notes);
+        Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, noNotes.UserId);
+        Assert.AreEqual(4, noNotes.ClockedHours, "The hours stay for payroll");
+    }
 }

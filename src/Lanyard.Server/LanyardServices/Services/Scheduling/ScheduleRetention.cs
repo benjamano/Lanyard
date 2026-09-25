@@ -43,8 +43,10 @@ public static class ScheduleRetention
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
 
-    // eraseDirectMessages: a GDPR erasure also empties the direct messages the person sent.
-    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc, bool eraseDirectMessages = false)
+    // gdprErasure: an erasure also empties the direct messages the person sent and the free-text
+    // notes on their time entries (the hours stay, anonymised, for payroll). Not restorable, so
+    // only GdprService passes it; a plain account delete keeps both.
+    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc, bool gdprErasure = false)
     {
         List<Shift> shifts = await ctx.Shifts
             .Where(x => x.UserId == userId || x.CreateByUserId == userId || x.UpdateByUserId == userId || x.PublishedByUserId == userId)
@@ -83,7 +85,7 @@ public static class ScheduleRetention
 
         claims.AddRange(linked.Where(x => claims.All(c => c.Id != x.Id)));
 
-        ChatRetention.Snapshot chat = await ChatRetention.DetachUserAsync(ctx, userId, nowUtc, eraseDirectMessages);
+        ChatRetention.Snapshot chat = await ChatRetention.DetachUserAsync(ctx, userId, nowUtc, gdprErasure);
 
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
@@ -173,6 +175,11 @@ public static class ScheduleRetention
                 }
 
                 entry.UserId = Placeholder;
+
+                if (gdprErasure)
+                {
+                    entry.Notes = null;
+                }
             }
 
             if (entry.CreateByUserId == userId)

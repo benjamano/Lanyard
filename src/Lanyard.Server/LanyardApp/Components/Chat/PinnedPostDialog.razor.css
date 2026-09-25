@@ -1,0 +1,12 @@
+.pinned-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* The composer brings its own top border for use under a thread; not needed in a dialog. */
+.pinned-dialog ::deep .composer {
+    padding: 0;
+    border-top: none;
+    background: transparent;
+}

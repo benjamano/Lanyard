@@ -24,7 +24,7 @@ else if (userId is not null && companyId is int company)
 {
     <div class="chat-page @(ConversationId is not null ? "has-thread" : string.Empty)">
         <div class="chat-inbox">
-            <ChatInbox Items="@inbox" SelectedId="@ConversationId" OnNew="NewConversationAsync" />
+            <ChatInbox Items="@inbox" Pinned="@pinned" SelectedId="@ConversationId" OnNew="NewConversationAsync" />
         </div>
         <div class="chat-thread">
             @if (ConversationId is Guid id)
@@ -50,6 +50,7 @@ else if (userId is not null && companyId is int company)
     private string? userId;
     private int? companyId;
     private List<ChatInboxItem>? inbox;
+    private List<ChatPinnedPost>? pinned;
     private string? loadError;
 
     protected override async Task OnInitializedAsync()
@@ -73,6 +74,13 @@ else if (userId is not null && companyId is int company)
         companyId = company;
         ChatEvents.OnChanged += OnChatEvent;
 
+        Result<bool> channels = await ChatService.EnsureChannelsAsync(userId);
+
+        if (!channels.IsSuccess)
+        {
+            _toastService.ShowError(channels.Error ?? "Couldn't set up your channels.");
+        }
+
         await LoadInboxAsync();
     }
 
@@ -85,6 +93,7 @@ else if (userId is not null && companyId is int company)
 
         Result<List<ChatInboxItem>> result = await ChatService.GetInboxAsync(userId);
         inbox = result.Data ?? [];
+        pinned = (await ChatService.GetPinnedForUserAsync(userId)).Data;
 
         if (!result.IsSuccess)
         {

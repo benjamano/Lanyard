@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Models;
@@ -35,6 +36,13 @@ internal static class ChatRules
 
         return found == distinct.Count;
     }
+
+    public const string GroupChangeNotAllowed = "Only the person who started this group, or a manager, can rename it or add people.";
+
+    // Renaming a group or adding people is for whoever started it, or a Manager or Admin who's in
+    // it. Everyone else can still post, mute and leave.
+    public static async Task<bool> CanManageGroupAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation) =>
+        conversation.CreatedByUserId == userId || await SchedulingRecipients.IsManagerOrAdminAsync(ctx, userId);
 
     public static Task<bool> BlockedEitherWayAsync(ApplicationDbContext ctx, string a, string b) =>
         ctx.ChatBlocks.AsNoTracking().TagWithCallSite().AnyAsync(x =>

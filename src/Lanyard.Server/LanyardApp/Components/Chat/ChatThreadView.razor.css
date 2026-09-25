@@ -259,3 +259,127 @@
 .msg-menu {
     min-width: 140px;
 }
+
+/* Pinned posts: one line under the header, opening into the full list. */
+.thread-pinned {
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    background: color-mix(in srgb, var(--colorBrandBackground) 6%, var(--colorNeutralBackground1));
+}
+
+.pinned-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 14px;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pinned-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pinned-more {
+    flex-shrink: 0;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+    font-weight: 600;
+}
+
+.pinned-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.pinned-list li {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    overflow-wrap: anywhere;
+}
+
+.pinned-meta {
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+    margin-bottom: 2px;
+}
+
+.pinned-unpin {
+    margin-top: 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground3);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.msg-pinned {
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+    font-weight: 600;
+}
+
+/* Open-shift and swap cards: a small panel with the live status and, while it's still open,
+   a link to act on it. */
+.msg-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 220px;
+    padding: 2px 0;
+    border-left: 4px solid var(--colorNeutralStroke1);
+    padding-left: 10px;
+}
+
+.msg-card.is-open {
+    border-left-color: var(--colorPaletteGreenBorder2, #107c10);
+}
+
+.msg-card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--colorNeutralForeground3);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.msg-card-detail {
+    font-weight: 600;
+}
+
+.msg-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.msg-card-status {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground2);
+}
+
+.msg-card-action {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+}

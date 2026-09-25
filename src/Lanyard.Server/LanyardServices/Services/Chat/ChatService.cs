@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -30,6 +31,22 @@ public class ChatService(
     private readonly ILogger<ChatService> _logger = logger;
 
     private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
+
+    public async Task<Result<bool>> EnsureChannelsAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await ChatChannels.EnsureChannelsForUserAsync(ctx, userId, Now);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set up chat channels for {UserId}", userId);
+            return Result<bool>.Fail($"Couldn't set up your channels: {ex.Message}");
+        }
+    }
 
     public async Task<Result<List<ChatInboxItem>>> GetInboxAsync(string userId)
     {
@@ -276,9 +293,13 @@ public class ChatService(
                 return Result<bool>.Fail("That group isn't available.");
             }
 
+            if (!await ChatRules.CanManageGroupAsync(ctx, userId, conversation))
+            {
+                return Result<bool>.Fail(ChatRules.GroupChangeNotAllowed);
+            }
+
             // Changing a group is posting in it as far as everyone else can see, so a suspension
-            // stops it too. (Any member may add people or rename: groups are informal, and there's
-            // no owner to ask.)
+            // stops it too.
             if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
             {
                 return Result<bool>.Fail(suspended);
@@ -352,6 +373,11 @@ public class ChatService(
                 return Result<bool>.Fail("That group isn't available.");
             }
 
+            if (!await ChatRules.CanManageGroupAsync(ctx, userId, conversation))
+            {
+                return Result<bool>.Fail(ChatRules.GroupChangeNotAllowed);
+            }
+
             if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
             {
                 return Result<bool>.Fail(suspended);
@@ -399,7 +425,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50)
+    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null)
     {
         try
         {
@@ -417,8 +443,9 @@ public class ChatService(
             take = Math.Clamp(take, 1, 200);
 
             // A member sees what was said from when they (last) joined - someone added to a group,
-            // or added back after leaving, doesn't get the conversation from before.
-            DateTime joined = me.JoinedUtc;
+            // or added back after leaving, doesn't get the conversation from before. Channels are
+            // the whole team's: anyone who works there can scroll back through them.
+            DateTime joined = ChatChannels.IsChannel(conversation) ? DateTime.MinValue : me.JoinedUtc;
 
             IQueryable<ChatMessage> query = ctx.ChatMessages
                 .AsNoTracking()
@@ -439,17 +466,30 @@ public class ChatService(
 
             bool hasOlder = newestFirst.Count > take;
 
-            List<ChatMessageView> messages = newestFirst
+            List<ChatMessageView> messages = await WithCardsAsync(ctx, newestFirst
                 .Take(take)
                 .Reverse()
-                .Select(x => new ChatMessageView(
-                    x,
-                    RotaNames.For(x.Author),
-                    x.AuthorUserId == userId,
-                    x.ReplyTo is null ? null
-                        : x.ReplyTo.CreateUtc < joined ? new ChatReplyPreview(x.ReplyTo.Id, "Earlier message", "From before you joined", true)
-                        : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, 100), x.ReplyTo.IsDeleted)))
-                .ToList();
+                .Select(x => ToView(x, userId, joined))
+                .ToList());
+
+            List<ChatMessageView> pinned = [];
+            bool canModerate = false;
+
+            if (ChatChannels.IsChannel(conversation))
+            {
+                canModerate = ChatChannels.CanModerate(scope, conversation);
+
+                pinned = (await ctx.ChatMessages
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .Include(x => x.Author)
+                    .Where(x => x.ConversationId == conversationId && x.IsPinned && x.DeletedUtc == null)
+                    .OrderByDescending(x => x.PinnedUtc)
+                    .Take(10)
+                    .ToListAsync())
+                    .Select(x => ToView(x, userId, joined))
+                    .ToList();
+            }
 
             List<ChatMember> members = await ctx.ChatMembers
                 .AsNoTracking()
@@ -465,7 +505,8 @@ public class ChatService(
                 ? RotaNames.For(members.FirstOrDefault(x => x.UserId != userId)?.User)
                 : conversation.Name ?? "Group";
 
-            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId);
+            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope);
+            bool canManageGroup = conversation.Kind == ChatConversationKind.Group && await ChatRules.CanManageGroupAsync(ctx, userId, conversation);
 
             return Result<ChatThread>.Ok(new ChatThread(
                 conversation,
@@ -477,7 +518,12 @@ public class ChatService(
                 me.IsGroupAdmin,
                 otherUserId,
                 blockedByMe,
-                cannotPost));
+                cannotPost)
+            {
+                CanModerate = canModerate,
+                CanManageGroup = canManageGroup,
+                Pinned = pinned
+            });
         }
         catch (Exception ex)
         {
@@ -486,7 +532,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<ChatMessage>> SendAsync(string userId, Guid conversationId, string html, Guid? replyToMessageId = null)
+    public async Task<Result<ChatMessage>> SendAsync(string userId, Guid conversationId, string html, Guid? replyToMessageId = null, LocationScope? scope = null)
     {
         try
         {
@@ -511,13 +557,20 @@ public class ChatService(
                 return Result<ChatMessage>.Fail("That conversation isn't available.");
             }
 
+            // A channel's members follow who works there; bring them up to date so a new starter who
+            // hasn't opened chat yet is still in it.
+            if (ChatChannels.IsChannel(conversation))
+            {
+                await ChatChannels.SyncMembersAsync(ctx, conversation, Now);
+            }
+
             List<ChatMember> members = await ctx.ChatMembers
                 .Include(x => x.User)
                 .Where(x => x.ConversationId == conversationId && x.LeftUtc == null)
                 .ToListAsync();
 
             string? otherUserId = conversation.Kind == ChatConversationKind.Direct ? members.FirstOrDefault(x => x.UserId != userId)?.UserId : null;
-            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId);
+            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope);
 
             if (cannotPost is not null)
             {
@@ -561,7 +614,11 @@ public class ChatService(
                 string author = RotaNames.For(members.First(x => x.UserId == userId).User);
                 bool isGroup = conversation.Kind != ChatConversationKind.Direct;
 
-                _notifications.Enqueue(toPush, isGroup ? NotificationTopic.GroupMessage : NotificationTopic.DirectMessage,
+                NotificationTopic topic = ChatChannels.IsChannel(conversation) ? NotificationTopic.ChannelMessage
+                    : isGroup ? NotificationTopic.GroupMessage
+                    : NotificationTopic.DirectMessage;
+
+                _notifications.Enqueue(toPush, topic,
                     new ChatMessagePayload(conversationId, isGroup, isGroup ? conversation.Name ?? "Group" : author, author, ChatHtml.Preview(cleaned.Text)));
             }
             catch (Exception ex)
@@ -578,7 +635,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<bool>> EditAsync(string userId, Guid messageId, string html)
+    public async Task<Result<bool>> EditAsync(string userId, Guid messageId, string html, LocationScope? scope = null)
     {
         try
         {
@@ -615,7 +672,7 @@ public class ChatService(
                 ? await ctx.ChatMembers.AsNoTracking().Where(x => x.ConversationId == conversation.Id && x.UserId != userId).Select(x => x.UserId).FirstOrDefaultAsync()
                 : null;
 
-            if (await CannotPostReasonAsync(ctx, userId, conversation, otherUserId) is { } cannotPost)
+            if (await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope) is { } cannotPost)
             {
                 return Result<bool>.Fail(cannotPost);
             }
@@ -806,6 +863,133 @@ public class ChatService(
         }
     }
 
+    // ---- Channels --------------------------------------------------------------------------
+
+    public async Task<Result<bool>> SetPinnedAsync(LocationScope scope, string userId, Guid messageId, bool pinned)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ChatMessage? message = await ctx.ChatMessages.Include(x => x.Conversation).FirstOrDefaultAsync(x => x.Id == messageId);
+
+            if (message?.Conversation is not ChatConversation channel || !ChatChannels.IsChannel(channel) || message.IsDeleted)
+            {
+                return Result<bool>.Fail("Only channel messages can be pinned.");
+            }
+
+            if (!ChatChannels.CanModerate(scope, channel))
+            {
+                return Result<bool>.Fail("Only managers can pin posts in this channel.");
+            }
+
+            if (message.IsPinned == pinned)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            DateTime now = Now;
+            message.IsPinned = pinned;
+            message.PinnedByUserId = pinned ? userId : null;
+            message.PinnedUtc = pinned ? now : null;
+
+            await ctx.SaveChangesAsync();
+
+            List<string> members = await ChatChannels.SyncMembersAsync(ctx, channel, now);
+
+            if (pinned)
+            {
+                try
+                {
+                    await ChatChannels.NotifyPinnedAsync(ctx, _notifications, channel, message, members, userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Pinned message {MessageId} but couldn't queue its notifications", message.Id);
+                }
+            }
+
+            _logger.LogInformation("{UserId} {Action} message {MessageId} in channel {ChannelId}", userId, pinned ? "pinned" : "unpinned", messageId, channel.Id);
+            _eventBus.Publish(new ChatEvent(channel.Id, members, ChatEventKind.MessageChanged));
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to pin chat message {MessageId}", messageId);
+            return Result<bool>.Fail($"Couldn't change the pin: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> RemoveAsModeratorAsync(LocationScope scope, string userId, Guid messageId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ChatMessage? message = await ctx.ChatMessages.Include(x => x.Conversation).FirstOrDefaultAsync(x => x.Id == messageId);
+
+            if (message?.Conversation is not ChatConversation channel || !ChatChannels.IsChannel(channel))
+            {
+                return Result<bool>.Fail("Only channel messages can be removed by a manager.");
+            }
+
+            if (!ChatChannels.CanModerate(scope, channel))
+            {
+                return Result<bool>.Fail("Only managers can remove messages in this channel.");
+            }
+
+            if (message.IsDeleted)
+            {
+                return Result<bool>.Ok(true);
+            }
+
+            ChatRules.Erase(message, userId, Now);
+            message.IsPinned = false;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("{UserId} removed message {MessageId} by {AuthorId} from channel {ChannelId}", userId, messageId, message.AuthorUserId, channel.Id);
+            await PublishAsync(ctx, channel.Id, ChatEventKind.MessageChanged);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove chat message {MessageId}", messageId);
+            return Result<bool>.Fail($"Couldn't remove the message: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<ChatPinnedPost>>> GetPinnedForUserAsync(string userId, int take = 5)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<ChatMessage> pinned = await ctx.ChatMessages
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Author)
+                .Include(x => x.Conversation)
+                .Where(x => x.IsPinned && x.DeletedUtc == null
+                    && (x.Conversation!.Kind == ChatConversationKind.LocationChannel || x.Conversation.Kind == ChatConversationKind.CompanyChannel)
+                    && ctx.ChatMembers.Any(m => m.ConversationId == x.ConversationId && m.UserId == userId && m.LeftUtc == null))
+                .OrderByDescending(x => x.PinnedUtc)
+                .Take(Math.Clamp(take, 1, 20))
+                .ToListAsync();
+
+            return Result<List<ChatPinnedPost>>.Ok(pinned
+                .Select(x => new ChatPinnedPost(x.ConversationId, x.Conversation!.Name ?? "Channel", ToView(x, userId, DateTime.MinValue)))
+                .ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load pinned posts for {UserId}", userId);
+            return Result<List<ChatPinnedPost>>.Fail($"Failed to load pinned posts: {ex.Message}");
+        }
+    }
+
     // ---- Helpers ---------------------------------------------------------------------------
 
     private static string? ValidateGroupName(string? name) =>
@@ -826,7 +1010,7 @@ public class ChatService(
         return (member?.Conversation, member);
     }
 
-    private async Task<string?> CannotPostReasonAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation, string? otherUserId)
+    private async Task<string?> CannotPostReasonAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation, string? otherUserId, LocationScope? scope)
     {
         if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
         {
@@ -838,7 +1022,97 @@ public class ChatService(
             return "You can't send messages in this conversation.";
         }
 
+        if (ChatChannels.IsChannel(conversation) && !conversation.StaffCanPost && !ChatChannels.CanModerate(scope, conversation))
+        {
+            return "Only managers can post here at the moment. You can still read it.";
+        }
+
         return null;
+    }
+
+    private static ChatMessageView ToView(ChatMessage x, string userId, DateTime joined) => new(
+        x,
+        RotaNames.For(x.Author),
+        x.AuthorUserId == userId,
+        x.ReplyTo is null ? null
+            : x.ReplyTo.CreateUtc < joined ? new ChatReplyPreview(x.ReplyTo.Id, "Earlier message", "From before you joined", true)
+            : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, 100), x.ReplyTo.IsDeleted));
+
+    // Open-shift and swap cards show what they link to as it is now, not as it was when posted.
+    private async Task<List<ChatMessageView>> WithCardsAsync(ApplicationDbContext ctx, List<ChatMessageView> views)
+    {
+        List<Guid> shiftIds = views.Where(x => x.Message.Kind == ChatMessageKind.OpenShiftCard && x.Message.LinkedEntityId != null)
+            .Select(x => x.Message.LinkedEntityId!.Value).ToList();
+        List<Guid> swapIds = views.Where(x => x.Message.Kind == ChatMessageKind.SwapRequestCard && x.Message.LinkedEntityId != null)
+            .Select(x => x.Message.LinkedEntityId!.Value).ToList();
+
+        if (shiftIds.Count == 0 && swapIds.Count == 0)
+        {
+            return views;
+        }
+
+        DateTime now = Now;
+
+        Dictionary<Guid, Shift> shifts = await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Include(x => x.StaffPosition)
+            .Include(x => x.User)
+            .Where(x => shiftIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        Dictionary<Guid, ShiftClaim> swaps = await ctx.ShiftClaims
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Include(x => x.User)
+            .Include(x => x.Shift).ThenInclude(x => x!.StaffPosition)
+            .Where(x => swapIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        return views.Select(view =>
+        {
+            Guid? linked = view.Message.LinkedEntityId;
+
+            ChatCardView? card = view.Message.Kind switch
+            {
+                ChatMessageKind.OpenShiftCard when linked is Guid id && shifts.TryGetValue(id, out Shift? shift) => OpenShiftCard(shift, now),
+                ChatMessageKind.SwapRequestCard when linked is Guid id && swaps.TryGetValue(id, out ShiftClaim? swap) => SwapCard(swap, now),
+                _ => null
+            };
+
+            return card is null ? view : view with { Card = card };
+        }).ToList();
+    }
+
+    private static ChatCardView OpenShiftCard(Shift shift, DateTime now)
+    {
+        (string status, bool open) = !shift.IsActive ? ("No longer needed", false)
+            : shift.UserId is not null ? ($"Covered by {shift.User?.FirstName ?? RotaNames.For(shift.User)}", false)
+            : shift.StartUtc <= now ? ("Started", false)
+            : ("Up for grabs", true);
+
+        return new ChatCardView("Open shift", ShiftLine(shift), status, open, "See open shifts", "/rota/open");
+    }
+
+    private static ChatCardView SwapCard(ShiftClaim swap, DateTime now)
+    {
+        (string status, bool open) = swap.Shift is null || swap.Shift.StartUtc <= now ? ("Closed", false)
+            : swap.Status switch
+            {
+                ShiftClaimStatus.Pending => ("Looking for offers", true),
+                ShiftClaimStatus.Accepted => ("Swap agreed", false),
+                ShiftClaimStatus.Approved => ("Swapped", false),
+                _ => ("No longer looking", false)
+            };
+
+        return new ChatCardView($"{RotaNames.For(swap.User)} wants to swap", swap.Shift is null ? "" : ShiftLine(swap.Shift), status, open, "Offer a swap", "/rota/open");
+    }
+
+    private static string ShiftLine(Shift shift)
+    {
+        string text = $"{RotaTime.LocalDate(shift.StartUtc).ToString("ddd d MMM", RotaFormat.Uk)} · {RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc)}";
+
+        return shift.StaffPosition?.Name is { Length: > 0 } position ? $"{text} · {position}" : text;
     }
 
     private static async Task<Dictionary<Guid, int>> UnreadByConversationAsync(ApplicationDbContext ctx, string userId, List<Guid> conversationIds)

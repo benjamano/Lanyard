@@ -2,7 +2,8 @@ using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Infrastructure.Models
 {
-    // A conversation: two people (Direct) or a named group. Everyone in it belongs to one company.
+    // A conversation: two people (Direct), a named group, or a channel everyone at a location
+    // (LocationChannel) or company (CompanyChannel) is in. Everyone in it belongs to one company.
     // Direct conversations are private to their two members by design - no screen or service method
     // shows one to anybody else, Admins included. The only exception is a single message a member
     // chose to report, and then only a snapshot of that message (ChatReport).
@@ -24,6 +25,9 @@ namespace Lanyard.Infrastructure.Models
         // Direct only: the two user ids, sorted and joined, so the same pair can't get two
         // conversations (partial unique index).
         public string? DirectKey { get; set; }
+
+        // Channels: off lets only managers post (for when a channel is being misused).
+        public bool StaffCanPost { get; set; } = true;
 
         public string? CreatedByUserId { get; set; }
         public DateTime CreateDate { get; set; }
@@ -90,6 +94,16 @@ namespace Lanyard.Infrastructure.Models
 
         public Guid? ReplyToMessageId { get; set; }
         public ChatMessage? ReplyTo { get; set; }
+
+        public ChatMessageKind Kind { get; set; } = ChatMessageKind.Text;
+
+        // For cards: the shift or swap request the card shows.
+        public Guid? LinkedEntityId { get; set; }
+
+        // Channels: shown in the pinned strip at the top of the channel and of the chat page.
+        public bool IsPinned { get; set; }
+        public string? PinnedByUserId { get; set; }
+        public DateTime? PinnedUtc { get; set; }
 
         public bool IsDeleted => DeletedUtc is not null;
     }

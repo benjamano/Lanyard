@@ -327,7 +327,7 @@ public class GdprService : IGdprService
             // deleted - Shift.UserId is a Restrict FK precisely so this can't be skipped silently.
             // (The snapshot is discarded - erasure anonymises regardless of whether the account
             // delete that follows succeeds, the same as every other attribution scrubbed here.)
-            _ = await ScheduleRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow, eraseDirectMessages: true);
+            _ = await ScheduleRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow, gdprErasure: true);
 
             await ctx.SaveChangesAsync();
 
