@@ -495,7 +495,8 @@
       "When a shift is opened up for cover or someone asks for a swap, a card appears in that location's channel showing whether it's still up for grabs, with a link to pick it up or offer a swap.",
       "New notification settings for channel messages (off by default) and pinned posts (on by default).",
       "Only the person who started a group, or a manager or admin in it, can now rename the group or add people to it. Everyone else can still post, mute it or leave.",
-      "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with."
+      "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
+      "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
   }
 ]
