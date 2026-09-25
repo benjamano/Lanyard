@@ -102,6 +102,47 @@
     </style>
 
     <style>
+        /* Nothing may make the whole page scroll sideways on a phone. The Content layout item
+        is the scroll box, so any one element wider than it drags every page element along -
+        the header, titles and all - rather than just itself. Global because these are all
+        Fluent-rendered elements that scoped CSS can't reach.
+
+        FluentDataGrid renders as a CSS grid whose fr columns never shrink below their
+        content, so a grid with a few columns is wider than a phone. It scrolls inside its
+        own box instead of moving the page. */
+        table.fluent-data-grid {
+        max-width: 100%;
+        overflow-x: auto;
+        }
+
+        @@media (max-width: 767.98px) {
+        /* FluentTabs' strip neither wraps nor scrolls, so later tabs overflow the edge
+        (My Shifts' four tabs are ~480px). Wrap onto a second row so every tab stays
+        visible without a sideways swipe. */
+        fluent-tablist {
+        flex-wrap: wrap;
+        }
+
+        /* The projection program/template editors are three side-by-side splitter panes;
+        at phone width each pane is a few characters wide. Stack them instead - the drag
+        handles mean nothing in a column, so they go. */
+        .fluent-multi-splitter[orientation] {
+        flex-direction: column;
+        height: auto !important;
+        }
+
+        .fluent-multi-splitter > .fluent-multi-splitter-pane {
+        flex: 0 0 auto !important;
+        width: 100%;
+        }
+
+        .fluent-multi-splitter > .fluent-multi-splitter-bar {
+        display: none;
+        }
+        }
+    </style>
+
+    <style>
         /* Theme-aware colour swatch. The app's light/dark toggle is the data-theme attribute
         on the body element (set by Fluent's IThemeService), which scoped .razor.css can never
         reach - CSS isolation stamps its scope attribute onto every selector in a chain, the
@@ -161,7 +202,8 @@
     <meta name="apple-mobile-web-app-title" content="Lanyard" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#0d6efd" />
+    <meta name="theme-color" content="@BrandConstants.PrimaryColorHex" />
+    <script src="@Assets["js/statusBarColor.js"]"></script>
 </head>
 
 <body>
