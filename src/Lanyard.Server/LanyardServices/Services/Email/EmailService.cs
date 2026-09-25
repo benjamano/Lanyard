@@ -28,7 +28,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, logoUrl, accentColorHex, locationName);
+        string html = BuildSetPasswordHtml(user.UserName ?? user.Email, setPasswordUrl, ResolveLogoUrl(logoUrl, setPasswordUrl), accentColorHex, locationName);
 
         return await SendResendEmailAsync(user.Id, user.Email, "Set your Lanyard password", html);
     }
@@ -40,7 +40,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildRecurrenceReminderHtml(user.GetGreetingName(), courseName, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildRecurrenceReminderHtml(user.GetGreetingName(), courseName, trainingUrl, ResolveLogoUrl(logoUrl), accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Time to retake: {courseName}", html);
     }
@@ -52,7 +52,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a code to.");
         }
 
-        string html = BuildTwoFactorCodeHtml(code);
+        string html = BuildTwoFactorCodeHtml(code, ResolveLogoUrl(null));
 
         return await SendResendEmailAsync(user.Id, user.Email, "Your Lanyard sign-in code", html);
     }
@@ -64,7 +64,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildTrainingAssignedHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildTrainingAssignedHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, ResolveLogoUrl(logoUrl), accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"New training assigned: {courseName}", html);
     }
@@ -76,7 +76,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildTrainingDueSoonHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, logoUrl, accentColorHex);
+        string html = BuildTrainingDueSoonHtml(user.GetGreetingName(), courseName, dueDate, trainingUrl, ResolveLogoUrl(logoUrl), accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Training due soon: {courseName}", html);
     }
@@ -88,7 +88,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a certificate to.");
         }
 
-        string html = BuildCourseCompletionCertificateHtml(user.GetGreetingName(), courseName, logoUrl, accentColorHex);
+        string html = BuildCourseCompletionCertificateHtml(user.GetGreetingName(), courseName, ResolveLogoUrl(logoUrl), accentColorHex);
 
         EmailAttachment attachment = new(BuildCertificateFileName(courseName), certificatePdf);
 
@@ -102,7 +102,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a link to.");
         }
 
-        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, daysBeforeExpiry, logoUrl, accentColorHex);
+        string html = BuildStaffDocumentExpiryReminderHtml(user.GetGreetingName(), documentTypeName, expiryDate, daysBeforeExpiry, ResolveLogoUrl(logoUrl), accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, $"Expiring soon: {documentTypeName}", html);
     }
@@ -114,7 +114,7 @@ public class EmailService : IEmailService
             return Result<bool>.Fail("User has no email address to send a welcome email to.");
         }
 
-        string html = BuildOnboardingWelcomeHtml(user.GetGreetingName(), bodyHtml, logoUrl, accentColorHex);
+        string html = BuildOnboardingWelcomeHtml(user.GetGreetingName(), bodyHtml, ResolveLogoUrl(logoUrl), accentColorHex);
 
         return await SendResendEmailAsync(user.Id, user.Email, subject, html, attachments);
     }
@@ -192,11 +192,42 @@ public class EmailService : IEmailService
         }
     }
 
-    private static string BuildTwoFactorCodeHtml(string code)
+    // Emails carry no "Lanyard" heading - the company's own logo is the header when it has one,
+    // and the Lanyard logo (wwwroot/logo.png) stands in only when it doesn't. The fallback needs an
+    // absolute, externally reachable URL, so it comes from PublicBaseUrl, or failing that the origin
+    // of a link the caller already built (the invite email builds its link off the live request
+    // when PublicBaseUrl is unset). With neither, the email simply has no header image.
+    private string? ResolveLogoUrl(string? companyLogoUrl, string? linkUrl = null)
     {
+        if (companyLogoUrl is not null)
+        {
+            return companyLogoUrl;
+        }
+
+        string? baseUrl = _options.Value.PublicBaseUrl;
+
+        if (string.IsNullOrWhiteSpace(baseUrl) && Uri.TryCreate(linkUrl, UriKind.Absolute, out Uri? linkUri))
+        {
+            baseUrl = linkUri.GetLeftPart(UriPartial.Authority);
+        }
+
+        return string.IsNullOrWhiteSpace(baseUrl) ? null : $"{baseUrl.TrimEnd('/')}/logo.png";
+    }
+
+    private static string BuildLogoHtml(string? logoUrl)
+    {
+        return logoUrl is not null
+            ? $"""<img src="{logoUrl}" alt="Logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+            : string.Empty;
+    }
+
+    private static string BuildTwoFactorCodeHtml(string code, string? logoUrl)
+    {
+        string logoHtml = BuildLogoHtml(logoUrl);
+
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2>Lanyard</h2>
+          {logoHtml}
           <p>Your sign-in code is:</p>
           <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">{WebUtility.HtmlEncode(code)}</p>
           <p style="color: #666; font-size: 13px;">This code expires shortly. If you didn't try to sign in, you can ignore this email.</p>
@@ -206,14 +237,11 @@ public class EmailService : IEmailService
 
     private static string BuildRecurrenceReminderHtml(string greetingName, string courseName, string trainingUrl, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>It's time to retake the training course <strong>{WebUtility.HtmlEncode(courseName)}</strong>. Your previous
              completion has expired and needs to be renewed.</p>
@@ -228,9 +256,7 @@ public class EmailService : IEmailService
 
     private static string BuildTrainingAssignedHtml(string greetingName, string courseName, DateTime? dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         string dueDateHtml = dueDate is not null
             ? $"""<p>It is due by <strong>{dueDate.Value.Date:d MMMM yyyy}</strong>.</p>"""
@@ -239,7 +265,6 @@ public class EmailService : IEmailService
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>You've been assigned a new training course: <strong>{WebUtility.HtmlEncode(courseName)}</strong>.</p>
           {dueDateHtml}
@@ -254,14 +279,11 @@ public class EmailService : IEmailService
 
     private static string BuildTrainingDueSoonHtml(string greetingName, string courseName, DateTime dueDate, string trainingUrl, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>Your training course <strong>{WebUtility.HtmlEncode(courseName)}</strong> is due soon, by
              <strong>{dueDate.Date:d MMMM yyyy}</strong>.</p>
@@ -276,14 +298,11 @@ public class EmailService : IEmailService
 
     private static string BuildCourseCompletionCertificateHtml(string greetingName, string courseName, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>Congratulations - you've passed <strong>{WebUtility.HtmlEncode(courseName)}</strong>.</p>
           <p>Your certificate of completion is attached to this email as a PDF. You can also
@@ -297,14 +316,11 @@ public class EmailService : IEmailService
 
     private static string BuildStaffDocumentExpiryReminderHtml(string greetingName, string documentTypeName, DateTime expiryDate, int daysBeforeExpiry, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <p>Your <strong>{WebUtility.HtmlEncode(documentTypeName)}</strong> is expiring in
              <strong>{daysBeforeExpiry} day{(daysBeforeExpiry == 1 ? "" : "s")}</strong>, on
@@ -326,16 +342,13 @@ public class EmailService : IEmailService
 
     private static string BuildOnboardingWelcomeHtml(string greetingName, string bodyHtml, string? logoUrl, string accentColorHex)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         string safeBodyHtml = _welcomeEmailSanitizer.Sanitize(bodyHtml);
 
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
           <div style="border-left: 4px solid {accentColorHex}; padding-left: 12px;">
             {safeBodyHtml}
@@ -346,9 +359,7 @@ public class EmailService : IEmailService
 
     private static string BuildSetPasswordHtml(string username, string setPasswordUrl, string? logoUrl, string accentColorHex, string? locationName)
     {
-        string logoHtml = logoUrl is not null
-            ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
-            : string.Empty;
+        string logoHtml = BuildLogoHtml(logoUrl);
 
         string locationHtml = locationName is not null
             ? $"""<p>Log in at: <strong>{WebUtility.HtmlEncode(locationName)}</strong></p>"""
@@ -357,7 +368,6 @@ public class EmailService : IEmailService
         return $"""
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
           {logoHtml}
-          <h2>Lanyard</h2>
           <p>Use the button below to set your password. Your username is:</p>
           <p style="font-size: 18px; font-weight: bold;">{WebUtility.HtmlEncode(username)}</p>
           {locationHtml}

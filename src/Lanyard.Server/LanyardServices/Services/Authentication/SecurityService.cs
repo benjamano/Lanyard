@@ -86,6 +86,15 @@ public class SecurityService : ISecurityService
     private async Task<bool> IsCurrentUserAdminOrManagerAsync() =>
         await IsCurrentUserInRoleAsync("Admin") || await IsCurrentUserInRoleAsync("Manager");
 
+    // This service is scoped (one per circuit / request). The layout, nav menu, greeting card
+    // and several pages each ask for the current user's profile during one page load, so the
+    // row is remembered briefly per instance instead of being fetched again for each of them.
+    // UpdateUserProfileAsync clears it; the TTL covers changes made from another session.
+    private static readonly TimeSpan CurrentProfileCacheTtl = TimeSpan.FromMinutes(1);
+    private UserProfile? _cachedCurrentProfile;
+    private string? _cachedCurrentProfileUserId;
+    private DateTime _cachedCurrentProfileAtUtc;
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
         try
@@ -97,13 +106,28 @@ public class SecurityService : ISecurityService
                 return Result<UserProfile>.Fail("User ID is not available");
             }
 
-            using ApplicationDbContext ctx = _factory.CreateDbContext();
-            UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
+            if (_cachedCurrentProfile is not null
+                && _cachedCurrentProfileUserId == getResult.Data
+                && DateTime.UtcNow - _cachedCurrentProfileAtUtc < CurrentProfileCacheTtl)
+            {
+                return Result<UserProfile>.Ok(_cachedCurrentProfile);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == getResult.Data);
 
             if (user is null)
             {
                 return Result<UserProfile>.Fail("User not found");
             }
+
+            _cachedCurrentProfile = user;
+            _cachedCurrentProfileUserId = user.Id;
+            _cachedCurrentProfileAtUtc = DateTime.UtcNow;
 
             return Result<UserProfile>.Ok(user);
         }
@@ -156,8 +180,8 @@ public class SecurityService : ISecurityService
 
     public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
-        return await ctx.Users.ToListAsync();
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await ctx.Users.AsNoTracking().TagWithCallSite().ToListAsync();
     }
 
     public async Task UpdateUserProfileAsync(UserProfile updatedUserProfile)
@@ -169,14 +193,26 @@ public class SecurityService : ISecurityService
 
         ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
         await ctx.SaveChangesAsync();
+
+        _cachedCurrentProfile = null;
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
         return await ctx.Users
+            .AsNoTracking()
+            .TagWithCallSite()
             .Where(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
             .ToListAsync();
+    }
+
+    private async Task<bool> AnyActiveUsersAsync()
+    {
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await ctx.Users
+            .TagWithCallSite()
+            .AnyAsync(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId);
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersInLocationAsync(int locationId)
@@ -195,7 +231,8 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if ((await GetActiveUsersAsync()).Any())
+            // An existence check, not a load of every user row (password hashes included).
+            if (await AnyActiveUsersAsync())
             {
                 // Once at least one account exists, only an Admin or Manager may create further
                 // accounts - being merely logged in is not enough (any Staff-level account could
