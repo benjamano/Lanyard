@@ -503,7 +503,7 @@
   {
     "version": "1.4.9",
     "releaseDate": "2026-09-25",
-    "summary": "ew Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
+    "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
     "details": [
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
       "If the connection dropped while the app was in the background, Lanyard now notices within about 15 seconds instead of 30, rather than looking connected but ignoring taps.",
