@@ -503,13 +503,14 @@
   {
     "version": "1.4.11",
     "releaseDate": "2026-09-25",
-    "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
+    "summary": "The installed app now uses your company's logo as its icon, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
     "details": [
       "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
       "If the connection dropped while the app was in the background, Lanyard now notices within about 15 seconds instead of 30, rather than looking connected but ignoring taps.",
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
       "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge.",
+      "When you install Lanyard on your phone, the app icon is now your company's logo, if your company has uploaded one. Otherwise it's still the λ. If you've already installed Lanyard, Android switches the icon over by itself within a day or so. On an iPhone, remove Lanyard from your home screen and add it again.",
       "On Android phones with themed icons switched on, the Lanyard app icon now changes colour to match your other apps. Remove Lanyard from your home screen and add it again to get the new icon.",
       "The loading spinner shown while Lanyard starts up is now Lanyard green instead of blue.",
       "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",

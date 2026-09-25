@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Branding;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -13,11 +14,16 @@ namespace Lanyard.API.Controllers
     {
         private readonly ICompanyLocationService _companyLocationService;
         private readonly IFileService _fileService;
+        private readonly IAppIconService _appIconService;
+        private readonly ILogger<CompanyBrandingController> _logger;
 
-        public CompanyBrandingController(ICompanyLocationService companyLocationService, IFileService fileService)
+        public CompanyBrandingController(ICompanyLocationService companyLocationService, IFileService fileService,
+            IAppIconService appIconService, ILogger<CompanyBrandingController> logger)
         {
             _companyLocationService = companyLocationService;
             _fileService = fileService;
+            _appIconService = appIconService;
+            _logger = logger;
         }
 
         // Raster image types only. An SVG served same-origin from this anonymous URL would
@@ -98,6 +104,65 @@ namespace Lanyard.API.Controllers
             }
 
             return File(fileResult.Data, contentType);
+        }
+    
+
+        // The installed app's manifest for one company (linked from App.razor's <head>). A company
+        // with no logo - or one that can't be found - gets the default λ manifest, so installing
+        // Lanyard never fails just because branding isn't set up.
+        [HttpGet("{companyId:int}/manifest.webmanifest")]
+        [AllowAnonymous]
+        [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
+        public async Task<IActionResult> GetManifest(int companyId)
+        {
+            Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+            if (!branding.Success || branding.Data?.LogoFileId is not Guid logoFileId)
+            {
+                return Redirect("/manifest.webmanifest");
+            }
+
+            return Content(_appIconService.BuildCompanyManifestJson(branding.Data, logoFileId), "application/manifest+json");
+        }
+
+        // The company's logo as a square app icon. Like GetLogo it takes only a companyId and
+        // resolves the logo server-side. Anything that stops the logo being usable falls back to the
+        // matching static λ icon rather than a broken image on someone's home screen. The ?v= the
+        // manifest adds changes with the logo, which is what lets this be cached for a day.
+        [HttpGet("{companyId:int}/app-icon/{size:int}")]
+        [AllowAnonymous]
+        [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+        public async Task<IActionResult> GetAppIcon(int companyId, int size, [FromQuery] bool maskable, CancellationToken cancellationToken)
+        {
+            if (!_appIconService.SupportedSizes.Contains(size))
+            {
+                return NotFound();
+            }
+
+            string fallback = size switch
+            {
+                180 => "/apple-touch-icon.png",
+                192 => "/icon-192.png",
+                _ => maskable ? "/icon-maskable-512.png" : "/icon-512.png"
+            };
+
+            Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+
+            if (!branding.Success || branding.Data?.LogoFileId is not Guid logoFileId)
+            {
+                return Redirect(fallback);
+            }
+
+            Result<byte[]> icon = await _appIconService.RenderLogoIconAsync(logoFileId, size,
+                maskable ? AppIconPurpose.Maskable : AppIconPurpose.Any, cancellationToken);
+
+            if (!icon.Success || icon.Data is null)
+            {
+                _logger.LogWarning("Falling back to the default app icon for {CompanyId}: {Error}", companyId, icon.Error);
+                return Redirect(fallback);
+            }
+
+            return File(icon.Data, "image/png");
         }
     }
 }

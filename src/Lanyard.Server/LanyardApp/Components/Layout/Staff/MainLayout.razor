@@ -162,6 +162,8 @@
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
         _locationDisplayName = null;
+        int? brandedCompanyId = null;
+        AppInstallLinks installLinks = AppInstallLinks.Default;
 
         try
         {
@@ -180,6 +182,9 @@
                     _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
                         ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
                         : null;
+
+                    brandedCompanyId = companyId;
+                    installLinks = AppInstallLinks.For(companyId, branding.Data.LogoFileId);
                 }
             }
         }
@@ -198,6 +203,11 @@
 
             await ThemeService.SetThemeAsync(new ThemeSettings(accentColor, 0, 0, mode, true));
             await JSRuntime.InvokeVoidAsync("lanyardSetStatusBarColor", accentColor);
+
+            if (brandedCompanyId is int appCompanyId)
+            {
+                await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, installLinks.ManifestHref, installLinks.AppleTouchIconHref);
+            }
         }
         catch { }
 
