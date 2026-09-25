@@ -110,6 +110,8 @@ public class NotificationDeliverer(
                     user, decided.TypeName, decided.Start, decided.End, decided.Outcome, decided.Reason, decided.DecidedByName,
                     EmailBranding.Link(_emailOptions, "/rota/time-off"), logoUrl, accent),
 
+                _ when ShiftClaimNotices.Handles(job.Payload) => await SendNoticeAsync(user, ShiftClaimNotices.For(job.Payload), logoUrl, accent),
+
                 _ => Result<bool>.Fail($"No delivery for {job.Payload.GetType().Name}.")
             };
 
@@ -126,6 +128,9 @@ public class NotificationDeliverer(
             _logger.LogError(ex, "Error emailing {Topic} notification to {UserId}", job.Topic, job.UserId);
         }
     }
+
+    private Task<Result<bool>> SendNoticeAsync(UserProfile user, Notice notice, string? logoUrl, string accent) =>
+        _emailService.SendNoticeEmailAsync(user, notice.Title, notice.Lines, notice.ButtonLabel, EmailBranding.Link(_emailOptions, notice.Url), logoUrl, accent);
 
     // "today", "tomorrow" or "on Mon 5 Oct", in venue time.
     private string DayLabel(DateOnly date)

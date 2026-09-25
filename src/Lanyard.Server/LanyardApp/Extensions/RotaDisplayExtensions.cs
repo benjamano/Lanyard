@@ -18,6 +18,14 @@ public static class RotaDisplayExtensions
 
     public static string TimeRange(this Shift shift) => RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc);
 
+    // "Sat 3 Oct · 09:00–17:00 · Supervisor": one shift in a sentence, for requests and swaps.
+    public static string Describe(this Shift shift)
+    {
+        string text = $"{shift.LocalDate().DayLabel()} · {shift.TimeRange()}";
+
+        return shift.StaffPosition?.Name is { Length: > 0 } position ? $"{text} · {position}" : text;
+    }
+
     // "09–17", "09:30–17" - for the month grid's narrow cells.
     public static string CompactTimeRange(this Shift shift) =>
         $"{Compact(RotaTime.LocalTime(shift.StartUtc))}–{Compact(RotaTime.LocalTime(shift.EndUtc))}";

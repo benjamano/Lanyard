@@ -142,3 +142,12 @@
     opacity: 1;
     border-color: var(--colorNeutralStroke1);
 }
+
+.month-open-name,
+.month-open-cell {
+    background: var(--colorNeutralBackground2);
+}
+
+.month-open-name {
+    box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
+}

@@ -9,6 +9,7 @@
 @using Lanyard.Infrastructure.Enum
 
 @inject IRotaService _rotaService
+@inject IShiftClaimService _shiftClaimService
 @inject IJSRuntime JS
 
 <PageTitle>Rota</PageTitle>
@@ -63,9 +64,17 @@
                 }
                 else
                 {
-                    <span>@view.UnpublishedChangeCount unpublished @(view.UnpublishedChangeCount == 1 ? "change" : "changes") affecting @view.PeopleWithUnpublishedChanges @(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people").</span>
+                    <span>@view.UnpublishedChangeCount unpublished @(view.UnpublishedChangeCount == 1 ? "change" : "changes") @WhoIsAffected(view.PeopleWithUnpublishedChanges, view.UnpublishedOpenShiftCount).</span>
                 }
             </FluentText>
+
+            @if (pendingRequests > 0 && scope?.LocationId == locationId)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @pendingRequests shift @(pendingRequests == 1 ? "request is" : "requests are") waiting for you (pick-ups, call-offs or swaps).
+                    <a href="/manage/rota/requests">Review @(pendingRequests == 1 ? "it" : "them")</a>
+                </FluentMessageBar>
+            }
         }
     </div>
 
@@ -138,6 +147,7 @@
 
     private RotaRangeView? view;
     private string? loadError;
+    private int pendingRequests;
     private bool isBusy;
     private string? loadedKey;
 
@@ -247,6 +257,10 @@
 
         loadError = null;
         view = result.Data;
+
+        Result<string> viewer = await _securityService.GetCurrentUserIdAsync();
+        Result<int> requests = await _shiftClaimService.CountPendingForNavAsync(scope, viewer.Data);
+        pendingRequests = requests.Data;
     }
 
     // All navigation goes through the URL so the page is linkable and back/forward work;
@@ -399,6 +413,20 @@
         await LoadAsync();
     }
 
+    // "affecting 3 people", "affecting 1 person and 2 open shifts", "to 2 open shifts".
+    private static string WhoIsAffected(int people, int openShifts)
+    {
+        string peopleText = $"{people} {(people == 1 ? "person" : "people")}";
+        string openText = $"{openShifts} open {(openShifts == 1 ? "shift" : "shifts")}";
+
+        return (people, openShifts) switch
+        {
+            (_, 0) => $"affecting {peopleText}",
+            (0, _) => $"to {openText}",
+            _ => $"affecting {peopleText} and {openText}"
+        };
+    }
+
     private async Task PublishAsync()
     {
         if (view is null || scope is null || locationId is not int location)
@@ -407,8 +435,9 @@
         }
 
         bool confirmed = await ConfirmAsync("Publish rota",
-            $"Publish {view.UnpublishedChangeCount} {(view.UnpublishedChangeCount == 1 ? "change" : "changes")} for {view.PeopleWithUnpublishedChanges} " +
-            $"{(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people")} in {RangeLabel}? Their shifts appear on My Shifts straight away, and each person gets an email listing just their own changes.",
+            $"Publish {view.UnpublishedChangeCount} {(view.UnpublishedChangeCount == 1 ? "change" : "changes")} {WhoIsAffected(view.PeopleWithUnpublishedChanges, view.UnpublishedOpenShiftCount)} in {RangeLabel}? " +
+            (view.PeopleWithUnpublishedChanges > 0 ? "Their shifts appear on My Shifts straight away, and each person gets an email listing just their own changes. " : string.Empty) +
+            (view.UnpublishedOpenShiftCount > 0 ? "Open shifts are offered to everyone who could work them." : string.Empty),
             "Publish");
 
         if (!confirmed)
@@ -435,7 +464,7 @@
             return;
         }
 
-        _toastService.ShowSuccess($"Published {result.Data.ShiftCount} {(result.Data.ShiftCount == 1 ? "change" : "changes")} for {result.Data.PeopleAffected} {(result.Data.PeopleAffected == 1 ? "person" : "people")}.");
+        _toastService.ShowSuccess($"Published {result.Data.ShiftCount} {(result.Data.ShiftCount == 1 ? "change" : "changes")} {WhoIsAffected(result.Data.PeopleAffected, result.Data.OpenedShifts.Count)}.");
 
         await LoadAsync();
     }

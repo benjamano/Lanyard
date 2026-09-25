@@ -1,7 +1,9 @@
+@using Lanyard.App.Components.Rota.Claims
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.Infrastructure.Enum
 
 @inject IRotaService _rotaService
+@inject IShiftClaimService _shiftClaimService
 
 @if (shifts is null)
 {
@@ -60,6 +62,28 @@ else
                             {
                                 <div class="my-shift-notes">@shift.Notes</div>
                             }
+                            @if (OpenRequestOn(shift) is ShiftClaim request)
+                            {
+                                <div class="my-shift-request">
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">
+                                        @(request.Kind == ShiftClaimKind.Drop ? "You've said you can't make it" : "You're looking for a swap")
+                                    </FluentBadge>
+                                    <a href="/rota/open">See progress</a>
+                                </div>
+                            }
+                            else if (CanChange(shift))
+                            {
+                                <div class="my-shift-actions">
+                                    <button type="button" class="my-shift-action" @onclick="@(() => AskAsync(shift, ShiftClaimKind.Swap))">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSwap())" Color="Color.Custom" CustomColor="currentColor" />
+                                        Ask to swap
+                                    </button>
+                                    <button type="button" class="my-shift-action" @onclick="@(() => AskAsync(shift, ShiftClaimKind.Drop))">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarCancel())" Color="Color.Custom" CustomColor="currentColor" />
+                                        Can't make it
+                                    </button>
+                                </div>
+                            }
                         </div>
                     </div>
                 }
@@ -72,8 +96,25 @@ else
     [Parameter]
     public int WeeksAhead { get; set; } = 6;
 
+    // Swap and call-off buttons; off where there's no room for them (the dashboard widget).
+    [Parameter]
+    public bool ShowRequestActions { get; set; } = true;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
     private List<Shift>? shifts;
+    private List<ShiftClaim> openClaims = [];
+    private string? userId;
     private DateOnly today;
+
+    private ShiftClaim? OpenRequestOn(Shift shift) =>
+        openClaims.FirstOrDefault(c => c.ShiftId == shift.Id && c.Kind is ShiftClaimKind.Drop or ShiftClaimKind.Swap);
+
+    // A shift that hasn't started, exactly as published: what the person was told is what they're
+    // asking to change.
+    private bool CanChange(Shift shift) =>
+        ShowRequestActions && shift.StartUtc > DateTime.UtcNow && shift.GetState() == ShiftState.Published;
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,6 +129,8 @@ else
             return;
         }
 
+        userId = userResult.Data;
+
         // From the start of today, so a shift that's already under way still shows.
         DateTime fromUtc = RotaTime.StartOfDayUtc(today);
         DateTime toUtc = RotaTime.StartOfDayUtc(today.AddDays(WeeksAhead * 7));
@@ -100,6 +143,52 @@ else
         }
 
         shifts = result.IsSuccess ? result.Data ?? [] : [];
+
+        await LoadClaimsAsync();
+    }
+
+    private async Task LoadClaimsAsync()
+    {
+        if (!ShowRequestActions || userId is null)
+        {
+            return;
+        }
+
+        Result<List<ShiftClaim>> claims = await _shiftClaimService.GetOpenClaimsForUserAsync(userId);
+        openClaims = claims.Data ?? [];
+    }
+
+    private async Task AskAsync(Shift shift, ShiftClaimKind kind)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        Result<LocationSchedulingSettings> settings = await _shiftClaimService.GetLocationSettingsAsync(shift.LocationId);
+
+        DialogResult result = await _dialogService.ShowDialogAsync<RequestShiftChangeDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.Shift), shift);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.UserId), userId);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.Kind), kind);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.NeedsApproval), settings.Data?.ClaimsNeedApproval ?? true);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadClaimsAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    // Called by the page when something changed on the Up for grabs tab (a swap went through).
+    public async Task ReloadAsync()
+    {
+        await OnInitializedAsync();
+        StateHasChanged();
     }
 
     private string WeekLabel(DateOnly weekStart)

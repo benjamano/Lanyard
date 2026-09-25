@@ -21,7 +21,7 @@ namespace Lanyard.Application.Services.Scheduling;
 public static class ScheduleRetention
 {
     public record ShiftFields(
-        Guid Id, string UserId, bool IsActive, bool RemovalPending,
+        Guid Id, string? UserId, bool IsActive, bool RemovalPending,
         string CreateByUserId, string? UpdateByUserId, string? PublishedByUserId);
 
     public record TimeEntryFields(
@@ -30,9 +30,11 @@ public static class ScheduleRetention
 
     public record TerminalFields(Guid Id, string CreatedByUserId, string? RevokedByUserId);
 
-    public record Snapshot(List<ShiftFields> Shifts, List<TimeEntryFields> TimeEntries, List<TerminalFields> Terminals)
+    public record ClaimFields(Guid Id, string UserId, ShiftClaimStatus Status, string? DecidedByUserId, DateTime? DecidedUtc, string? DecisionReason);
+
+    public record Snapshot(List<ShiftFields> Shifts, List<TimeEntryFields> TimeEntries, List<TerminalFields> Terminals, List<ClaimFields> Claims)
     {
-        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count;
+        public int Count => Shifts.Count + TimeEntries.Count + Terminals.Count + Claims.Count;
     }
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
@@ -51,10 +53,73 @@ public static class ScheduleRetention
             .Where(x => x.CreatedByUserId == userId || x.RevokedByUserId == userId)
             .ToListAsync();
 
+        List<ShiftClaim> claims = await ctx.ShiftClaims
+            .Where(x => x.UserId == userId || x.DecidedByUserId == userId)
+            .ToListAsync();
+
+        // Other people's requests tied to this person's: offers on their swaps, the swap they'd
+        // agreed to with their offer, and anything involving their future shifts (cancelled below). Loaded
+        // up front so the snapshot can put them back if the delete fails.
+        List<Guid> ownOpenIds = claims.Where(x => x.UserId == userId && x.IsOpen).Select(x => x.Id).ToList();
+        List<Guid> parentIds = claims
+            .Where(x => x.UserId == userId && x.Kind == ShiftClaimKind.SwapOffer && x.Status == ShiftClaimStatus.Accepted && x.ParentClaimId != null)
+            .Select(x => x.ParentClaimId!.Value)
+            .ToList();
+        List<Guid> cancelledShiftIds = shifts.Where(x => x.UserId == userId && x.StartUtc > nowUtc).Select(x => x.Id).ToList();
+
+        List<ShiftClaim> linked = await ctx.ShiftClaims
+            .Open()
+            .Where(x => x.UserId != userId
+                && ((x.ParentClaimId != null && ownOpenIds.Contains(x.ParentClaimId.Value))
+                    || parentIds.Contains(x.Id)
+                    || cancelledShiftIds.Contains(x.ShiftId)
+                    || (x.OfferedShiftId != null && cancelledShiftIds.Contains(x.OfferedShiftId.Value))))
+            .ToListAsync();
+
+        claims.AddRange(linked.Where(x => claims.All(c => c.Id != x.Id)));
+
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
             entries.Select(x => new TimeEntryFields(x.Id, x.UserId, x.ClockOutUtc, x.ClockOutMethod, x.NeedsReview, x.ReviewReason, x.CreateByUserId, x.UpdateByUserId, x.ApprovedByUserId)).ToList(),
-            terminals.Select(x => new TerminalFields(x.Id, x.CreatedByUserId, x.RevokedByUserId)).ToList());
+            terminals.Select(x => new TerminalFields(x.Id, x.CreatedByUserId, x.RevokedByUserId)).ToList(),
+            claims.Select(x => new ClaimFields(x.Id, x.UserId, x.Status, x.DecidedByUserId, x.DecidedUtc, x.DecisionReason)).ToList());
+
+        // Pick-ups, call-offs and swaps are kept as rota history like the shifts, anonymised. Any
+        // still waiting are withdrawn: the person can no longer work or give up a shift.
+        foreach (ShiftClaim claim in claims)
+        {
+            if (claim.UserId == userId)
+            {
+                if (claim.IsOpen)
+                {
+                    claim.Status = ShiftClaimStatus.Withdrawn;
+                    claim.DecidedUtc = nowUtc;
+                    claim.DecisionReason = "The account was deleted.";
+                }
+
+                claim.UserId = Placeholder;
+            }
+
+            if (claim.DecidedByUserId == userId)
+            {
+                claim.DecidedByUserId = null;
+            }
+        }
+
+        // A swap whose chosen offer came from this person goes back to collecting offers; anything
+        // else tied to them can't happen any more.
+        foreach (ShiftClaim claim in linked.Where(x => x.IsOpen))
+        {
+            if (parentIds.Contains(claim.Id) && !cancelledShiftIds.Contains(claim.ShiftId))
+            {
+                claim.Status = ShiftClaimStatus.Pending;
+                continue;
+            }
+
+            claim.Status = ShiftClaimStatus.Withdrawn;
+            claim.DecidedUtc = nowUtc;
+            claim.DecisionReason = "Someone involved has left.";
+        }
 
         foreach (Shift shift in shifts)
         {
@@ -152,6 +217,21 @@ public static class ScheduleRetention
                 shift.CreateByUserId = original.CreateByUserId;
                 shift.UpdateByUserId = original.UpdateByUserId;
                 shift.PublishedByUserId = original.PublishedByUserId;
+            }
+        }
+
+        List<Guid> claimIds = snapshot.Claims.Select(x => x.Id).ToList();
+        Dictionary<Guid, ShiftClaim> claims = await ctx.ShiftClaims.Where(x => claimIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id);
+
+        foreach (ClaimFields original in snapshot.Claims)
+        {
+            if (claims.TryGetValue(original.Id, out ShiftClaim? claim))
+            {
+                claim.UserId = original.UserId;
+                claim.Status = original.Status;
+                claim.DecidedByUserId = original.DecidedByUserId;
+                claim.DecidedUtc = original.DecidedUtc;
+                claim.DecisionReason = original.DecisionReason;
             }
         }
 

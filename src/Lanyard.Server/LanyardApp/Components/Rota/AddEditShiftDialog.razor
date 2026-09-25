@@ -4,6 +4,7 @@
 @using Lanyard.Infrastructure.Enum
 
 @inject IRotaService _rotaService
+@inject IShiftClaimService _shiftClaimService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -17,7 +18,14 @@
             @if (Existing is not null && Existing.GetState() is ShiftState.Published or ShiftState.Changed)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
-                    This shift is published, so @SelectedName sees any change straight away. They'll be told about it when you next publish.
+                    @if (Existing.UserId is null)
+                    {
+                        <text>This open shift is published, so staff can already see it and ask for it. Changing it withdraws their requests.</text>
+                    }
+                    else
+                    {
+                        <text>This shift is published, so @SelectedName sees any change straight away. They'll be told about it when you next publish.</text>
+                    }
                 </FluentMessageBar>
             }
 
@@ -56,7 +64,13 @@
     </ChildContent>
     <ActionTemplate>
         <div class="shift-dialog-actions">
-            @if (confirmingDelete)
+            @if (confirmingRelease)
+            {
+                <FluentText>Take @SelectedName off this shift and ask for cover?</FluentText>
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@ReleaseAsync">Open it up</FluentButton>
+                <FluentButton Disabled="@isBusy" OnClick="@(() => confirmingRelease = false)">Keep</FluentButton>
+            }
+            else if (confirmingDelete)
             {
                 <FluentText>Remove this shift?</FluentText>
                 <FluentButton Appearance="ButtonAppearance.Primary" Color="Color.Error" Disabled="@isBusy" OnClick="@DeleteAsync">
@@ -71,6 +85,14 @@
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())"
                                   Disabled="@isBusy" OnClick="@(() => confirmingDelete = true)" Class="shift-dialog-delete">
                         Remove
+                    </FluentButton>
+                }
+                @if (CanRelease)
+                {
+                    @* Someone has called in sick: the shift stays on the rota, open for anyone to pick up. *@
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.PersonSwap())"
+                                  Disabled="@isBusy" OnClick="@(() => confirmingRelease = true)">
+                        Open up for cover
                     </FluentButton>
                 }
                 <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => SaveAsync(false))">
@@ -125,9 +147,16 @@
     private string? errorMessage;
     private bool isBusy;
     private bool confirmingDelete;
+    private bool confirmingRelease;
     private bool savedSomething;
 
-    private string SelectedName => staffOptions.FirstOrDefault(x => x.UserId == userId)?.Name ?? "this person";
+    private string SelectedName => userId == RotaCellRef.OpenShift
+        ? "nobody yet"
+        : staffOptions.FirstOrDefault(x => x.UserId == userId)?.Name ?? "this person";
+
+    // Only a published shift that's someone's, not yet started, and without unpublished edits -
+    // what the person was told is what gets opened up.
+    private bool CanRelease => Existing is { UserId: not null } && Existing.GetState() == ShiftState.Published && Existing.StartUtc > DateTime.UtcNow;
 
     private bool EndsNextDay => endTime <= startTime;
 
@@ -145,10 +174,13 @@
 
     protected override void OnInitialized()
     {
-        staffOptions = View.Rows
-            .Where(r => r.IsLocationMember || r.User.Id == Existing?.UserId)
-            .Select(r => new StaffOption(r.User.Id, r.DisplayName))
-            .ToList();
+        staffOptions =
+        [
+            new StaffOption(RotaCellRef.OpenShift, "Open shift (anyone can pick it up)"),
+            .. View.Rows
+                .Where(r => r.IsLocationMember || r.User.Id == Existing?.UserId)
+                .Select(r => new StaffOption(r.User.Id, r.DisplayName))
+        ];
 
         positionOptions = [new PositionOption(string.Empty, "No position"), .. View.Positions.Select(p => new PositionOption(p.Id.ToString(), p.Name))];
 
@@ -161,7 +193,7 @@
 
         if (Existing is not null)
         {
-            userId = Existing.UserId;
+            userId = Existing.UserId ?? RotaCellRef.OpenShift;
             date = RotaTime.LocalDate(Existing.StartUtc).ToDateTime(TimeOnly.MinValue);
             startTime = RotaTime.LocalTime(Existing.StartUtc);
             endTime = RotaTime.LocalTime(Existing.EndUtc);
@@ -172,7 +204,7 @@
         else
         {
             date = DefaultDate.ToDateTime(TimeOnly.MinValue);
-            OnStaffChanged(DefaultUserId ?? staffOptions.FirstOrDefault()?.UserId);
+            OnStaffChanged(DefaultUserId ?? staffOptions.Skip(1).FirstOrDefault()?.UserId ?? RotaCellRef.OpenShift);
         }
     }
 
@@ -224,7 +256,7 @@
         {
             Id = Existing?.Id ?? Guid.Empty,
             LocationId = View.LocationId,
-            UserId = userId,
+            UserId = userId == RotaCellRef.OpenShift ? null : userId,
             StaffPositionId = Guid.TryParse(positionId, out Guid parsed) ? parsed : null,
             StartUtc = RotaTime.ToUtc(day, startTime),
             EndUtc = RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime),
@@ -252,7 +284,9 @@
 
         if (addAnother)
         {
-            _toastService.ShowSuccess($"Shift added for {SelectedName} on {day.DayLabel()}.");
+            _toastService.ShowSuccess(userId == RotaCellRef.OpenShift
+                ? $"Open shift added on {day.DayLabel()}."
+                : $"Shift added for {SelectedName} on {day.DayLabel()}.");
             notes = null;
             return;
         }
@@ -290,6 +324,41 @@
             return;
         }
 
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task ReleaseAsync()
+    {
+        if (Existing is null)
+        {
+            return;
+        }
+
+        isBusy = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isBusy = false;
+            errorMessage = scopeResult.Error ?? actingUser.Error ?? "Couldn't confirm who you are - try reloading the page.";
+            return;
+        }
+
+        string name = SelectedName;
+        Result<bool> result = await _shiftClaimService.ReleaseShiftAsync(scopeResult.Data, Existing.Id, actingUser.Data);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            confirmingRelease = false;
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess($"{name} is off the shift. Everyone who could cover it has been told.");
         await Dialog.CloseAsync(true);
     }
 

@@ -26,4 +26,8 @@ public interface IEmailService
     Task<Result<bool>> SendTimeOffRequestedEmailAsync(UserProfile manager, string requesterName, string typeName, DateOnly start, DateOnly end, string amount, string? notes, string approvalsUrl, string? logoUrl, string accentColorHex);
 
     Task<Result<bool>> SendTimeOffDecisionEmailAsync(UserProfile user, string typeName, DateOnly start, DateOnly end, TimeOffEmailOutcome outcome, string? reason, string? decidedByName, string myTimeOffUrl, string? logoUrl, string accentColorHex);
+
+    // A short notification: a heading line, a few lines of detail and one button. Used for open
+    // shifts, swaps and call-offs, whose wording comes from ShiftClaimNotices.
+    Task<Result<bool>> SendNoticeEmailAsync(UserProfile user, string subject, IReadOnlyList<string> lines, string buttonLabel, string url, string? logoUrl, string accentColorHex);
 }

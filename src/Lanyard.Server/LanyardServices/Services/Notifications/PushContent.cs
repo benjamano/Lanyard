@@ -26,6 +26,7 @@ public static class PushContentBuilder
             PushMessageUrgency.Normal,
             TimeSpan.FromDays(3)),
         TimeOffDecidedPayload decided => Decided(decided),
+        _ when ShiftClaimNotices.Handles(payload) => FromNotice(payload),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -54,7 +55,7 @@ public static class PushContentBuilder
         // With one shift involved, name it; otherwise the counts say more than a list would.
         List<ShiftEmailLine> all = [.. rota.Added, .. rota.Changed, .. rota.Removed];
         string kind = rota.Added.Count == 1 ? "new" : rota.Changed.Count == 1 ? "changed" : "removed";
-        string body = all.Count == 1 ? $"{Line(all[0])} ({kind})" : string.Join(", ", parts);
+        string body = all.Count == 1 ? $"{ShiftClaimNotices.Line(all[0])} ({kind})" : string.Join(", ", parts);
 
         return new PushContent(title, body, "/rota", $"rota-{rota.LocationId}", PushMessageUrgency.Normal, TimeSpan.FromDays(3));
     }
@@ -95,11 +96,14 @@ public static class PushContentBuilder
         return new PushContent(title, body, "/rota/time-off", $"time-off-{decided.Start:yyyyMMdd}", PushMessageUrgency.Normal, TimeSpan.FromDays(3));
     }
 
-    private static string Line(ShiftEmailLine line)
+    // Open shifts and pick-ups are time-sensitive: someone has called off and the gap needs filling.
+    private static PushContent FromNotice(NotificationPayload payload)
     {
-        string text = $"{line.Date.ToString("ddd d MMM", RotaFormat.Uk)} · {line.TimeRange}";
+        Notice notice = ShiftClaimNotices.For(payload);
+        bool urgent = payload is OpenShiftPayload or ShiftClaimPendingPayload or ShiftClaimDecidedPayload;
 
-        return line.PositionName is { Length: > 0 } position ? $"{text} · {position}" : text;
+        return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag,
+            urgent ? PushMessageUrgency.High : PushMessageUrgency.Normal, TimeSpan.FromDays(2));
     }
 
     private static string Count(int count, string one, string many) => $"{count} {(count == 1 ? one : many)}";

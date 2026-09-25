@@ -1,0 +1,13 @@
+.claim-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.claim-problem {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}

@@ -7,7 +7,7 @@
         @foreach (DateOnly day in Days)
         {
             DateOnly thisDay = day;
-            int count = View.Rows.Sum(r => r.Shifts.Count(s => s.IsActive && s.LocalDate() == day));
+            int count = View.Rows.Sum(r => r.Shifts.Count(s => s.IsActive && s.LocalDate() == day)) + View.OpenShifts.Count(s => s.LocalDate() == day);
 
             <button type="button" role="tab" aria-selected="@(day == selectedDate ? "true" : "false")"
                     class="day-strip-button @(day == selectedDate ? "is-selected" : string.Empty) @(day == Today ? "is-today" : string.Empty)"
@@ -43,6 +43,24 @@
                 }
             </ul>
         </details>
+    }
+
+    @if (OpenOnDay.Count > 0)
+    {
+        <div class="day-list-rows">
+            <div class="day-list-row day-list-open">
+                <div class="day-list-name">
+                    <span>Open shifts</span>
+                    <span class="day-list-position">Anyone who could work them can ask</span>
+                </div>
+                <div class="day-list-shifts">
+                    @foreach (Shift shift in OpenOnDay)
+                    {
+                        <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                    }
+                </div>
+            </div>
+        </div>
     }
 
     @if (RowsOnDay.Count == 0)
@@ -95,6 +113,8 @@
 
     private List<DateOnly> Days =>
         Enumerable.Range(0, View.To.DayNumber - View.From.DayNumber + 1).Select(i => View.From.AddDays(i)).ToList();
+
+    private List<Shift> OpenOnDay => View.OpenShifts.Where(s => s.LocalDate() == selectedDate).ToList();
 
     private List<RotaStaffRow> RowsOnDay =>
         View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate) || r.TimeOffOn(selectedDate) is not null).ToList();

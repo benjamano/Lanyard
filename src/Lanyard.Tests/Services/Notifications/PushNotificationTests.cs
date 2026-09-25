@@ -235,7 +235,9 @@ public class PushNotificationTests
         NotificationPreferenceService service = new(SchedulingTestHelpers.GetFactory(options), NullLogger<NotificationPreferenceService>.Instance);
 
         Result<List<TopicPreference>> defaults = await service.GetForUserAsync("amy");
-        Assert.IsTrue(defaults.Data!.All(x => x.Push && x.Email));
+        Assert.IsTrue(defaults.Data!.All(x => x == NotificationTopics.Default(x.Topic)));
+        Assert.IsTrue(defaults.Data!.All(x => x.Push), "Push is on for everything by default");
+        Assert.IsTrue(defaults.Data!.Single(x => x.Topic == NotificationTopic.ShiftReminder).Email, "Topics that emailed before push still do");
         Assert.AreEqual(NotificationTopics.All.Count, defaults.Data!.Count);
 
         await service.SaveAsync("amy", NotificationTopic.ShiftReminder, push: true, email: false);
