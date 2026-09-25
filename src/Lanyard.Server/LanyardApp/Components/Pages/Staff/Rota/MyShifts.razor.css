@@ -1,0 +1,13 @@
+/* The tab strip doesn't wrap or scroll on its own - on a phone-width viewport the four tabs
+   overflow and drag the whole page into horizontal scroll. Keep the overflow inside the strip
+   instead (same fix as TrainingDashboard/UserEditor). .my-shifts-page is a plain <div> so it
+   carries the scope attribute ::deep needs as an anchor; Fluent* roots don't. */
+.my-shifts-page ::deep fluent-tabs {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.my-shifts-page ::deep fluent-tablist {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}

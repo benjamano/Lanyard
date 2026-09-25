@@ -499,5 +499,13 @@
       "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
       "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
+  },
+  {
+    "version": "1.4.9",
+    "releaseDate": "2026-09-25",
+    "summary": "Fixed the My Shifts page scrolling sideways on phones.",
+    "details": [
+      "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still."
+    ]
   }
 ]
