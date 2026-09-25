@@ -509,6 +509,8 @@
       "If the connection dropped while the app was in the background, Lanyard now notices within about 15 seconds instead of 30, rather than looking connected but ignoring taps.",
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
       "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge.",
+      "On Android phones with themed icons switched on, the Lanyard app icon now changes colour to match your other apps. Remove Lanyard from your home screen and add it again to get the new icon.",
+      "The loading spinner shown while Lanyard starts up is now Lanyard green instead of blue.",
       "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",
       "Tables that are too wide for a phone now scroll within their own box. The rest of the page stays still.",
       "The tabs on My Shifts, Training and similar pages move onto a second row on a phone, so you can see every tab.",
