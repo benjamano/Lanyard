@@ -499,5 +499,14 @@
       "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
       "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
+  },
+  {
+    "version": "1.4.9",
+    "releaseDate": "2026-09-25",
+    "summary": "Faster reconnecting when you come back to Lanyard on your phone.",
+    "details": [
+      "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
+      "If the connection dropped while the app was in the background, Lanyard now notices within about 15 seconds instead of 30, rather than looking connected but ignoring taps."
+    ]
   }
 ]
