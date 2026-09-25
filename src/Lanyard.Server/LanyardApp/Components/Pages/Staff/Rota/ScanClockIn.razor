@@ -1,5 +1,9 @@
 @page "/rota/scan/{Nonce}"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@* Anonymous only so a signed-out phone keeps its code while it signs in: the tablet's codes last
+   a minute, and signing in (maybe with 2FA) takes longer. A signed-out visitor sees nothing - the
+   page holds this one code for sign-in (ITerminalEphemeralTokenService.HoldQrNonceForSignIn) and
+   sends them to the login page, which brings them back here. Clocking needs a signed-in user. *@
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.Infrastructure.DTO.Scheduling
@@ -84,8 +88,22 @@
     private ClockActionResult? outcome;
     private string? errorMessage;
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        AuthenticationState? auth = AuthenticationStateTask is null ? null : await AuthenticationStateTask;
+
+        if (auth?.User.Identity?.IsAuthenticated != true)
+        {
+            _tokenService.HoldQrNonceForSignIn(Nonce);
+
+            string returnUrl = Uri.EscapeDataString(_navigationManager.ToBaseRelativePath(_navigationManager.Uri));
+            _navigationManager.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
+            return;
+        }
+
         Result<UserProfile> user = await _securityService.GetCurrentUserProfileAsync();
 
         if (!user.IsSuccess || user.Data is null)
