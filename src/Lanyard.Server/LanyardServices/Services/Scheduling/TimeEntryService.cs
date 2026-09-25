@@ -141,8 +141,10 @@ public class TimeEntryService(
                 .TagWithCallSite()
                 .Include(x => x.User)
                 .Include(x => x.StaffPosition)
+                // Any shift that overlaps today, so a night shift that started yesterday and is still
+                // running counts as on now.
                 .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null
-                    && x.StartUtc >= dayStartUtc && x.StartUtc < dayEndUtc
+                    && x.StartUtc < dayEndUtc && x.EndUtc > dayStartUtc
                     && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
@@ -402,7 +404,7 @@ public class TimeEntryService(
     {
         ClockActionResult result = new(user.GetGreetingName(), direction, atUtc, shiftSummary, clockedHours);
 
-        _eventBus.Publish(new TerminalClockEvent(session.TerminalId, result.GreetingName, direction, atUtc, method));
+        _eventBus.Publish(new TerminalClockEvent(session.TerminalId, result.GreetingName, direction, atUtc, method, session.LocationId));
 
         return result;
     }

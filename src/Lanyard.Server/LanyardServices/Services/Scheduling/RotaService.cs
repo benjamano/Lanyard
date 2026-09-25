@@ -574,8 +574,12 @@ public class RotaService(
                 .TagWithCallSite()
                 .Include(x => x.Location)
                 .Include(x => x.StaffPosition)
+                // Only shifts exactly as published: one edited since (UpdateDate after the publish)
+                // holds a time or person nobody has been told about yet, so it waits for the
+                // republish rather than reminding anyone of an unannounced change.
                 .Where(x => x.IsActive
                     && x.PublishedDateUtc != null
+                    && (x.UpdateDate == null || x.UpdateDate <= x.PublishedDateUtc)
                     && x.StartUtc > nowUtc && x.StartUtc <= horizonUtc
                     && (x.ReminderSentForStartUtc == null || x.ReminderSentForStartUtc != x.StartUtc)
                     && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
@@ -633,32 +637,33 @@ public class RotaService(
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Shift? shift = await ctx.Shifts.FirstOrDefaultAsync(x => x.Id == shiftId);
+            // Everything the claim depends on is in the WHERE clause of one UPDATE, so two sweeps
+            // can't both win, and nothing else about the shift is written - a manager saving the
+            // same shift at that moment isn't affected.
+            IQueryable<Shift> claimable = ctx.Shifts.Where(x => x.Id == shiftId
+                && x.IsActive
+                && x.PublishedDateUtc != null
+                && (x.UpdateDate == null || x.UpdateDate <= x.PublishedDateUtc)
+                && x.StartUtc == startUtc
+                && (x.ReminderSentForStartUtc == null || x.ReminderSentForStartUtc != startUtc));
 
-            if (shift is null || !shift.IsActive || shift.PublishedDateUtc is null || shift.StartUtc != startUtc)
+            int claimed;
+
+            if (ctx.Database.IsRelational())
             {
-                return Result<bool>.Fail("The shift has changed or gone since it was found.");
+                claimed = await claimable.ExecuteUpdateAsync(x => x.SetProperty(s => s.ReminderSentForStartUtc, startUtc));
+            }
+            else
+            {
+                // The EF in-memory provider (tests) has no ExecuteUpdate.
+                List<Shift> rows = await claimable.ToListAsync();
+                rows.ForEach(x => x.ReminderSentForStartUtc = startUtc);
+                claimed = await ctx.SaveChangesAsync();
             }
 
-            if (shift.ReminderSentForStartUtc == startUtc)
-            {
-                return Result<bool>.Fail("Reminder already sent.");
-            }
-
-            shift.ReminderSentForStartUtc = startUtc;
-
-            try
-            {
-                await ctx.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                // Another sweep claimed it between our read and our write - ReminderSentForStartUtc's
-                // [ConcurrencyCheck] made the UPDATE's WHERE clause the atomic guard.
-                return Result<bool>.Fail("Reminder already sent.");
-            }
-
-            return Result<bool>.Ok(true);
+            return claimed == 1
+                ? Result<bool>.Ok(true)
+                : Result<bool>.Fail("Already reminded, or the shift has changed since it was found.");
         }
         catch (Exception ex)
         {
@@ -733,19 +738,28 @@ public class RotaService(
 
             // One email per person, listing only their own shifts that changed - so a last-minute
             // edit reaches just the people it touches. Queued, so the publish never waits on it.
-            string locationName = await ctx.Locations.AsNoTracking().TagWithCallSite()
-                .Where(x => x.Id == locationId)
-                .Select(x => x.Name)
-                .FirstOrDefaultAsync() ?? "your location";
-
-            foreach (PublishedChange change in changes)
+            // The publish is already saved, so a failure here is logged, never reported as a
+            // failed publish.
+            try
             {
-                _notifications.Enqueue([change.UserId], NotificationTopic.RotaChanged, new RotaChangedPayload(
-                    locationId,
-                    locationName,
-                    change.New.Select(ToEmailLine).ToList(),
-                    change.Changed.Select(ToEmailLine).ToList(),
-                    change.Removed.Select(ToEmailLine).ToList()));
+                string locationName = await ctx.Locations.AsNoTracking().TagWithCallSite()
+                    .Where(x => x.Id == locationId)
+                    .Select(x => x.Name)
+                    .FirstOrDefaultAsync() ?? "your location";
+
+                foreach (PublishedChange change in changes)
+                {
+                    _notifications.Enqueue([change.UserId], NotificationTopic.RotaChanged, new RotaChangedPayload(
+                        locationId,
+                        locationName,
+                        change.New.Select(ToEmailLine).ToList(),
+                        change.Changed.Select(ToEmailLine).ToList(),
+                        change.Removed.Select(ToEmailLine).ToList()));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Rota published at location {LocationId} but its emails couldn't be queued", locationId);
             }
 
             _logger.LogInformation("Published {ShiftCount} rota changes for {PeopleAffected} people at location {LocationId} ({From} to {To}) by {UserId}",

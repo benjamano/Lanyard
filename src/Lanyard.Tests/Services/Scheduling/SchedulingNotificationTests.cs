@@ -388,4 +388,46 @@ public class SchedulingNotificationTests
         Assert.AreEqual(DayBoardStatus.NoShift, board.Single(x => x.UserId == cover.Id).Status);
         Assert.AreEqual("Now", board.Single(x => x.UserId == now.Id).FirstName);
     }
+
+    [TestMethod]
+    public async Task Reminders_WaitForTheRepublishWhenAPublishedShiftHasUnpublishedEdits()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        Shift edited = await AddShiftAsync(options, location, amy, Now.AddHours(20), publishedUtc: Now.AddDays(-5));
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            Shift tracked = await ctx.Shifts.SingleAsync(x => x.Id == edited.Id);
+            tracked.UpdateDate = Now.AddHours(-1);
+            await ctx.SaveChangesAsync();
+        }
+
+        RotaService rota = GetRota(options, new());
+
+        Assert.AreEqual(0, (await rota.GetShiftsDueForReminderAsync(Now)).Data!.Count);
+        Assert.IsFalse((await rota.ClaimShiftReminderAsync(edited.Id, edited.StartUtc)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task DayBoard_IncludesANightShiftThatStartedYesterday()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        UserProfile night = await SchedulingTestHelpers.SeedUserAsync(options, location, "Night");
+        DateTime nowUtc = RotaTime.ToUtc(Today, new TimeOnly(2, 0));
+
+        await AddShiftAsync(options, location, night, RotaTime.ToUtc(Today.AddDays(-1), new TimeOnly(22, 0)), 8, Now.AddDays(-5));
+
+        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
+        TestClock clock = new(nowUtc);
+        TimeEntryService service = new(factory, new ClockInPinService(factory, new PasswordHasher<UserProfile>()),
+            new ClockInTerminalService(factory, clock, NullLogger<ClockInTerminalService>.Instance), new SchedulingSettingsService(factory),
+            new TerminalEphemeralTokenService(clock), new TerminalEventBus(), clock, NullLogger<TimeEntryService>.Instance);
+
+        DayBoardEntry entry = (await service.GetDayBoardAsync(location.Id)).Data!.Single();
+
+        Assert.AreEqual(DayBoardStatus.OnNow, entry.Status);
+    }
 }

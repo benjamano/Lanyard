@@ -34,6 +34,11 @@
                     <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
                 </div>
                 break;
+            case State.NoLocation:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Sign in to a location to see its requests</FluentBadge>
+                </div>
+                break;
             default:
                 @if (_views.Count == 0)
                 {
@@ -75,7 +80,7 @@
     [Parameter]
     public bool AllowTrigger { get; set; } = true;
 
-    private enum State { Loading, Failed, NotManager, Ready }
+    private enum State { Loading, Failed, NotManager, NoLocation, Ready }
 
     private State _state = State.Loading;
     private LocationScope? _scope;
@@ -100,9 +105,17 @@
 
     private async Task LoadAsync()
     {
-        if (_scope is null || !(_scope.IsAdmin || _scope.IsManager) || _scope.LocationId is not int locationId)
+        if (_scope is null || !(_scope.IsAdmin || _scope.IsManager))
         {
             _state = State.NotManager;
+            return;
+        }
+
+        // An Admin can sign in without a location; the list is per location, so say that rather
+        // than suggesting they aren't allowed to see it.
+        if (_scope.LocationId is not int locationId)
+        {
+            _state = State.NoLocation;
             return;
         }
 

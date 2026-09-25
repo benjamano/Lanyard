@@ -187,11 +187,10 @@ namespace Lanyard.Infrastructure.Models
         public bool RemovalPending { get; set; }
 
         // The StartUtc this shift's reminder email was sent for. Compared against StartUtc, so
-        // moving the shift re-arms the reminder without anything having to clear it. Marked before
-        // the email is queued, and [ConcurrencyCheck] puts the old value in the UPDATE's WHERE
-        // clause, so two overlapping sweeps can't both claim it (same guard as
-        // StaffDocument.ReminderSentDate).
-        [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
+        // moving the shift re-arms the reminder without anything having to clear it. Claimed
+        // before the email is queued with a single conditional UPDATE (RotaService.
+        // ClaimShiftReminderAsync) - not a concurrency token, which would add this column to every
+        // shift update and make an ordinary rota save fail if it overlapped a claim.
         public DateTime? ReminderSentForStartUtc { get; set; }
 
         public bool IsActive { get; set; } = true;

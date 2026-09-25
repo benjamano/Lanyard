@@ -1674,7 +1674,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ReminderSentForStartUtc")
-                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("RemovalPending")

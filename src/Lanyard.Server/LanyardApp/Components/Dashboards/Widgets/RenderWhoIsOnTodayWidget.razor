@@ -175,8 +175,11 @@
 
     private void OnClock(TerminalClockEvent clockEvent)
     {
-        // The event names a terminal, not a location; reloading one location's board is cheap
-        // enough that every open board simply refreshes.
+        if (clockEvent.LocationId != _locationId)
+        {
+            return;
+        }
+
         _ = InvokeAsync(async () =>
         {
             await LoadAsync();

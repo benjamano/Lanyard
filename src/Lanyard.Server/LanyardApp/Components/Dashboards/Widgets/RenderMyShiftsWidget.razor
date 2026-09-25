@@ -120,7 +120,7 @@
                 s.StartUtc,
                 DayText(s.LocalDate(), today),
                 string.Join(" · ", new[] { s.TimeRange(), s.StaffPosition?.Name, s.Location?.Name }.Where(x => !string.IsNullOrWhiteSpace(x))),
-                s.LocalDate() == today && s.StartUtc <= DateTime.UtcNow ? "On now" : null,
+                s.StartUtc <= DateTime.UtcNow && s.EndUtc > DateTime.UtcNow ? "On now" : null,
                 BadgeColor.Success,
                 false));
 

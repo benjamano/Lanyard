@@ -442,7 +442,7 @@ public class TimeOffService(
 
                     _logger.LogInformation("Time-off request {RequestId} cut short after {Today} by {DeciderUserId}", requestId, today, deciderUserId);
                     _eventBus.Publish(request.LocationId);
-                    await NotifyDecisionAsync(ctx, withdrawn, TimeOffEmailOutcome.CutShort, trimmedReason, deciderUserId);
+                    await NotifySafelyAsync(() => NotifyDecisionAsync(ctx, withdrawn, TimeOffEmailOutcome.CutShort, trimmedReason, deciderUserId), requestId);
 
                     return Result<TimeOffRequest>.Ok(withdrawn);
                 }
@@ -463,7 +463,7 @@ public class TimeOffService(
                 : previousStatus == TimeOffStatus.Pending ? TimeOffEmailOutcome.Rejected
                 : TimeOffEmailOutcome.Withdrawn;
 
-            await NotifyDecisionAsync(ctx, request, outcome, trimmedReason, deciderUserId);
+            await NotifySafelyAsync(() => NotifyDecisionAsync(ctx, request, outcome, trimmedReason, deciderUserId), requestId);
 
             return Result<TimeOffRequest>.Ok(request);
         }
@@ -486,6 +486,20 @@ public class TimeOffService(
         {
             _logger.LogError(ex, "Failed to retrieve time off");
             return Result<List<TimeOffRequest>>.Fail($"Failed to retrieve time off: {ex.Message}");
+        }
+    }
+
+    // Notifications are queued after the change is saved. A failure building one is logged and
+    // swallowed: reporting it would tell the person their saved request or decision had failed.
+    private async Task NotifySafelyAsync(Func<Task> notify, Guid requestId)
+    {
+        try
+        {
+            await notify();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Time-off request {RequestId} was saved but its notification couldn't be queued", requestId);
         }
     }
 
@@ -629,22 +643,25 @@ public class TimeOffService(
             {
                 // Saved as approved, so the person hears it as a decision; the manager's note
                 // ("Called in sick") is what they see as the reason.
-                await NotifyDecisionAsync(ctx, request, TimeOffEmailOutcome.Recorded, request.Notes, requestedBy);
+                await NotifySafelyAsync(() => NotifyDecisionAsync(ctx, request, TimeOffEmailOutcome.Recorded, request.Notes, requestedBy), request.Id);
             }
             else
             {
-                List<string> managers = (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId))
-                    .Where(x => x != userId)
-                    .ToList();
+                await NotifySafelyAsync(async () =>
+                {
+                    List<string> managers = (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId))
+                        .Where(x => x != userId)
+                        .ToList();
 
-                _notifications.Enqueue(managers, NotificationTopic.TimeOffRequested, new TimeOffRequestedPayload(
-                    locationId,
-                    await DisplayNameAsync(ctx, userId) ?? "Someone",
-                    context.Type.Name,
-                    request.StartDate,
-                    request.EndDate,
-                    TimeOffFormat.DaysAndHours(request.Hours, settings.HoursPerDay),
-                    request.Notes));
+                    _notifications.Enqueue(managers, NotificationTopic.TimeOffRequested, new TimeOffRequestedPayload(
+                        locationId,
+                        await DisplayNameAsync(ctx, userId) ?? "Someone",
+                        context.Type.Name,
+                        request.StartDate,
+                        request.EndDate,
+                        TimeOffFormat.DaysAndHours(request.Hours, settings.HoursPerDay),
+                        request.Notes));
+                }, request.Id);
             }
 
             _logger.LogInformation(recordedByManager
