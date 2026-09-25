@@ -501,7 +501,7 @@
     ]
   },
   {
-    "version": "1.4.10",
+    "version": "1.4.11",
     "releaseDate": "2026-09-25",
     "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
     "details": [
@@ -520,7 +520,8 @@
       "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read.",
       "Fixed the \"Write a message\" placeholder in Chat staying visible under what you're typing on an Android phone until you pressed space.",
       "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side.",
-      "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages."
+      "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages.",
+      "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules."
     ]
   }
 ]
