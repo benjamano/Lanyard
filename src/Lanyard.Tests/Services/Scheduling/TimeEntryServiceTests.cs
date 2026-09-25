@@ -121,6 +121,7 @@ public class TimeEntryServiceTests
         UserProfile covering = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Location, "Cat");
         UserProfile tomorrow = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Location, "Tia");
         UserProfile finished = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Location, "Fin");
+        UserProfile forgot = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Location, "Flo");
 
         await SeedShiftAsync(f, f.Ben, Monday, 9, 17);
         await SeedShiftAsync(f, amy, Monday, 12, 20);
@@ -129,10 +130,15 @@ public class TimeEntryServiceTests
         await SeedShiftAsync(f, finished, Monday, 2, 6);
         await SeedOpenEntryAsync(f, covering, Local(Monday, 8));
 
+        // Forgot to clock out yesterday: their next tap clocks them in, so they aren't on the clock.
+        await SeedOpenEntryAsync(f, forgot, Local(Monday.AddDays(-1), 8));
+
         Result<List<TerminalRosterEntry>> result = await f.Service.GetTerminalRosterAsync(f.Terminal.Id);
 
         Assert.IsTrue(result.IsSuccess, result.Error);
-        CollectionAssert.AreEqual(new[] { "Ben Tester", "Amy Tester", "Cat Tester" }, result.Data!.Select(x => x.DisplayName).ToArray());
+
+        // A shared tablet anyone can see: first name and surname initial only.
+        CollectionAssert.AreEqual(new[] { "Ben T.", "Amy T.", "Cat T." }, result.Data!.Select(x => x.DisplayName).ToArray());
         Assert.AreEqual("09:00–17:00", result.Data[0].ShiftSummary);
         Assert.IsTrue(result.Data[0].HasPin);
         Assert.IsFalse(result.Data[1].HasPin);
@@ -525,6 +531,22 @@ public class TimeEntryServiceTests
         }, "manager");
 
         Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SaveEntryAsync_RejectsAClockOutInTheFuture()
+    {
+        Fixture f = await CreateAsync(10, 0);
+
+        // Typed in at 10:00: a closed 09:00-17:00 entry would let a terminal clock-in at 12:00
+        // overlap it.
+        Result<TimeEntry> result = await f.Service.SaveEntryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Location), new TimeEntry
+        {
+            UserId = f.Ben.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 17)
+        }, "manager");
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "future");
     }
 
     [TestMethod]
