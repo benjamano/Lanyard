@@ -116,10 +116,10 @@ public class DmxSceneRunnerService(
 
                     OnSceneStepAdvanced?.Invoke(clientId, sceneId, step.StepNumber);
 
-                    foreach (DmxSceneStepChannelValue channelValue in step.ChannelValues)
-                    {
-                        await _dmxService.UpdateChannelValue(clientId, channelValue.ChannelNumber, channelValue.Value);
-                    }
+                    // One batched write per step: a single hub message to the kiosk and a
+                    // single change event for any open virtual desk, instead of one of each
+                    // per channel (which also made the step's start smear out over N sends).
+                    await _dmxService.UpdateChannelValuesAsync(clientId, ToChannelBatch(step.ChannelValues));
 
                     // The delay IS the scheduler: hold the values, then move on.
                     // BPM sync recomputes from the live playback position every step,
@@ -162,16 +162,20 @@ public class DmxSceneRunnerService(
                 // Momentary scenes must not leave a channel stuck at its last value once
                 // playback stops for any reason (release, holdFor expiry, scene edited/
                 // deleted while running, or an unexpected fault mid-loop).
-                foreach (int channel in steps.SelectMany(s => s.ChannelValues).Select(cv => cv.ChannelNumber).Distinct())
+                List<DmxChannel> resetBatch = steps
+                    .SelectMany(s => s.ChannelValues)
+                    .Select(cv => cv.ChannelNumber)
+                    .Distinct()
+                    .Select(channel => new DmxChannel { Address = channel, Value = 0 })
+                    .ToList();
+
+                try
                 {
-                    try
-                    {
-                        await _dmxService.UpdateChannelValue(clientId, channel, 0);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error resetting channel {Channel} to 0 after momentary DMX scene {SceneId} stopped for client {ClientId}", channel, sceneId, clientId);
-                    }
+                    await _dmxService.UpdateChannelValuesAsync(clientId, resetBatch);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error resetting {ChannelCount} channels to 0 after momentary DMX scene {SceneId} stopped for client {ClientId}", resetBatch.Count, sceneId, clientId);
                 }
             }
 
@@ -188,6 +192,13 @@ public class DmxSceneRunnerService(
 
             OnSceneStopped?.Invoke(clientId, sceneId);
         }
+    }
+
+    private static List<DmxChannel> ToChannelBatch(IEnumerable<DmxSceneStepChannelValue> channelValues)
+    {
+        return channelValues
+            .Select(cv => new DmxChannel { Address = cv.ChannelNumber, Value = cv.Value })
+            .ToList();
     }
 
     public Result<bool> StopScene(Guid sceneId)

@@ -37,6 +37,36 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         }
     }
 
+    public async Task<Result<IEnumerable<Dashboard>>> GetDashboardSummariesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Dashboard> dashboards = await ctx.Dashboards
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Name)
+                .Select(x => new Dashboard
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    IsActive = x.IsActive,
+                    CreateDate = x.CreateDate,
+                    LastUpdateDate = x.LastUpdateDate
+                })
+                .ToListAsync();
+
+            return Result<IEnumerable<Dashboard>>.Ok(dashboards);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<Dashboard>>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId)
     {
         try

@@ -215,9 +215,7 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => x.ErasedAtUtc);
 
             // The Hall of Fame always queries a time window, either venue-wide or for one kiosk.
-            // Both indexes exist because those are the two shapes GameResultService issues; the
-            // automation execution log next door is the cautionary example of a time-queried
-            // append-only table with no index on its timestamp.
+            // Both indexes exist because those are the two shapes GameResultService issues.
             modelBuilder.Entity<GameResult>()
                 .HasIndex(x => x.PlayedAtUtc);
 
@@ -306,6 +304,28 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
                 .IsUnique();
+
+            // CourseAssignments is filtered by UserId on every home-page load (outstanding
+            // training card), the MyTraining widget/page and every bulk-assign duplicate check,
+            // and it grows by users x courses x recurrence cycles. Only the CourseId and
+            // LocationId foreign keys had indexes.
+            modelBuilder.Entity<CourseAssignment>()
+                .HasIndex(x => x.UserId);
+
+            // The automation execution log is append-only (one row per rule fire, including
+            // retries) and is always read newest-first: the Automation page's recent list and
+            // the rule-status widget's "latest execution for this rule". Without these the first
+            // is a full sort of the table and the second a scan of the rule's rows.
+            // AutomationExecutionRetentionHostedService keeps the table bounded.
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasIndex(x => x.ExecutedAt);
+
+            modelBuilder.Entity<AutomationRuleExecution>()
+                .HasIndex(x => new { x.AutomationRuleId, x.ExecutedAt });
+
+            // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
+            modelBuilder.Entity<Song>()
+                .HasIndex(x => x.BpmAnalysisStatus);
         }
     }
 }
