@@ -796,7 +796,7 @@ public class RotaService(
 
                 foreach (Shift shift in opened.Where(x => x.StartUtc > now))
                 {
-                    await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, []);
+                    await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, [], actingUserId);
                 }
             }
             catch (Exception ex)

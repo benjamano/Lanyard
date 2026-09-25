@@ -375,6 +375,10 @@ public class ShiftClaimService(
 
                 _notifications.Enqueue(audience, NotificationTopic.SwapRequest,
                     new SwapRequestedPayload(shift!.LocationId, LocationName(shift), name, RotaService.ToEmailLine(shift), claim.Note));
+
+                // And a card in the location's channel, so the whole team sees it.
+                await Chat.ChatChannels.PostCardAsync(ctx, shift.LocationId, ChatMessageKind.SwapRequestCard, claim.Id, userId,
+                    $"{name} is looking for a swap: {ShiftClaimNotices.Line(RotaService.ToEmailLine(shift))}", Now);
             }, claim.Id);
 
             _logger.LogInformation("{UserId} asked for a swap on shift {ShiftId}", userId, shiftId);
@@ -799,7 +803,7 @@ public class ShiftClaimService(
                     notify = async () =>
                     {
                         Decided([claim.UserId], shift, claim.Kind, true, null, reason);
-                        await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, [claim.UserId]);
+                        await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, [claim.UserId], deciderUserId);
                     };
                     break;
                 }
@@ -941,7 +945,7 @@ public class ShiftClaimService(
                 _notifications.Enqueue([previousUserId], NotificationTopic.RotaChanged,
                     new RotaChangedPayload(shift.LocationId, LocationName(shift), [], [], [line]));
 
-                await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, [previousUserId]);
+                await ShiftClaimRules.AnnounceOpenShiftAsync(ctx, _notifications, shift, [previousUserId], actingUserId);
             }, shift.Id);
 
             _logger.LogInformation("{UserId} released shift {ShiftId} from {PreviousUserId} for cover", actingUserId, shiftId, previousUserId);

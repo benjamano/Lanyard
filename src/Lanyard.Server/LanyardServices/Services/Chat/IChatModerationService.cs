@@ -26,6 +26,21 @@ public interface IChatModerationService
 
     Task<Result<bool>> LiftSuspensionAsync(LocationScope scope, Guid suspensionId, string userId);
 
+    // ---- Channels --------------------------------------------------------------------------
+
+    // The channels this manager looks after: their location's (Managers), or every location's and
+    // company's (Admins). Creates any that don't exist yet.
+    Task<Result<List<ChatChannelAdminView>>> GetChannelsAsync(LocationScope scope);
+
+    // Lets staff post in a channel, or only its managers.
+    Task<Result<bool>> SetStaffCanPostAsync(LocationScope scope, Guid channelId, bool staffCanPost, string userId);
+
+    // Writes a post straight into a channel, pinned, and tells everyone in it.
+    Task<Result<ChatMessage>> PostPinnedAsync(LocationScope scope, Guid channelId, string html, string userId);
+
+    // Messages managers removed from these channels in the last 30 days (not what they said).
+    Task<Result<List<ChatRemovalView>>> GetRecentRemovalsAsync(LocationScope scope);
+
     // Open reports at the manager's signed-in location, for the nav badge.
     Task<Result<int>> CountOpenForNavAsync(LocationScope scope, string? viewerUserId);
 }

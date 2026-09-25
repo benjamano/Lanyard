@@ -573,6 +573,21 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ChatConversation>()
                 .HasIndex(x => new { x.CompanyId, x.LastMessageUtc });
 
+            // One channel per location, and one per company.
+            modelBuilder.Entity<ChatConversation>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique()
+                .HasFilter("\"Kind\" = 2");
+
+            modelBuilder.Entity<ChatConversation>()
+                .HasIndex(x => x.CompanyId)
+                .IsUnique()
+                .HasDatabaseName("IX_ChatConversations_CompanyChannel")
+                .HasFilter("\"Kind\" = 3");
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasIndex(x => new { x.ConversationId, x.IsPinned });
+
             modelBuilder.Entity<ChatConversation>()
                 .HasOne(x => x.Company)
                 .WithMany()

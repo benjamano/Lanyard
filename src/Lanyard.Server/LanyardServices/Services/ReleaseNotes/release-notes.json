@@ -424,5 +424,17 @@
       "Report a message that's abusive or inappropriate. Your managers see that one message only - not the rest of the conversation - and the sender isn't told who reported it. You can block the sender at the same time; blocking stops direct messages both ways.",
       "Managers review reports under Manage > Chat Reports: dismiss a report, remove the message for everyone, or stop the sender posting in chat for a day, a week, a month or until lifted. The person who reported it is told it's been reviewed."
     ]
+  },
+  {
+    "version": "1.4.8",
+    "releaseDate": "2026-09-25",
+    "summary": "Added team channels, pinned posts, and open-shift and swap cards in chat.",
+    "details": [
+      "Every location now has a team channel (for example \"Peterborough team\") and every company an everyone channel. You're in the channels for wherever you work, and they update by themselves when that changes. New starters can read back through the channel's history.",
+      "Managers can pin posts in their location's channel, either an existing message or a new post written under Manage > Chat Channels; admins can do this in any channel. Pinned posts stay at the top of the channel and at the top of the Chat page, and everyone in the channel gets a notification.",
+      "Managers can remove any message in their location's channel (it shows as \"Removed by a manager\"), and can switch off staff posting there if a channel is being misused. Manage > Chat Channels lists recent removals.",
+      "When a shift is opened up for cover or someone asks for a swap, a card appears in that location's channel showing whether it's still up for grabs, with a link to pick it up or offer a swap.",
+      "New notification settings for channel messages (off by default) and pinned posts (on by default)."
+    ]
   }
 ]

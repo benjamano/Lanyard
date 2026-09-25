@@ -58,7 +58,7 @@
                         <FluentBadge Appearance="BadgeAppearance.Tint" Color="@StatusColor(report.Status)">@StatusLabel(report.Status)</FluentBadge>
                     </div>
 
-                    <div class="report-reason">@ReasonLabel(report.Reason)@(view.WasDirectMessage ? " · direct message" : " · group message")</div>
+                    <div class="report-reason">@ReasonLabel(report.Reason) · @view.WhereLabel</div>
 
                     <div class="report-snapshot">
                         <div class="report-snapshot-meta">Sent @RotaTime.ToVenueLocal(report.MessageSentUtc).ToString("ddd d MMM, HH:mm", RotaFormat.Uk)@(view.MessageStillVisible ? string.Empty : " · no longer visible")</div>

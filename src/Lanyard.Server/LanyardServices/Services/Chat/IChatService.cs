@@ -44,4 +44,16 @@ public interface IChatService
     Task<Result<bool>> BlockAsync(string userId, string otherUserId);
 
     Task<Result<bool>> UnblockAsync(string userId, string otherUserId);
+
+    // ---- Channels --------------------------------------------------------------------------
+
+    // Pins or unpins a channel message (channel moderators: the location's managers, or Admins).
+    // Pinning tells everyone in the channel.
+    Task<Result<bool>> SetPinnedAsync(string userId, Guid messageId, bool pinned);
+
+    // A moderator removes someone's message from a channel ("Removed by a manager").
+    Task<Result<bool>> RemoveAsModeratorAsync(string userId, Guid messageId);
+
+    // Pinned posts from the person's channels, newest first, for the top of the chat page.
+    Task<Result<List<ChatPinnedPost>>> GetPinnedForUserAsync(string userId, int take = 5);
 }

@@ -17,5 +17,7 @@ public enum NotificationTopic
     GroupMessage = 9,
     ChatUnreadEmail = 10,
     ChatReport = 11,
-    ChatReportReviewed = 12
+    ChatReportReviewed = 12,
+    ChannelMessage = 13,
+    PinnedPost = 14
 }

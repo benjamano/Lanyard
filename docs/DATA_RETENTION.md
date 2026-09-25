@@ -74,6 +74,12 @@ Six tables hold chat: `ChatConversations`, `ChatMembers`, `ChatMessages`, `ChatB
   message they sent.
 - **Retention period: 2 years proposed, not yet enforced.** There is no automatic purge of old
   messages or resolved reports yet; it belongs with the retention sweeper below.
+- **Channels** (one per location, one per company) are open to everyone who works there, who can
+  read back through their history; membership follows `UserLocationMemberships`. On account
+  deletion a person's channel messages are kept like group messages, attributed to the
+  placeholder. Managers removing a message empties it just as the author deleting it would; the
+  managers' recent-removals list shows who wrote it and where, never what it said. Open-shift and
+  swap cards hold a link to the shift or request and a one-line summary.
 - The daily unread-messages email names conversations and counts only, never message text. Chat
   pushes include the message text unless the person has turned that off
   (`UserProfile.ShowMessagePreviews`).

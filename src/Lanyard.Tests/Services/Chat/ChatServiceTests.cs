@@ -147,7 +147,7 @@ public class ChatServiceTests
         Assert.IsFalse(manager.IsSuccess);
         Assert.AreEqual(missing.Error, manager.Error);
         Assert.IsFalse((await w.Chat.SendAsync(w.Priya.Id, direct.Id, "<p>Hi</p>")).IsSuccess);
-        Assert.AreEqual(0, (await w.Chat.GetInboxAsync(w.Manager.Id)).Data!.Count);
+        Assert.AreEqual(0, (await w.Chat.GetInboxAsync(w.Manager.Id)).Data!.Count(x => x.Kind == ChatConversationKind.Direct));
     }
 
     [TestMethod]
@@ -404,7 +404,7 @@ public class ChatServiceTests
 
         Assert.AreEqual(2, (await w.Chat.GetUnreadTotalAsync(w.Amy.Id)).Data);
         Assert.AreEqual(0, (await w.Chat.GetUnreadTotalAsync(w.Tom.Id)).Data);
-        Assert.AreEqual(2, (await w.Chat.GetInboxAsync(w.Amy.Id)).Data!.Single().UnreadCount);
+        Assert.AreEqual(2, (await w.Chat.GetInboxAsync(w.Amy.Id)).Data!.Single(x => x.Kind == ChatConversationKind.Direct).UnreadCount);
 
         w.Clock.Advance(TimeSpan.FromMinutes(1));
         await w.Chat.MarkReadAsync(w.Amy.Id, direct.Id);

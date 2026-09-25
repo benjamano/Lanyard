@@ -270,10 +270,14 @@ internal static class ShiftClaimRules
         claim.DecidedUtc = nowUtc;
     }
 
-    // Tells everyone who could work an open shift that it's there. The shift needs Location and
-    // StaffPosition loaded.
-    public static async Task AnnounceOpenShiftAsync(ApplicationDbContext ctx, INotificationDispatcher notifications, Shift shift, IReadOnlyCollection<string> except)
+    // Tells everyone who could work an open shift that it's there, and puts a card in the
+    // location's channel (posted as postedByUserId, the manager who opened it up). The shift needs
+    // Location and StaffPosition loaded.
+    public static async Task AnnounceOpenShiftAsync(ApplicationDbContext ctx, INotificationDispatcher notifications, Shift shift, IReadOnlyCollection<string> except, string postedByUserId)
     {
+        await Chat.ChatChannels.PostCardAsync(ctx, shift.LocationId, ChatMessageKind.OpenShiftCard, shift.Id, postedByUserId,
+            $"Open shift: {ShiftClaimNotices.Line(RotaService.ToEmailLine(shift))}", DateTime.UtcNow);
+
         List<string> eligible = await EligibleForAsync(ctx, shift, except);
 
         if (eligible.Count == 0)

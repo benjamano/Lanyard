@@ -176,10 +176,17 @@ public class ChatModerationService(
             List<ChatReportView> views = reports
                 .Select(x =>
                 {
-                    bool wasDirect = x.Message?.Conversation?.Kind == ChatConversationKind.Direct;
+                    ChatConversationKind? kind = x.Message?.Conversation?.Kind;
+                    bool wasDirect = kind == ChatConversationKind.Direct;
                     bool stillVisible = x.Message is { IsDeleted: false };
+                    string where = kind switch
+                    {
+                        ChatConversationKind.Direct => "direct message",
+                        ChatConversationKind.LocationChannel or ChatConversationKind.CompanyChannel => $"in {x.Message!.Conversation!.Name}",
+                        _ => "group message"
+                    };
 
-                    return new ChatReportView(StripConversation(x), RotaNames.For(x.Reporter), RotaNames.For(x.Reported), wasDirect, stillVisible);
+                    return new ChatReportView(StripConversation(x), RotaNames.For(x.Reporter), RotaNames.For(x.Reported), wasDirect, stillVisible) { WhereLabel = where };
                 })
                 .ToList();
 
@@ -391,6 +398,224 @@ public class ChatModerationService(
             return Result<int>.Fail($"Failed to count reports: {ex.Message}");
         }
     }
+
+    // ---- Channels --------------------------------------------------------------------------
+
+    public async Task<Result<List<ChatChannelAdminView>>> GetChannelsAsync(LocationScope scope)
+    {
+        try
+        {
+            if (!scope.IsAdmin && !scope.IsManager)
+            {
+                return Result<List<ChatChannelAdminView>>.Fail("Only managers can look after channels.");
+            }
+
+            DateTime now = Now;
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Location> locations = await ctx.Locations
+                .TagWithCallSite()
+                .Include(x => x.Company)
+                .Where(x => x.IsActive && (scope.IsAdmin || x.Id == scope.LocationId))
+                .OrderBy(x => x.CompanyId).ThenBy(x => x.Name)
+                .ToListAsync();
+
+            List<ChatConversation> channels = [];
+
+            // Company channels are the Admins' to look after.
+            if (scope.IsAdmin)
+            {
+                foreach (Company company in locations.Select(x => x.Company!).Where(x => x is not null).DistinctBy(x => x.Id))
+                {
+                    channels.Add(await ChatChannels.GetOrCreateCompanyChannelAsync(ctx, company, now));
+                }
+            }
+
+            foreach (Location location in locations)
+            {
+                channels.Add(await ChatChannels.GetOrCreateLocationChannelAsync(ctx, location, now));
+            }
+
+            // A channel nobody has opened yet has no member rows; bring them up to date so the
+            // count is everyone who works there.
+            foreach (ChatConversation channel in channels)
+            {
+                await ChatChannels.SyncMembersAsync(ctx, channel, now);
+            }
+
+            List<Guid> ids = channels.Select(x => x.Id).ToList();
+
+            Dictionary<Guid, int> members = await ctx.ChatMembers.AsNoTracking().TagWithCallSite()
+                .Where(x => ids.Contains(x.ConversationId) && x.LeftUtc == null)
+                .GroupBy(x => x.ConversationId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+            Dictionary<Guid, int> pinned = await ctx.ChatMessages.AsNoTracking().TagWithCallSite()
+                .Where(x => ids.Contains(x.ConversationId) && x.IsPinned && x.DeletedUtc == null)
+                .GroupBy(x => x.ConversationId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+            return Result<List<ChatChannelAdminView>>.Ok(channels
+                .Select(x => new ChatChannelAdminView(x, members.GetValueOrDefault(x.Id), pinned.GetValueOrDefault(x.Id)))
+                .ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load chat channels");
+            return Result<List<ChatChannelAdminView>>.Fail($"Failed to load channels: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> SetStaffCanPostAsync(LocationScope scope, Guid channelId, bool staffCanPost, string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ChatConversation? channel = await ctx.ChatConversations.FirstOrDefaultAsync(x => x.Id == channelId);
+
+            if (channel is null || !CanLookAfter(scope, channel))
+            {
+                return Result<bool>.Fail("That channel isn't yours to change.");
+            }
+
+            channel.StaffCanPost = staffCanPost;
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("{UserId} set StaffCanPost={Value} on channel {ChannelId}", userId, staffCanPost, channelId);
+
+            List<string> members = await ctx.ChatMembers.AsNoTracking().TagWithCallSite()
+                .Where(x => x.ConversationId == channelId && x.LeftUtc == null)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            _eventBus.Publish(new ChatEvent(channelId, members, ChatEventKind.ConversationChanged));
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to change posting on channel {ChannelId}", channelId);
+            return Result<bool>.Fail($"Couldn't change that: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<ChatMessage>> PostPinnedAsync(LocationScope scope, Guid channelId, string html, string userId)
+    {
+        try
+        {
+            ChatHtml.Cleaned? cleaned = ChatHtml.Clean(html);
+
+            if (cleaned is null)
+            {
+                return Result<ChatMessage>.Fail("Write something to pin first.");
+            }
+
+            if (cleaned.Html.Length > ChatHtml.MaxHtmlLength || cleaned.Text.Length > ChatHtml.MaxTextLength)
+            {
+                return Result<ChatMessage>.Fail("That post is too long.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ChatConversation? channel = await ctx.ChatConversations.FirstOrDefaultAsync(x => x.Id == channelId);
+
+            if (channel is null || !CanLookAfter(scope, channel))
+            {
+                return Result<ChatMessage>.Fail("You can't post in that channel.");
+            }
+
+            DateTime now = Now;
+
+            ChatMessage message = new()
+            {
+                Id = Guid.NewGuid(),
+                ConversationId = channelId,
+                AuthorUserId = userId,
+                BodyHtml = cleaned.Html,
+                BodyText = cleaned.Text,
+                CreateUtc = now,
+                IsPinned = true,
+                PinnedByUserId = userId,
+                PinnedUtc = now
+            };
+
+            ctx.ChatMessages.Add(message);
+            channel.LastMessageUtc = now;
+            await ctx.SaveChangesAsync();
+
+            List<string> members = await ChatChannels.SyncMembersAsync(ctx, channel, now);
+
+            try
+            {
+                await ChatChannels.NotifyPinnedAsync(ctx, _notifications, channel, message, members, userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Posted pinned message {MessageId} but couldn't queue its notifications", message.Id);
+            }
+
+            _logger.LogInformation("{UserId} posted a pinned message in channel {ChannelId}", userId, channelId);
+            _eventBus.Publish(new ChatEvent(channelId, members, ChatEventKind.MessagePosted));
+
+            return Result<ChatMessage>.Ok(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to post a pinned message in channel {ChannelId}", channelId);
+            return Result<ChatMessage>.Fail($"Couldn't post it: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<ChatRemovalView>>> GetRecentRemovalsAsync(LocationScope scope)
+    {
+        try
+        {
+            if (!scope.IsAdmin && !scope.IsManager)
+            {
+                return Result<List<ChatRemovalView>>.Ok([]);
+            }
+
+            DateTime since = Now.AddDays(-30);
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var removed = await ctx.ChatMessages
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.DeletedUtc > since && x.DeletedByUserId != null && x.DeletedByUserId != x.AuthorUserId
+                    && ((scope.IsAdmin && (x.Conversation!.Kind == ChatConversationKind.LocationChannel || x.Conversation.Kind == ChatConversationKind.CompanyChannel))
+                        || (x.Conversation!.Kind == ChatConversationKind.LocationChannel && x.Conversation.LocationId == scope.LocationId)))
+                .OrderByDescending(x => x.DeletedUtc)
+                .Take(50)
+                .Select(x => new { Channel = x.Conversation!.Name, x.AuthorUserId, x.DeletedByUserId, x.CreateUtc, x.DeletedUtc })
+                .ToListAsync();
+
+            List<string> people = removed.SelectMany(x => new[] { x.AuthorUserId, x.DeletedByUserId! }).Distinct().ToList();
+            Dictionary<string, string> names = await ctx.Users.AsNoTracking().TagWithCallSite()
+                .Where(x => people.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => RotaNames.For(x));
+
+            return Result<List<ChatRemovalView>>.Ok(removed
+                .Select(x => new ChatRemovalView(x.Channel ?? "Channel", names.GetValueOrDefault(x.AuthorUserId, "Someone"),
+                    names.GetValueOrDefault(x.DeletedByUserId!, "A manager"), x.CreateUtc, x.DeletedUtc!.Value))
+                .ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load recent chat removals");
+            return Result<List<ChatRemovalView>>.Fail($"Failed to load removals: {ex.Message}");
+        }
+    }
+
+    // Managers look after their own location's channel; Admins every channel.
+    private static bool CanLookAfter(LocationScope scope, ChatConversation channel) => channel.Kind switch
+    {
+        ChatConversationKind.LocationChannel => channel.LocationId is int locationId && SchedulingAccess.CanManageLocation(scope, locationId),
+        ChatConversationKind.CompanyChannel => scope.IsAdmin,
+        _ => false
+    };
 
     // The report without its navigation to the live message and conversation, so nothing beyond
     // the snapshot can reach a page by accident.

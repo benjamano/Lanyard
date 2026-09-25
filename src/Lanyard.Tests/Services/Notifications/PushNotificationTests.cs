@@ -236,7 +236,9 @@ public class PushNotificationTests
 
         Result<List<TopicPreference>> defaults = await service.GetForUserAsync("amy");
         Assert.IsTrue(defaults.Data!.All(x => x == NotificationTopics.Default(x.Topic)));
-        Assert.IsTrue(defaults.Data!.Where(x => NotificationTopics.Get(x.Topic).PushAvailable).All(x => x.Push), "Push is on by default wherever a topic has it");
+        // Push is on by default wherever a topic has it - except everyday channel chatter.
+        Assert.IsTrue(defaults.Data!.Where(x => NotificationTopics.Get(x.Topic).PushAvailable && x.Topic != NotificationTopic.ChannelMessage).All(x => x.Push));
+        Assert.IsFalse(defaults.Data!.Single(x => x.Topic == NotificationTopic.ChannelMessage).Push);
         Assert.IsTrue(defaults.Data!.Single(x => x.Topic == NotificationTopic.ShiftReminder).Email, "Topics that emailed before push still do");
         Assert.AreEqual(NotificationTopics.All.Count, defaults.Data!.Count);
 
