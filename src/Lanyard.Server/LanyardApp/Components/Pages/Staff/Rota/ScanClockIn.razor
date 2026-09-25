@@ -99,7 +99,8 @@
         {
             _tokenService.HoldQrNonceForSignIn(Nonce);
 
-            string returnUrl = Uri.EscapeDataString(_navigationManager.ToBaseRelativePath(_navigationManager.Uri));
+            // Leading slash: the login only returns to a local URL (Url.IsLocalUrl), else goes home.
+            string returnUrl = Uri.EscapeDataString("/" + _navigationManager.ToBaseRelativePath(_navigationManager.Uri));
             _navigationManager.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
             return;
         }
