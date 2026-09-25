@@ -197,6 +197,7 @@
             };
 
             await ThemeService.SetThemeAsync(new ThemeSettings(accentColor, 0, 0, mode, true));
+            await JSRuntime.InvokeVoidAsync("lanyardSetStatusBarColor", accentColor);
         }
         catch { }
 
