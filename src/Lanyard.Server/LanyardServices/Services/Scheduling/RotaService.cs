@@ -125,6 +125,12 @@ public class RotaService(
                 _logger.LogWarning("Failed to resolve contracts for location {LocationId}: {Error}", locationId, contractsResult.Error);
             }
 
+            // Time off beside the shifts: approved and still-pending, so a manager building the
+            // rota sees "Tom has asked for Saturday off" before scheduling him.
+            ILookup<string, TimeOffRequest> timeOffByUser =
+                (await TimeOffService.LiveTimeOffQuery(ctx, rowIds, firstWeek, afterLastWeek.AddDays(-1)).ToListAsync())
+                .ToLookup(x => x.UserId);
+
             List<StaffPosition> positions = await ctx.StaffPositions
                 .AsNoTracking()
                 .TagWithCallSite()
@@ -160,6 +166,8 @@ public class RotaService(
 
                 Dictionary<DateOnly, decimal> hoursByWeek = [];
                 List<ContractWarning> warnings = [];
+                List<TimeOffRequest> userTimeOff = timeOffByUser[user.Id].ToList();
+                List<TimeOffRequest> approvedTimeOff = userTimeOff.Where(x => x.Status == TimeOffStatus.Approved).ToList();
 
                 foreach (DateOnly week in weekStarts)
                 {
@@ -171,7 +179,18 @@ public class RotaService(
                     // with an old shift on the rota isn't "missing" hours.
                     if (isMember)
                     {
-                        warnings.AddRange(ContractCompliance.EvaluateWeek(user.Id, week, contract, inWeek));
+                        List<ContractWarning> weekWarnings = ContractCompliance.EvaluateWeek(user.Id, week, contract, inWeek);
+
+                        // Someone booked off for the whole week can't be short of shifts that week.
+                        // Only a whole week excuses it: a day or two off still leaves room for the
+                        // "one shift a week" kind of contract to be met.
+                        if (ContractCompliance.IsWholeWeekOff(week, approvedTimeOff))
+                        {
+                            weekWarnings.RemoveAll(w => w.Kind is ContractWarningKind.BelowMinShifts or ContractWarningKind.BelowMinHours);
+                        }
+
+                        warnings.AddRange(weekWarnings);
+                        warnings.AddRange(ContractCompliance.ShiftsDuringTimeOff(user.Id, week, inWeek, approvedTimeOff));
                     }
                 }
 
@@ -181,7 +200,10 @@ public class RotaService(
                     locationShiftsByUser[user.Id].ToList(),
                     hoursByWeek,
                     warnings,
-                    isMember));
+                    isMember)
+                {
+                    TimeOff = userTimeOff
+                });
             }
 
             rows = rows
@@ -310,6 +332,20 @@ public class RotaService(
             if (overlap is not null)
             {
                 return Result<ShiftSaveResult>.Fail(overlap);
+            }
+
+            // Time off never blocks a shift (the manager may have agreed a swap), but it's said out
+            // loud so nobody is scheduled on their holiday by accident.
+            DateOnly shiftDay = RotaTime.LocalDate(shift.StartUtc);
+            TimeOffRequest? timeOff = await TimeOffService.LiveTimeOffQuery(ctx, [shift.UserId], shiftDay, shiftDay).FirstOrDefaultAsync();
+
+            if (timeOff is not null)
+            {
+                string typeName = timeOff.TimeOffType?.Name.ToLower() ?? "time off";
+
+                warnings.Add(timeOff.Status == TimeOffStatus.Approved
+                    ? $"This person has approved {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)}."
+                    : $"This person has asked for {typeName} on {shiftDay.ToString("ddd d MMM", RotaFormat.Uk)} (not decided yet).");
             }
 
             DateTime now = DateTime.UtcNow;

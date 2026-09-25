@@ -84,3 +84,15 @@
     opacity: 0.5;
     background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(128, 128, 128, 0.5) 3px 4px);
 }
+
+/* Matches TimeOffChip: hatched neutral when approved, dashed outline while still asked for. */
+.legend-time-off {
+    border-left-color: var(--colorNeutralStroke1);
+    background: repeating-linear-gradient(-45deg, var(--colorNeutralBackground3) 0 3px, var(--colorNeutralBackground1) 3px 6px);
+}
+
+.legend-time-off-asked {
+    background: transparent;
+    outline: 1px dashed var(--colorNeutralStroke1);
+    outline-offset: -1px;
+}

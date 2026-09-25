@@ -1,0 +1,52 @@
+.balance-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.balance-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.balance-card.is-over {
+    border-color: var(--colorPaletteRedBorder2, #d13438);
+}
+
+.balance-type {
+    font-weight: 600;
+}
+
+.balance-main {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.balance-figure {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.balance-muted,
+.balance-of,
+.balance-detail {
+    color: var(--colorNeutralForeground3);
+}
+
+.balance-detail {
+    font-size: 0.85rem;
+}
+
+.balance-year {
+    margin: 8px 0 0;
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}

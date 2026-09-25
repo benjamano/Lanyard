@@ -35,6 +35,10 @@
                 DateOnly cellDay = day;
 
                 <div class="month-day-cell @DayClasses(day)" role="gridcell">
+                    @if (row.TimeOffOn(day) is TimeOffRequest timeOff)
+                    {
+                        <TimeOffChip Request="@timeOff" Compact="true" />
+                    }
                     @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == day))
                     {
                         <ShiftChip Shift="@shift" Compact="true" OnClick="@OnEdit" />

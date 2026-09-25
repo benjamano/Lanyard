@@ -63,6 +63,10 @@
                         }
                     </div>
                     <div class="day-list-shifts">
+                        @if (row.TimeOffOn(selectedDate) is TimeOffRequest timeOff)
+                        {
+                            <TimeOffChip Request="@timeOff" />
+                        }
                         @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == selectedDate))
                         {
                             <ShiftChip Shift="@shift" OnClick="@OnEdit" />
@@ -93,7 +97,7 @@
         Enumerable.Range(0, View.To.DayNumber - View.From.DayNumber + 1).Select(i => View.From.AddDays(i)).ToList();
 
     private List<RotaStaffRow> RowsOnDay =>
-        View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate)).ToList();
+        View.Rows.Where(r => r.Shifts.Any(s => s.LocalDate() == selectedDate) || r.TimeOffOn(selectedDate) is not null).ToList();
 
     private List<(RotaStaffRow Row, ContractWarning Warning)> WeekWarnings
     {

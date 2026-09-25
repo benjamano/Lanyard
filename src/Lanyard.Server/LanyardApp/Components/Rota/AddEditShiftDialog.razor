@@ -26,6 +26,14 @@
                 <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
             }
 
+            @if (SelectedTimeOff is TimeOffRequest timeOff)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    @SelectedName @(timeOff.Status == TimeOffStatus.Approved ? "has approved" : "has asked for")
+                    @(timeOff.TimeOffType?.Name.ToLower() ?? "time off") on this day@(timeOff.Status == TimeOffStatus.Pending ? " (not decided yet)" : string.Empty).
+                </FluentMessageBar>
+            }
+
             <FluentSelect TOption="StaffOption" TValue="string" Items="@staffOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
                           Value="@userId" ValueChanged="@OnStaffChanged" Label="Staff member" Width="100%" />
 
@@ -84,6 +92,12 @@
 
     [Parameter, EditorRequired]
     public required RotaRangeView View { get; set; }
+
+    // Only as far as the rota being viewed reaches; a date moved outside it still gets the
+    // service's warning when saved.
+    private TimeOffRequest? SelectedTimeOff => date is DateTime chosen
+        ? View.Rows.FirstOrDefault(r => r.User.Id == userId)?.TimeOffOn(DateOnly.FromDateTime(chosen))
+        : null;
 
     [Parameter]
     public Shift? Existing { get; set; }

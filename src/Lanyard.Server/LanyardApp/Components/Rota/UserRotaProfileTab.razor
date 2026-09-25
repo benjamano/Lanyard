@@ -1,6 +1,10 @@
 @using Lanyard.Application.Services.Scheduling
+@using Lanyard.App.Components.Rota.TimeOff
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
 
 @inject IStaffPositionService _staffPositionService
+@inject ITimeOffService _timeOffService
 
 <div class="rota-profile">
     @if (isLoading)
@@ -65,6 +69,19 @@
         <FluentDivider Style="width: 100%;" />
 
         <section class="rota-profile-section">
+            <TimeOffAllowanceEditor @key="@SavedPrimaryPositionId" CompanyId="@CompanyId.Value" UserId="@UserId"
+                                    PrimaryPositionId="@SavedPrimaryPositionId" Title="Time-off allowances for this person"
+                                    OnSaved="@LoadBalancesAsync" />
+            @if (balances is not null && balances.Balances.Count > 0)
+            {
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">This holiday year so far</FluentText>
+                <TimeOffBalanceCards Balances="@balances" />
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Clock-in PIN</FluentText>
             <ClockInPinEditor UserId="@UserId" SetByManager="true" />
         </section>
@@ -87,6 +104,7 @@
     private HashSet<Guid> selectedPositionIds = [];
     private string? primaryPositionId;
     private bool isSavingPositions;
+    private TimeOffBalances? balances;
 
     private List<StaffPosition> SelectedPositions =>
         companyPositions.Where(x => selectedPositionIds.Contains(x.Id)).ToList();
@@ -120,7 +138,20 @@
         selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
         primaryPositionId = SavedPrimaryPositionId?.ToString();
 
+        await LoadBalancesAsync();
+
         isLoading = false;
+    }
+
+    private async Task LoadBalancesAsync()
+    {
+        if (CompanyId is not int companyId)
+        {
+            return;
+        }
+
+        Result<TimeOffBalances> result = await _timeOffService.GetBalancesAsync(UserId, companyId, RotaTime.Today(DateTime.UtcNow));
+        balances = result.IsSuccess ? result.Data : null;
     }
 
     private void TogglePosition(Guid positionId, bool isChecked)
@@ -170,6 +201,8 @@
         userPositions = result.Data ?? [];
         selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
         primaryPositionId = SavedPrimaryPositionId?.ToString();
+
+        await LoadBalancesAsync();
 
         _toastService.ShowSuccess("Positions saved.");
     }

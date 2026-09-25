@@ -40,6 +40,16 @@ Clock-in terminals store only a SHA-256 hash of each device's token; clock-in PI
 salted hashes and deleted with the account. There is still no automated purge once the 6 years
 have passed - that remains part of the retention sweeper below.
 
+### Time off
+
+Time-off requests (`TimeOffRequest`) and personal allowance overrides (`TimeOffAllowance` rows
+with a `UserId`) are the person's own records rather than payroll history - hours actually worked
+are in `TimeEntry` - so they are **deleted with the account** (a cascading foreign key on a plain
+delete; removed explicitly by GDPR erasure). Where the person decided or recorded someone else's
+time off, erasure keeps the decision but clears their name from it. Requests can carry a free-text
+reason for a rejection and notes from the requester; managers should avoid putting medical detail
+in either. Leave types and company or position allowances contain no personal data.
+
 ## Required follow-up work (tracked separately)
 
 These are deliberately **not** implemented as part of the security-hardening change because they

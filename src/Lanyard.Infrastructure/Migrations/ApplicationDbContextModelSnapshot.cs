@@ -1949,6 +1949,155 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("TimeEntries");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffAllowance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AllowanceHours")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsUnlimited")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TimeOffTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("StaffPositionId");
+
+                    b.HasIndex("TimeOffTypeId")
+                        .IsUnique()
+                        .HasFilter("\"StaffPositionId\" IS NULL AND \"UserId\" IS NULL");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TimeOffTypeId", "StaffPositionId")
+                        .IsUnique()
+                        .HasFilter("\"StaffPositionId\" IS NOT NULL");
+
+                    b.HasIndex("TimeOffTypeId", "UserId")
+                        .IsUnique()
+                        .HasFilter("\"UserId\" IS NOT NULL");
+
+                    b.ToTable("TimeOffAllowances");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CancelledDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DecidedDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Hours")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TimeOffTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TimeOffTypeId");
+
+                    b.HasIndex("LocationId", "Status");
+
+                    b.HasIndex("UserId", "StartDate");
+
+                    b.ToTable("TimeOffRequests");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("DeductsFromAllowance")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPaid")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TimeOffTypes");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserClockInPin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3216,6 +3365,77 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Shift");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffAllowance", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany()
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.TimeOffType", "TimeOffType")
+                        .WithMany()
+                        .HasForeignKey("TimeOffTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("StaffPosition");
+
+                    b.Navigation("TimeOffType");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffRequest", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.TimeOffType", "TimeOffType")
+                        .WithMany()
+                        .HasForeignKey("TimeOffTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+
+                    b.Navigation("TimeOffType");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeOffType", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserClockInPin", b =>

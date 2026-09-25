@@ -53,5 +53,35 @@ public static class ContractCompliance
         return warnings;
     }
 
+    // True when approved time off covers all seven days of the Monday-starting week.
+    public static bool IsWholeWeekOff(DateOnly weekStart, IReadOnlyCollection<TimeOffRequest> approvedTimeOff) =>
+        approvedTimeOff.Count > 0
+        && Enumerable.Range(0, 7).All(i => approvedTimeOff.Any(x => x.Covers(weekStart.AddDays(i))));
+
+    // One warning per shift that falls on a day of approved time off.
+    public static List<ContractWarning> ShiftsDuringTimeOff(string userId, DateOnly weekStart, IReadOnlyCollection<Shift> shiftsInWeek, IReadOnlyCollection<TimeOffRequest> approvedTimeOff)
+    {
+        List<ContractWarning> warnings = [];
+
+        if (approvedTimeOff.Count == 0)
+        {
+            return warnings;
+        }
+
+        foreach (Shift shift in shiftsInWeek.OrderBy(x => x.StartUtc))
+        {
+            DateOnly day = RotaTime.LocalDate(shift.StartUtc);
+            TimeOffRequest? timeOff = approvedTimeOff.FirstOrDefault(x => x.Covers(day));
+
+            if (timeOff is not null)
+            {
+                warnings.Add(new ContractWarning(userId, weekStart, ContractWarningKind.ShiftDuringTimeOff,
+                    $"On the rota on {day.ToString("ddd d MMM", RotaFormat.Uk)} during approved {timeOff.TimeOffType?.Name.ToLower() ?? "time off"}."));
+            }
+        }
+
+        return warnings;
+    }
+
     private static string Hours(decimal hours) => RotaFormat.Hours(hours);
 }

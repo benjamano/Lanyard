@@ -412,5 +412,21 @@
       "My Shifts has a new My hours tab showing your clocked time for the last three weeks and whether it's been approved.",
       "Deleting a user keeps their timesheet history for payroll records under an anonymous placeholder, as it already did for shifts."
     ]
+  },
+  {
+    "version": "1.4.3",
+    "releaseDate": "2026-09-24",
+    "summary": "Added time-off requests, holiday allowances and approvals.",
+    "details": [
+      "Staff can request time off from the new Time off tab on My Shifts (or Time Off in the menu). It shows how much of each allowance is left this holiday year, what's booked and what's waiting for a decision.",
+      "While filling in a request you see what it costs in days and hours, and a warning if it takes you over your allowance or you're already on the rota that day. Going over doesn't block the request; your manager decides.",
+      "Managers approve or reject requests under Manage > Rota > Time Off Requests, with the person's remaining allowance and who else is off at the same time shown beside each one. A rejection needs a reason, which the person sees. An approval can be withdrawn; if the time off has already started, only the days from tomorrow are cancelled and the days already taken stay recorded. Managers can't approve their own time off - another manager or an admin decides it.",
+      "Managers can record time off for someone directly, including past dates, for example when someone calls in sick.",
+      "Time-off types (Paid holiday, Unpaid leave and Sickness to start with) are managed under Manage > Rota > Time Off Types. Each type can be paid or unpaid, and can count against an allowance or not.",
+      "Allowances are set per holiday year as a company default, per position or for one person, in days or hours - for example 28 days of holiday for everyone, 30 for Managers, and unlimited unpaid leave for Customer Service Advisors. The holiday year starts on 6 April unless changed in Rota Settings.",
+      "Approved and requested time off now appears on the Rota Builder beside that person's shifts. Scheduling someone on a day they're off shows a warning, and nobody gets a \"not enough shifts\" warning for a week they're off entirely.",
+      "Managers now see a badge with the number of time-off requests waiting for them next to Time Off Requests in the menu, and on the Rota heading so it shows even when that group is collapsed. It updates as soon as someone asks for, cancels or gets a decision on time off - no refresh needed.",
+      "Section headings on several pages and dialogs (including Onboarding, Staff Document Types, Roles, the What's New dialog, and the music and projection dialogs) show as headings again instead of plain text."
+    ]
   }
 ]

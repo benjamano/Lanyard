@@ -1,0 +1,30 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@* Time off on the rota, next to (or instead of) shifts. Hatched when approved; dashed and marked
+   "asked" while it's still waiting for a decision. Not clickable: decisions happen on the Time Off
+   Requests page, which has the balance and who-else-is-off beside it. *@
+<div class="time-off-chip @(IsPending ? "is-pending" : string.Empty) @(Compact ? "is-compact" : string.Empty)" title="@Tooltip">
+    @if (Compact)
+    {
+        <span class="time-off-chip-label">@(IsPending ? "Asked" : "Off")</span>
+    }
+    else
+    {
+        <span class="time-off-chip-label">@(Request.TimeOffType?.Name ?? "Time off")</span>
+        <span class="time-off-chip-status">@(IsPending ? "Requested" : "Approved")</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required TimeOffRequest Request { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    private bool IsPending => Request.Status == TimeOffStatus.Pending;
+
+    private string Tooltip =>
+        $"{Request.TimeOffType?.Name ?? "Time off"}, {TimeOffFormat.DateRange(Request.StartDate, Request.EndDate)} - {(IsPending ? "waiting for a decision" : "approved")}";
+}

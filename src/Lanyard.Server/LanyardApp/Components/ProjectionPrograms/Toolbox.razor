@@ -8,7 +8,7 @@
 
 <FluentStack Orientation="Orientation.Vertical" Style="height:100%;">
     <FluentStack class="ps-3" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Orientation="Orientation.Vertical" VerticalGap="8">
-        <FluentText Typo="Typography.PaneHeader">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
             <FluentIcon Value="@(new Icons.Regular.Size24.Toolbox())" Margin="@Margin.End2"/>
             Toolbox
         </FluentText>
@@ -22,7 +22,7 @@
         }
         else if (stepTemplates.Count == 0)
         {
-            <FluentText Class="mt-4 text-center" Typo="Typography.Body">No templates available</FluentText>
+            <FluentText Class="mt-4 text-center">No templates available</FluentText>
         }
         else
         {
@@ -31,11 +31,11 @@
                 <FluentCard Appearance="CardAppearance.Filled" Class="toolbox-card" draggable="true" @ondragstart="(e) => OnDragStart(e, template)" @ondragend="OnDragEnd">
                     <FluentStack Orientation="Orientation.Horizontal" VerticalAlignment="VerticalAlignment.Center" Class="toolbox-card-header">
                         <FluentIcon Value="@GetTemplateIcon(template.Name)" Color="Color.Primary" Class="toolbox-card-icon" />
-                        <FluentText Typo="Typography.H6" Class="toolbox-card-title">@template.Name</FluentText>
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Class="toolbox-card-title">@template.Name</FluentText>
                     </FluentStack>
                     @if (!string.IsNullOrWhiteSpace(template.Description))
                     {
-                        <FluentText Class="toolbox-card-description" Typo="Typography.Body">@template.Description</FluentText>
+                        <FluentText Class="toolbox-card-description">@template.Description</FluentText>
                     }
                 </FluentCard>
             }

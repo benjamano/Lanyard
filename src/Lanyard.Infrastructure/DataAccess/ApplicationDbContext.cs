@@ -89,6 +89,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
         public DbSet<TimeEntry> TimeEntries { get; set; }
+        public DbSet<TimeOffType> TimeOffTypes { get; set; }
+        public DbSet<TimeOffAllowance> TimeOffAllowances { get; set; }
+        public DbSet<TimeOffRequest> TimeOffRequests { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -389,6 +392,75 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.ClockInTerminalId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<TimeOffType>()
+                .HasIndex(x => new { x.CompanyId, x.Name })
+                .IsUnique();
+
+            // Same three-tier shape as ContractRequirement, per type: one company default, one
+            // row per position and one per person, each enforced by its own partial index.
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasIndex(x => x.TimeOffTypeId)
+                .IsUnique()
+                .HasFilter("\"StaffPositionId\" IS NULL AND \"UserId\" IS NULL");
+
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasIndex(x => new { x.TimeOffTypeId, x.StaffPositionId })
+                .IsUnique()
+                .HasFilter("\"StaffPositionId\" IS NOT NULL");
+
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasIndex(x => new { x.TimeOffTypeId, x.UserId })
+                .IsUnique()
+                .HasFilter("\"UserId\" IS NOT NULL");
+
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasOne(x => x.TimeOffType)
+                .WithMany()
+                .HasForeignKey(x => x.TimeOffTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany()
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TimeOffAllowance>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // My Time Off and the balance read one person's requests by date; the manager list
+            // reads a location's requests by status.
+            modelBuilder.Entity<TimeOffRequest>()
+                .HasIndex(x => new { x.UserId, x.StartDate });
+
+            modelBuilder.Entity<TimeOffRequest>()
+                .HasIndex(x => new { x.LocationId, x.Status });
+
+            // Cascade, unlike shifts and time entries: a leave request is the person's own record,
+            // not payroll history (hours actually worked live in TimeEntries), so it goes when the
+            // account does. docs/DATA_RETENTION.md says so.
+            modelBuilder.Entity<TimeOffRequest>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Types are archived, never deleted, so a request can always name its type.
+            modelBuilder.Entity<TimeOffRequest>()
+                .HasOne(x => x.TimeOffType)
+                .WithMany()
+                .HasForeignKey(x => x.TimeOffTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<TimeOffRequest>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // CourseAssignments is filtered by UserId on every home-page load (outstanding
             // training card), the MyTraining widget/page and every bulk-assign duplicate check,

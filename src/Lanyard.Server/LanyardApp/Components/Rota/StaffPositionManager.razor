@@ -1,4 +1,5 @@
 @using Lanyard.Application.Services.Scheduling
+@using Lanyard.App.Components.Rota.TimeOff
 
 @inject IStaffPositionService _staffPositionService
 
@@ -8,7 +9,7 @@
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Positions</FluentText>
             <FluentText Style="color: var(--colorNeutralForeground3);">
                 The jobs staff work on shift, such as Customer Service Advisor or Supervisor. Each position can carry its own
-                contract requirements, which apply to everyone whose primary position it is.
+                contract requirements and time-off allowances, which apply to everyone whose primary position it is.
             </FluentText>
 
             @if (positions is null)
@@ -41,7 +42,7 @@
                                 </div>
                                 <div class="position-list-actions">
                                     <FluentButton IconStart="@(new Icons.Regular.Size16.DocumentBulletList())"
-                                                  Title="@(expandedPositionId == position.Id ? "Hide contract requirements" : "Contract requirements")"
+                                                  Title="@(expandedPositionId == position.Id ? "Hide contract and allowances" : "Contract and time-off allowances")"
                                                   Appearance="@(expandedPositionId == position.Id ? ButtonAppearance.Primary : ButtonAppearance.Default)"
                                                   OnClick="@(() => ToggleContract(position.Id))" />
                                     <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit"
@@ -56,6 +57,9 @@
                                 <div class="position-contract">
                                     <ContractRequirementEditor CompanyId="@CompanyId" PositionId="@position.Id"
                                                                Title="@($"Contract requirements for {position.Name}")" />
+                                    <FluentDivider Style="width: 100%;" />
+                                    <TimeOffAllowanceEditor CompanyId="@CompanyId" PositionId="@position.Id"
+                                                            Title="@($"Time-off allowances for {position.Name}")" />
                                 </div>
                             }
                         </div>

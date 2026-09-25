@@ -9,7 +9,7 @@
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size24.Pen())" />
-            <FluentText Typo="Typography.PaneHeader">Execution Detail</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Execution Detail</FluentText>
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
@@ -33,7 +33,7 @@
 
             <FluentDivider />
 
-            <FluentText Typo="Typography.H6">Actions</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Actions</FluentText>
 
             @foreach (AutomationRuleActionExecution ae in Content.ActionExecutions)
             {

@@ -1,0 +1,301 @@
+@inject ITimeOffPolicyService _timeOffPolicyService
+@inject ISchedulingSettingsService _schedulingSettingsService
+
+@* The same editor at all three tiers: company default (neither key), a position, or one person.
+   Each allowance-deducting type is one row: inherit / unlimited / an amount. *@
+<div class="allowance-editor">
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <FluentText Weight="TextWeight.Semibold" Size="@TitleSize">@Title</FluentText>
+    }
+
+    <FluentText Class="allowance-intro">
+        @if (Tier == ContractTier.Company)
+        {
+            <text>How much of each type everyone gets per holiday year, unless their position or they personally have something different.</text>
+        }
+        else
+        {
+            <text>Leave a type on "Inherit" to use the allowance from the tier below.</text>
+        }
+    </FluentText>
+
+    @if (rows is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (rows.Count == 0)
+    {
+        <FluentText Class="allowance-intro">No time-off types use an allowance yet.</FluentText>
+    }
+    else
+    {
+        <div class="allowance-units" role="group" aria-label="Show amounts in">
+            <FluentButton Appearance="@(inDays ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetUnit(true))">Days</FluentButton>
+            <FluentButton Appearance="@(!inDays ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetUnit(false))">Hours</FluentButton>
+            <FluentText Class="allowance-intro">A day is @RotaFormat.Hours(hoursPerDay).</FluentText>
+        </div>
+
+        <div class="allowance-rows">
+            @foreach (AllowanceRow row in rows)
+            {
+                <div class="allowance-row">
+                    <div class="allowance-type">@row.Type.Name</div>
+                    <FluentSelect TOption="string" TValue="string" Items="@ModeOptions" OptionText="@ModeLabel" OptionValue="@(x => x)"
+                                  @bind-Value="row.Mode" Width="170px" aria-label="@($"{row.Type.Name} allowance")" />
+                    @if (row.Mode == AmountMode)
+                    {
+                        <FluentNumberInput TValue="double?" @bind-Value="row.Amount" Width="110px" aria-label="@($"{row.Type.Name} amount in {(inDays ? "days" : "hours")}")" />
+                        <span class="allowance-unit">@(inDays ? "days" : "hours")</span>
+                    }
+                    <div class="allowance-hint">@HintFor(row)</div>
+                </div>
+            }
+        </div>
+
+        <div>
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Disabled="@isSaving" OnClick="@SaveAsync">
+                @(isSaving ? "Saving..." : "Save Allowances")
+            </FluentButton>
+        </div>
+    }
+</div>
+
+@code {
+    private const string InheritMode = "inherit";
+    private const string UnlimitedMode = "unlimited";
+    private const string AmountMode = "amount";
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public Guid? PositionId { get; set; }
+
+    [Parameter]
+    public string? UserId { get; set; }
+
+    // User tier only: so "inherits from" reflects the person's real chain.
+    [Parameter]
+    public Guid? PrimaryPositionId { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    // Size400 when it sits under another heading (position expander, user editor); Size500 when
+    // it's a section of its own.
+    [Parameter]
+    public TextSize TitleSize { get; set; } = TextSize.Size400;
+
+    private ContractTier Tier => UserId is not null ? ContractTier.User : PositionId is not null ? ContractTier.Position : ContractTier.Company;
+
+    private List<string> ModeOptions => [InheritMode, UnlimitedMode, AmountMode];
+
+    private List<AllowanceRow>? rows;
+    private Dictionary<Guid, ResolvedAllowance> parent = [];
+    private decimal hoursPerDay = 8m;
+    private bool inDays = true;
+    private bool isSaving;
+
+    // Which tier is loaded. Only a different tier reloads: the parent re-renders for unrelated
+    // reasons (ticking a position checkbox, say), and reloading then would wipe unsaved edits.
+    private (int CompanyId, Guid? PositionId, string? UserId, Guid? PrimaryPositionId)? loadedFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var wanted = (CompanyId, PositionId, UserId, PrimaryPositionId);
+
+        if (loadedFor != wanted)
+        {
+            loadedFor = wanted;
+            await LoadAsync();
+        }
+    }
+
+    private string ModeLabel(string mode) => mode switch
+    {
+        InheritMode => Tier == ContractTier.Company ? "No allowance" : "Inherit",
+        UnlimitedMode => "Unlimited",
+        _ => "Set amount"
+    };
+
+    private async Task LoadAsync()
+    {
+        Result<CompanySchedulingSettings> settings = await _schedulingSettingsService.GetSettingsAsync(CompanyId);
+        hoursPerDay = settings.Data?.HoursPerDay is decimal perDay and > 0 ? perDay : 8m;
+
+        Result<List<TimeOffType>> types = await _timeOffPolicyService.GetTypesAsync(CompanyId);
+        Result<List<TimeOffAllowance>> tier = await _timeOffPolicyService.GetTierAsync(CompanyId, PositionId, UserId);
+
+        if (!types.IsSuccess || !tier.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load allowances: {types.Error ?? tier.Error}");
+            rows = [];
+            return;
+        }
+
+        parent = Tier switch
+        {
+            ContractTier.User => (await _timeOffPolicyService.ResolveAsync(CompanyId, PrimaryPositionId, null)).Data ?? [],
+            ContractTier.Position => (await _timeOffPolicyService.ResolveAsync(CompanyId, null, null)).Data ?? [],
+            _ => []
+        };
+
+        rows = (types.Data ?? [])
+            .Where(t => t.DeductsFromAllowance)
+            .Select(t =>
+            {
+                TimeOffAllowance? saved = tier.Data!.FirstOrDefault(a => a.TimeOffTypeId == t.Id);
+
+                return new AllowanceRow
+                {
+                    Type = t,
+                    Saved = saved,
+                    Mode = saved is null ? InheritMode : saved.IsUnlimited ? UnlimitedMode : AmountMode,
+                    Amount = saved is { IsUnlimited: false } ? ToDisplay(saved.AllowanceHours) : null
+                };
+            })
+            .ToList();
+    }
+
+    private double ToDisplay(decimal hours) => (double)(inDays ? Math.Round(hours / hoursPerDay, 2) : hours);
+
+    private decimal ToHours(double amount) => inDays ? (decimal)amount * hoursPerDay : (decimal)amount;
+
+    private void SetUnit(bool days)
+    {
+        if (days == inDays || rows is null)
+        {
+            return;
+        }
+
+        // Convert what's typed so switching units never changes the allowance itself.
+        List<(AllowanceRow Row, decimal Hours)> typed = rows
+            .Where(r => r.Amount is not null)
+            .Select(r => (r, ToHours(r.Amount!.Value)))
+            .ToList();
+
+        inDays = days;
+
+        foreach ((AllowanceRow row, decimal hours) in typed)
+        {
+            row.Amount = ToDisplay(hours);
+        }
+    }
+
+    private string HintFor(AllowanceRow row)
+    {
+        if (row.Mode == AmountMode && row.Amount is double amount)
+        {
+            decimal hours = ToHours(amount);
+            return inDays ? $"= {RotaFormat.Hours(hours)}" : $"= {TimeOffFormat.Days(hours, hoursPerDay)}";
+        }
+
+        if (row.Mode != InheritMode || Tier == ContractTier.Company)
+        {
+            return string.Empty;
+        }
+
+        ResolvedAllowance? inherited = parent.GetValueOrDefault(row.Type.Id);
+
+        if (inherited is null || !inherited.IsConfigured)
+        {
+            return "Inherits: no allowance";
+        }
+
+        string from = inherited.Source == ContractTier.Position ? "their position" : "the company default";
+
+        return inherited.IsUnlimited
+            ? $"Inherits unlimited from {from}"
+            : $"Inherits {TimeOffFormat.DaysAndHours(inherited.Hours, hoursPerDay)} from {from}";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (rows is null)
+        {
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> me = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError("Couldn't confirm your location. Refresh the page and try again.");
+            return;
+        }
+
+        if (rows.Any(r => r.Mode == AmountMode && (r.Amount is null || r.Amount < 0)))
+        {
+            _toastService.ShowError("Enter an amount of 0 or more for each type set to an amount.");
+            return;
+        }
+
+        isSaving = true;
+        List<string> errors = [];
+
+        foreach (AllowanceRow row in rows)
+        {
+            Result<bool> outcome;
+
+            if (row.Mode == InheritMode)
+            {
+                if (row.Saved is null)
+                {
+                    continue;
+                }
+
+                outcome = await _timeOffPolicyService.RemoveAllowanceAsync(scope.Data, CompanyId, row.Type.Id, PositionId, UserId);
+            }
+            else
+            {
+                Result<TimeOffAllowance> saved = await _timeOffPolicyService.SaveAllowanceAsync(scope.Data, new TimeOffAllowance
+                {
+                    CompanyId = CompanyId,
+                    TimeOffTypeId = row.Type.Id,
+                    StaffPositionId = PositionId,
+                    UserId = UserId,
+                    IsUnlimited = row.Mode == UnlimitedMode,
+                    AllowanceHours = row.Mode == AmountMode ? ToHours(row.Amount!.Value) : 0m,
+                    UpdatedByUserId = me.IsSuccess ? me.Data : null
+                });
+
+                outcome = saved.IsSuccess ? Result<bool>.Ok(true) : Result<bool>.Fail(saved.Error ?? "Failed to save.");
+            }
+
+            if (!outcome.IsSuccess)
+            {
+                errors.Add($"{row.Type.Name}: {outcome.Error}");
+            }
+        }
+
+        isSaving = false;
+
+        if (errors.Count > 0)
+        {
+            _toastService.ShowError(string.Join(" ", errors));
+        }
+        else
+        {
+            _toastService.ShowSuccess("Allowances saved.");
+        }
+
+        await LoadAsync();
+        await OnSaved.InvokeAsync();
+    }
+
+    private class AllowanceRow
+    {
+        public required TimeOffType Type { get; init; }
+        public TimeOffAllowance? Saved { get; init; }
+        public string Mode { get; set; } = InheritMode;
+        public double? Amount { get; set; }
+    }
+}

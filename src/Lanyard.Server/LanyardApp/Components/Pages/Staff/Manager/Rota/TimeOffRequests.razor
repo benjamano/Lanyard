@@ -1,0 +1,346 @@
+@page "/manage/rota/time-off"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Rota
+@using Lanyard.App.Components.Rota.TimeOff
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@implements IDisposable
+
+@inject ITimeOffService _timeOffService
+@inject ITimeOffEventBus _timeOffEventBus
+@inject ITimeOffPolicyService _timeOffPolicyService
+@inject ISchedulingSettingsService _schedulingSettingsService
+
+<PageTitle>Time Off Requests</PageTitle>
+
+<div class="time-off-page">
+    <div class="time-off-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="TerminalLocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+
+        <div class="time-off-filters" role="group" aria-label="Which requests to show">
+            @foreach ((TimeOffListFilter value, string label) in Filters)
+            {
+                <FluentButton Appearance="@(filter == value ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                              OnClick="@(() => SetFilterAsync(value))">
+                    @label@(value == TimeOffListFilter.Pending && pendingCount > 0 ? $" ({pendingCount})" : string.Empty)
+                </FluentButton>
+            }
+        </div>
+
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())" Class="time-off-record"
+                      Disabled="@(locationId is null || companyId is null)" OnClick="@OpenRecordAsync">
+            Record time off
+        </FluentButton>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (views is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (views.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentText>@EmptyText</FluentText>
+        </FluentCard>
+    }
+    else
+    {
+        <div class="request-cards">
+            @foreach (TimeOffRequestView view in views)
+            {
+                TimeOffRequest request = view.Request;
+
+                <section class="request-card">
+                    <div class="request-card-top">
+                        <div class="request-who">
+                            <div class="request-name">@view.DisplayName</div>
+                            <div class="request-dates">@TimeOffFormat.DateRange(request.StartDate, request.EndDate)</div>
+                        </div>
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="@request.Status.Color()">@request.Status.Label()</FluentBadge>
+                    </div>
+
+                    <div class="request-facts">
+                        <span>@request.TimeOffType?.Name</span>
+                        <span>@TimeOffFormat.DaysAndHours(request.Hours, view.HoursPerDay)</span>
+                        @if (view.Balance is TimeOffBalance balance)
+                        {
+                            <span>@balance.Summary(view.HoursPerDay)</span>
+                        }
+                        <span>Asked @RotaTime.LocalDate(request.RequestedDateUtc).DayLabel()</span>
+                    </div>
+
+                    @if (request.Notes is string requestNotes)
+                    {
+                        <div class="request-note">“@requestNotes”</div>
+                    }
+
+                    @if (request.DecisionReason is string reason && request.Status is TimeOffStatus.Rejected or TimeOffStatus.Approved)
+                    {
+                        <div class="request-note">Decision note: “@reason”</div>
+                    }
+
+                    @if (view.OthersOff.Count > 0)
+                    {
+                        <div class="request-others">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.People())" />
+                            <span>Also off: @string.Join(", ", view.OthersOff)</span>
+                        </div>
+                    }
+
+                    @foreach (string warning in view.Warnings)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+                    }
+
+                    @if (IsOwnRequest(request) && request.IsLive)
+                    {
+                        <FluentText Class="request-own">This is your own request. Another manager or an admin needs to decide it.</FluentText>
+                    }
+                    else if (request.Status == TimeOffStatus.Pending)
+                    {
+                        <div class="request-actions">
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Checkmark())" OnClick="@(() => DecideAsync(view, true))">Approve</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@(() => DecideAsync(view, false))">Reject</FluentButton>
+                        </div>
+                    }
+                    else if (request.Status == TimeOffStatus.Approved && request.EndDate > Today)
+                    {
+                        <div class="request-actions">
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => DecideAsync(view, false))">@(request.StartDate <= Today ? "Cut short" : "Withdraw approval")</FluentButton>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private static readonly (TimeOffListFilter, string)[] Filters =
+    [
+        (TimeOffListFilter.Pending, "Waiting"),
+        (TimeOffListFilter.Upcoming, "Upcoming"),
+        (TimeOffListFilter.Recent, "All recent")
+    ];
+
+    private LocationScope? scope;
+    private string? currentUserId;
+    private List<TerminalLocationOption> locationOptions = [];
+    private Dictionary<int, int> companyByLocation = [];
+    private int? locationId;
+    private int? companyId;
+    private TimeOffListFilter filter = TimeOffListFilter.Pending;
+    private List<TimeOffRequestView>? views;
+    private int pendingCount;
+    private string? loadError;
+    private int? loadedLocationId;
+
+    private DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    // Managers can't decide their own leave (the service refuses it too); admins can.
+    private bool IsOwnRequest(TimeOffRequest request) => request.UserId == currentUserId && scope?.IsAdmin != true;
+
+    private string EmptyText => filter switch
+    {
+        TimeOffListFilter.Pending => "Nothing waiting for a decision.",
+        TimeOffListFilter.Upcoming => "Nobody has approved time off coming up.",
+        _ => "No time off in the last 90 days or coming up."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        currentUserId = userResult.IsSuccess ? userResult.Data : null;
+
+        // A request sent from someone's phone (or decided by another manager) shows up here live.
+        _timeOffEventBus.OnChanged += OnTimeOffChanged;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            locationOptions = locations.IsSuccess && locations.Data is not null
+                ? locations.Data.OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+            companyByLocation = locations.Data?.ToDictionary(l => l.Id, l => l.CompanyId) ?? [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new TerminalLocationOption(own, scope.LocationDisplayName ?? "Your location")];
+
+            if (scope.CompanyId is int ownCompany)
+            {
+                companyByLocation[own] = ownCompany;
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own) ? own : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations yet.";
+            return;
+        }
+
+        if (locationId != loadedLocationId)
+        {
+            companyId = companyByLocation.TryGetValue(locationId.Value, out int company) ? company : null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        loadedLocationId = location;
+
+        Result<List<TimeOffRequestView>> result = await _timeOffService.GetRequestsForLocationAsync(scope, location, filter);
+        Result<int> pending = await _timeOffService.CountPendingAsync(scope, location);
+
+        if (!result.IsSuccess)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        views = result.Data ?? [];
+        pendingCount = pending.IsSuccess ? pending.Data : 0;
+    }
+
+    private void OnTimeOffChanged(int changedLocationId)
+    {
+        if (changedLocationId != loadedLocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => _timeOffEventBus.OnChanged -= OnTimeOffChanged;
+
+    private async Task SetFilterAsync(TimeOffListFilter value)
+    {
+        filter = value;
+        await LoadAsync();
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            _navigationManager.NavigateTo($"/manage/rota/time-off?location={id}");
+        }
+    }
+
+    private async Task DecideAsync(TimeOffRequestView view, bool approve)
+    {
+        if (currentUserId is null)
+        {
+            _toastService.ShowError("Couldn't confirm who you are. Refresh the page and try again.");
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<DecideTimeOffDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DecideTimeOffDialog.View), view);
+            options.Parameters.Add(nameof(DecideTimeOffDialog.Approve), approve);
+            options.Parameters.Add(nameof(DecideTimeOffDialog.DeciderUserId), currentUserId);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task OpenRecordAsync()
+    {
+        if (locationId is not int location || companyId is not int company || currentUserId is null)
+        {
+            return;
+        }
+
+        Result<List<UserProfile>> members = await _companyLocationService.GetUsersInLocationAsync(location);
+        List<EntryStaffOption> staff = members.IsSuccess && members.Data is not null
+            ? members.Data
+                .Where(u => u.Id != Lanyard.Infrastructure.DataAccess.ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Select(u => new EntryStaffOption(u.Id, RotaNames.For(u)))
+                .OrderBy(x => x.Name)
+                .ToList()
+            : [];
+
+        Result<List<TimeOffType>> types = await _timeOffPolicyService.GetTypesAsync(company);
+        Result<CompanySchedulingSettings> settings = await _schedulingSettingsService.GetSettingsAsync(company);
+
+        if (!types.IsSuccess || types.Data is null || types.Data.Count == 0 || staff.Count == 0)
+        {
+            _toastService.ShowError(staff.Count == 0 ? "Nobody works at this location yet." : "There are no time-off types to choose from.");
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<RequestTimeOffDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RequestTimeOffDialog.CompanyId), company);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.LocationId), location);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.Types), types.Data);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.HoursPerDay), settings.Data?.HoursPerDay ?? 8m);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.Staff), staff);
+            options.Parameters.Add(nameof(RequestTimeOffDialog.ManagerUserId), currentUserId);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+}
