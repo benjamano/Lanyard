@@ -48,7 +48,6 @@
             @foreach (ChatReportView view in reports)
             {
                 ChatReport report = view.Report;
-                bool aboutMe = report.ReportedUserId == currentUserId && scope?.IsAdmin != true;
 
                 <section class="report-card">
                     <div class="report-card-top">
@@ -78,17 +77,10 @@
 
                     @if (report.Status == ChatReportStatus.Open)
                     {
-                        @if (aboutMe)
-                        {
-                            <div class="report-meta">This report is about you, so another manager needs to review it.</div>
-                        }
-                        else
-                        {
-                            <div class="report-actions">
-                                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="() => ResolveAsync(view, false)">Take action</FluentButton>
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => ResolveAsync(view, true)">Dismiss</FluentButton>
-                            </div>
-                        }
+                        <div class="report-actions">
+                            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="() => ResolveAsync(view, false)">Take action</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => ResolveAsync(view, true)">Dismiss</FluentButton>
+                        </div>
                     }
                 </section>
             }
@@ -110,7 +102,14 @@
                                 · by @suspension.ImposedByName · @suspension.Suspension.Reason
                             </div>
                         </div>
-                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => LiftAsync(suspension)">Lift</FluentButton>
+                        @if (suspension.Suspension.UserId == currentUserId && scope?.IsAdmin != true)
+                        {
+                            <span class="report-meta">Another manager needs to lift this.</span>
+                        }
+                        else
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="() => LiftAsync(suspension)">Lift</FluentButton>
+                        }
                     </li>
                 }
             </ul>
@@ -196,7 +195,7 @@
 
         loadedLocationId = location;
 
-        Result<List<ChatReportView>> result = await Moderation.GetReportsAsync(scope, location, openOnly);
+        Result<List<ChatReportView>> result = await Moderation.GetReportsAsync(scope, location, openOnly, currentUserId);
 
         if (!result.IsSuccess)
         {

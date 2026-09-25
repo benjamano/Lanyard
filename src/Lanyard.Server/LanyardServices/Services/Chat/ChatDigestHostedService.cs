@@ -11,9 +11,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Chat;
 
-// Once an hour, emails anyone with messages that have sat unread for a day - one email per person,
-// naming the conversations and how many are waiting, never what they say. Each message is
-// mentioned once: the member row remembers the newest message an email has covered.
+// Once an hour, emails anyone with messages that have sat unread for a day - at most one email per
+// person per day, naming the conversations and how many are waiting, never what they say. Each
+// message is mentioned once: an email sent at T covers messages up to T minus a day, so the next
+// one (a day later at the earliest) picks up exactly where it left off.
 public class ChatDigestHostedService(
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
@@ -74,18 +75,29 @@ public class ChatDigestHostedService(
 
         await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
 
-        // Per membership: messages from others, still there, unread, older than a day, and newer
-        // than anything a previous email covered. Muted conversations are left out.
+        // Anyone emailed in the last day waits until tomorrow, whichever conversation it's about.
+        DateTime emailedSince = nowUtc - UnreadFor;
+
+        List<string> emailedRecently = await ctx.ChatMembers
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(m => m.LastDigestEmailUtc != null && m.LastDigestEmailUtc > emailedSince)
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        // Per membership: messages from others, still there, unread, older than a day, and not
+        // covered by a previous email. Muted conversations are left out.
         var waiting = await ctx.ChatMembers
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(m => m.LeftUtc == null && !m.IsMuted && m.Conversation!.IsActive)
+            .Where(m => m.LeftUtc == null && !m.IsMuted && m.Conversation!.IsActive && !emailedRecently.Contains(m.UserId))
             .Join(ctx.ChatMessages, m => m.ConversationId, msg => msg.ConversationId, (m, msg) => new { Member = m, msg })
             .Where(x => x.msg.AuthorUserId != x.Member.UserId
                 && x.msg.DeletedUtc == null
                 && x.msg.CreateUtc <= cutoff
                 && x.msg.CreateUtc > (x.Member.LastReadUtc ?? x.Member.JoinedUtc)
-                && (x.Member.LastDigestEmailUtc == null || x.msg.CreateUtc > x.Member.LastDigestEmailUtc))
+                && (x.Member.LastDigestEmailUtc == null || x.msg.CreateUtc > x.Member.LastDigestEmailUtc.Value.AddHours(-24)))
             .GroupBy(x => new { x.Member.Id, x.Member.UserId, x.Member.ConversationId })
             .Select(g => new { g.Key.Id, g.Key.UserId, g.Key.ConversationId, Count = g.Count(), Newest = g.Max(x => x.msg.CreateUtc) })
             .ToListAsync();
@@ -132,13 +144,14 @@ public class ChatDigestHostedService(
             emailed++;
         }
 
-        // Remember what's been covered, so the same messages aren't emailed about again.
+        // Remember when, so the same messages aren't emailed about again and the person isn't
+        // emailed again for a day.
         List<Guid> memberIds = waiting.Select(x => x.Id).ToList();
         List<ChatMember> members = await ctx.ChatMembers.Where(x => memberIds.Contains(x.Id)).ToListAsync();
 
         foreach (ChatMember member in members)
         {
-            member.LastDigestEmailUtc = waiting.First(x => x.Id == member.Id).Newest;
+            member.LastDigestEmailUtc = nowUtc;
         }
 
         await ctx.SaveChangesAsync();

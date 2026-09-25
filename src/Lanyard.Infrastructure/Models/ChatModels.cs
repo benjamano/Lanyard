@@ -52,8 +52,9 @@ namespace Lanyard.Infrastructure.Models
         // Everything posted up to here has been seen; later messages from others are unread.
         public DateTime? LastReadUtc { get; set; }
 
-        // The newest unread message the daily unread-messages email has already mentioned, so
-        // it isn't mentioned twice.
+        // When the last unread-messages email mentioning this conversation went out. It covers
+        // messages that were a day old then, so the next one picks up from a day before this -
+        // and no one gets that email more than once a day.
         public DateTime? LastDigestEmailUtc { get; set; }
 
         // No push notifications from this conversation (unread counts still show).

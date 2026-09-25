@@ -45,7 +45,8 @@ public class ChatModerationService(
             // Only someone in the conversation can report from it: the same answer for a message
             // that doesn't exist, so a guessed id reveals nothing.
             bool isMember = message is not null && await ctx.ChatMembers.AsNoTracking()
-                .AnyAsync(x => x.ConversationId == message.ConversationId && x.UserId == reporterUserId && x.LeftUtc == null);
+                .AnyAsync(x => x.ConversationId == message.ConversationId && x.UserId == reporterUserId && x.LeftUtc == null
+                    && x.JoinedUtc <= message.CreateUtc);
 
             if (message is null || !isMember)
             {
@@ -122,7 +123,11 @@ public class ChatModerationService(
                 _logger.LogError(ex, "Saved chat report {ReportId} but couldn't notify managers", report.Id);
             }
 
-            _eventBus.Publish(new ChatEvent(message.ConversationId, blocked ? [reporterUserId, message.AuthorUserId] : [], ChatEventKind.ConversationChanged));
+            // Only a block changes what anyone sees; an empty recipient list would mean "everyone".
+            if (blocked)
+            {
+                _eventBus.Publish(new ChatEvent(message.ConversationId, [reporterUserId, message.AuthorUserId], ChatEventKind.ConversationChanged));
+            }
 
             return Result<ChatReport>.Ok(report);
         }
@@ -133,7 +138,7 @@ public class ChatModerationService(
         }
     }
 
-    public async Task<Result<List<ChatReportView>>> GetReportsAsync(LocationScope scope, int locationId, bool openOnly)
+    public async Task<Result<List<ChatReportView>>> GetReportsAsync(LocationScope scope, int locationId, bool openOnly, string? viewerUserId)
     {
         try
         {
@@ -151,6 +156,11 @@ public class ChatModerationService(
                 .Include(x => x.Reported)
                 .Include(x => x.Message).ThenInclude(x => x!.Conversation)
                 .Where(x => x.LocationId == locationId);
+
+            if (!scope.IsAdmin && viewerUserId is not null)
+            {
+                query = query.Where(x => x.ReportedUserId != viewerUserId);
+            }
 
             query = openOnly
                 ? query.Where(x => x.Status == ChatReportStatus.Open)
@@ -329,6 +339,11 @@ public class ChatModerationService(
             if (suspension is null || !SchedulingAccess.CanManageCompany(scope, suspension.CompanyId))
             {
                 return Result<bool>.Fail("That suspension isn't available.");
+            }
+
+            if (!scope.IsAdmin && suspension.UserId == userId)
+            {
+                return Result<bool>.Fail("You can't lift your own suspension. Another manager or an admin needs to.");
             }
 
             suspension.LiftedUtc = Now;

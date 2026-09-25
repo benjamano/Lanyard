@@ -14,7 +14,9 @@ public interface IChatModerationService
     // alsoBlock: for a direct message, also blocks the author.
     Task<Result<ChatReport>> ReportAsync(string reporterUserId, Guid messageId, ChatReportReason reason, string? details, bool alsoBlock);
 
-    Task<Result<List<ChatReportView>>> GetReportsAsync(LocationScope scope, int locationId, bool openOnly);
+    // Reports about the viewer themselves are left out (unless they're an Admin): a reported
+    // manager mustn't learn who reported them.
+    Task<Result<List<ChatReportView>>> GetReportsAsync(LocationScope scope, int locationId, bool openOnly, string? viewerUserId);
 
     // Dismiss (neither), or take action: remove the message for everyone and/or suspend its author
     // from posting. suspendDays null with suspend = until a manager lifts it.

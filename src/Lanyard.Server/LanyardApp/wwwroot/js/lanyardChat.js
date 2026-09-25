@@ -109,6 +109,30 @@ window.lanyardChat = (() => {
             }
         },
 
+        // Tells .NET when the page is hidden (another tab, minimised, phone locked) and shown again,
+        // so a conversation left open in the background doesn't count as being read. Returns
+        // whether it's visible now.
+        watchVisibility(dotNetRef) {
+            if (window.__lanyardChatVisibility) {
+                document.removeEventListener('visibilitychange', window.__lanyardChatVisibility);
+            }
+
+            window.__lanyardChatVisibility = () => {
+                dotNetRef.invokeMethodAsync('OnVisibilityChanged', document.visibilityState === 'visible').catch(() => { });
+            };
+
+            document.addEventListener('visibilitychange', window.__lanyardChatVisibility);
+
+            return document.visibilityState === 'visible';
+        },
+
+        unwatchVisibility() {
+            if (window.__lanyardChatVisibility) {
+                document.removeEventListener('visibilitychange', window.__lanyardChatVisibility);
+                window.__lanyardChatVisibility = null;
+            }
+        },
+
         isNearBottom(el) {
             return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 160;
         },

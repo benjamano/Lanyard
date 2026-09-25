@@ -165,7 +165,7 @@ public class ChatServiceTests
         // Tom deletes it afterwards; the manager still sees what was reported, and nothing else.
         await w.Chat.DeleteOwnAsync(w.Tom.Id, nasty.Id);
 
-        List<ChatReportView> reports = (await w.Moderation.GetReportsAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), w.Location.Id, openOnly: true)).Data!;
+        List<ChatReportView> reports = (await w.Moderation.GetReportsAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), w.Location.Id, openOnly: true, w.Manager.Id)).Data!;
         ChatReportView view = reports.Single();
 
         Assert.AreEqual("<p>Nasty message</p>", view.Report.MessageHtmlSnapshot);
@@ -198,6 +198,38 @@ public class ChatServiceTests
 
         Assert.IsFalse(resolved.IsSuccess);
         Assert.AreEqual(0, (await w.Moderation.CountOpenForNavAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), w.Manager.Id)).Data);
+
+        // Not even listed for them - the card would say who reported them.
+        Assert.AreEqual(0, (await w.Moderation.GetReportsAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), w.Location.Id, openOnly: false, w.Manager.Id)).Data!.Count);
+        Assert.AreEqual(1, (await w.Moderation.GetReportsAsync(SchedulingTestHelpers.AdminScope, w.Location.Id, openOnly: false, "admin")).Data!.Count);
+    }
+
+    [TestMethod]
+    public async Task Suspension_CantBeLiftedByTheSuspendedManager()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Manager.Id])).Data!;
+        ChatMessage message = await SendAsync(w, w.Manager, group);
+        ChatReport report = (await w.Moderation.ReportAsync(w.Amy.Id, message.Id, ChatReportReason.Spam, null, false)).Data!;
+        await w.Moderation.ResolveAsync(SchedulingTestHelpers.AdminScope, report.Id, false, true, null, null, "admin");
+
+        ChatSuspensionView mine = (await w.Moderation.GetSuspensionsAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), w.Company.Id)).Data!.Single();
+
+        Assert.IsFalse((await w.Moderation.LiftSuspensionAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), mine.Suspension.Id, w.Manager.Id)).IsSuccess);
+        Assert.IsTrue((await w.Moderation.LiftSuspensionAsync(SchedulingTestHelpers.AdminScope, mine.Suspension.Id, "admin")).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Suspended_CantRenameOrAddPeopleEither()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+        ChatMessage message = await SendAsync(w, w.Tom, group);
+        ChatReport report = (await w.Moderation.ReportAsync(w.Amy.Id, message.Id, ChatReportReason.Spam, null, false)).Data!;
+        await w.Moderation.ResolveAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), report.Id, false, true, 7, null, w.Manager.Id);
+
+        Assert.IsFalse((await w.Chat.RenameGroupAsync(w.Tom.Id, group.Id, "Rude name")).IsSuccess);
+        Assert.IsFalse((await w.Chat.AddMembersAsync(w.Tom.Id, group.Id, [w.Priya.Id])).IsSuccess);
     }
 
     [TestMethod]
@@ -262,6 +294,39 @@ public class ChatServiceTests
 
         await w.Chat.UnblockAsync(w.Amy.Id, w.Tom.Id);
         Assert.IsTrue((await w.Chat.SendAsync(w.Tom.Id, direct.Id, "<p>Hi</p>")).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Block_AlsoStopsEditingOldDirectMessages()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        ChatMessage message = await SendAsync(w, w.Tom, direct);
+
+        await w.Chat.BlockAsync(w.Amy.Id, w.Tom.Id);
+
+        Assert.IsFalse((await w.Chat.EditAsync(w.Tom.Id, message.Id, "<p>Something nasty</p>")).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task ReAddedMember_StartsFresh_WithoutWhatWasSaidWhileTheyWereOut()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
+        await w.Chat.LeaveGroupAsync(w.Tom.Id, group.Id);
+
+        w.Clock.Advance(TimeSpan.FromMinutes(5));
+        await SendAsync(w, w.Amy, group, "<p>About Tom while he's out</p>");
+
+        w.Clock.Advance(TimeSpan.FromMinutes(5));
+        await w.Chat.AddMembersAsync(w.Amy.Id, group.Id, [w.Tom.Id]);
+
+        Assert.AreEqual(0, (await w.Chat.GetThreadAsync(w.Tom.Id, group.Id)).Data!.Messages.Count);
+        Assert.AreEqual(0, (await w.Chat.GetUnreadTotalAsync(w.Tom.Id)).Data);
+
+        w.Clock.Advance(TimeSpan.FromMinutes(1));
+        await SendAsync(w, w.Amy, group, "<p>Welcome back</p>");
+        Assert.AreEqual("Welcome back", (await w.Chat.GetThreadAsync(w.Tom.Id, group.Id)).Data!.Messages.Single().Message.BodyText);
     }
 
     [TestMethod]
@@ -404,9 +469,44 @@ public class ChatServiceTests
 
         NotificationJob job = w.Notifications.Jobs.Single(x => x.Topic == NotificationTopic.ChatUnreadEmail);
         Assert.AreEqual(w.Amy.Id, job.UserId);
+        Assert.AreEqual(w.Amy.Id, job.UserId);
         ChatDigestLine line = ((ChatDigestPayload)job.Payload).Lines.Single();
         Assert.AreEqual(1, line.Count);
         StringAssert.Contains(line.ConversationName, "Tom");
+    }
+
+    [TestMethod]
+    public async Task Digest_AtMostOnceADayPerPerson_AndPicksUpWhereItLeftOff()
+    {
+        World w = await SeedAsync();
+        ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Tom.Id, w.Company.Id, "Crew", [w.Amy.Id])).Data!;
+        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(w.Options);
+        DateTime start = w.Clock.UtcNow;
+
+        // A message an hour, in two conversations, and Amy never opens chat.
+        for (int hour = 1; hour <= 30; hour++)
+        {
+            w.Clock.UtcNow = start.AddHours(hour);
+            await SendAsync(w, w.Tom, hour % 2 == 0 ? direct : group, $"<p>Message {hour}</p>");
+        }
+
+        int emails = 0;
+
+        // Three days of hourly sweeps: day one covers message 1 (the only one a day old), day two
+        // messages 2-25, day three the rest.
+        for (int hour = 25; hour <= 80; hour++)
+        {
+            emails += await ChatDigestHostedService.SweepAsync(factory, w.Notifications, start.AddHours(hour).AddMinutes(30));
+        }
+
+        Assert.AreEqual(3, emails, "One a day, not one an hour");
+
+        // Together the emails mention every message exactly once.
+        int mentioned = w.Notifications.Jobs
+            .Where(x => x.Topic == NotificationTopic.ChatUnreadEmail)
+            .Sum(x => ((ChatDigestPayload)x.Payload).Lines.Sum(l => l.Count));
+        Assert.AreEqual(30, mentioned);
     }
 
     [TestMethod]

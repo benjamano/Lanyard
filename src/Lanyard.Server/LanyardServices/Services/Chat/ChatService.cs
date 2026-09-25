@@ -276,6 +276,14 @@ public class ChatService(
                 return Result<bool>.Fail("That group isn't available.");
             }
 
+            // Changing a group is posting in it as far as everyone else can see, so a suspension
+            // stops it too. (Any member may add people or rename: groups are informal, and there's
+            // no owner to ask.)
+            if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
+            {
+                return Result<bool>.Fail(suspended);
+            }
+
             List<string> adding = memberUserIds.Where(x => !string.IsNullOrEmpty(x) && x != userId).Distinct().ToList();
 
             if (!await ChatRules.InCompanyAsync(ctx, conversation.CompanyId, adding))
@@ -302,8 +310,13 @@ public class ChatService(
                 }
                 else if (member.LeftUtc is not null)
                 {
+                    // A fresh start: what was said while they were out is neither theirs to read
+                    // nor unread for them.
                     member.LeftUtc = null;
                     member.JoinedUtc = now;
+                    member.LastReadUtc = now;
+                    member.LastDigestEmailUtc = null;
+                    member.IsMuted = false;
                 }
             }
 
@@ -337,6 +350,11 @@ public class ChatService(
             if (conversation is null || me is null || conversation.Kind != ChatConversationKind.Group)
             {
                 return Result<bool>.Fail("That group isn't available.");
+            }
+
+            if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
+            {
+                return Result<bool>.Fail(suspended);
             }
 
             conversation.Name = name.Trim();
@@ -398,12 +416,16 @@ public class ChatService(
 
             take = Math.Clamp(take, 1, 200);
 
+            // A member sees what was said from when they (last) joined - someone added to a group,
+            // or added back after leaving, doesn't get the conversation from before.
+            DateTime joined = me.JoinedUtc;
+
             IQueryable<ChatMessage> query = ctx.ChatMessages
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Author)
                 .Include(x => x.ReplyTo).ThenInclude(x => x!.Author)
-                .Where(x => x.ConversationId == conversationId);
+                .Where(x => x.ConversationId == conversationId && x.CreateUtc >= joined);
 
             if (before is DateTime cutoff)
             {
@@ -424,7 +446,9 @@ public class ChatService(
                     x,
                     RotaNames.For(x.Author),
                     x.AuthorUserId == userId,
-                    x.ReplyTo is null ? null : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, 100), x.ReplyTo.IsDeleted)))
+                    x.ReplyTo is null ? null
+                        : x.ReplyTo.CreateUtc < joined ? new ChatReplyPreview(x.ReplyTo.Id, "Earlier message", "From before you joined", true)
+                        : new ChatReplyPreview(x.ReplyTo.Id, RotaNames.For(x.ReplyTo.Author), ChatHtml.Preview(x.ReplyTo.BodyText, 100), x.ReplyTo.IsDeleted)))
                 .ToList();
 
             List<ChatMember> members = await ctx.ChatMembers
@@ -586,9 +610,14 @@ public class ChatService(
                 return Result<bool>.Fail("That conversation isn't available.");
             }
 
-            if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
+            // Editing is posting: the same suspension and block rules as sending.
+            string? otherUserId = conversation.Kind == ChatConversationKind.Direct
+                ? await ctx.ChatMembers.AsNoTracking().Where(x => x.ConversationId == conversation.Id && x.UserId != userId).Select(x => x.UserId).FirstOrDefaultAsync()
+                : null;
+
+            if (await CannotPostReasonAsync(ctx, userId, conversation, otherUserId) is { } cannotPost)
             {
-                return Result<bool>.Fail(suspended);
+                return Result<bool>.Fail(cannotPost);
             }
 
             message.BodyHtml = cleaned.Html;

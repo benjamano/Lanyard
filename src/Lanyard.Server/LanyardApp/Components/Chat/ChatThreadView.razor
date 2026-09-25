@@ -211,6 +211,11 @@
     private bool scrollToBottom;
     private double? keepFromHeight;
 
+    // Whether the page is actually on screen. Only then does the conversation count as being
+    // read (no push, marked read); a tab in the background or a locked phone doesn't.
+    private bool pageVisible = true;
+    private DotNetObjectReference<ChatThreadView>? dotNetRef;
+
     private string? composerContext => editing is not null ? "Editing your message"
         : replyingTo is not null ? $"Replying to {replyingTo.AuthorName}: {ChatHtml.Preview(replyingTo.Message.BodyText, 60)}"
         : null;
@@ -227,6 +232,8 @@
             return;
         }
 
+        bool switching = loadedId != Guid.Empty;
+
         loadedId = ConversationId;
         thread = null;
         messages = [];
@@ -235,15 +242,26 @@
         menuOpen = false;
         messageMenu = null;
 
+        // The same composer stays on screen when switching conversation; whatever was typed (or
+        // loaded for editing) belongs to the old one and must not be sent to the new one.
+        if (switching && composer is not null)
+        {
+            await composer.ClearAsync();
+        }
+
         presence?.Dispose();
-        presence = Presence.Enter(UserId, ConversationId);
+        presence = pageVisible ? Presence.Enter(UserId, ConversationId) : null;
 
         await LoadLatestAsync(scroll: true);
     }
 
     private async Task LoadLatestAsync(bool scroll)
     {
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId);
+        // Reload as far back as the reader has scrolled (up to the page limit), so edits and
+        // removals of older messages show too, not just the newest page.
+        int take = Math.Clamp(messages.Count, 50, 200);
+
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -262,7 +280,31 @@
         messages = [.. older, .. result.Data.Messages];
         scrollToBottom = scrollToBottom || scroll;
 
-        await ChatService.MarkReadAsync(UserId, ConversationId);
+        if (pageVisible)
+        {
+            await ChatService.MarkReadAsync(UserId, ConversationId);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnVisibilityChanged(bool visible)
+    {
+        if (visible == pageVisible)
+        {
+            return;
+        }
+
+        pageVisible = visible;
+        presence?.Dispose();
+        presence = null;
+
+        if (visible)
+        {
+            // Back on screen: count as reading again and catch up.
+            presence = Presence.Enter(UserId, ConversationId);
+            await LoadLatestAsync(scroll: false);
+            StateHasChanged();
+        }
     }
 
     private void OnChatEvent(ChatEvent chatEvent)
@@ -298,6 +340,17 @@
     {
         try
         {
+            if (firstRender)
+            {
+                dotNetRef = DotNetObjectReference.Create(this);
+                bool visible = await JS.InvokeAsync<bool>("lanyardChat.watchVisibility", dotNetRef);
+
+                if (!visible)
+                {
+                    await OnVisibilityChanged(false);
+                }
+            }
+
             if (keepFromHeight is double height)
             {
                 keepFromHeight = null;
@@ -582,10 +635,19 @@
             : day.ToString(day.Year == today.Year ? "dddd d MMMM" : "d MMMM yyyy", RotaFormat.Uk);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         ChatEvents.OnChanged -= OnChatEvent;
         presence?.Dispose();
-        return ValueTask.CompletedTask;
+
+        try
+        {
+            await JS.InvokeVoidAsync("lanyardChat.unwatchVisibility");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        dotNetRef?.Dispose();
     }
 }
