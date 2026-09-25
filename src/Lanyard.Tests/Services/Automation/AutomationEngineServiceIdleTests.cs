@@ -426,4 +426,40 @@ public class AutomationEngineServiceIdleTests
         Assert.AreEqual(1, executor.ExecutedActionIds.Count,
             "A successful fire ends the stretch; only a new transition should re-arm it.");
     }
+
+    [TestMethod]
+    public async Task EnabledFlag_FailedFirstRead_IsRetriedOnTheNextEvaluation()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, enabled: true);
+
+        // First context creation fails (Postgres not ready yet during a redeploy), later ones work.
+        int calls = 0;
+        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => Interlocked.Increment(ref calls) == 1
+                ? Task.FromException<ApplicationDbContext>(new InvalidOperationException("database unavailable"))
+                : Task.FromResult(new ApplicationDbContext(options)));
+
+        AutomationEngineService engine = new(factoryMock.Object, [], NullLogger<AutomationEngineService>.Instance);
+
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow, CancellationToken.None);
+        Assert.IsFalse(engine.IsEnabled, "A failed read leaves the engine disabled for that evaluation.");
+
+        await engine.ProcessIdleRulesAsync(DateTime.UtcNow, CancellationToken.None);
+        Assert.IsTrue(engine.IsEnabled, "The next evaluation must retry the read instead of staying disabled until restart.");
+    }
+
+    [TestMethod]
+    public async Task EnabledFlag_ConcurrentFirstUse_ReadsTheSettingAndEnables()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, enabled: true);
+
+        AutomationEngineService engine = GetEngine(options);
+
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => engine.ProcessIdleRulesAsync(DateTime.UtcNow, CancellationToken.None)));
+
+        Assert.IsTrue(engine.IsEnabled);
+    }
 }

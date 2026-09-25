@@ -5,7 +5,6 @@ using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -14,13 +13,11 @@ namespace Lanyard.Application.Services;
 public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
     IHubContext<SignalRControlHub> hubContext,
     ILogger<DmxService> logger,
-    IMemoryCache cache,
     IServiceScopeFactory scopeFactory) : IDmxService, IDmxClientService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<DmxService> _logger = logger;
-    private readonly IMemoryCache _cache = cache;
 
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
 

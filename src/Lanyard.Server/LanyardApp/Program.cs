@@ -1,4 +1,5 @@
 ﻿using Amazon.S3;
+using Microsoft.AspNetCore.Localization;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
@@ -136,6 +137,8 @@ builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExe
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
+builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 
@@ -143,7 +146,11 @@ builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardSer
 
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
-builder.Services.AddSignalR();
+// Kiosks report lists (cached songs, screens, devices) in single messages; a few hundred
+// cached songs overflow the 32 KB default and the hub drops the connection. Raised for the
+// kiosk hub only: global HubOptions would also apply to every Blazor circuit.
+builder.Services.AddSignalR()
+    .AddHubOptions<SignalRControlHub>(options => options.MaximumReceiveMessageSize = 256 * 1024);
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -183,7 +190,17 @@ if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(bu
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
+    options.UseNpgsql(connectionString, b =>
+    {
+        b.MigrationsAssembly("Lanyard.Infrastructure");
+
+        // Several read paths Include two or more collections at once (a course with its
+        // sections, questions, options, attempts and answers; a program's steps with template
+        // parameters and parameter values). As one SQL statement those multiply into a row per
+        // combination of child rows, each repeating the parent's large text columns. Split
+        // queries load each collection with its own statement instead.
+        b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
 
 if (builder.Environment.IsDevelopment())
 {
@@ -273,14 +290,6 @@ builder.Services.AddCascadingAuthenticationState();
 // Add Controllers for API endpoints
 builder.Services.AddControllers();
 
-// Add HttpClient
-builder.Services.AddHttpClient();
-builder.Services.AddScoped(sp =>
-{
-    NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
-});
-
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
 {
@@ -330,6 +339,16 @@ if (app.Environment.IsDevelopment() == false)
 }
 
 app.UseRateLimiter();
+
+// Per-user date/time format from the culture cookie (see UserCultureCookie). Cookie only: the
+// browser's Accept-Language must not override an explicit preference, and nothing in the app
+// switches culture via the query string. Defaults to en-GB (the business is UK based).
+RequestLocalizationOptions localizationOptions = new RequestLocalizationOptions()
+    .SetDefaultCulture(UserCultureCookie.DefaultCulture)
+    .AddSupportedCultures(UserCultureCookie.SupportedCultures)
+    .AddSupportedUICultures(UserCultureCookie.SupportedCultures);
+localizationOptions.RequestCultureProviders = [new CookieRequestCultureProvider()];
+app.UseRequestLocalization(localizationOptions);
 
 string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
 

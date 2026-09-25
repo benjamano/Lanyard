@@ -309,8 +309,8 @@
       "Editing the subject or body only changes the email sent to that one new user - the shared company/location welcome email template is left untouched.",
       "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
     ]
-  },  
-  {
+  },
+  {   
     "version": "1.3.21",
     "releaseDate": "2026-09-25",
     "summary": "Performance and reliability improvements across staff pages, kiosks, DMX lighting, music and file streaming.",
@@ -340,6 +340,33 @@
       "The login company picker and the sign-in form no longer reload (and briefly blank out) a moment after the page first appears.",
       "The home page no longer fetches your home screen dashboard settings and company branding twice on every load.",
       "Fixed the \"your home screen dashboard is no longer available\" notice never actually appearing when the dashboard you had chosen was deleted."
+      "Added database indexes for the training assignment list (per user), the automation execution log (newest-first and per rule) and the song BPM backfill sweep, so those screens stay fast as the tables grow.",
+      "Automation rule execution history is now kept for 90 days (configurable via Automation:ExecutionLog:RetentionDays) instead of forever.",
+      "Opening a course, an assignment or a projection program now loads its sections, questions, attempts and parameters with separate queries instead of one multiplied result set that repeated the course text for every combination of rows.",
+      "The recurring-training and due-soon reminder sweeps now ask the database for exactly the assignments that qualify instead of loading every assignment for every course and filtering in memory.",
+      "Training analytics rankings (top scores, fastest completions) are computed in the database and return only the top rows.",
+      "Dashboard pickers (home screen settings, program flow, dashboard list) no longer load every widget of every dashboard just to show names.",
+      "User lists used for name lookups and the \"is this the first user?\" check no longer load and track every account row.",
+      "Automation actions checking whether a kiosk is online now run a single existence query instead of loading every connected kiosk.",
+      "The Music page's song list no longer redraws every row every second while a song is playing. With a large playlist this made the page sluggish; the list now only redraws when the songs, the selected kiosk or the playing track actually change.",
+      "Opening the Music page now loads playlist names plus the songs of the first playlist only, rather than every song of every playlist twice.",
+      "Playlist pickers (Music page, playlist widget, automation rule dialog) load names only.",
+      "The current user's profile and location are looked up once per browser session instead of separately by the layout, footer, navigation menu, greeting card and page on every load.",
+      "Fixed: choosing the 24-hour time format on your account page changed the date/time format for every other user until someone else loaded a page. The preference is now stored in a browser cookie set at login and applied per user; the app defaults to UK format.",
+      "Changing the time-format preference now takes effect immediately (the page reloads once) instead of on the next page someone happens to open.",
+      "Fixed: the laser-game status widget counted down the shared game timer itself, so with several dashboards open the remaining time dropped several seconds per second for everyone. Each widget now works out the remaining time from the kiosk's last report.",
+      "Laser-game status and scoreboard widgets now redraw at most about ten times a second during a game instead of once for every hit.",
+      "The digital clock widget in millisecond mode updates ten times a second instead of twenty, and no longer restarts its timer every time the dashboard redraws.",
+      "The Clients page no longer re-sorts and reloads its grid every second while it counts up \"last seen\" times.",
+      "The Automation page, the automation rule status widget and the kiosk page now load their independent data in parallel.",
+      "Song BPM analysis no longer queues the same song several times while a backlog is being processed.",
+      "Kiosk song-cache reports now look up all song names with one query instead of one per cached song.",
+      "Removed two unused script libraries (Bootstrap's JavaScript bundle and an input-mask library) from every page load.",
+      "Projection program steps now hold for exactly their configured time, including when a program is paused and resumed part-way through a step. Each step used to run a few percent long.",
+      "Kiosks with a large song cache no longer risk being disconnected when they report their cached songs: the server now accepts larger kiosk messages.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
+      "Removed the \"Lanyard\" text heading from the top of every email sent by the app.",
+      "Emails now show the company's logo at the top when one has been uploaded, and the Lanyard logo only when the company has no logo of its own."
     ]
   }
 ]
