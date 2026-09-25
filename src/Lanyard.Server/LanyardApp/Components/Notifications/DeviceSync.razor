@@ -1,0 +1,58 @@
+@using Lanyard.Application.Services.Notifications
+@using Microsoft.Extensions.Logging
+
+@inject IJSRuntime JS
+@inject IPushSender PushSender
+@inject IPushSubscriptionService PushSubscriptionService
+@inject IAppInstallationService AppInstallationService
+@inject ILogger<DeviceSync> Logger
+
+@* Renders nothing. On each app load while signed in: tells the server this browser's push
+   subscription still exists (and belongs to whoever is signed in now), and that the installed app
+   is in use on this device. *@
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+            if (!userResult.IsSuccess || string.IsNullOrEmpty(userResult.Data))
+            {
+                return;
+            }
+
+            string userId = userResult.Data;
+            BrowserDevice device = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
+
+            if (PushSender.IsConfigured)
+            {
+                PushSubscriptionInput? subscription = await JS.InvokeAsync<PushSubscriptionInput?>("lanyardPush.sync", PushSender.PublicKey);
+
+                if (subscription is not null)
+                {
+                    await PushSubscriptionService.SaveAsync(userId, subscription, device.Report);
+                }
+            }
+
+            if (device.IsStandalone && !string.IsNullOrEmpty(device.DeviceId))
+            {
+                await AppInstallationService.RecordAsync(userId, device.DeviceId, device.Report);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Page closed mid-sync; the next load tries again.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("Device sync failed: {Error}", ex.Message);
+        }
+    }
+}

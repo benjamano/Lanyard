@@ -34,7 +34,7 @@ public class NotificationTests
 
         NotificationDeliverer deliverer = new(
             SchedulingTestHelpers.GetFactory(options), email.Object, Microsoft.Extensions.Options.Options.Create(Options),
-            branding.Object, new TestClock(Now), NullLogger<NotificationDeliverer>.Instance);
+            branding.Object, Mock.Of<IPushSender>(), new TestClock(Now), NullLogger<NotificationDeliverer>.Instance);
 
         return (deliverer, email);
     }

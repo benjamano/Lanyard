@@ -1,0 +1,371 @@
+@using Lanyard.Application.Services.Notifications
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+@using Lib.Net.Http.WebPush
+
+@implements IDisposable
+
+@inject IJSRuntime JS
+@inject IPushSender PushSender
+@inject IPushSubscriptionService PushSubscriptionService
+@inject INotificationPreferenceService PreferenceService
+
+@* Notification settings: this device's push status, the person's devices, and per-topic push/email
+   switches. Push reaches every device listed under "Your devices"; email goes to the account's
+   address. *@
+<div class="notifications-card">
+    @if (state == DeviceState.Loading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <section class="notifications-device">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">This device</FluentText>
+
+            @switch (state)
+            {
+                case DeviceState.ServerOff:
+                    <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                        Phone notifications aren't set up on this server yet. Emails still arrive as set below.
+                    </FluentMessageBar>
+                    break;
+
+                case DeviceState.IosNeedsInstall:
+                    <FluentText Style="color: var(--colorNeutralForeground3);">
+                        @if (device!.IosSupportsPush)
+                        {
+                            <text>On iPhone and iPad, notifications only work once Lanyard is on your Home Screen:</text>
+                        }
+                        else
+                        {
+                            <text>Notifications need iOS 16.4 or later. You can still add Lanyard to your Home Screen:</text>
+                        }
+                    </FluentText>
+                    <InstallSteps Device="@(device!)" />
+                    break;
+
+                case DeviceState.Unsupported:
+                    <FluentText Style="color: var(--colorNeutralForeground3);">This browser can't show notifications. Emails still arrive as set below.</FluentText>
+                    break;
+
+                case DeviceState.Blocked:
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        Notifications are blocked for Lanyard in this browser. Allow them in the site settings
+                        (the icon beside the address, or Settings › Notifications on a phone), then reload this page.
+                    </FluentMessageBar>
+                    break;
+
+                case DeviceState.On:
+                    <div class="notifications-device-row">
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">On for this device</FluentBadge>
+                        <div class="notifications-device-actions">
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Send())"
+                                          Disabled="@isBusy" OnClick="SendTestAsync">Send a test</FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Subtle" Disabled="@isBusy" OnClick="TurnOffAsync">Turn off</FluentButton>
+                        </div>
+                    </div>
+                    break;
+
+                default:
+                    <FluentText Style="color: var(--colorNeutralForeground3);">
+                        Get shift reminders and rota changes as notifications on this @(device!.IsPhoneOrTablet ? "phone" : "computer").
+                    </FluentText>
+                    <div>
+                        @* Plain element: the permission request must run inside the tap itself (see lanyardPush.js). *@
+                        <button type="button" class="notifications-enable" @ref="enableButton" disabled="@isBusy">
+                            @(isBusy ? "Turning on..." : "Turn on notifications for this device")
+                        </button>
+                    </div>
+                    break;
+            }
+
+            @if (showInstallSteps)
+            {
+                <details class="notifications-install">
+                    <summary>Add Lanyard to your home screen</summary>
+                    <InstallSteps Device="@(device!)" />
+                </details>
+            }
+        </section>
+
+        @if (devices.Count > 0)
+        {
+            <section class="notifications-devices">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Your devices</FluentText>
+                <ul class="notifications-device-list">
+                    @foreach (PushDeviceView item in devices)
+                    {
+                        bool isThis = item.Endpoint == browserEndpoint;
+
+                        <li>
+                            <FluentIcon Value="@(new Icons.Regular.Size20.Phone())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" />
+                            <div class="notifications-device-name">
+                                <span>
+                                    @item.DeviceLabel
+                                    @if (isThis)
+                                    {
+                                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand" Class="ms-1">This device</FluentBadge>
+                                    }
+                                </span>
+                                <span class="notifications-device-meta">Last used @RotaTime.ToVenueLocal(item.LastSeenUtc).ToString("d MMM yyyy", RotaFormat.Uk)</span>
+                            </div>
+                            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                          Title="@($"Remove {item.DeviceLabel}")" aria-label="@($"Remove {item.DeviceLabel}")"
+                                          Disabled="@isBusy" OnClick="@(() => RemoveDeviceAsync(item, isThis))" />
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
+        <section class="notifications-topics">
+            <div class="notifications-topic-row notifications-topic-header">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">What you get</FluentText>
+                <span>Push</span>
+                <span>Email</span>
+            </div>
+
+            @foreach (IGrouping<NotificationTopicGroup, NotificationTopicInfo> group in VisibleTopics.GroupBy(x => x.Group))
+            {
+                <div class="notifications-topic-group">@NotificationTopics.GroupLabel(group.Key)</div>
+
+                @foreach (NotificationTopicInfo info in group)
+                {
+                    TopicPreference pref = preferences.First(x => x.Topic == info.Topic);
+
+                    <div class="notifications-topic-row">
+                        <div class="notifications-topic-text">
+                            <span class="notifications-topic-label">@info.Label</span>
+                            <span class="notifications-topic-description">@info.Description</span>
+                        </div>
+                        <FluentSwitch Value="@pref.Push" aria-label="@($"{info.Label} by push")"
+                                      ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, v, pref.Email))" />
+                        <FluentSwitch Value="@pref.Email" aria-label="@($"{info.Label} by email")"
+                                      ValueChanged="@((bool v) => SavePreferenceAsync(info.Topic, pref.Push, v))" />
+                    </div>
+                }
+            }
+
+            <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
+                Push goes to every device under "Your devices". Password, sign-in and invite emails always arrive.
+            </FluentText>
+        </section>
+    }
+</div>
+
+@code {
+    private enum DeviceState
+    {
+        Loading,
+        ServerOff,
+        Unsupported,
+        IosNeedsInstall,
+        Blocked,
+        Off,
+        On
+    }
+
+    private DeviceState state = DeviceState.Loading;
+    private DeviceDescription? device;
+    private BrowserDevice? browser;
+    private string? browserEndpoint;
+    private string? userId;
+    private bool isManager;
+    private bool isBusy;
+    private bool showInstallSteps;
+    private bool bound;
+    private List<PushDeviceView> devices = [];
+    private List<TopicPreference> preferences = [];
+    private ElementReference enableButton;
+    private DotNetObjectReference<NotificationsCard>? dotNetRef;
+
+    private IEnumerable<NotificationTopicInfo> VisibleTopics => NotificationTopics.All.Where(x => !x.ManagerOnly || isManager);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (state == DeviceState.Off && !bound && PushSender.PublicKey is not null)
+        {
+            bound = true;
+            dotNetRef ??= DotNetObjectReference.Create(this);
+
+            try
+            {
+                await JS.InvokeVoidAsync("lanyardPush.bindEnableButton", enableButton, dotNetRef, PushSender.PublicKey);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+            if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+            {
+                _toastService.ShowError($"Failed to load your account: {user.Error}");
+                return;
+            }
+
+            userId = user.Data;
+            isManager = await _securityService.IsCurrentUserInRoleAsync("Admin") || await _securityService.IsCurrentUserInRoleAsync("Manager");
+
+            Result<List<TopicPreference>> prefs = await PreferenceService.GetForUserAsync(userId);
+            preferences = prefs.Data ?? NotificationTopics.All.Select(x => NotificationTopics.Default(x.Topic)).ToList();
+
+            if (!prefs.IsSuccess)
+            {
+                _toastService.ShowError(prefs.Error ?? "Couldn't load your notification settings.");
+            }
+
+            browser = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
+            device = DeviceDescriptor.Describe(browser.Report);
+
+            await RefreshDeviceAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task RefreshDeviceAsync()
+    {
+        Result<List<PushDeviceView>> list = await PushSubscriptionService.GetForUserAsync(userId!);
+        devices = list.Data ?? [];
+
+        BrowserPushState push = await JS.InvokeAsync<BrowserPushState>("lanyardPush.getState");
+        browserEndpoint = push.Endpoint;
+
+        state = !PushSender.IsConfigured ? DeviceState.ServerOff
+            : !push.Supported && device!.IsApple && !browser!.IsStandalone ? DeviceState.IosNeedsInstall
+            : !push.Supported ? DeviceState.Unsupported
+            : push.Permission == "denied" ? DeviceState.Blocked
+            : push.Endpoint is not null && devices.Any(x => x.Endpoint == push.Endpoint) ? DeviceState.On
+            : DeviceState.Off;
+
+        showInstallSteps = device!.IsPhoneOrTablet && !browser!.IsStandalone && state != DeviceState.IosNeedsInstall;
+        bound = false;
+
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnPushResult(string permission, PushSubscriptionInput? subscription)
+    {
+        if (permission == "granted" && subscription is not null)
+        {
+            isBusy = true;
+            StateHasChanged();
+
+            Result<bool> saved = await PushSubscriptionService.SaveAsync(userId!, subscription, browser!.Report);
+
+            isBusy = false;
+
+            if (saved.IsSuccess)
+            {
+                _toastService.ShowSuccess("Notifications are on for this device.");
+            }
+            else
+            {
+                _toastService.ShowError($"Couldn't turn on notifications: {saved.Error}");
+            }
+        }
+        else if (permission == "error")
+        {
+            _toastService.ShowError("Couldn't turn on notifications on this device.");
+        }
+
+        await RefreshDeviceAsync();
+    }
+
+    private async Task SendTestAsync()
+    {
+        isBusy = true;
+
+        PushSendSummary summary = await PushSender.SendToUserAsync(userId!,
+            new PushContent("Notifications are working", "This is how shift reminders and rota changes will look on this device.",
+                "/account/manage", "lanyard-test", PushMessageUrgency.Normal, TimeSpan.FromHours(1)),
+            onlyEndpoint: browserEndpoint);
+
+        isBusy = false;
+
+        if (summary.Delivered > 0)
+        {
+            _toastService.ShowSuccess("Test sent. It should appear in a few seconds.");
+        }
+        else
+        {
+            _toastService.ShowError("The test couldn't be delivered. Try turning notifications off and on again.");
+        }
+
+        await RefreshDeviceAsync();
+    }
+
+    private async Task TurnOffAsync()
+    {
+        isBusy = true;
+
+        string? endpoint = await JS.InvokeAsync<string?>("lanyardPush.unsubscribe");
+
+        if (endpoint is not null)
+        {
+            await PushSubscriptionService.RemoveAsync(userId!, endpoint);
+        }
+
+        isBusy = false;
+        _toastService.ShowInfo("Notifications are off for this device.");
+
+        await RefreshDeviceAsync();
+    }
+
+    private async Task RemoveDeviceAsync(PushDeviceView item, bool isThis)
+    {
+        isBusy = true;
+
+        if (isThis)
+        {
+            await JS.InvokeAsync<string?>("lanyardPush.unsubscribe");
+        }
+
+        Result<bool> removed = await PushSubscriptionService.RemoveByIdAsync(userId!, item.Id);
+        isBusy = false;
+
+        if (!removed.IsSuccess)
+        {
+            _toastService.ShowError(removed.Error ?? "Couldn't remove that device.");
+        }
+
+        await RefreshDeviceAsync();
+    }
+
+    private async Task SavePreferenceAsync(NotificationTopic topic, bool push, bool email)
+    {
+        Result<TopicPreference> saved = await PreferenceService.SaveAsync(userId!, topic, push, email);
+
+        if (!saved.IsSuccess || saved.Data is null)
+        {
+            _toastService.ShowError(saved.Error ?? "Couldn't save that setting.");
+            return;
+        }
+
+        preferences = preferences.Select(x => x.Topic == topic ? saved.Data : x).ToList();
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+    }
+}

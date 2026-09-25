@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
+@using Lanyard.App.Components.Notifications
+
 @inject NavigationManager NavigationManager
 @inject IThemeService ThemeService
 @inject IJSRuntime JSRuntime
@@ -64,6 +66,12 @@
 
     <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
+        <AuthorizeView>
+            <Authorized>
+                <DeviceSync />
+                <InstallAppPrompt />
+            </Authorized>
+        </AuthorizeView>
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
                 @Body

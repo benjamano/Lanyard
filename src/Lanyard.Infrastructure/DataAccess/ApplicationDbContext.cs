@@ -92,6 +92,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<TimeOffType> TimeOffTypes { get; set; }
         public DbSet<TimeOffAllowance> TimeOffAllowances { get; set; }
         public DbSet<TimeOffRequest> TimeOffRequests { get; set; }
+        public DbSet<UserPushSubscription> PushSubscriptions { get; set; }
+        public DbSet<NotificationPreference> NotificationPreferences { get; set; }
+        public DbSet<AppInstallation> AppInstallations { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -480,6 +483,41 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Notification rows exist only for the person they belong to, so they go with the
+            // account (docs/DATA_RETENTION.md).
+            modelBuilder.Entity<UserPushSubscription>()
+                .HasIndex(x => x.Endpoint)
+                .IsUnique();
+
+            modelBuilder.Entity<UserPushSubscription>()
+                .HasIndex(x => x.UserId);
+
+            modelBuilder.Entity<UserPushSubscription>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<NotificationPreference>()
+                .HasIndex(x => new { x.UserId, x.Topic })
+                .IsUnique();
+
+            modelBuilder.Entity<NotificationPreference>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AppInstallation>()
+                .HasIndex(x => new { x.UserId, x.DeviceId })
+                .IsUnique();
+
+            modelBuilder.Entity<AppInstallation>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

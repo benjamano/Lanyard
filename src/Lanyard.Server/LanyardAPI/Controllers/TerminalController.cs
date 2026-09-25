@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
@@ -35,6 +36,7 @@ namespace Lanyard.API.Controllers
         ICompanyLocationService companyLocationService,
         SignInManager<UserProfile> signInManager,
         IAntiforgery antiforgery,
+        IPushSubscriptionService pushSubscriptionService,
         ILogger<TerminalController> logger) : ControllerBase
     {
         private const string TerminalsPage = "/manage/rota/terminals";
@@ -44,6 +46,7 @@ namespace Lanyard.API.Controllers
         private readonly ICompanyLocationService _companyLocationService = companyLocationService;
         private readonly SignInManager<UserProfile> _signInManager = signInManager;
         private readonly IAntiforgery _antiforgery = antiforgery;
+        private readonly IPushSubscriptionService _pushSubscriptionService = pushSubscriptionService;
         private readonly ILogger<TerminalController> _logger = logger;
 
         [HttpGet("pair/{code}")]
@@ -71,12 +74,13 @@ namespace Lanyard.API.Controllers
                     <form id="pairForm" method="post" action="/api/terminal/pair">
                         <input type="hidden" name="{encoder.Encode(tokens.FormFieldName)}" value="{encoder.Encode(tokens.RequestToken ?? string.Empty)}" />
                         <input type="hidden" name="code" value="{encoder.Encode(code)}" />
+                        {PushSignOut.HiddenField}
                         <noscript>
                             <p>Pairing this tablet as a clock-in terminal.</p>
                             <button type="submit">Continue</button>
                         </noscript>
                     </form>
-                    <script>document.getElementById('pairForm').submit();</script>
+                    {PushSignOut.SubmitScript("pairForm")}
                 </body>
                 </html>
                 """;
@@ -86,7 +90,7 @@ namespace Lanyard.API.Controllers
 
         [EnableRateLimiting("ip-fixed")]
         [HttpPost("pair")]
-        public async Task<IActionResult> Pair([FromForm] string? code)
+        public async Task<IActionResult> Pair([FromForm] string? code, [FromForm(Name = PushSignOut.EndpointField)] string? pushEndpoint = null)
         {
             try
             {
@@ -131,6 +135,13 @@ namespace Lanyard.API.Controllers
             }
 
             Response.Cookies.Append(TerminalCookie.Name, paired.Data.RawToken, TerminalCookie.Options(Request.IsHttps));
+
+            // A clock-in tablet never shows anyone's notifications, whether or not the manager
+            // stays signed in on it (see PushSignOut).
+            if (!string.IsNullOrEmpty(pushEndpoint))
+            {
+                await _pushSubscriptionService.RemoveAsync(userId, pushEndpoint);
+            }
 
             // A shared wall tablet shouldn't stay signed in as the manager who set it up.
             if (pairing.SignOutAfterPairing)

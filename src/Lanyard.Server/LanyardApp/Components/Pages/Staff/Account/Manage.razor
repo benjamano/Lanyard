@@ -3,6 +3,7 @@
 
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Layout.Staff
+@using Lanyard.App.Components.Notifications
 @using Lanyard.Application.Services.Authentication
 
 @inject INotificationService ToastService
@@ -31,6 +32,13 @@
             <div class="account-manage-section">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Home Screen</FluentText>
                 <HomeScreenCard @ref="homeScreenCard" />
+            </div>
+        </FluentCard>
+
+        <FluentCard Width="100%">
+            <div class="account-manage-section" id="notifications">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Notifications</FluentText>
+                <NotificationsCard />
             </div>
         </FluentCard>
 

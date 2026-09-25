@@ -383,5 +383,19 @@
       "New Who's On Today widget: everyone on the rota at a location today, who's on now, later or finished, and whether they've clocked in. It updates as people clock in. On a signed-out kiosk screen it only appears if a location is picked in its settings, and then shows first names only.",
       "New Time Off to Approve widget for managers, listing requests waiting at their location and updating live."
     ]
+  },
+  {
+    "version": "1.4.5",
+    "releaseDate": "2026-09-25",
+    "summary": "Added phone notifications, notification settings, and a prompt to add Lanyard to your home screen.",
+    "details": [
+      "Lanyard can now send notifications to your phone or computer for rota changes, shift reminders and time-off decisions (and, for managers, new time-off requests). Turn them on for each device under Account > Notifications.",
+      "On iPhone and iPad, notifications work once Lanyard is added to the Home Screen (iOS 16.4 or later). On Android and on computers they also work in the browser.",
+      "Phone users now see a short popup suggesting they add Lanyard to their home screen, with steps for their phone and browser. On Android it can install the app in one tap. It doesn't appear on the first page after signing in, and can be put off for two weeks or turned off for good.",
+      "Account > Notifications lets you choose, for each kind of notification, whether it comes by push, by email or both. Email stays on for everything unless you turn it off. You can also send yourself a test notification and see or remove the devices notifications go to.",
+      "Signing out turns off notifications on that device, so a shared phone or computer doesn't keep getting the last person's alerts.",
+      "Managers can see on a person's Rota tab whether they have the app installed and notifications on.",
+      "Lanyard has a new app icon for home screens, and installs properly on Android."
+    ]
   }
 ]

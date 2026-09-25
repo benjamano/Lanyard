@@ -1,3 +1,4 @@
+@using Lanyard.Application.Services.Notifications
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.App.Components.Rota.TimeOff
 @using Lanyard.Infrastructure.DTO.Scheduling
@@ -5,6 +6,7 @@
 
 @inject IStaffPositionService _staffPositionService
 @inject ITimeOffService _timeOffService
+@inject IAppInstallationService _appInstallationService
 
 <div class="rota-profile">
     @if (isLoading)
@@ -82,6 +84,32 @@
         <FluentDivider Style="width: 100%;" />
 
         <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">App and notifications</FluentText>
+            @* Who will actually see a call-off or rota change the moment it happens. *@
+            @if (reach is null)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">Couldn't load this person's devices.</FluentText>
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(reach.InstalledDevices > 0 ? BadgeColor.Success : BadgeColor.Informative)">
+                        @(reach.InstalledDevices switch { 0 => "App not installed", 1 => "App installed on 1 device", int n => $"App installed on {n} devices" })
+                    </FluentBadge>
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(reach.PushDevices > 0 ? BadgeColor.Success : BadgeColor.Informative)">
+                        @(reach.PushDevices switch { 0 => "Notifications off", 1 => "Notifications on for 1 device", int n => $"Notifications on for {n} devices" })
+                    </FluentBadge>
+                </FluentStack>
+                @if (reach.PushDevices == 0)
+                {
+                    <FluentText Style="color: var(--colorNeutralForeground3);">They'll still get rota emails. They can switch notifications on under Account › Notifications.</FluentText>
+                }
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Clock-in PIN</FluentText>
             <ClockInPinEditor UserId="@UserId" SetByManager="true" />
         </section>
@@ -105,6 +133,7 @@
     private string? primaryPositionId;
     private bool isSavingPositions;
     private TimeOffBalances? balances;
+    private DeviceReachSummary? reach;
 
     private List<StaffPosition> SelectedPositions =>
         companyPositions.Where(x => selectedPositionIds.Contains(x.Id)).ToList();
@@ -128,6 +157,9 @@
             isLoading = false;
             return;
         }
+
+        Result<DeviceReachSummary> reachResult = await _appInstallationService.GetSummaryAsync(UserId);
+        reach = reachResult.Data;
 
         Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(CompanyId.Value);
         Result<List<UserPosition>> userPositionsResult = await _staffPositionService.GetUserPositionsAsync(UserId);
