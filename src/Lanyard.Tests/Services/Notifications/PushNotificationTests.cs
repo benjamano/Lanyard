@@ -221,9 +221,22 @@ public class PushNotificationTests
         Assert.IsFalse(VapidKeys.Create(new PushOptions(), "https://lanyard.example.com", isDevelopment: false, NullLogger.Instance).IsConfigured);
         Assert.IsTrue(VapidKeys.Create(new PushOptions(), null, isDevelopment: true, NullLogger.Instance).IsConfigured);
 
-        VapidKeys configured = VapidKeys.Create(new PushOptions { PublicKey = "pub", PrivateKey = "priv" }, "https://lanyard.example.com/", false, NullLogger.Instance);
-        Assert.AreEqual("pub", configured.PublicKey);
+        (string publicKey, string privateKey) = VapidKeys.Generate();
+        VapidKeys configured = VapidKeys.Create(new PushOptions { PublicKey = publicKey, PrivateKey = $" {privateKey}\n" }, "https://lanyard.example.com/", false, NullLogger.Instance);
+        Assert.AreEqual(publicKey, configured.PublicKey);
+        Assert.AreEqual(privateKey, configured.PrivateKey);
         Assert.AreEqual("https://lanyard.example.com", configured.Subject);
+    }
+
+    [TestMethod]
+    public void Vapid_PrivateKeyFromAnotherPair_TurnsPushOff()
+    {
+        (string publicKey, _) = VapidKeys.Generate();
+        (_, string otherPrivateKey) = VapidKeys.Generate();
+
+        Assert.IsFalse(VapidKeys.IsMatchingPair(publicKey, otherPrivateKey));
+        Assert.IsFalse(VapidKeys.Create(new PushOptions { PublicKey = publicKey, PrivateKey = otherPrivateKey }, null, false, NullLogger.Instance).IsConfigured);
+        Assert.IsFalse(VapidKeys.IsMatchingPair("pub", "priv"));
     }
 
     // ---- Preferences -----------------------------------------------------------------------
