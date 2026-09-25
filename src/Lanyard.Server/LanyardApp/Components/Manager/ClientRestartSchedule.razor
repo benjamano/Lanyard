@@ -23,10 +23,9 @@
                               Label="Unit" />
             </FluentStack>
 
-            <FluentTimePicker @bind-Value="client!.AutoRestartTimeOfDay"
-                              RenderStyle="DatePickerRenderStyle.Native"
-                              Disabled="!client.AutoRestartEnabled"
-                              Label="At time" />
+            <AnyTimePicker @bind-Value="client!.AutoRestartTimeOfDay"
+                           Disabled="!client.AutoRestartEnabled"
+                           Label="At time" />
 
             <FluentText Color="Color.Default">
                 Monthly restarts run on that day of every month; the "every" count applies to days and weeks only.

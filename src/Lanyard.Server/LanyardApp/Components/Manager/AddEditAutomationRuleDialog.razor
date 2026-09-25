@@ -75,10 +75,9 @@
                 else if (_triggerTypeString == AutomationTriggerType.Scheduled.ToString())
                 {
                     @* Trigger Event and idle threshold are both meaningless for a scheduled rule. *@
-                    <FluentTimePicker @bind-Value="_scheduledTimeOfDay"
-                                      RenderStyle="DatePickerRenderStyle.Native"
-                                      Label="At time (server local)"
-                                      Style="width: 100%;" />
+                    <AnyTimePicker @bind-Value="_scheduledTimeOfDay"
+                                   Label="At time (server local)"
+                                   Style="width: 100%;" />
 
                     <FluentText Color="Color.Default">Days of week (leave all unticked to run every day)</FluentText>
                     <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
