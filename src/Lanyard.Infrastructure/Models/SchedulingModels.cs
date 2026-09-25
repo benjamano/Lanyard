@@ -129,6 +129,11 @@ namespace Lanyard.Infrastructure.Models
 
         public int ShiftReminderLeadHours { get; set; } = 24;
 
+        // How early before a shift starts (and how late after it ends) the terminal will let
+        // someone clock in. Outside it the clock-in is refused - an unscheduled or cover shift is
+        // added by a manager on the Timesheets page instead.
+        public int ClockInWindowMinutes { get; set; } = 60;
+
         public DateTime UpdateDate { get; set; }
     }
 
@@ -205,5 +210,89 @@ namespace Lanyard.Infrastructure.Models
         }
 
         public bool NeedsPublishing => GetState() is ShiftState.Draft or ShiftState.Changed or ShiftState.RemovedPendingNotice;
+    }
+
+    // A tablet at a venue that staff clock in and out on. The device proves it's this terminal with
+    // a long random token held in an HttpOnly cookie set when a manager paired it; only a SHA-256
+    // hash of that token is stored, so a database leak doesn't hand out working terminals.
+    // Revoking (IsActive = false) takes effect on the terminal's next check-in or clock action.
+    public class ClockInTerminal
+    {
+        public Guid Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public required string Name { get; set; }
+
+        public required string DeviceTokenHash { get; set; }
+
+        public required string CreatedByUserId { get; set; }
+        public DateTime CreateDate { get; set; }
+
+        public DateTime? LastSeenUtc { get; set; }
+
+        public DateTime? RevokedDateUtc { get; set; }
+        public string? RevokedByUserId { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+
+    // One stretch someone was actually at work: clocked in, and (once finished) clocked out. Linked
+    // to the published shift it was worked against where there is one, so the Timesheets page can
+    // show late starts and missed shifts. At most one open entry (ClockOutUtc null) per person is
+    // enforced by a partial unique index, which is what stops two terminals racing to clock the
+    // same person in twice.
+    //
+    // Kept for 6 years like shifts (docs/DATA_RETENTION.md); UserId is a Restrict FK and user
+    // deletion re-points it to the placeholder account via ScheduleRetention.
+    public class TimeEntry
+    {
+        public Guid Id { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public Guid? ShiftId { get; set; }
+        public Shift? Shift { get; set; }
+
+        public Guid? ClockInTerminalId { get; set; }
+        public ClockInTerminal? ClockInTerminal { get; set; }
+
+        public DateTime ClockInUtc { get; set; }
+        public DateTime? ClockOutUtc { get; set; }
+
+        public ClockMethod ClockInMethod { get; set; }
+        public ClockMethod? ClockOutMethod { get; set; }
+
+        // Set when something about the entry wants a manager's eye before payroll - closed
+        // automatically, clocked out at a different site - with the reason in plain words.
+        public bool NeedsReview { get; set; }
+        public string? ReviewReason { get; set; }
+
+        public string? Notes { get; set; }
+
+        public string? ApprovedByUserId { get; set; }
+        public DateTime? ApprovedDateUtc { get; set; }
+
+        public DateTime CreateDate { get; set; }
+        public string? CreateByUserId { get; set; }
+        public DateTime? UpdateDate { get; set; }
+        public string? UpdateByUserId { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public bool IsOpen => ClockOutUtc is null;
+
+        public bool IsApproved => ApprovedDateUtc is not null;
+
+        // Time on the clock, not paid time: no break is deducted here, because whether and how
+        // breaks are deducted from clocked hours is a payroll decision, not something to guess.
+        public decimal? ClockedHours => ClockOutUtc is DateTime outUtc
+            ? Math.Max(0m, (decimal)(outUtc - ClockInUtc).TotalMinutes) / 60m
+            : null;
     }
 }

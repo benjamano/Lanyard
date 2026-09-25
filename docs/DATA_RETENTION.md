@@ -23,6 +23,23 @@ never physically removed. This means:
 - An erasure ("right to be forgotten") request cannot yet be fully satisfied in-app, because
   soft-deleted rows and their personal data remain in the database.
 
+### Rota and timesheet records
+
+Shifts (`Shift`) and clocked time (`TimeEntry`) are kept, not deleted, when a staff account is
+deleted or erased, because of the 6-year payroll retention above. Both delete paths
+(`SecurityService.DeleteUserAsync` and the GDPR erasure in `GdprService`) run
+`ScheduleRetention.DetachUserAsync` first, which:
+
+- re-points the person's shifts and time entries to the seeded placeholder account, so the
+  records no longer identify them;
+- cancels any shifts they had in the future, and closes any time entry they were still clocked
+  in on (flagged for review);
+- scrubs their user id from "created / updated / published / approved by" attribution fields.
+
+Clock-in terminals store only a SHA-256 hash of each device's token; clock-in PINs are stored as
+salted hashes and deleted with the account. There is still no automated purge once the 6 years
+have passed - that remains part of the retention sweeper below.
+
 ## Required follow-up work (tracked separately)
 
 These are deliberately **not** implemented as part of the security-hardening change because they

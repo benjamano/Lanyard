@@ -83,4 +83,36 @@ internal static class SchedulingTestHelpers
 
         return position;
     }
+
+    public static async Task<ClockInTerminal> SeedTerminalAsync(DbContextOptions<ApplicationDbContext> options, Location location, string name = "Front desk", bool isActive = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ClockInTerminal terminal = new()
+        {
+            Id = Guid.NewGuid(),
+            LocationId = location.Id,
+            Name = name,
+            DeviceTokenHash = Guid.NewGuid().ToString("N"),
+            CreatedByUserId = "manager",
+            CreateDate = DateTime.UtcNow,
+            IsActive = isActive
+        };
+
+        ctx.ClockInTerminals.Add(terminal);
+        await ctx.SaveChangesAsync();
+
+        return terminal;
+    }
+}
+
+// A clock the tests can set and move, for anything that takes a TimeProvider (PIN lockouts, QR
+// code expiry, the clock-in window).
+internal sealed class TestClock(DateTime utcNow) : TimeProvider
+{
+    public DateTime UtcNow { get; set; } = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+
+    public override DateTimeOffset GetUtcNow() => new(UtcNow, TimeSpan.Zero);
+
+    public void Advance(TimeSpan by) => UtcNow = UtcNow.Add(by);
 }

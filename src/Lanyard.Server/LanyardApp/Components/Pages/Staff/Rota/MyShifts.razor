@@ -8,6 +8,17 @@
 <div class="p-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
         <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
-        <MyShiftsList WeeksAhead="6" />
+        <FluentTabs>
+            <FluentTab Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
+                <div class="pt-3">
+                    <MyShiftsList WeeksAhead="6" />
+                </div>
+            </FluentTab>
+            <FluentTab Header="My hours" IconStart="@(new Icons.Regular.Size20.Clock())">
+                <div class="pt-3">
+                    <MyHoursList Weeks="3" />
+                </div>
+            </FluentTab>
+        </FluentTabs>
     </FluentStack>
 </div>

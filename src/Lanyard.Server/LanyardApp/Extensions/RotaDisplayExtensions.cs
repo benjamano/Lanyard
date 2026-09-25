@@ -16,8 +16,7 @@ public static class RotaDisplayExtensions
 
     public static bool EndsNextDay(this Shift shift) => RotaTime.LocalDate(shift.EndUtc) > RotaTime.LocalDate(shift.StartUtc);
 
-    public static string TimeRange(this Shift shift) =>
-        $"{RotaTime.LocalTime(shift.StartUtc).ToString("HH:mm", Uk)}–{RotaTime.LocalTime(shift.EndUtc).ToString("HH:mm", Uk)}{(shift.EndsNextDay() ? " (+1)" : string.Empty)}";
+    public static string TimeRange(this Shift shift) => RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc);
 
     // "09–17", "09:30–17" - for the month grid's narrow cells.
     public static string CompactTimeRange(this Shift shift) =>

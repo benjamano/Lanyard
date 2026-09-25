@@ -60,6 +60,7 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             existing.FinancialYearStartDay = settings.FinancialYearStartDay;
             existing.HoursPerDay = settings.HoursPerDay;
             existing.ShiftReminderLeadHours = settings.ShiftReminderLeadHours;
+            existing.ClockInWindowMinutes = settings.ClockInWindowMinutes;
             existing.UpdateDate = DateTime.UtcNow;
 
             await ctx.SaveChangesAsync();
@@ -97,6 +98,11 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
         if (settings.ShiftReminderLeadHours is < 1 or > 168)
         {
             return "Shift reminder lead time must be between 1 and 168 hours.";
+        }
+
+        if (settings.ClockInWindowMinutes is < 0 or > 240)
+        {
+            return "The clock-in window must be between 0 and 240 minutes.";
         }
 
         return null;
