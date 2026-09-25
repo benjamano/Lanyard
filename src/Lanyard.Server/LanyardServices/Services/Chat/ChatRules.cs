@@ -36,6 +36,20 @@ internal static class ChatRules
         return found == distinct.Count;
     }
 
+    public const string GroupChangeNotAllowed = "Only the person who started this group, or a manager, can rename it or add people.";
+
+    // Renaming a group or adding people is for whoever started it, or a Manager or Admin who's in
+    // it. Everyone else can still post, mute and leave.
+    public static async Task<bool> CanManageGroupAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation) =>
+        conversation.CreatedByUserId == userId
+        || await (from userRole in ctx.UserRoles
+                  join role in ctx.Roles on userRole.RoleId equals role.Id
+                  where userRole.UserId == userId && role.IsActive && (role.Name == "Admin" || role.Name == "Manager")
+                  select userRole.UserId)
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync();
+
     public static Task<bool> BlockedEitherWayAsync(ApplicationDbContext ctx, string a, string b) =>
         ctx.ChatBlocks.AsNoTracking().TagWithCallSite().AnyAsync(x =>
             (x.BlockerUserId == a && x.BlockedUserId == b) || (x.BlockerUserId == b && x.BlockedUserId == a));

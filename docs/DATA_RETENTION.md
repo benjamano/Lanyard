@@ -13,6 +13,8 @@
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
+| Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
+| Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
 
 ## Current implementation status
 
@@ -72,8 +74,15 @@ Six tables hold chat: `ChatConversations`, `ChatMembers`, `ChatMessages`, `ChatB
   still makes sense to others; reports they made or that are about them keep their snapshot,
   with the person re-pointed to the placeholder. A **GDPR erasure** also empties every direct
   message they sent.
-- **Retention period: 2 years proposed, not yet enforced.** There is no automatic purge of old
-  messages or resolved reports yet; it belongs with the retention sweeper below.
+- **Kept for 2 years, enforced daily** by `ChatRetentionHostedService`
+  (`ChatRetention.PurgeExpiredAsync`), which hard-deletes:
+  - messages sent more than 2 years ago, except a pinned post, which stays until it's unpinned.
+    Replies to a deleted message stay but lose the quote. A message that a kept report points at
+    is emptied rather than deleted (the report has its own snapshot) and goes with the report;
+  - reports 2 years after they were resolved. An open report stays until a manager deals with it;
+  - suspensions 2 years after they ended (ran out or were lifted);
+  - direct conversations and groups with no messages left and none for 2 years, with their
+    member rows. Channels stay.
 - **Channels** (one per location, one per company) are open to everyone who works there, who can
   read back through their history; membership follows `UserLocationMemberships`. On account
   deletion a person's channel messages are kept like group messages, attributed to the

@@ -19,6 +19,7 @@ public interface IChatService
 
     Task<Result<ChatConversation>> CreateGroupAsync(string userId, int companyId, string name, IReadOnlyCollection<string> memberUserIds);
 
+    // Adding people and renaming are for the group's creator, or a Manager or Admin in it.
     Task<Result<bool>> AddMembersAsync(string userId, Guid conversationId, IReadOnlyCollection<string> memberUserIds);
 
     Task<Result<bool>> RenameGroupAsync(string userId, Guid conversationId, string name);

@@ -279,9 +279,13 @@ public class ChatService(
                 return Result<bool>.Fail("That group isn't available.");
             }
 
+            if (!await ChatRules.CanManageGroupAsync(ctx, userId, conversation))
+            {
+                return Result<bool>.Fail(ChatRules.GroupChangeNotAllowed);
+            }
+
             // Changing a group is posting in it as far as everyone else can see, so a suspension
-            // stops it too. (Any member may add people or rename: groups are informal, and there's
-            // no owner to ask.)
+            // stops it too.
             if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
             {
                 return Result<bool>.Fail(suspended);
@@ -353,6 +357,11 @@ public class ChatService(
             if (conversation is null || me is null || conversation.Kind != ChatConversationKind.Group)
             {
                 return Result<bool>.Fail("That group isn't available.");
+            }
+
+            if (!await ChatRules.CanManageGroupAsync(ctx, userId, conversation))
+            {
+                return Result<bool>.Fail(ChatRules.GroupChangeNotAllowed);
             }
 
             if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
@@ -483,6 +492,7 @@ public class ChatService(
                 : conversation.Name ?? "Group";
 
             string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId);
+            bool canManageGroup = conversation.Kind == ChatConversationKind.Group && await ChatRules.CanManageGroupAsync(ctx, userId, conversation);
 
             return Result<ChatThread>.Ok(new ChatThread(
                 conversation,
@@ -497,6 +507,7 @@ public class ChatService(
                 cannotPost)
             {
                 CanModerate = canModerate,
+                CanManageGroup = canManageGroup,
                 Pinned = pinned
             });
         }

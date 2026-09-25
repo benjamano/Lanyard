@@ -54,8 +54,11 @@
                         <button type="button" role="menuitem" @onclick="ToggleMuteAsync">@(thread.IsMuted ? "Turn notifications back on" : "Mute notifications")</button>
                         @if (thread.Conversation.Kind == ChatConversationKind.Group)
                         {
-                            <button type="button" role="menuitem" @onclick="AddPeopleAsync">Add people</button>
-                            <button type="button" role="menuitem" @onclick="RenameAsync">Rename group</button>
+                            @if (thread.CanManageGroup)
+                            {
+                                <button type="button" role="menuitem" @onclick="AddPeopleAsync">Add people</button>
+                                <button type="button" role="menuitem" @onclick="RenameAsync">Rename group</button>
+                            }
                             <button type="button" role="menuitem" class="danger" @onclick="LeaveAsync">Leave group</button>
                         }
                         else if (thread.OtherUserId is not null)

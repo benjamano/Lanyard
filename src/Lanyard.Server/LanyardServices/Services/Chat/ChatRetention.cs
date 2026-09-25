@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -77,6 +78,103 @@ public static class ChatRetention
         }
 
         return snapshot;
+    }
+
+    // ---- The two-year limit ------------------------------------------------------------------
+
+    public const int KeepForYears = 2;
+
+    public record PurgeResult(int MessagesDeleted, int MessagesEmptied, int Reports, int Suspensions, int Conversations)
+    {
+        public int Total => MessagesDeleted + MessagesEmptied + Reports + Suspensions + Conversations;
+    }
+
+    // Chat is kept for two years (docs/DATA_RETENTION.md), then deleted:
+    // - reports two years after they were resolved (an open report waits for a manager);
+    // - suspensions two years after they ended;
+    // - messages two years after they were sent, except a pinned post, which stays until it's
+    //   unpinned. A message a kept report points at is emptied instead, since the report
+    //   carries its own snapshot and goes later;
+    // - direct conversations and groups with nothing left in them and no messages for two years.
+    // Channels themselves stay. Run daily by ChatRetentionHostedService.
+    public static async Task<PurgeResult> PurgeExpiredAsync(ApplicationDbContext ctx, DateTime nowUtc, int batchSize = 500)
+    {
+        DateTime cutoff = nowUtc.AddYears(-KeepForYears);
+
+        List<ChatReport> reports = await ctx.ChatReports
+            .TagWithCallSite()
+            .Where(x => x.Status != ChatReportStatus.Open && x.ReviewedUtc != null && x.ReviewedUtc < cutoff)
+            .ToListAsync();
+
+        List<ChatSuspension> suspensions = await ctx.ChatSuspensions
+            .TagWithCallSite()
+            .Where(x => x.LiftedUtc != null ? x.LiftedUtc < cutoff : x.UntilUtc != null && x.UntilUtc < cutoff)
+            .ToListAsync();
+
+        ctx.ChatReports.RemoveRange(reports);
+        ctx.ChatSuspensions.RemoveRange(suspensions);
+        await ctx.SaveChangesAsync();
+
+        List<ChatMessage> evidence = await ctx.ChatMessages
+            .TagWithCallSite()
+            .Where(m => m.CreateUtc < cutoff && !m.IsPinned && m.DeletedUtc == null && ctx.ChatReports.Any(r => r.MessageId == m.Id))
+            .ToListAsync();
+
+        foreach (ChatMessage message in evidence)
+        {
+            ChatRules.Erase(message, null, nowUtc);
+        }
+
+        await ctx.SaveChangesAsync();
+        ctx.ChangeTracker.Clear();
+
+        int deleted = 0;
+
+        while (true)
+        {
+            List<ChatMessage> batch = await ctx.ChatMessages
+                .TagWithCallSite()
+                .Where(m => m.CreateUtc < cutoff && !m.IsPinned && !ctx.ChatReports.Any(r => r.MessageId == m.Id))
+                .OrderBy(m => m.CreateUtc)
+                .Take(batchSize)
+                .ToListAsync();
+
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            // Replies to a deleted message lose the quote, not themselves.
+            List<Guid> ids = batch.Select(x => x.Id).ToList();
+            List<ChatMessage> replies = await ctx.ChatMessages
+                .Where(m => m.ReplyToMessageId != null && ids.Contains(m.ReplyToMessageId.Value))
+                .ToListAsync();
+
+            foreach (ChatMessage reply in replies)
+            {
+                reply.ReplyToMessageId = null;
+            }
+
+            ctx.ChatMessages.RemoveRange(batch);
+            await ctx.SaveChangesAsync();
+            ctx.ChangeTracker.Clear();
+
+            deleted += batch.Count;
+        }
+
+        List<ChatConversation> empty = await ctx.ChatConversations
+            .TagWithCallSite()
+            .Where(c => (c.Kind == ChatConversationKind.Direct || c.Kind == ChatConversationKind.Group)
+                && c.LastMessageUtc < cutoff
+                && !ctx.ChatMessages.Any(m => m.ConversationId == c.Id))
+            .ToListAsync();
+
+        List<Guid> emptyIds = empty.Select(x => x.Id).ToList();
+        ctx.ChatMembers.RemoveRange(await ctx.ChatMembers.Where(x => emptyIds.Contains(x.ConversationId)).ToListAsync());
+        ctx.ChatConversations.RemoveRange(empty);
+        await ctx.SaveChangesAsync();
+
+        return new PurgeResult(deleted, evidence.Count, reports.Count, suspensions.Count, empty.Count);
     }
 
     public static async Task RestoreAsync(ApplicationDbContext ctx, Snapshot snapshot)

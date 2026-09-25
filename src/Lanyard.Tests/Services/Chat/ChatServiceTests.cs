@@ -224,12 +224,33 @@ public class ChatServiceTests
     {
         World w = await SeedAsync();
         ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id])).Data!;
-        ChatMessage message = await SendAsync(w, w.Tom, group);
-        ChatReport report = (await w.Moderation.ReportAsync(w.Amy.Id, message.Id, ChatReportReason.Spam, null, false)).Data!;
+        ChatMessage message = await SendAsync(w, w.Amy, group);
+        ChatReport report = (await w.Moderation.ReportAsync(w.Tom.Id, message.Id, ChatReportReason.Spam, null, false)).Data!;
         await w.Moderation.ResolveAsync(SchedulingTestHelpers.ManagerScopeFor(w.Location), report.Id, false, true, 7, null, w.Manager.Id);
 
-        Assert.IsFalse((await w.Chat.RenameGroupAsync(w.Tom.Id, group.Id, "Rude name")).IsSuccess);
+        // Amy started the group, but a suspension still stops her changing it.
+        Assert.IsFalse((await w.Chat.RenameGroupAsync(w.Amy.Id, group.Id, "Rude name")).IsSuccess);
+        Assert.IsFalse((await w.Chat.AddMembersAsync(w.Amy.Id, group.Id, [w.Priya.Id])).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task Group_OnlyItsCreatorOrAManagerCanRenameOrAddPeople()
+    {
+        World w = await SeedAsync();
+        ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id, w.Manager.Id])).Data!;
+
+        Result<bool> tomRenames = await w.Chat.RenameGroupAsync(w.Tom.Id, group.Id, "Tom's crew");
+        Assert.IsFalse(tomRenames.IsSuccess);
+        StringAssert.Contains(tomRenames.Error, "started this group");
         Assert.IsFalse((await w.Chat.AddMembersAsync(w.Tom.Id, group.Id, [w.Priya.Id])).IsSuccess);
+        Assert.IsFalse((await w.Chat.GetThreadAsync(w.Tom.Id, group.Id)).Data!.CanManageGroup);
+
+        Assert.IsTrue((await w.Chat.RenameGroupAsync(w.Amy.Id, group.Id, "Weekend crew")).IsSuccess);
+        Assert.IsTrue((await w.Chat.GetThreadAsync(w.Amy.Id, group.Id)).Data!.CanManageGroup);
+
+        Assert.IsTrue((await w.Chat.AddMembersAsync(w.Manager.Id, group.Id, [w.Priya.Id])).IsSuccess);
+        Assert.IsTrue((await w.Chat.GetThreadAsync(w.Manager.Id, group.Id)).Data!.CanManageGroup);
+        Assert.AreEqual(4, (await w.Chat.GetThreadAsync(w.Amy.Id, group.Id)).Data!.Members.Count);
     }
 
     [TestMethod]

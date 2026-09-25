@@ -48,6 +48,9 @@ public record ChatThread(
     // Channels: the viewer can pin, unpin and remove others' messages here.
     public bool CanModerate { get; init; }
 
+    // Groups: the viewer can rename it and add people (its creator, or a Manager or Admin).
+    public bool CanManageGroup { get; init; }
+
     // Channels: pinned posts, newest first, for the strip at the top.
     public List<ChatMessageView> Pinned { get; init; } = [];
 }
