@@ -1,6 +1,8 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -12,12 +14,14 @@ namespace Lanyard.Application.Services.Scheduling;
 public class RotaService(
     IDbContextFactory<ApplicationDbContext> factory,
     IContractRequirementService contractRequirementService,
+    INotificationDispatcher notifications,
     ILogger<RotaService> logger) : IRotaService
 {
     private static readonly TimeSpan MaxShiftLength = TimeSpan.FromHours(24);
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly IContractRequirementService _contractRequirementService = contractRequirementService;
+    private readonly INotificationDispatcher _notifications = notifications;
     private readonly ILogger<RotaService> _logger = logger;
 
     public async Task<Result<RotaRangeView>> GetRangeViewAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeAllMembers = false)
@@ -554,6 +558,118 @@ public class RotaService(
         }
     }
 
+    // The longest lead time Rota Settings allows; shifts further out than this can't be due.
+    private const int MaxReminderLeadHours = 168;
+
+    public async Task<Result<List<ShiftReminderDue>>> GetShiftsDueForReminderAsync(DateTime nowUtc)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            DateTime horizonUtc = nowUtc.AddHours(MaxReminderLeadHours);
+
+            List<Shift> candidates = await ctx.Shifts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                .Include(x => x.StaffPosition)
+                .Where(x => x.IsActive
+                    && x.PublishedDateUtc != null
+                    && x.StartUtc > nowUtc && x.StartUtc <= horizonUtc
+                    && (x.ReminderSentForStartUtc == null || x.ReminderSentForStartUtc != x.StartUtc)
+                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .OrderBy(x => x.StartUtc)
+                .ToListAsync();
+
+            if (candidates.Count == 0)
+            {
+                return Result<List<ShiftReminderDue>>.Ok([]);
+            }
+
+            List<int> companyIds = candidates.Select(x => x.Location!.CompanyId).Distinct().ToList();
+
+            // A company with no settings row gets the defaults: reminders on, 24 hours ahead.
+            Dictionary<int, CompanySchedulingSettings> settingsByCompany = await ctx.CompanySchedulingSettings
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => companyIds.Contains(x.CompanyId))
+                .ToDictionaryAsync(x => x.CompanyId);
+
+            List<ShiftReminderDue> due = [];
+
+            foreach (Shift shift in candidates)
+            {
+                CompanySchedulingSettings settings = settingsByCompany.GetValueOrDefault(shift.Location!.CompanyId)
+                    ?? new CompanySchedulingSettings { CompanyId = shift.Location.CompanyId };
+
+                if (!settings.SendShiftReminders)
+                {
+                    continue;
+                }
+
+                DateTime windowOpensUtc = shift.StartUtc.AddHours(-settings.ShiftReminderLeadHours);
+
+                if (nowUtc < windowOpensUtc)
+                {
+                    continue;
+                }
+
+                due.Add(new ShiftReminderDue(shift, SendEmail: shift.PublishedDateUtc < windowOpensUtc));
+            }
+
+            return Result<List<ShiftReminderDue>>.Ok(due);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to find shifts due a reminder");
+            return Result<List<ShiftReminderDue>>.Fail($"Failed to find shifts due a reminder: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<bool>> ClaimShiftReminderAsync(Guid shiftId, DateTime startUtc)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Shift? shift = await ctx.Shifts.FirstOrDefaultAsync(x => x.Id == shiftId);
+
+            if (shift is null || !shift.IsActive || shift.PublishedDateUtc is null || shift.StartUtc != startUtc)
+            {
+                return Result<bool>.Fail("The shift has changed or gone since it was found.");
+            }
+
+            if (shift.ReminderSentForStartUtc == startUtc)
+            {
+                return Result<bool>.Fail("Reminder already sent.");
+            }
+
+            shift.ReminderSentForStartUtc = startUtc;
+
+            try
+            {
+                await ctx.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another sweep claimed it between our read and our write - ReminderSentForStartUtc's
+                // [ConcurrencyCheck] made the UPDATE's WHERE clause the atomic guard.
+                return Result<bool>.Fail("Reminder already sent.");
+            }
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to claim the reminder for shift {ShiftId}", shiftId);
+            return Result<bool>.Fail($"Failed to claim the reminder: {ex.Message}");
+        }
+    }
+
+    internal static ShiftEmailLine ToEmailLine(Shift shift) =>
+        new(RotaTime.LocalDate(shift.StartUtc), RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc), shift.StaffPosition?.Name);
+
     public async Task<Result<PublishResult>> PublishRangeAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string actingUserId)
     {
         try
@@ -614,6 +730,23 @@ public class RotaService(
             await ctx.SaveChangesAsync();
 
             PublishResult result = new(changes);
+
+            // One email per person, listing only their own shifts that changed - so a last-minute
+            // edit reaches just the people it touches. Queued, so the publish never waits on it.
+            string locationName = await ctx.Locations.AsNoTracking().TagWithCallSite()
+                .Where(x => x.Id == locationId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync() ?? "your location";
+
+            foreach (PublishedChange change in changes)
+            {
+                _notifications.Enqueue([change.UserId], NotificationTopic.RotaChanged, new RotaChangedPayload(
+                    locationId,
+                    locationName,
+                    change.New.Select(ToEmailLine).ToList(),
+                    change.Changed.Select(ToEmailLine).ToList(),
+                    change.Removed.Select(ToEmailLine).ToList()));
+            }
 
             _logger.LogInformation("Published {ShiftCount} rota changes for {PeopleAffected} people at location {LocationId} ({From} to {To}) by {UserId}",
                 result.ShiftCount, result.PeopleAffected, locationId, from, to, actingUserId);

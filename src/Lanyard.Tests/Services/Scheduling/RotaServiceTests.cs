@@ -23,7 +23,7 @@ public class RotaServiceTests
     private static RotaService GetService(DbContextOptions<ApplicationDbContext> options)
     {
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
-        return new RotaService(factory, new ContractRequirementService(factory), NullLogger<RotaService>.Instance);
+        return new RotaService(factory, new ContractRequirementService(factory), new RecordingNotificationDispatcher(), NullLogger<RotaService>.Instance);
     }
 
     private static Shift ShiftFor(Location location, UserProfile user, DateOnly day, int startHour, int endHour, int breakMinutes = 0, Guid? positionId = null) => new()

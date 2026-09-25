@@ -48,6 +48,8 @@ public record PublishResult(List<PublishedChange> Changes)
 
 public record CopyRangeResult(int Copied, List<string> Skipped);
 
+public record ShiftReminderDue(Shift Shift, bool SendEmail);
+
 public static class RotaNames
 {
     public static string For(UserProfile? user)

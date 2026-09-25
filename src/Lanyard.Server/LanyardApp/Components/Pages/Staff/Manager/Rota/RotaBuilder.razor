@@ -408,7 +408,7 @@
 
         bool confirmed = await ConfirmAsync("Publish rota",
             $"Publish {view.UnpublishedChangeCount} {(view.UnpublishedChangeCount == 1 ? "change" : "changes")} for {view.PeopleWithUnpublishedChanges} " +
-            $"{(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people")} in {RangeLabel}? New shifts appear under their My Shifts page straight away.",
+            $"{(view.PeopleWithUnpublishedChanges == 1 ? "person" : "people")} in {RangeLabel}? Their shifts appear on My Shifts straight away, and each person gets an email listing just their own changes.",
             "Publish");
 
         if (!confirmed)

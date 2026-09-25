@@ -36,8 +36,10 @@
                         <div class="settings-hint">How long before a shift starts, and after it ends, staff can clock in for it on a terminal.</div>
                     </div>
                     <div class="settings-field">
-                        <FluentNumberInput TValue="int" Label="Shift reminder lead time (hours)" @bind-Value="shiftReminderLeadHours" Width="100%" />
-                        <div class="settings-hint">How far ahead of a shift staff are emailed a reminder.</div>
+                        <FluentSwitch @bind-Value="sendShiftReminders" Label="Email staff a reminder before each shift" />
+                        <FluentNumberInput TValue="int" Label="Shift reminder lead time (hours)" @bind-Value="shiftReminderLeadHours" Width="100%"
+                                           Disabled="@(!sendShiftReminders)" />
+                        <div class="settings-hint">How far ahead of a shift the reminder goes out. A shift published inside that time isn't reminded again, since the rota email has just told them.</div>
                     </div>
                 </div>
 
@@ -69,6 +71,7 @@
     private int financialYearStartDay = 6;
     private double hoursPerDay = 8;
     private int shiftReminderLeadHours = 24;
+    private bool sendShiftReminders = true;
     private int clockInWindowMinutes = 60;
     private bool isSaving;
 
@@ -97,6 +100,7 @@
         financialYearStartDay = settings.FinancialYearStartDay;
         hoursPerDay = (double)settings.HoursPerDay;
         shiftReminderLeadHours = settings.ShiftReminderLeadHours;
+        sendShiftReminders = settings.SendShiftReminders;
         clockInWindowMinutes = settings.ClockInWindowMinutes;
     }
 
@@ -120,6 +124,7 @@
             FinancialYearStartDay = financialYearStartDay,
             HoursPerDay = (decimal)hoursPerDay,
             ShiftReminderLeadHours = shiftReminderLeadHours,
+            SendShiftReminders = sendShiftReminders,
             ClockInWindowMinutes = clockInWindowMinutes
         };
 

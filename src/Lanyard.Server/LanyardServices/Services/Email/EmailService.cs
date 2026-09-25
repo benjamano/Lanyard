@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.DTO.Scheduling;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -126,6 +129,70 @@ public class EmailService : IEmailService
         string safeCourseName = new string(courseName.Where(c => char.IsLetterOrDigit(c) || c == ' ' || c == '-' || c == '_').ToArray()).Trim();
 
         return string.IsNullOrWhiteSpace(safeCourseName) ? "Certificate.pdf" : $"{safeCourseName} Certificate.pdf";
+    }
+
+    public async Task<Result<bool>> SendRotaChangedEmailAsync(UserProfile user, string locationName, IReadOnlyList<ShiftEmailLine> added, IReadOnlyList<ShiftEmailLine> changed, IReadOnlyList<ShiftEmailLine> removed, string myShiftsUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send their rota to.");
+        }
+
+        // "Your shifts" when it's all new (the usual monthly publish); "has changed" as soon as
+        // anything they'd already been told about moved or went, so a last-minute change stands out.
+        bool onlyNew = changed.Count == 0 && removed.Count == 0;
+        string subject = onlyNew
+            ? $"Your shifts at {locationName}"
+            : $"Your rota at {locationName} has changed";
+
+        string html = BuildRotaChangedHtml(user.GetGreetingName(), locationName, added, changed, removed, onlyNew, myShiftsUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, subject, html);
+    }
+
+    public async Task<Result<bool>> SendShiftReminderEmailAsync(UserProfile user, string locationName, ShiftEmailLine shift, string dayLabel, string myShiftsUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send a reminder to.");
+        }
+
+        string html = BuildShiftReminderHtml(user.GetGreetingName(), locationName, shift, dayLabel, myShiftsUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, $"Reminder: you're working {dayLabel}, {shift.TimeRange}", html);
+    }
+
+    public async Task<Result<bool>> SendTimeOffRequestedEmailAsync(UserProfile manager, string requesterName, string typeName, DateOnly start, DateOnly end, string amount, string? notes, string approvalsUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(manager.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send the request to.");
+        }
+
+        string html = BuildTimeOffRequestedHtml(manager.GetGreetingName(), requesterName, typeName, start, end, amount, notes, approvalsUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(manager.Id, manager.Email, $"{requesterName} has asked for time off", html);
+    }
+
+    public async Task<Result<bool>> SendTimeOffDecisionEmailAsync(UserProfile user, string typeName, DateOnly start, DateOnly end, TimeOffEmailOutcome outcome, string? reason, string? decidedByName, string myTimeOffUrl, string? logoUrl, string accentColorHex)
+    {
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return Result<bool>.Fail("User has no email address to send the decision to.");
+        }
+
+        string subject = outcome switch
+        {
+            TimeOffEmailOutcome.Approved => "Your time off is approved",
+            TimeOffEmailOutcome.Rejected => "Your time off wasn't approved",
+            TimeOffEmailOutcome.Withdrawn => "Your approved time off has been withdrawn",
+            TimeOffEmailOutcome.CutShort => "Your time off has been cut short",
+            _ => "Time off has been recorded for you"
+        };
+
+        string html = BuildTimeOffDecisionHtml(user.GetGreetingName(), typeName, start, end, outcome, reason, decidedByName, myTimeOffUrl, logoUrl, accentColorHex);
+
+        return await SendResendEmailAsync(user.Id, user.Email, subject, html);
     }
 
     // Single decision point for the Resend HTTP call - the config check, request shape,
@@ -367,6 +434,133 @@ public class EmailService : IEmailService
             </a>
           </p>
           <p style="color: #666; font-size: 13px;">This link expires in 7 days. If it has expired, ask an administrator to send you a new one.</p>
+        </div>
+        """;
+    }
+
+    // --- Staff scheduling emails -------------------------------------------------------------
+
+    private static string LogoHtml(string? logoUrl) => logoUrl is not null
+        ? $"""<img src="{logoUrl}" alt="Company logo" style="max-height: 48px; display: block; margin-bottom: 12px;" />"""
+        : string.Empty;
+
+    private static string ButtonHtml(string url, string label, string accentColorHex) => $"""
+        <p>
+          <a href="{url}" style="display: inline-block; padding: 12px 24px; background: {accentColorHex}; color: #fff; text-decoration: none; border-radius: 4px;">
+            {WebUtility.HtmlEncode(label)}
+          </a>
+        </p>
+        """;
+
+    private static string ShiftLinesHtml(string heading, IReadOnlyList<ShiftEmailLine> lines, bool struckThrough = false)
+    {
+        if (lines.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        string style = struckThrough ? " style=\"text-decoration: line-through; color: #666;\"" : string.Empty;
+        string items = string.Concat(lines
+            .OrderBy(x => x.Date)
+            .Select(x => $"<li{style}>{WebUtility.HtmlEncode(ShiftLineText(x))}</li>"));
+
+        return $"""<p style="margin-bottom: 4px;"><strong>{WebUtility.HtmlEncode(heading)}</strong></p><ul style="margin-top: 0;">{items}</ul>""";
+    }
+
+    // "Mon 5 Oct · 09:00–17:00 · Supervisor"
+    private static string ShiftLineText(ShiftEmailLine line)
+    {
+        string text = $"{line.Date.ToString("ddd d MMM", RotaFormat.Uk)} · {line.TimeRange}";
+
+        return line.PositionName is string position ? $"{text} · {position}" : text;
+    }
+
+    private static string BuildRotaChangedHtml(string greetingName, string locationName, IReadOnlyList<ShiftEmailLine> added, IReadOnlyList<ShiftEmailLine> changed, IReadOnlyList<ShiftEmailLine> removed, bool onlyNew, string myShiftsUrl, string? logoUrl, string accentColorHex)
+    {
+        string intro = onlyNew
+            ? $"Your shifts at <strong>{WebUtility.HtmlEncode(locationName)}</strong> have been published."
+            : $"Your rota at <strong>{WebUtility.HtmlEncode(locationName)}</strong> has changed.";
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {LogoHtml(logoUrl)}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>{intro}</p>
+          {ShiftLinesHtml(onlyNew ? "Your shifts" : "New shifts", added)}
+          {ShiftLinesHtml("Changed (new times shown)", changed)}
+          {ShiftLinesHtml("Removed", removed, struckThrough: true)}
+          {ButtonHtml(myShiftsUrl, "See my shifts", accentColorHex)}
+          <p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #666; font-size: 13px;">
+            If you can't work a shift, speak to your manager as soon as you can.
+          </p>
+        </div>
+        """;
+    }
+
+    private static string BuildShiftReminderHtml(string greetingName, string locationName, ShiftEmailLine shift, string dayLabel, string myShiftsUrl, string? logoUrl, string accentColorHex)
+    {
+        string position = shift.PositionName is string name ? $" as <strong>{WebUtility.HtmlEncode(name)}</strong>" : string.Empty;
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {LogoHtml(logoUrl)}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>Just a reminder that you're working {WebUtility.HtmlEncode(dayLabel)} at
+             <strong>{WebUtility.HtmlEncode(locationName)}</strong>{position}:
+             <strong>{WebUtility.HtmlEncode(ShiftLineText(shift with { PositionName = null }))}</strong>.</p>
+          {ButtonHtml(myShiftsUrl, "See my shifts", accentColorHex)}
+        </div>
+        """;
+    }
+
+    private static string BuildTimeOffRequestedHtml(string greetingName, string requesterName, string typeName, DateOnly start, DateOnly end, string amount, string? notes, string approvalsUrl, string? logoUrl, string accentColorHex)
+    {
+        string notesHtml = string.IsNullOrWhiteSpace(notes)
+            ? string.Empty
+            : $"""<p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #444;">“{WebUtility.HtmlEncode(notes)}”</p>""";
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {LogoHtml(logoUrl)}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p><strong>{WebUtility.HtmlEncode(requesterName)}</strong> has asked for
+             <strong>{WebUtility.HtmlEncode(typeName.ToLower())}</strong>:
+             <strong>{WebUtility.HtmlEncode(TimeOffFormat.DateRange(start, end))}</strong> ({WebUtility.HtmlEncode(amount)}).</p>
+          {notesHtml}
+          {ButtonHtml(approvalsUrl, "Review the request", accentColorHex)}
+        </div>
+        """;
+    }
+
+    private static string BuildTimeOffDecisionHtml(string greetingName, string typeName, DateOnly start, DateOnly end, TimeOffEmailOutcome outcome, string? reason, string? decidedByName, string myTimeOffUrl, string? logoUrl, string accentColorHex)
+    {
+        string what = $"<strong>{WebUtility.HtmlEncode(typeName.ToLower())}</strong> for <strong>{WebUtility.HtmlEncode(TimeOffFormat.DateRange(start, end))}</strong>";
+        string by = string.IsNullOrWhiteSpace(decidedByName) ? string.Empty : $" by {WebUtility.HtmlEncode(decidedByName)}";
+
+        string message = outcome switch
+        {
+            TimeOffEmailOutcome.Approved => $"Your {what} has been approved{by}.",
+            TimeOffEmailOutcome.Rejected => $"Your {what} wasn't approved{by}.",
+            TimeOffEmailOutcome.Withdrawn => $"The approval for your {what} has been withdrawn{by}.",
+            TimeOffEmailOutcome.CutShort => $"Your time off has been cut short{by}: {what} has been cancelled. The days before that still count as taken.",
+            _ => $"Time off has been recorded for you{by}: {what}."
+        };
+
+        string reasonHtml = string.IsNullOrWhiteSpace(reason)
+            ? string.Empty
+            : $"""<p style="border-left: 4px solid {accentColorHex}; padding-left: 12px; color: #444;">“{WebUtility.HtmlEncode(reason)}”</p>""";
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          {LogoHtml(logoUrl)}
+          <h2>Lanyard</h2>
+          <p>Hi {WebUtility.HtmlEncode(greetingName)},</p>
+          <p>{message}</p>
+          {reasonHtml}
+          {ButtonHtml(myTimeOffUrl, "See my time off", accentColorHex)}
         </div>
         """;
     }

@@ -42,3 +42,30 @@ public record TimesheetView(int LocationId, string LocationName, DateOnly From, 
 {
     public int AwaitingApprovalCount => People.Sum(x => x.AwaitingApprovalCount);
 }
+
+public enum DayBoardStatus
+{
+    // Later today.
+    Later = 0,
+
+    // Under way now.
+    OnNow = 1,
+
+    // Already finished today.
+    Finished = 2,
+
+    // On the clock with no shift here today (cover, or a manager's manual entry).
+    NoShift = 3
+}
+
+// One line of the "Who's on today" board. FirstName is what a signed-out kiosk shows.
+public record DayBoardEntry(
+    string UserId,
+    string DisplayName,
+    string FirstName,
+    string? PositionName,
+    DateTime? StartUtc,
+    DateTime? EndUtc,
+    DayBoardStatus Status,
+    bool IsClockedIn);
+

@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Lanyard.Application.Services.Email;
 using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -775,6 +777,120 @@ namespace Lanyard.Tests.Services.Email
 
             Assert.IsFalse(result.IsSuccess);
             Assert.Contains("401", result.Error);
+        }
+
+        // --- Staff scheduling emails ---------------------------------------------------------
+
+        private static UserProfile Amy() => new() { Id = "amy", UserName = "amy", FirstName = "Amy", Email = "amy@example.com" };
+
+        // Decoded, so assertions read as the recipient sees the text (the builder encodes "·" etc.).
+        private static string HtmlOf(FakeHttpMessageHandler handler) =>
+            WebUtility.HtmlDecode(JsonDocument.Parse(handler.LastRequestBody!).RootElement.GetProperty("html").GetString()!);
+
+        private static string SubjectOf(FakeHttpMessageHandler handler) =>
+            JsonDocument.Parse(handler.LastRequestBody!).RootElement.GetProperty("subject").GetString()!;
+
+        [TestMethod]
+        public async Task SendRotaChangedEmailAsync_ListsEveryShiftAndUsesTheNewShiftsSubject()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendRotaChangedEmailAsync(
+                Amy(), "Peterborough",
+                [new ShiftEmailLine(new DateOnly(2026, 10, 5), "09:00–17:00", "Supervisor"), new ShiftEmailLine(new DateOnly(2026, 10, 7), "12:00–16:00", null)],
+                [], [],
+                "https://lanyard.example.com/rota", null, "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            string html = HtmlOf(handler);
+            Assert.Contains("Mon 5 Oct · 09:00–17:00 · Supervisor", html);
+            Assert.Contains("Wed 7 Oct · 12:00–16:00", html);
+            Assert.Contains("https://lanyard.example.com/rota", html);
+            Assert.AreEqual("Your shifts at Peterborough", SubjectOf(handler));
+        }
+
+        [TestMethod]
+        public async Task SendRotaChangedEmailAsync_SaysChangedWhenAnythingMovedOrWent()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            await service.SendRotaChangedEmailAsync(
+                Amy(), "Peterborough", [],
+                [new ShiftEmailLine(new DateOnly(2026, 10, 5), "10:00–17:00", null)],
+                [new ShiftEmailLine(new DateOnly(2026, 10, 6), "09:00–13:00", null)],
+                "https://lanyard.example.com/rota", null, "#C8102E");
+
+            string html = HtmlOf(handler);
+            Assert.AreEqual("Your rota at Peterborough has changed", SubjectOf(handler));
+            Assert.Contains("Changed (new times shown)", html);
+            Assert.Contains("Removed", html);
+            Assert.Contains("line-through", html);
+        }
+
+        [TestMethod]
+        public async Task SendRotaChangedEmailAsync_NoEmailAddress_Fails()
+        {
+            (EmailService service, _) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendRotaChangedEmailAsync(
+                new UserProfile { UserName = "noemail" }, "Peterborough", [], [], [], "https://x/rota", null, "#000");
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.Contains("no email address", result.Error);
+        }
+
+        [TestMethod]
+        public async Task SendShiftReminderEmailAsync_PutsTheDayAndTimesInTheSubject()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendShiftReminderEmailAsync(
+                Amy(), "Peterborough", new ShiftEmailLine(new DateOnly(2026, 10, 5), "09:00–17:00", "Supervisor"),
+                "tomorrow", "https://lanyard.example.com/rota", null, "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.AreEqual("Reminder: you're working tomorrow, 09:00–17:00", SubjectOf(handler));
+            Assert.Contains("Supervisor", HtmlOf(handler));
+        }
+
+        [TestMethod]
+        public async Task SendTimeOffRequestedEmailAsync_IncludesWhoWhatWhenAndTheReviewLink()
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTimeOffRequestedEmailAsync(
+                new UserProfile { Id = "sam", UserName = "sam", FirstName = "Sam", Email = "sam@example.com" },
+                "Amy Clarke", "Paid holiday", new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 9), "5 days (40 h)", "Week away <3",
+                "https://lanyard.example.com/manage/rota/time-off", null, "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            string html = HtmlOf(handler);
+            Assert.AreEqual("Amy Clarke has asked for time off", SubjectOf(handler));
+            Assert.Contains("Mon 5 – Fri 9 Oct", html);
+            Assert.Contains("5 days (40 h)", html);
+            Assert.Contains("Week away <3", html);
+            Assert.Contains("Week away &lt;3", JsonDocument.Parse(handler.LastRequestBody!).RootElement.GetProperty("html").GetString());
+            Assert.Contains("https://lanyard.example.com/manage/rota/time-off", html);
+        }
+
+        [TestMethod]
+        [DataRow(TimeOffEmailOutcome.Approved, "Your time off is approved")]
+        [DataRow(TimeOffEmailOutcome.Rejected, "Your time off wasn't approved")]
+        [DataRow(TimeOffEmailOutcome.Withdrawn, "Your approved time off has been withdrawn")]
+        [DataRow(TimeOffEmailOutcome.CutShort, "Your time off has been cut short")]
+        [DataRow(TimeOffEmailOutcome.Recorded, "Time off has been recorded for you")]
+        public async Task SendTimeOffDecisionEmailAsync_SubjectMatchesTheOutcome(TimeOffEmailOutcome outcome, string subject)
+        {
+            (EmailService service, FakeHttpMessageHandler handler) = BuildService(HttpStatusCode.OK, ValidOptions());
+
+            Result<bool> result = await service.SendTimeOffDecisionEmailAsync(
+                Amy(), "Paid holiday", new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 9), outcome, "Short-staffed", "Sam Okafor",
+                "https://lanyard.example.com/rota/time-off", null, "#C8102E");
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.AreEqual(subject, SubjectOf(handler));
+            Assert.Contains("Short-staffed", HtmlOf(handler));
+            Assert.Contains("Sam Okafor", HtmlOf(handler));
         }
     }
 }

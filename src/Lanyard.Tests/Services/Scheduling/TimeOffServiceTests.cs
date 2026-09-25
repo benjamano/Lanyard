@@ -38,7 +38,7 @@ public class TimeOffServiceTests
 
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
         TimeOffPolicyService policy = new(factory, NullLogger<TimeOffPolicyService>.Instance);
-        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new RecordingNotificationDispatcher(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
 
         List<TimeOffType> types = (await policy.GetTypesAsync(company.Id)).Data!;
         TimeOffType holiday = types.Single(x => x.Name == "Paid holiday");
@@ -516,7 +516,7 @@ public class TimeOffServiceTests
         (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
-        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), new TimeOffEventBus(), new RecordingNotificationDispatcher(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
 
         Result<TimeOffBalances> result = await service.GetBalancesAsync(user.Id, company.Id, Today);
 
@@ -582,7 +582,7 @@ public class TimeOffServiceTests
         TimeOffEventBus bus = new();
         List<int> published = [];
         bus.OnChanged += published.Add;
-        TimeOffService service = new(factory, new SchedulingSettingsService(factory), bus, new TestClock(Now), NullLogger<TimeOffService>.Instance);
+        TimeOffService service = new(factory, new SchedulingSettingsService(factory), bus, new RecordingNotificationDispatcher(), new TestClock(Now), NullLogger<TimeOffService>.Instance);
         TimeOffType holiday = (await new TimeOffPolicyService(factory, NullLogger<TimeOffPolicyService>.Instance).GetTypesAsync(company.Id)).Data!.First();
 
         Result<TimeOffSubmitResult> submitted = await service.SubmitAsync(user.Id, location.Id, Draft(holiday, new(2026, 10, 12), new(2026, 10, 12), 8));

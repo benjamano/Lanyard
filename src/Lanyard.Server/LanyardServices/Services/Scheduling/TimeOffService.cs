@@ -1,6 +1,8 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
@@ -14,6 +16,7 @@ public class TimeOffService(
     IDbContextFactory<ApplicationDbContext> factory,
     ISchedulingSettingsService settingsService,
     ITimeOffEventBus eventBus,
+    INotificationDispatcher notifications,
     TimeProvider timeProvider,
     ILogger<TimeOffService> logger) : ITimeOffService
 {
@@ -22,6 +25,7 @@ public class TimeOffService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ISchedulingSettingsService _settingsService = settingsService;
     private readonly ITimeOffEventBus _eventBus = eventBus;
+    private readonly INotificationDispatcher _notifications = notifications;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<TimeOffService> _logger = logger;
 
@@ -393,6 +397,9 @@ public class TimeOffService(
                 return Result<TimeOffRequest>.Fail("Keep the reason to 500 characters or fewer.");
             }
 
+            // Kept for the email: a rejection reads differently if it had been approved.
+            TimeOffStatus previousStatus = request.Status;
+
             if (approve)
             {
                 if (request.Status != TimeOffStatus.Pending)
@@ -435,6 +442,7 @@ public class TimeOffService(
 
                     _logger.LogInformation("Time-off request {RequestId} cut short after {Today} by {DeciderUserId}", requestId, today, deciderUserId);
                     _eventBus.Publish(request.LocationId);
+                    await NotifyDecisionAsync(ctx, withdrawn, TimeOffEmailOutcome.CutShort, trimmedReason, deciderUserId);
 
                     return Result<TimeOffRequest>.Ok(withdrawn);
                 }
@@ -450,6 +458,12 @@ public class TimeOffService(
 
             _logger.LogInformation("Time-off request {RequestId} {Decision} by {DeciderUserId}", requestId, approve ? "approved" : "rejected", deciderUserId);
             _eventBus.Publish(request.LocationId);
+
+            TimeOffEmailOutcome outcome = approve ? TimeOffEmailOutcome.Approved
+                : previousStatus == TimeOffStatus.Pending ? TimeOffEmailOutcome.Rejected
+                : TimeOffEmailOutcome.Withdrawn;
+
+            await NotifyDecisionAsync(ctx, request, outcome, trimmedReason, deciderUserId);
 
             return Result<TimeOffRequest>.Ok(request);
         }
@@ -473,6 +487,29 @@ public class TimeOffService(
             _logger.LogError(ex, "Failed to retrieve time off");
             return Result<List<TimeOffRequest>>.Fail($"Failed to retrieve time off: {ex.Message}");
         }
+    }
+
+    private async Task NotifyDecisionAsync(ApplicationDbContext ctx, TimeOffRequest request, TimeOffEmailOutcome outcome, string? reason, string deciderUserId)
+    {
+        string typeName = request.TimeOffType?.Name
+            ?? await ctx.TimeOffTypes.AsNoTracking().TagWithCallSite().Where(x => x.Id == request.TimeOffTypeId).Select(x => x.Name).FirstOrDefaultAsync()
+            ?? "Time off";
+
+        _notifications.Enqueue([request.UserId], NotificationTopic.TimeOffDecided, new TimeOffDecidedPayload(
+            request.LocationId,
+            typeName,
+            request.StartDate,
+            request.EndDate,
+            outcome,
+            reason,
+            await DisplayNameAsync(ctx, deciderUserId)));
+    }
+
+    private static async Task<string?> DisplayNameAsync(ApplicationDbContext ctx, string userId)
+    {
+        UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == userId);
+
+        return user is null ? null : RotaNames.For(user);
     }
 
     // Splits an approved request that has started: the original keeps the days up to and including
@@ -587,6 +624,28 @@ public class TimeOffService(
 
             request.TimeOffType = context.Type;
             _eventBus.Publish(locationId);
+
+            if (recordedByManager)
+            {
+                // Saved as approved, so the person hears it as a decision; the manager's note
+                // ("Called in sick") is what they see as the reason.
+                await NotifyDecisionAsync(ctx, request, TimeOffEmailOutcome.Recorded, request.Notes, requestedBy);
+            }
+            else
+            {
+                List<string> managers = (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId))
+                    .Where(x => x != userId)
+                    .ToList();
+
+                _notifications.Enqueue(managers, NotificationTopic.TimeOffRequested, new TimeOffRequestedPayload(
+                    locationId,
+                    await DisplayNameAsync(ctx, userId) ?? "Someone",
+                    context.Type.Name,
+                    request.StartDate,
+                    request.EndDate,
+                    TimeOffFormat.DaysAndHours(request.Hours, settings.HoursPerDay),
+                    request.Notes));
+            }
 
             _logger.LogInformation(recordedByManager
                     ? "Manager {RequestedBy} recorded time off {RequestId} for {UserId}"

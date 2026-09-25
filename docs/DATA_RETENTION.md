@@ -40,6 +40,13 @@ Clock-in terminals store only a SHA-256 hash of each device's token; clock-in PI
 salted hashes and deleted with the account. There is still no automated purge once the 6 years
 have passed - that remains part of the retention sweeper below.
 
+### Notification emails
+
+Rota, shift-reminder and time-off emails are queued in memory and sent by a background worker;
+nothing about them is stored, and a queued email is lost if the app restarts before it goes. The
+only record kept is `Shift.ReminderSentForStartUtc`, which stops a reminder being sent twice.
+Emails carry names, dates, shift times and any reason a manager gave - nothing more sensitive.
+
 ### Time off
 
 Time-off requests (`TimeOffRequest`) and personal allowance overrides (`TimeOffAllowance` rows

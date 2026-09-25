@@ -21,7 +21,7 @@ public class TimeOffRotaTests
     private static RotaService GetRotaService(DbContextOptions<ApplicationDbContext> options)
     {
         IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
-        return new RotaService(factory, new ContractRequirementService(factory), NullLogger<RotaService>.Instance);
+        return new RotaService(factory, new ContractRequirementService(factory), new RecordingNotificationDispatcher(), NullLogger<RotaService>.Instance);
     }
 
     private static async Task<(DbContextOptions<ApplicationDbContext> Options, Company Company, Location Location, UserProfile User, TimeOffType Holiday)> SetupAsync()

@@ -1,0 +1,47 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.CalendarPerson())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Time Off to Approve
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentText>Shows the requests waiting at the location the manager viewing it signed in to.</FluentText>
+            <FluentNumberInput TValue="int" @bind-Value="Widget.MaxItems" Min="1" Max="PendingTimeOffWidget.MaxSupportedItems"
+                               Label="Maximum requests to show" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public required PendingTimeOffWidget Widget { get; set; }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private int _originalMaxItems;
+
+    protected override void OnInitialized() => _originalMaxItems = Widget.MaxItems;
+
+    private async Task SaveAsync()
+    {
+        Widget.MaxItems = Math.Clamp(Widget.MaxItems, 1, PendingTimeOffWidget.MaxSupportedItems);
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.MaxItems = _originalMaxItems;
+        await Dialog.CancelAsync();
+    }
+}
