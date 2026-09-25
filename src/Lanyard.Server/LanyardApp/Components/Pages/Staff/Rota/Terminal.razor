@@ -2,7 +2,7 @@
 @* Anonymous on purpose: this page runs on a shared wall tablet that nobody is signed in to. It
    authenticates the *device* instead, by the HttpOnly cookie set when a manager paired it (see
    TerminalController). It shows nothing until the cookie resolves to an active terminal, and
-   even then only first names and today's shift times; every clock action re-checks the terminal
+   even then only first names with a surname initial, and today's shift times; every clock action re-checks the terminal
    server-side and needs the person's PIN, or a QR code that only existed on this screen. *@
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 @implements IDisposable

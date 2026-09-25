@@ -9,19 +9,25 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
     public static readonly TimeSpan PairingCodeLifetime = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan QrRotationInterval = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan QrNonceLifetime = TimeSpan.FromSeconds(60);
+    public static readonly TimeSpan QrSignInHold = TimeSpan.FromMinutes(10);
     public const int MaxPinFailures = 5;
-    public static readonly TimeSpan PinFailureWindow = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan PinLockout = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan MaxPinLockout = TimeSpan.FromHours(1);
+    public static readonly TimeSpan PinFailureMemory = TimeSpan.FromHours(24);
 
     private readonly TimeProvider _timeProvider = timeProvider;
 
     private readonly ConcurrentDictionary<string, PendingPairing> _pairingCodes = new();
-    private readonly ConcurrentDictionary<string, (Guid TerminalId, DateTime ExpiresUtc)> _qrNonces = new();
-    private readonly ConcurrentDictionary<(Guid TerminalId, string UserId), PinFailureState> _pinFailures = new();
+    private readonly ConcurrentDictionary<string, QrNonce> _qrNonces = new();
+
+    private sealed record QrNonce(Guid TerminalId, DateTime ExpiresUtc, bool HeldForSignIn);
+    private readonly ConcurrentDictionary<string, PinFailureState> _pinFailures = new();
 
     private sealed class PinFailureState
     {
-        public List<DateTime> Failures { get; } = [];
+        public int Failures { get; set; }
+        public int Lockouts { get; set; }
+        public DateTime LastFailureUtc { get; set; }
         public DateTime? LockedUntilUtc { get; set; }
     }
 
@@ -52,62 +58,95 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
         Prune();
 
         string nonce = NewToken();
-        _qrNonces[nonce] = (terminalId, Now.Add(QrNonceLifetime));
+        _qrNonces[nonce] = new QrNonce(terminalId, Now.Add(QrNonceLifetime), false);
 
         return nonce;
     }
 
     public Guid? PeekQrNonce(string nonce) =>
-        !string.IsNullOrEmpty(nonce) && _qrNonces.TryGetValue(nonce, out (Guid TerminalId, DateTime ExpiresUtc) entry) && entry.ExpiresUtc > Now
+        !string.IsNullOrEmpty(nonce) && _qrNonces.TryGetValue(nonce, out QrNonce? entry) && entry.ExpiresUtc > Now
             ? entry.TerminalId
             : null;
 
     public Guid? ConsumeQrNonce(string nonce) =>
-        !string.IsNullOrEmpty(nonce) && _qrNonces.TryRemove(nonce, out (Guid TerminalId, DateTime ExpiresUtc) entry) && entry.ExpiresUtc > Now
+        !string.IsNullOrEmpty(nonce) && _qrNonces.TryRemove(nonce, out QrNonce? entry) && entry.ExpiresUtc > Now
             ? entry.TerminalId
             : null;
 
-    public bool IsPinLocked(Guid terminalId, string userId)
+    public bool HoldQrNonceForSignIn(string nonce)
     {
-        if (!_pinFailures.TryGetValue((terminalId, userId), out PinFailureState? state))
+        if (string.IsNullOrEmpty(nonce) || !_qrNonces.TryGetValue(nonce, out QrNonce? entry) || entry.ExpiresUtc <= Now || entry.HeldForSignIn)
         {
             return false;
         }
 
+        return _qrNonces.TryUpdate(nonce, entry with { ExpiresUtc = Now.Add(QrSignInHold), HeldForSignIn = true }, entry);
+    }
+
+    public DateTime? PinLockedUntil(string userId)
+    {
+        if (!_pinFailures.TryGetValue(userId, out PinFailureState? state))
+        {
+            return null;
+        }
+
         lock (state)
         {
-            return state.LockedUntilUtc is DateTime until && until > Now;
+            return state.LockedUntilUtc is DateTime until && until > Now ? until : null;
         }
     }
 
-    public bool RegisterPinFailure(Guid terminalId, string userId)
+    public DateTime? RegisterPinFailure(string userId)
     {
-        PinFailureState state = _pinFailures.GetOrAdd((terminalId, userId), _ => new PinFailureState());
+        PrunePinFailures();
+
+        PinFailureState state = _pinFailures.GetOrAdd(userId, _ => new PinFailureState());
         DateTime now = Now;
 
         lock (state)
         {
-            state.Failures.RemoveAll(x => now - x > PinFailureWindow);
-            state.Failures.Add(now);
-
-            if (state.Failures.Count >= MaxPinFailures)
+            // A day without a wrong PIN forgets the history; until then each lockout is twice the
+            // last, so guessing someone's PIN slows to a handful of tries an hour.
+            if (now - state.LastFailureUtc > PinFailureMemory)
             {
-                state.LockedUntilUtc = now.Add(PinLockout);
-                state.Failures.Clear();
+                state.Failures = 0;
+                state.Lockouts = 0;
             }
 
-            return state.LockedUntilUtc is DateTime until && until > now;
+            state.Failures++;
+            state.LastFailureUtc = now;
+
+            if (state.Failures >= MaxPinFailures)
+            {
+                state.Failures = 0;
+                state.Lockouts++;
+
+                TimeSpan lockout = PinLockout * Math.Pow(2, Math.Min(state.Lockouts - 1, 16));
+                state.LockedUntilUtc = now.Add(lockout < MaxPinLockout ? lockout : MaxPinLockout);
+            }
+
+            return state.LockedUntilUtc is DateTime until && until > now ? until : null;
         }
     }
 
-    public void ClearPinFailures(Guid terminalId, string userId) =>
-        _pinFailures.TryRemove((terminalId, userId), out _);
+    public void ClearPinFailures(string userId) =>
+        _pinFailures.TryRemove(userId, out _);
 
     private static string NewToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-')
             .Replace('/', '_')
             .TrimEnd('=');
+
+    private void PrunePinFailures()
+    {
+        DateTime now = Now;
+
+        foreach (KeyValuePair<string, PinFailureState> entry in _pinFailures.Where(x => now - x.Value.LastFailureUtc > PinFailureMemory))
+        {
+            _pinFailures.TryRemove(entry.Key, out _);
+        }
+    }
 
     private void Prune()
     {
@@ -118,7 +157,7 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
             _pairingCodes.TryRemove(entry.Key, out _);
         }
 
-        foreach (KeyValuePair<string, (Guid TerminalId, DateTime ExpiresUtc)> entry in _qrNonces.Where(x => x.Value.ExpiresUtc <= now))
+        foreach (KeyValuePair<string, QrNonce> entry in _qrNonces.Where(x => x.Value.ExpiresUtc <= now))
         {
             _qrNonces.TryRemove(entry.Key, out _);
         }
