@@ -506,7 +506,14 @@
     "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour.",
     "details": [
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
-      "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge."
+      "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge.",
+      "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",
+      "Tables that are too wide for a phone now scroll within their own box. The rest of the page stays still.",
+      "The tabs on My Shifts, Training and similar pages move onto a second row on a phone, so you can see every tab.",
+      "My Training shows the course, due date and status on a phone without scrolling, and long course names wrap onto a second line. Before, some names showed only as \"…\".",
+      "On a phone, the Rota Builder's day picker fits a whole week on screen.",
+      "The DMX desk's client picker moves onto its own line on narrow phones.",
+      "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read."
     ]
   }
 ]
