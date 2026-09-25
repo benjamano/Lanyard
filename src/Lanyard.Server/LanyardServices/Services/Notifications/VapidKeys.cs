@@ -37,9 +37,23 @@ public sealed class VapidKeys
             : !string.IsNullOrWhiteSpace(publicBaseUrl) && publicBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? publicBaseUrl.TrimEnd('/')
             : "mailto:notifications@lanyard.invalid";
 
-        if (!string.IsNullOrEmpty(options.PublicKey) && !string.IsNullOrEmpty(options.PrivateKey))
+        // Pasted secrets often pick up a stray space or newline, which the push services reject.
+        string? configuredPublic = options.PublicKey?.Trim();
+        string? configuredPrivate = options.PrivateKey?.Trim();
+
+        if (!string.IsNullOrEmpty(configuredPublic) && !string.IsNullOrEmpty(configuredPrivate))
         {
-            return new VapidKeys(options.PublicKey, options.PrivateKey, subject);
+            // A private key that doesn't belong to the public key still lets browsers subscribe, but
+            // every push is then refused (FCM: "invalid JWT", Mozilla: "InvalidSignature"). Catch it
+            // here with a clear message instead of as a failed test send.
+            if (!IsMatchingPair(configuredPublic, configuredPrivate))
+            {
+                logger.LogError("Push notifications are off: Push:PrivateKey does not match Push:PublicKey. Generate a fresh pair and set both together");
+
+                return new VapidKeys(null, null, subject);
+            }
+
+            return new VapidKeys(configuredPublic, configuredPrivate, subject);
         }
 
         if (isDevelopment)
@@ -71,6 +85,44 @@ public sealed class VapidKeys
         parameters.Q.Y!.CopyTo(publicKey, 33);
 
         return (Base64Url(publicKey), Base64Url(parameters.D!));
+    }
+
+    // True when both keys are well-formed and the private key signs data the public key verifies.
+    public static bool IsMatchingPair(string publicKey, string privateKey)
+    {
+        try
+        {
+            byte[] pub = FromBase64Url(publicKey);
+            byte[] priv = FromBase64Url(privateKey);
+
+            if (pub.Length != 65 || pub[0] != 0x04 || priv.Length != 32)
+            {
+                return false;
+            }
+
+            ECPoint q = new() { X = pub[1..33], Y = pub[33..] };
+
+            using ECDsa verifier = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = q });
+
+            // Import the private scalar alone so the platform derives its own public point, rather
+            // than trusting the configured one.
+            using ECDsa signer = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = priv });
+
+            byte[] data = "lanyard-vapid-check"u8.ToArray();
+
+            return verifier.VerifyData(data, signer.SignData(data, HashAlgorithmName.SHA256), HashAlgorithmName.SHA256);
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException)
+        {
+            return false;
+        }
+    }
+
+    private static byte[] FromBase64Url(string value)
+    {
+        string base64 = value.Replace('-', '+').Replace('_', '/');
+
+        return Convert.FromBase64String(base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '='));
     }
 
     private static string Base64Url(byte[] bytes) =>
