@@ -5,9 +5,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Notifications;
 
-// Drains the notification queue one job at a time, each in its own scope so a scoped email
-// client and DbContext are never shared across jobs. One failing job is logged by the deliverer
-// and never stops the loop.
+// Drains the notification queue, each job in its own scope so a scoped email client and DbContext
+// are never shared across jobs. A few jobs run at once: a push service that is timing out can hold
+// one job for close to a minute (retries and back-off), and it mustn't hold every email and shift
+// reminder queued behind it. One failing job is logged by the deliverer and never stops the loop.
 public class NotificationDeliveryHostedService(
     NotificationDispatcher dispatcher,
     IServiceScopeFactory scopeFactory,
@@ -17,22 +18,26 @@ public class NotificationDeliveryHostedService(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ILogger<NotificationDeliveryHostedService> _logger = logger;
 
+    public const int MaxConcurrentDeliveries = 8;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("NotificationDeliveryHostedService started");
 
         try
         {
-            await foreach (NotificationJob job in _dispatcher.Reader.ReadAllAsync(stoppingToken))
+            ParallelOptions options = new() { MaxDegreeOfParallelism = MaxConcurrentDeliveries, CancellationToken = stoppingToken };
+
+            await Parallel.ForEachAsync(_dispatcher.Reader.ReadAllAsync(stoppingToken), options, async (job, token) =>
             {
                 try
                 {
                     using IServiceScope scope = _scopeFactory.CreateScope();
                     INotificationDeliverer deliverer = scope.ServiceProvider.GetRequiredService<INotificationDeliverer>();
 
-                    await deliverer.DeliverAsync(job, stoppingToken);
+                    await deliverer.DeliverAsync(job, token);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
                     throw;
                 }
@@ -40,7 +45,7 @@ public class NotificationDeliveryHostedService(
                 {
                     _logger.LogError(ex, "Failed to deliver a {Topic} notification to {UserId}", job.Topic, job.UserId);
                 }
-            }
+            });
         }
         catch (OperationCanceledException)
         {

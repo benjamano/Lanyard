@@ -257,7 +257,7 @@ namespace Lanyard.API.Controllers
         // navigation is a GET. The redirect is the same one the POST performs, so from the user's
         // side the extra hop is invisible.
         [HttpGet("logout")]
-        public IActionResult LogoutGet([FromQuery] string? returnUrl = null)
+        public IActionResult LogoutGet([FromQuery] string? returnUrl = null, [FromQuery] bool keepNotifications = false)
         {
             AntiforgeryTokenSet tokens = _antiforgery.GetAndStoreTokens(HttpContext);
 
@@ -287,7 +287,7 @@ namespace Lanyard.API.Controllers
                             <button type="submit">Continue</button>
                         </noscript>
                     </form>
-                    {PushSignOut.SubmitScript("signOutForm")}
+                    {(keepNotifications ? PushSignOut.PlainSubmitScript("signOutForm") : PushSignOut.SubmitScript("signOutForm"))}
                 </body>
                 </html>
                 """;

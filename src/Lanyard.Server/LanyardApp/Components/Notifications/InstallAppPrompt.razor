@@ -61,6 +61,8 @@
 
     private InstallPromptKind kind = InstallPromptKind.None;
     private DeviceDescription? device;
+    private DeviceReport? deviceReport;
+    private string? userId;
     private ElementReference enableButton;
     private DotNetObjectReference<InstallAppPrompt>? dotNetRef;
     private bool bound;
@@ -97,14 +99,7 @@
         {
             bound = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
-
-            try
-            {
-                await JS.InvokeVoidAsync("lanyardPush.bindEnableButton", enableButton, dotNetRef, PushSender.PublicKey);
-            }
-            catch (JSDisconnectedException)
-            {
-            }
+            await PushTurnOn.BindAsync(JS, enableButton, dotNetRef, PushSender.PublicKey);
         }
     }
 
@@ -148,7 +143,14 @@
                 return;
             }
 
+            if (decided == InstallPromptKind.EnableNotifications)
+            {
+                Result<string> user = await _securityService.GetCurrentUserIdAsync();
+                userId = user.Data;
+            }
+
             device = promptState.Device;
+            deviceReport = new DeviceReport(state.UserAgent, state.MaxTouchPoints, state.IsStandalone);
             kind = decided;
             bound = false;
 
@@ -160,7 +162,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogWarning("Install prompt check failed: {Error}", ex.Message);
+            Logger.LogError(ex, "Install prompt check failed");
         }
     }
 
@@ -185,37 +187,12 @@
     [JSInvokable]
     public async Task OnPushResult(string permission, PushSubscriptionInput? subscription)
     {
-        if (permission == "granted" && subscription is not null)
-        {
-            isSaving = true;
-            StateHasChanged();
+        isSaving = true;
+        StateHasChanged();
 
-            Result<string> user = await _securityService.GetCurrentUserIdAsync();
-            BrowserDevice browser = await JS.InvokeAsync<BrowserDevice>("lanyardInstall.getDevice");
-            Result<bool> saved = user.IsSuccess && !string.IsNullOrEmpty(user.Data)
-                ? await PushSubscriptionService.SaveAsync(user.Data, subscription, browser.Report)
-                : Result<bool>.Fail(user.Error ?? "Not signed in.");
+        await PushTurnOn.HandleResultAsync(permission, subscription, userId, deviceReport ?? new DeviceReport(null, 0, false), PushSubscriptionService, _toastService);
 
-            isSaving = false;
-
-            if (saved.IsSuccess)
-            {
-                _toastService.ShowSuccess("Notifications are on for this device.");
-            }
-            else
-            {
-                _toastService.ShowError($"Couldn't turn on notifications: {saved.Error}");
-            }
-        }
-        else if (permission == "denied")
-        {
-            _toastService.ShowWarning("Notifications are blocked. You can allow them later in your browser's site settings.");
-        }
-        else if (permission == "error")
-        {
-            _toastService.ShowError("Couldn't turn on notifications on this device.");
-        }
-
+        isSaving = false;
         kind = InstallPromptKind.None;
         StateHasChanged();
     }

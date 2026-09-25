@@ -21,7 +21,8 @@ public static class PushContentBuilder
             $"{requested.RequesterName} has asked for time off",
             $"{requested.TypeName} · {TimeOffFormat.DateRange(requested.Start, requested.End)} · {requested.Amount}",
             "/manage/rota/time-off",
-            $"time-off-requests-{requested.LocationId}",
+            // One per request: separate requests must not replace each other on the manager's phone.
+            $"time-off-request-{requested.LocationId}-{requested.Start:yyyyMMdd}-{requested.End:yyyyMMdd}-{requested.RequesterName}",
             PushMessageUrgency.Normal,
             TimeSpan.FromDays(3)),
         TimeOffDecidedPayload decided => Decided(decided),

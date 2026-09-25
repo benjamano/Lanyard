@@ -80,7 +80,7 @@ namespace Lanyard.API.Controllers
                             <button type="submit">Continue</button>
                         </noscript>
                     </form>
-                    {PushSignOut.SubmitScript("pairForm")}
+                    {PushSignOut.CaptureEndpointScript("pairForm")}
                 </body>
                 </html>
                 """;
@@ -136,17 +136,25 @@ namespace Lanyard.API.Controllers
 
             Response.Cookies.Append(TerminalCookie.Name, paired.Data.RawToken, TerminalCookie.Options(Request.IsHttps));
 
-            // A clock-in tablet never shows anyone's notifications, whether or not the manager
-            // stays signed in on it (see PushSignOut).
-            if (!string.IsNullOrEmpty(pushEndpoint))
-            {
-                await _pushSubscriptionService.RemoveAsync(userId, pushEndpoint);
-            }
-
             // A shared wall tablet shouldn't stay signed in as the manager who set it up.
             if (pairing.SignOutAfterPairing)
             {
                 await _signInManager.SignOutAsync();
+            }
+
+            // A clock-in tablet never shows anyone's notifications, whether or not the manager
+            // stays signed in on it. Only done now the pairing has succeeded, so a failed or
+            // expired pairing link leaves the manager's own phone as it was (see PushSignOut).
+            if (!string.IsNullOrEmpty(pushEndpoint))
+            {
+                Result<bool> removed = await _pushSubscriptionService.RemoveAsync(userId, pushEndpoint);
+
+                if (!removed.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't remove the push subscription for {UserId} when pairing a terminal: {Error}", userId, removed.Error);
+                }
+
+                return Content(PushSignOut.UnsubscribeThenGoPage("Pairing this tablet&hellip;", "/rota/terminal"), "text/html; charset=utf-8");
             }
 
             return Redirect("/rota/terminal");

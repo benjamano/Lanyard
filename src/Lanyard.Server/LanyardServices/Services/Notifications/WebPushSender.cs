@@ -15,7 +15,10 @@ namespace Lanyard.Application.Services.Notifications;
 // the stored subscription:
 //   201           delivered; failures reset
 //   404 / 410     the browser unsubscribed or the app was removed; delete it
-//   400 / 403     the subscription belongs to other VAPID keys (keys were changed); delete it
+//   400/401/403   our request was refused: usually our VAPID setup (subject, keys, clock), so the
+//                 subscription is kept and an error logged - deleting here would let one bad
+//                 deploy wipe every device. A subscription made with old keys is replaced by
+//                 lanyardPush.sync the next time the app opens there, or ages out after 90 days.
 //   413           payload too big; retried once with a shortened body
 //   429           rate limited; the library waits for Retry-After and retries
 //   5xx / network retried with back-off, then counted as a failure
@@ -100,6 +103,9 @@ public class WebPushSender(
                         removed++;
                         break;
 
+                    case SendOutcome.Rejected:
+                        break;
+
                     default:
                         subscription.ConsecutiveFailures++;
 
@@ -116,7 +122,16 @@ public class WebPushSender(
                 }
             }
 
-            await ctx.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await ctx.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // Another send to this person (say a test while a rota push goes out) removed or
+                // changed one of these rows first. The pushes still went; only the bookkeeping is lost.
+                _logger.LogWarning("Push bookkeeping for {UserId} clashed with another send: {Error}", userId, ex.Message);
+            }
 
             return new PushSendSummary(subscriptions.Count, delivered, removed);
         }
@@ -136,6 +151,7 @@ public class WebPushSender(
     {
         Delivered,
         Gone,
+        Rejected,
         Failed
     }
 
@@ -165,12 +181,13 @@ public class WebPushSender(
             }
             catch (PushServiceClientException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
             {
-                // Almost always a subscription made with different VAPID keys. It can never work
-                // with ours, so keeping it would just fail on every send.
-                _logger.LogError("Push service rejected our request for {DeviceLabel} ({UserId}) with {Status}: {Body}. Removing it; check the Push VAPID keys haven't changed",
+                // Either this subscription was made with other VAPID keys, or our own setup is wrong
+                // (Push__Subject, keys, server clock). The two can't be told apart from here, and the
+                // second would hit every device at once, so nothing is deleted.
+                _logger.LogError("Push service rejected our request for {DeviceLabel} ({UserId}) with {Status}: {Body}. Check the Push VAPID keys and subject",
                     subscription.DeviceLabel, subscription.UserId, (int)ex.StatusCode, ex.Body);
 
-                return SendOutcome.Gone;
+                return SendOutcome.Rejected;
             }
             catch (PushServiceClientException ex) when (ex.StatusCode == HttpStatusCode.RequestEntityTooLarge && !trimmed)
             {
@@ -218,11 +235,24 @@ public class WebPushSender(
     }
 
     // The Topic header lets the push service replace an undelivered older message with this one.
-    // It allows only URL-safe base64 characters, at most 32 of them.
+    // It allows only URL-safe base64 characters, at most 32 of them. A longer tag is hashed rather
+    // than cut short, so two different tags never collapse into one topic.
     public static string? TopicHeader(string tag)
     {
         string cleaned = new(tag.Where(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_').ToArray());
 
-        return cleaned.Length == 0 ? null : cleaned.Length <= 32 ? cleaned : cleaned[..32];
+        if (cleaned.Length == 0)
+        {
+            return null;
+        }
+
+        if (cleaned.Length <= 32 && cleaned.Length == tag.Length)
+        {
+            return cleaned;
+        }
+
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tag));
+
+        return Convert.ToBase64String(hash, 0, 24).Replace('+', '-').Replace('/', '_');
     }
 }

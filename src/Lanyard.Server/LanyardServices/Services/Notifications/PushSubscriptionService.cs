@@ -14,6 +14,10 @@ public class PushSubscriptionService(
     // Push service URLs are a few hundred characters; anything far longer isn't one.
     private const int MaxEndpointLength = 2000;
 
+    // The app reports in on every load; LastSeenUtc only feeds the 90-day cleanup, so an unchanged
+    // row needs touching now and then, not every time.
+    private static readonly TimeSpan TouchInterval = TimeSpan.FromHours(1);
+
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<PushSubscriptionService> _logger = logger;
@@ -60,6 +64,16 @@ public class PushSubscriptionService(
             }
             else
             {
+                bool unchanged = existing.UserId == userId
+                    && existing.P256dh == input.P256dh
+                    && existing.Auth == input.Auth
+                    && existing.DeviceLabel == label;
+
+                if (unchanged && now - existing.LastSeenUtc < TouchInterval)
+                {
+                    return Result<bool>.Ok(true);
+                }
+
                 if (existing.UserId != userId)
                 {
                     // Someone else is using this browser now; their notifications must not reach
@@ -84,16 +98,44 @@ public class PushSubscriptionService(
         }
         catch (DbUpdateException ex)
         {
-            // Two tabs syncing the same new subscription at once: the other one saved it.
-            _logger.LogWarning("Push subscription save for {UserId} lost a race: {Error}", userId, ex.InnerException?.Message ?? ex.Message);
+            // Two tabs syncing the same new subscription at once hit the unique endpoint index,
+            // and the other one saved it - fine. Anything else (the account was deleted meanwhile,
+            // another constraint) really failed, and the person must not be told it worked.
+            if (await IsSavedForAsync(userId, input.Endpoint))
+            {
+                _logger.LogWarning("Push subscription save for {UserId} lost a race: {Error}", userId, ex.InnerException?.Message ?? ex.Message);
 
-            return Result<bool>.Ok(true);
+                return Result<bool>.Ok(true);
+            }
+
+            _logger.LogError(ex, "Error saving a push subscription for {UserId}", userId);
+
+            return Result<bool>.Fail($"Couldn't save notifications for this device: {ex.InnerException?.Message ?? ex.Message}");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error saving a push subscription for {UserId}", userId);
 
             return Result<bool>.Fail($"Couldn't save notifications for this device: {ex.Message}");
+        }
+    }
+
+    private async Task<bool> IsSavedForAsync(string userId, string endpoint)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            return await ctx.PushSubscriptions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .AnyAsync(x => x.Endpoint == endpoint && x.UserId == userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error re-checking a push subscription for {UserId}", userId);
+
+            return false;
         }
     }
 

@@ -197,14 +197,7 @@
         {
             bound = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
-
-            try
-            {
-                await JS.InvokeVoidAsync("lanyardPush.bindEnableButton", enableButton, dotNetRef, PushSender.PublicKey);
-            }
-            catch (JSDisconnectedException)
-            {
-            }
+            await PushTurnOn.BindAsync(JS, enableButton, dotNetRef, PushSender.PublicKey);
         }
     }
 
@@ -265,29 +258,12 @@
     [JSInvokable]
     public async Task OnPushResult(string permission, PushSubscriptionInput? subscription)
     {
-        if (permission == "granted" && subscription is not null)
-        {
-            isBusy = true;
-            StateHasChanged();
+        isBusy = true;
+        StateHasChanged();
 
-            Result<bool> saved = await PushSubscriptionService.SaveAsync(userId!, subscription, browser!.Report);
+        await PushTurnOn.HandleResultAsync(permission, subscription, userId, browser!.Report, PushSubscriptionService, _toastService);
 
-            isBusy = false;
-
-            if (saved.IsSuccess)
-            {
-                _toastService.ShowSuccess("Notifications are on for this device.");
-            }
-            else
-            {
-                _toastService.ShowError($"Couldn't turn on notifications: {saved.Error}");
-            }
-        }
-        else if (permission == "error")
-        {
-            _toastService.ShowError("Couldn't turn on notifications on this device.");
-        }
-
+        isBusy = false;
         await RefreshDeviceAsync();
     }
 

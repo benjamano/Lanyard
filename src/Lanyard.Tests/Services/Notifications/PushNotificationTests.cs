@@ -155,6 +155,17 @@ public class PushNotificationTests
     }
 
     [TestMethod]
+    public void PushContent_TimeOffRequests_FromDifferentPeopleDontReplaceEachOther()
+    {
+        DateOnly today = new(2026, 9, 24);
+        PushContent alice = PushContentBuilder.Build(new TimeOffRequestedPayload(1, "Alice", "Paid holiday", new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 9), "5 days", null), today);
+        PushContent bob = PushContentBuilder.Build(new TimeOffRequestedPayload(1, "Bob", "Paid holiday", new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 9), "5 days", null), today);
+
+        Assert.AreNotEqual(alice.Tag, bob.Tag);
+        Assert.AreNotEqual(WebPushSender.TopicHeader(alice.Tag), WebPushSender.TopicHeader(bob.Tag));
+    }
+
+    [TestMethod]
     public void PushContent_Reminder_SaysTomorrowAndIsUrgent()
     {
         PushContent content = PushContentBuilder.Build(
@@ -183,8 +194,13 @@ public class PushNotificationTests
     public void TopicHeader_KeepsOnlyAllowedCharacters()
     {
         Assert.AreEqual("shift-reminder-20260925", WebPushSender.TopicHeader("shift-reminder-20260925"));
-        Assert.AreEqual("abc", WebPushSender.TopicHeader("a b.c"));
+        Assert.AreEqual(32, WebPushSender.TopicHeader("a b.c")!.Length);
         Assert.AreEqual(32, WebPushSender.TopicHeader(new string('x', 50))!.Length);
+
+        // Long tags are hashed, not cut, so two that share a prefix stay different.
+        Assert.AreNotEqual(
+            WebPushSender.TopicHeader("time-off-request-12-20261005-20261009-Alice"),
+            WebPushSender.TopicHeader("time-off-request-12-20261005-20261009-Bob"));
     }
 
     // ---- VAPID keys ------------------------------------------------------------------------
@@ -261,6 +277,25 @@ public class PushNotificationTests
         UserPushSubscription row = await ctx.PushSubscriptions.SingleAsync();
         Assert.AreEqual("sam", row.UserId);
         Assert.AreEqual("Chrome on Android", row.DeviceLabel);
+    }
+
+    [TestMethod]
+    public async Task Subscription_UnchangedResync_TouchesLastSeenAtMostHourly()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        TestClock clock = new(Now);
+        PushSubscriptionService service = SubscriptionService(options, clock);
+        DeviceReport device = new(AndroidChrome, 5, false);
+
+        await service.SaveAsync("amy", Input(), device);
+
+        clock.UtcNow = Now.AddMinutes(20);
+        await service.SaveAsync("amy", Input(), device);
+        Assert.AreEqual(Now, (await service.GetForUserAsync("amy")).Data!.Single().LastSeenUtc);
+
+        clock.UtcNow = Now.AddHours(2);
+        await service.SaveAsync("amy", Input(), device);
+        Assert.AreEqual(Now.AddHours(2), (await service.GetForUserAsync("amy")).Data!.Single().LastSeenUtc);
     }
 
     [TestMethod]
@@ -534,8 +569,7 @@ public class PushNotificationTests
     [TestMethod]
     [DataRow(HttpStatusCode.Gone)]
     [DataRow(HttpStatusCode.NotFound)]
-    [DataRow(HttpStatusCode.Forbidden)]
-    public async Task Send_GoneOrWrongKeys_RemovesTheDevice(HttpStatusCode status)
+    public async Task Send_Gone_RemovesTheDevice(HttpStatusCode status)
     {
         DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
         await SeedDeviceAsync(options, "https://push.example.com/a");
@@ -548,6 +582,26 @@ public class PushNotificationTests
 
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(0, await ctx.PushSubscriptions.CountAsync());
+    }
+
+    [TestMethod]
+    [DataRow(HttpStatusCode.Forbidden)]
+    [DataRow(HttpStatusCode.Unauthorized)]
+    [DataRow(HttpStatusCode.BadRequest)]
+    public async Task Send_RequestRefused_KeepsTheDevice(HttpStatusCode status)
+    {
+        // Usually our own VAPID setup is wrong; deleting would wipe every device at once.
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        await SeedDeviceAsync(options, "https://push.example.com/a");
+        (WebPushSender sender, FakePushService service) = Sender(options);
+        service.Answers["https://push.example.com/a"] = new([status]);
+
+        PushSendSummary summary = await sender.SendToUserAsync("amy", Content);
+
+        Assert.AreEqual(0, summary.Removed);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(0, (await ctx.PushSubscriptions.SingleAsync()).ConsecutiveFailures);
     }
 
     [TestMethod]
