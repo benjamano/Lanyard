@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Models;
@@ -41,14 +42,7 @@ internal static class ChatRules
     // Renaming a group or adding people is for whoever started it, or a Manager or Admin who's in
     // it. Everyone else can still post, mute and leave.
     public static async Task<bool> CanManageGroupAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation) =>
-        conversation.CreatedByUserId == userId
-        || await (from userRole in ctx.UserRoles
-                  join role in ctx.Roles on userRole.RoleId equals role.Id
-                  where userRole.UserId == userId && role.IsActive && (role.Name == "Admin" || role.Name == "Manager")
-                  select userRole.UserId)
-            .AsNoTracking()
-            .TagWithCallSite()
-            .AnyAsync();
+        conversation.CreatedByUserId == userId || await SchedulingRecipients.IsManagerOrAdminAsync(ctx, userId);
 
     public static Task<bool> BlockedEitherWayAsync(ApplicationDbContext ctx, string a, string b) =>
         ctx.ChatBlocks.AsNoTracking().TagWithCallSite().AnyAsync(x =>

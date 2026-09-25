@@ -74,6 +74,13 @@ else if (userId is not null && companyId is int company)
         companyId = company;
         ChatEvents.OnChanged += OnChatEvent;
 
+        Result<bool> channels = await ChatService.EnsureChannelsAsync(userId);
+
+        if (!channels.IsSuccess)
+        {
+            _toastService.ShowError(channels.Error ?? "Couldn't set up your channels.");
+        }
+
         await LoadInboxAsync();
     }
 

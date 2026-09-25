@@ -9,11 +9,12 @@ namespace Lanyard.Application.Services.Chat;
 // suspensions go with the account (cascading keys). What they wrote in groups stays, attributed
 // to the placeholder account, so the conversation still makes sense to everyone else; reports
 // they made or that are about them keep their snapshot for the retention period, with the person
-// re-pointed to the placeholder. A GDPR erasure also empties the direct messages they sent.
+// re-pointed to the placeholder, and their name comes off messages they removed or pinned. A GDPR
+// erasure also empties the direct messages they sent.
 // Run by ScheduleRetention.DetachUserAsync; the snapshot lets a failed account delete be undone.
 public static class ChatRetention
 {
-    public record MessageFields(Guid Id, string AuthorUserId, string BodyHtml, string BodyText, DateTime? DeletedUtc, string? DeletedByUserId);
+    public record MessageFields(Guid Id, string AuthorUserId, string BodyHtml, string BodyText, DateTime? DeletedUtc, string? DeletedByUserId, string? PinnedByUserId);
 
     public record ReportFields(Guid Id, string ReporterUserId, string ReportedUserId, string? ReviewedByUserId);
 
@@ -26,11 +27,11 @@ public static class ChatRetention
 
     private const string Placeholder = ApplicationDbContext.SystemDeletedUserPlaceholderId;
 
-    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc, bool eraseDirectMessages)
+    public static async Task<Snapshot> DetachUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc, bool gdprErasure)
     {
         List<ChatMessage> messages = await ctx.ChatMessages
             .Include(x => x.Conversation)
-            .Where(x => x.AuthorUserId == userId || x.DeletedByUserId == userId)
+            .Where(x => x.AuthorUserId == userId || x.DeletedByUserId == userId || x.PinnedByUserId == userId)
             .ToListAsync();
 
         List<ChatReport> reports = await ctx.ChatReports
@@ -38,14 +39,14 @@ public static class ChatRetention
             .ToListAsync();
 
         Snapshot snapshot = new(
-            messages.Select(x => new MessageFields(x.Id, x.AuthorUserId, x.BodyHtml, x.BodyText, x.DeletedUtc, x.DeletedByUserId)).ToList(),
+            messages.Select(x => new MessageFields(x.Id, x.AuthorUserId, x.BodyHtml, x.BodyText, x.DeletedUtc, x.DeletedByUserId, x.PinnedByUserId)).ToList(),
             reports.Select(x => new ReportFields(x.Id, x.ReporterUserId, x.ReportedUserId, x.ReviewedByUserId)).ToList());
 
         foreach (ChatMessage message in messages)
         {
             if (message.AuthorUserId == userId)
             {
-                if (eraseDirectMessages && message.Conversation?.Kind == Infrastructure.Enum.ChatConversationKind.Direct && !message.IsDeleted)
+                if (gdprErasure && message.Conversation?.Kind == Infrastructure.Enum.ChatConversationKind.Direct && !message.IsDeleted)
                 {
                     ChatRules.Erase(message, null, nowUtc);
                 }
@@ -56,6 +57,11 @@ public static class ChatRetention
             if (message.DeletedByUserId == userId)
             {
                 message.DeletedByUserId = null;
+            }
+
+            if (message.PinnedByUserId == userId)
+            {
+                message.PinnedByUserId = null;
             }
         }
 
@@ -191,6 +197,7 @@ public static class ChatRetention
                 message.BodyText = original.BodyText;
                 message.DeletedUtc = original.DeletedUtc;
                 message.DeletedByUserId = original.DeletedByUserId;
+                message.PinnedByUserId = original.PinnedByUserId;
             }
         }
 

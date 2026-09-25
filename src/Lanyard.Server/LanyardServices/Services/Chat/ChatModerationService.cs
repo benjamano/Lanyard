@@ -476,7 +476,7 @@ public class ChatModerationService(
 
             ChatConversation? channel = await ctx.ChatConversations.FirstOrDefaultAsync(x => x.Id == channelId);
 
-            if (channel is null || !CanLookAfter(scope, channel))
+            if (channel is null || !ChatChannels.CanModerate(scope, channel))
             {
                 return Result<bool>.Fail("That channel isn't yours to change.");
             }
@@ -522,7 +522,7 @@ public class ChatModerationService(
 
             ChatConversation? channel = await ctx.ChatConversations.FirstOrDefaultAsync(x => x.Id == channelId);
 
-            if (channel is null || !CanLookAfter(scope, channel))
+            if (channel is null || !ChatChannels.CanModerate(scope, channel))
             {
                 return Result<ChatMessage>.Fail("You can't post in that channel.");
             }
@@ -610,13 +610,6 @@ public class ChatModerationService(
     }
 
     // Managers look after their own location's channel; Admins every channel.
-    private static bool CanLookAfter(LocationScope scope, ChatConversation channel) => channel.Kind switch
-    {
-        ChatConversationKind.LocationChannel => channel.LocationId is int locationId && SchedulingAccess.CanManageLocation(scope, locationId),
-        ChatConversationKind.CompanyChannel => scope.IsAdmin,
-        _ => false
-    };
-
     // The report without its navigation to the live message and conversation, so nothing beyond
     // the snapshot can reach a page by accident.
     private static ChatReport StripConversation(ChatReport report)

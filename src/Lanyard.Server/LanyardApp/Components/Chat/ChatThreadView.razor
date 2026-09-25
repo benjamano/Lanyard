@@ -275,6 +275,10 @@
     private ChatMessageView? replyingTo;
     private ChatMessageView? editing;
     private bool menuOpen;
+
+    // The signed-in location: decides whether this person looks after a channel
+    // (ChatChannels.CanModerate), so it goes with every call that depends on that.
+    private LocationScope? scope;
     private Guid? messageMenu;
     private bool pinnedOpen;
 
@@ -318,7 +322,7 @@
     private async Task SetPinnedAsync(ChatMessageView view, bool pinned)
     {
         messageMenu = null;
-        Result<bool> result = await ChatService.SetPinnedAsync(UserId, view.Message.Id, pinned);
+        Result<bool> result = await ChatService.SetPinnedAsync(scope!, UserId, view.Message.Id, pinned);
 
         if (!result.IsSuccess)
         {
@@ -338,7 +342,7 @@
             return;
         }
 
-        Result<bool> result = await ChatService.RemoveAsModeratorAsync(UserId, view.Message.Id);
+        Result<bool> result = await ChatService.RemoveAsModeratorAsync(scope!, UserId, view.Message.Id);
 
         if (!result.IsSuccess)
         {
@@ -373,6 +377,8 @@
         presence?.Dispose();
         presence = pageVisible ? Presence.Enter(UserId, ConversationId) : null;
 
+        scope ??= (await _currentLocationContext.GetScopeAsync()).Data;
+
         await LoadLatestAsync(scroll: true);
     }
 
@@ -382,7 +388,7 @@
         // removals of older messages show too, not just the newest page.
         int take = Math.Clamp(messages.Count, 50, 200);
 
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take);
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, take: take, scope: scope);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -496,7 +502,7 @@
         }
 
         loadingOlder = true;
-        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc);
+        Result<ChatThread> result = await ChatService.GetThreadAsync(UserId, ConversationId, messages[0].Message.CreateUtc, scope: scope);
         loadingOlder = false;
 
         if (!result.IsSuccess || result.Data is null)
@@ -521,7 +527,7 @@
     {
         if (editing is ChatMessageView edited)
         {
-            Result<bool> saved = await ChatService.EditAsync(UserId, edited.Message.Id, html);
+            Result<bool> saved = await ChatService.EditAsync(UserId, edited.Message.Id, html, scope);
 
             if (!saved.IsSuccess)
             {
@@ -534,7 +540,7 @@
             return true;
         }
 
-        Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id);
+        Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id, scope);
 
         if (!sent.IsSuccess)
         {

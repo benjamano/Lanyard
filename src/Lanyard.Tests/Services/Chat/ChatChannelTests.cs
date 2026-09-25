@@ -36,6 +36,7 @@ public class ChatChannelTests
         ChatModerationService Moderation)
     {
         public LocationScope ManagerScope => SchedulingTestHelpers.ManagerScopeFor(Location);
+        public LocationScope StaffScope => SchedulingTestHelpers.StaffScopeFor(Location);
         public LocationScope AdminScope => new(true, Location.Id, Company.Id, Location.Name, true);
     }
 
@@ -77,8 +78,10 @@ public class ChatChannelTests
             new ChatModerationService(factory, notifications, bus, clock, NullLogger<ChatModerationService>.Instance));
     }
 
+    // What opening the chat page does: set up the person's channels once, then load the inbox.
     private static async Task<List<ChatInboxItem>> InboxAsync(World w, UserProfile user)
     {
+        Assert.IsTrue((await w.Chat.EnsureChannelsAsync(user.Id)).IsSuccess);
         Result<List<ChatInboxItem>> inbox = await w.Chat.GetInboxAsync(user.Id);
         Assert.IsTrue(inbox.IsSuccess, inbox.Error);
         return inbox.Data!;
@@ -98,7 +101,7 @@ public class ChatChannelTests
         Assert.AreEqual("Play2Day everyone", inbox.Single(x => x.Kind == ChatConversationKind.CompanyChannel).Title);
 
         // Opening it again reuses the same channels.
-        List<ChatInboxItem> again = (await w.Chat.GetInboxAsync(w.Tom.Id)).Data!;
+        List<ChatInboxItem> again = await InboxAsync(w, w.Tom);
         Assert.AreEqual(inbox.Single(x => x.Kind == ChatConversationKind.LocationChannel).ConversationId,
             again.Single(x => x.Kind == ChatConversationKind.LocationChannel).ConversationId);
     }
@@ -107,7 +110,7 @@ public class ChatChannelTests
     public async Task LeavingALocation_LeavesItsChannel()
     {
         World w = await SeedAsync();
-        await w.Chat.GetInboxAsync(w.Amy.Id);
+        await InboxAsync(w, w.Amy);
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
@@ -129,7 +132,7 @@ public class ChatChannelTests
         await w.Chat.SendAsync(w.Amy.Id, channel.ConversationId, "<p>Welcome, everyone</p>");
 
         UserProfile newStarter = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Location, "Nia");
-        await w.Chat.GetInboxAsync(newStarter.Id);
+        await InboxAsync(w, newStarter);
 
         ChatThread thread = (await w.Chat.GetThreadAsync(newStarter.Id, channel.ConversationId)).Data!;
 
@@ -142,12 +145,12 @@ public class ChatChannelTests
     {
         World w = await SeedAsync();
         ChatInboxItem channel = await ChannelAsync(w, w.Amy, ChatConversationKind.LocationChannel);
-        await w.Chat.GetInboxAsync(w.Manager.Id);
+        await InboxAsync(w, w.Manager);
 
         Assert.IsTrue((await w.Moderation.SetStaffCanPostAsync(w.ManagerScope, channel.ConversationId, false, w.Manager.Id)).IsSuccess);
 
         Result<ChatMessage> staff = await w.Chat.SendAsync(w.Amy.Id, channel.ConversationId, "<p>Hi</p>");
-        Result<ChatMessage> manager = await w.Chat.SendAsync(w.Manager.Id, channel.ConversationId, "<p>Hi team</p>");
+        Result<ChatMessage> manager = await w.Chat.SendAsync(w.Manager.Id, channel.ConversationId, "<p>Hi team</p>", scope: w.ManagerScope);
 
         StringAssert.Contains(staff.Error, "Only managers can post");
         Assert.IsTrue(manager.IsSuccess, manager.Error);
@@ -186,10 +189,10 @@ public class ChatChannelTests
         ChatInboxItem channel = await ChannelAsync(w, w.Amy, ChatConversationKind.LocationChannel);
         ChatMessage message = (await w.Chat.SendAsync(w.Amy.Id, channel.ConversationId, "<p>Lost property box is full</p>")).Data!;
 
-        Assert.IsFalse((await w.Chat.SetPinnedAsync(w.Tom.Id, message.Id, true)).IsSuccess);
+        Assert.IsFalse((await w.Chat.SetPinnedAsync(w.StaffScope, w.Tom.Id, message.Id, true)).IsSuccess);
 
         // Tom has never opened chat, but he still hears about it.
-        Assert.IsTrue((await w.Chat.SetPinnedAsync(w.Manager.Id, message.Id, true)).IsSuccess);
+        Assert.IsTrue((await w.Chat.SetPinnedAsync(w.ManagerScope, w.Manager.Id, message.Id, true)).IsSuccess);
 
         List<string> told = w.Notifications.Jobs.Where(x => x.Topic == NotificationTopic.PinnedPost).Select(x => x.UserId).ToList();
         CollectionAssert.Contains(told, w.Tom.Id);
@@ -205,7 +208,7 @@ public class ChatChannelTests
     public async Task PinnedPost_WrittenByAManager_ForTheirOwnLocationOnly()
     {
         World w = await SeedAsync();
-        await w.Chat.GetInboxAsync(w.Amy.Id);
+        await InboxAsync(w, w.Amy);
         List<ChatChannelAdminView> admins = (await w.Moderation.GetChannelsAsync(w.AdminScope)).Data!;
         ChatConversation mine = admins.Single(x => x.Channel.LocationId == w.Location.Id).Channel;
         ChatConversation otherLocation = admins.Single(x => x.Channel.LocationId == w.Other.Id).Channel;
@@ -226,8 +229,8 @@ public class ChatChannelTests
         ChatInboxItem channel = await ChannelAsync(w, w.Amy, ChatConversationKind.LocationChannel);
         ChatMessage message = (await w.Chat.SendAsync(w.Amy.Id, channel.ConversationId, "<p>Something rude</p>")).Data!;
 
-        Assert.IsFalse((await w.Chat.RemoveAsModeratorAsync(w.Tom.Id, message.Id)).IsSuccess);
-        Assert.IsTrue((await w.Chat.RemoveAsModeratorAsync(w.Manager.Id, message.Id)).IsSuccess);
+        Assert.IsFalse((await w.Chat.RemoveAsModeratorAsync(w.StaffScope, w.Tom.Id, message.Id)).IsSuccess);
+        Assert.IsTrue((await w.Chat.RemoveAsModeratorAsync(w.ManagerScope, w.Manager.Id, message.Id)).IsSuccess);
 
         ChatMessageView removed = (await w.Chat.GetThreadAsync(w.Tom.Id, channel.ConversationId)).Data!.Messages.Single();
         Assert.IsTrue(removed.Message.IsDeleted);
@@ -244,7 +247,65 @@ public class ChatChannelTests
         ChatConversation group = (await w.Chat.CreateGroupAsync(w.Amy.Id, w.Company.Id, "Crew", [w.Tom.Id, w.Manager.Id])).Data!;
         ChatMessage message = (await w.Chat.SendAsync(w.Amy.Id, group.Id, "<p>Hi</p>")).Data!;
 
-        Assert.IsFalse((await w.Chat.RemoveAsModeratorAsync(w.Manager.Id, message.Id)).IsSuccess);
+        Assert.IsFalse((await w.Chat.RemoveAsModeratorAsync(w.ManagerScope, w.Manager.Id, message.Id)).IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task DeletingAManager_ClearsTheirNameFromPostsTheyPinned_AndCanBeUndone()
+    {
+        World w = await SeedAsync();
+        ChatInboxItem channel = await ChannelAsync(w, w.Amy, ChatConversationKind.LocationChannel);
+        ChatMessage message = (await w.Chat.SendAsync(w.Amy.Id, channel.ConversationId, "<p>Rota's up</p>")).Data!;
+        Assert.IsTrue((await w.Chat.SetPinnedAsync(w.ManagerScope, w.Manager.Id, message.Id, true)).IsSuccess);
+
+        ScheduleRetention.Snapshot snapshot;
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            snapshot = await ScheduleRetention.DetachUserAsync(ctx, w.Manager.Id, Now);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ChatMessage pinned = await ctx.ChatMessages.SingleAsync(x => x.Id == message.Id);
+            Assert.IsNull(pinned.PinnedByUserId);
+            Assert.IsTrue(pinned.IsPinned, "Still pinned for everyone else");
+
+            await ScheduleRetention.RestoreAsync(ctx, snapshot);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using ApplicationDbContext verify = new(w.Options);
+        Assert.AreEqual(w.Manager.Id, (await verify.ChatMessages.SingleAsync(x => x.Id == message.Id)).PinnedByUserId);
+    }
+
+    [TestMethod]
+    public async Task Moderating_IsForTheLocationTheManagerSignedInTo()
+    {
+        World w = await SeedAsync();
+
+        // Sam manages Ipswich but also works at Wisbech.
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.UserLocationMemberships.Add(new UserLocationMembership { UserId = w.Manager.Id, LocationId = w.Other.Id, CreateDate = DateTime.UtcNow });
+            await ctx.SaveChangesAsync();
+        }
+
+        UserProfile olu = await SchedulingTestHelpers.SeedUserAsync(w.Options, w.Other, "Olu");
+        ChatInboxItem wisbech = await ChannelAsync(w, olu, ChatConversationKind.LocationChannel);
+        ChatMessage message = (await w.Chat.SendAsync(olu.Id, wisbech.ConversationId, "<p>Hello</p>")).Data!;
+        await InboxAsync(w, w.Manager);
+
+        // Signed in at Ipswich: a member of Wisbech's channel, but not looking after it.
+        Assert.IsFalse((await w.Chat.GetThreadAsync(w.Manager.Id, wisbech.ConversationId, scope: w.ManagerScope)).Data!.CanModerate);
+        Assert.IsFalse((await w.Chat.SetPinnedAsync(w.ManagerScope, w.Manager.Id, message.Id, true)).IsSuccess);
+        Assert.IsFalse((await w.Chat.RemoveAsModeratorAsync(w.ManagerScope, w.Manager.Id, message.Id)).IsSuccess);
+
+        // Signed in at Wisbech, they are.
+        LocationScope atWisbech = SchedulingTestHelpers.ManagerScopeFor(w.Other);
+        Assert.IsTrue((await w.Chat.GetThreadAsync(w.Manager.Id, wisbech.ConversationId, scope: atWisbech)).Data!.CanModerate);
+        Assert.IsTrue((await w.Chat.SetPinnedAsync(atWisbech, w.Manager.Id, message.Id, true)).IsSuccess);
     }
 
     [TestMethod]

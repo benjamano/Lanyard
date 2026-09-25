@@ -1,4 +1,5 @@
 using System.Net;
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DTO.Notifications;
@@ -17,37 +18,18 @@ namespace Lanyard.Application.Services.Chat;
 // is sent to a channel.
 public static class ChatChannels
 {
-    public const string AdminRole = "Admin";
-
     public static bool IsChannel(ChatConversation conversation) =>
         conversation.Kind is ChatConversationKind.LocationChannel or ChatConversationKind.CompanyChannel;
 
-    public static async Task<bool> IsAdminAsync(ApplicationDbContext ctx, string userId) =>
-        await (from userRole in ctx.UserRoles
-               join role in ctx.Roles on userRole.RoleId equals role.Id
-               where userRole.UserId == userId && role.IsActive && role.Name == AdminRole
-               select userRole.UserId)
-            .AsNoTracking()
-            .TagWithCallSite()
-            .AnyAsync();
-
-    // Managers of the location for its channel (the same people who manage its rota), Admins for
-    // any channel.
-    public static async Task<bool> CanModerateAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation)
+    // Who looks after a channel - pins, removes, posts while staff posting is off, and sees it on
+    // Manage > Chat Channels: an Admin any channel; a Manager only their signed-in location's
+    // channel (SchedulingAccess.CanManageLocation, the rota's rule). No scope, no rights.
+    public static bool CanModerate(LocationScope? scope, ChatConversation channel) => scope is not null && channel.Kind switch
     {
-        if (!IsChannel(conversation))
-        {
-            return false;
-        }
-
-        if (await IsAdminAsync(ctx, userId))
-        {
-            return true;
-        }
-
-        return conversation.Kind == ChatConversationKind.LocationChannel && conversation.LocationId is int locationId
-            && (await SchedulingRecipients.ManagersOfLocationAsync(ctx, locationId)).Contains(userId);
-    }
+        ChatConversationKind.LocationChannel => channel.LocationId is int locationId && SchedulingAccess.CanManageLocation(scope, locationId),
+        ChatConversationKind.CompanyChannel => scope.IsAdmin,
+        _ => false
+    };
 
     public static async Task<ChatConversation> GetOrCreateLocationChannelAsync(ApplicationDbContext ctx, Location location, DateTime nowUtc)
     {

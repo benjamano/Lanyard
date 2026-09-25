@@ -36,7 +36,9 @@ deleted or erased, because of the 6-year payroll retention above. Both delete pa
   records no longer identify them;
 - cancels any shifts they had in the future, and closes any time entry they were still clocked
   in on (flagged for review);
-- scrubs their user id from "created / updated / published / approved by" attribution fields.
+- scrubs their user id from "created / updated / published / approved by" attribution fields;
+- on a **GDPR erasure** only, also clears the free-text notes on their time entries (the hours
+  themselves stay, anonymised, for payroll).
 
 Clock-in terminals store only a SHA-256 hash of each device's token; clock-in PINs are stored as
 salted hashes and deleted with the account. There is still no automated purge once the 6 years
@@ -86,7 +88,8 @@ Six tables hold chat: `ChatConversations`, `ChatMembers`, `ChatMessages`, `ChatB
 - **Channels** (one per location, one per company) are open to everyone who works there, who can
   read back through their history; membership follows `UserLocationMemberships`. On account
   deletion a person's channel messages are kept like group messages, attributed to the
-  placeholder. Managers removing a message empties it just as the author deleting it would; the
+  placeholder, and their name is cleared from any post they pinned or removed. Managers removing
+  a message empties it just as the author deleting it would; the
   managers' recent-removals list shows who wrote it and where, never what it said. Open-shift and
   swap cards hold a link to the shift or request and a one-line summary.
 - The daily unread-messages email names conversations and counts only, never message text. Chat

@@ -541,7 +541,7 @@ public class ChatServiceTests
 
         await using (ApplicationDbContext ctx = new(w.Options))
         {
-            await ScheduleRetention.DetachUserAsync(ctx, w.Tom.Id, Now, eraseDirectMessages: true);
+            await ScheduleRetention.DetachUserAsync(ctx, w.Tom.Id, Now, gdprErasure: true);
             await ctx.SaveChangesAsync();
         }
 

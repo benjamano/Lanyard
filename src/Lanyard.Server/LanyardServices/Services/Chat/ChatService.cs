@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
@@ -31,14 +32,27 @@ public class ChatService(
 
     private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
 
+    public async Task<Result<bool>> EnsureChannelsAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await ChatChannels.EnsureChannelsForUserAsync(ctx, userId, Now);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set up chat channels for {UserId}", userId);
+            return Result<bool>.Fail($"Couldn't set up your channels: {ex.Message}");
+        }
+    }
+
     public async Task<Result<List<ChatInboxItem>>> GetInboxAsync(string userId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
-            // The person's location and company channels, created and joined on first look.
-            await ChatChannels.EnsureChannelsForUserAsync(ctx, userId, Now);
 
             List<ChatMember> mine = await ctx.ChatMembers
                 .AsNoTracking()
@@ -411,7 +425,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50)
+    public async Task<Result<ChatThread>> GetThreadAsync(string userId, Guid conversationId, DateTime? before = null, int take = 50, LocationScope? scope = null)
     {
         try
         {
@@ -463,7 +477,7 @@ public class ChatService(
 
             if (ChatChannels.IsChannel(conversation))
             {
-                canModerate = await ChatChannels.CanModerateAsync(ctx, userId, conversation);
+                canModerate = ChatChannels.CanModerate(scope, conversation);
 
                 pinned = (await ctx.ChatMessages
                     .AsNoTracking()
@@ -491,7 +505,7 @@ public class ChatService(
                 ? RotaNames.For(members.FirstOrDefault(x => x.UserId != userId)?.User)
                 : conversation.Name ?? "Group";
 
-            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId);
+            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope);
             bool canManageGroup = conversation.Kind == ChatConversationKind.Group && await ChatRules.CanManageGroupAsync(ctx, userId, conversation);
 
             return Result<ChatThread>.Ok(new ChatThread(
@@ -518,7 +532,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<ChatMessage>> SendAsync(string userId, Guid conversationId, string html, Guid? replyToMessageId = null)
+    public async Task<Result<ChatMessage>> SendAsync(string userId, Guid conversationId, string html, Guid? replyToMessageId = null, LocationScope? scope = null)
     {
         try
         {
@@ -556,7 +570,7 @@ public class ChatService(
                 .ToListAsync();
 
             string? otherUserId = conversation.Kind == ChatConversationKind.Direct ? members.FirstOrDefault(x => x.UserId != userId)?.UserId : null;
-            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId);
+            string? cannotPost = await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope);
 
             if (cannotPost is not null)
             {
@@ -621,7 +635,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<bool>> EditAsync(string userId, Guid messageId, string html)
+    public async Task<Result<bool>> EditAsync(string userId, Guid messageId, string html, LocationScope? scope = null)
     {
         try
         {
@@ -658,7 +672,7 @@ public class ChatService(
                 ? await ctx.ChatMembers.AsNoTracking().Where(x => x.ConversationId == conversation.Id && x.UserId != userId).Select(x => x.UserId).FirstOrDefaultAsync()
                 : null;
 
-            if (await CannotPostReasonAsync(ctx, userId, conversation, otherUserId) is { } cannotPost)
+            if (await CannotPostReasonAsync(ctx, userId, conversation, otherUserId, scope) is { } cannotPost)
             {
                 return Result<bool>.Fail(cannotPost);
             }
@@ -851,7 +865,7 @@ public class ChatService(
 
     // ---- Channels --------------------------------------------------------------------------
 
-    public async Task<Result<bool>> SetPinnedAsync(string userId, Guid messageId, bool pinned)
+    public async Task<Result<bool>> SetPinnedAsync(LocationScope scope, string userId, Guid messageId, bool pinned)
     {
         try
         {
@@ -864,7 +878,7 @@ public class ChatService(
                 return Result<bool>.Fail("Only channel messages can be pinned.");
             }
 
-            if (!await ChatChannels.CanModerateAsync(ctx, userId, channel))
+            if (!ChatChannels.CanModerate(scope, channel))
             {
                 return Result<bool>.Fail("Only managers can pin posts in this channel.");
             }
@@ -907,7 +921,7 @@ public class ChatService(
         }
     }
 
-    public async Task<Result<bool>> RemoveAsModeratorAsync(string userId, Guid messageId)
+    public async Task<Result<bool>> RemoveAsModeratorAsync(LocationScope scope, string userId, Guid messageId)
     {
         try
         {
@@ -920,7 +934,7 @@ public class ChatService(
                 return Result<bool>.Fail("Only channel messages can be removed by a manager.");
             }
 
-            if (!await ChatChannels.CanModerateAsync(ctx, userId, channel))
+            if (!ChatChannels.CanModerate(scope, channel))
             {
                 return Result<bool>.Fail("Only managers can remove messages in this channel.");
             }
@@ -996,7 +1010,7 @@ public class ChatService(
         return (member?.Conversation, member);
     }
 
-    private async Task<string?> CannotPostReasonAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation, string? otherUserId)
+    private async Task<string?> CannotPostReasonAsync(ApplicationDbContext ctx, string userId, ChatConversation conversation, string? otherUserId, LocationScope? scope)
     {
         if (await ChatRules.SuspendedUntilAsync(ctx, userId, conversation.CompanyId, Now) is { } suspended)
         {
@@ -1008,7 +1022,7 @@ public class ChatService(
             return "You can't send messages in this conversation.";
         }
 
-        if (ChatChannels.IsChannel(conversation) && !conversation.StaffCanPost && !await ChatChannels.CanModerateAsync(ctx, userId, conversation))
+        if (ChatChannels.IsChannel(conversation) && !conversation.StaffCanPost && !ChatChannels.CanModerate(scope, conversation))
         {
             return "Only managers can post here at the moment. You can still read it.";
         }
