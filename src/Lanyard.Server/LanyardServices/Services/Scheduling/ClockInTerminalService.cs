@@ -18,7 +18,9 @@ public class ClockInTerminalService(
     private const int MaxNameLength = 60;
 
     // LastSeenUtc is for "is this tablet still in use?" on the manage page, not an audit trail,
-    // so it's only written when it's gone stale rather than on every page load.
+    // so it's only written when it's gone stale: on a full page load, and on the open page's
+    // regular check and every clock action (GetActiveSessionAsync), since a wall tablet can stay
+    // on one page load for weeks.
     private static readonly TimeSpan LastSeenThrottle = TimeSpan.FromMinutes(5);
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -139,13 +141,7 @@ public class ClockInTerminalService(
                 return Result<TerminalSession>.Fail("This device has been unpaired. A manager can pair it again from Manage > Rota > Clock-In Terminals.");
             }
 
-            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
-
-            if (terminal.LastSeenUtc is null || now - terminal.LastSeenUtc > LastSeenThrottle)
-            {
-                terminal.LastSeenUtc = now;
-                await ctx.SaveChangesAsync();
-            }
+            await TouchAsync(ctx, terminal);
 
             return Result<TerminalSession>.Ok(ToSession(terminal));
         }
@@ -162,7 +158,6 @@ public class ClockInTerminalService(
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             ClockInTerminal? terminal = await ctx.ClockInTerminals
-                .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.Location)
                 .FirstOrDefaultAsync(x => x.Id == terminalId);
@@ -172,11 +167,24 @@ public class ClockInTerminalService(
                 return Result<TerminalSession>.Fail("This device has been unpaired.");
             }
 
+            await TouchAsync(ctx, terminal);
+
             return Result<TerminalSession>.Ok(ToSession(terminal));
         }
         catch (Exception ex)
         {
             return Result<TerminalSession>.Fail($"Failed to check this device: {ex.Message}");
+        }
+    }
+
+    private async Task TouchAsync(ApplicationDbContext ctx, ClockInTerminal terminal)
+    {
+        DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (terminal.LastSeenUtc is null || now - terminal.LastSeenUtc > LastSeenThrottle)
+        {
+            terminal.LastSeenUtc = now;
+            await ctx.SaveChangesAsync();
         }
     }
 
