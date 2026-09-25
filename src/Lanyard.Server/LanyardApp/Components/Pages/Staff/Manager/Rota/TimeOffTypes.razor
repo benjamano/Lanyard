@@ -1,0 +1,60 @@
+@page "/manage/rota/time-off/types"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Rota.TimeOff
+
+<PageTitle>Time Off Types</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+        @if (companies is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else if (companies.Count == 0)
+        {
+            <FluentText>No companies exist yet. Add one under Companies &amp; Locations first.</FluentText>
+        }
+        else
+        {
+            @if (companies.Count > 1)
+            {
+                <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            }
+
+            @if (SelectedCompany is not null)
+            {
+                <TimeOffTypeManager CompanyId="@SelectedCompany.Id" OnChanged="@(() => allowanceKey++)" />
+
+                <FluentCard Height="auto">
+                    <TimeOffAllowanceEditor @key="@($"{SelectedCompany.Id}-{allowanceKey}")" CompanyId="@SelectedCompany.Id" Title="Company default allowances" TitleSize="TextSize.Size500" />
+                </FluentCard>
+
+                <FluentText Style="color: var(--colorNeutralForeground3);">
+                    Different amounts for a position go under Manage &gt; Rota &gt; Positions; for one person, on the Rota tab of their user page.
+                </FluentText>
+            }
+        }
+    </FluentStack>
+</div>
+
+@code {
+    private List<Company>? companies;
+    private string? selectedCompanyId;
+
+    // Bumped when a type changes, so the allowance editor reloads its list of types.
+    private int allowanceKey;
+
+    private Company? SelectedCompany => companies?.FirstOrDefault(c => c.Id.ToString() == selectedCompanyId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        companies = await ManagerCompanyAccess.GetCompaniesForCurrentUserAsync(_securityService, _companyLocationService);
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+    }
+}

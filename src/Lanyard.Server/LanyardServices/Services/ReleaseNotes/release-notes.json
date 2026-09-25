@@ -310,7 +310,7 @@
       "The option is disabled with an explanatory message if welcome emails aren't enabled for the selected location."
     ]
   },
-  {   
+  {
     "version": "1.3.21",
     "releaseDate": "2026-09-25",
     "summary": "Performance and reliability improvements across staff pages, kiosks, DMX lighting, music and file streaming.",
@@ -368,6 +368,136 @@
       "Removed the \"Lanyard\" text heading from the top of every email sent by the app.",
       "Emails now show the company's logo at the top when one has been uploaded, and the Lanyard logo only when the company has no logo of its own.",
       "After being signed out (for example by the auto-logout) and signing back in, you now return to the page you were on instead of the home page."
+    ]
+  },
+  {
+    "version": "1.4.0",
+    "releaseDate": "2026-09-23",
+    "summary": "Started the new Staff Scheduling system: positions, contract requirements, clock-in PINs and rota settings.",
+    "details": [
+      "Added a Positions catalog under Manage > Rota > Positions, where admins and managers define the jobs staff work (e.g. Customer Service Advisor, Supervisor), each with a colour that will identify it on the rota.",
+      "Each staff member's profile (Manage > Users) has a new Rota tab for assigning their positions, choosing a primary position, setting a personal contract override and setting their clock-in PIN.",
+      "Added contract requirements (minimum shifts per week, minimum shift length, minimum and maximum hours per week) that can be set as a company default, overridden per position, and overridden again per person - any value left blank inherits from the tier below.",
+      "Added a Rota Settings page under Manage > Rota with the holiday year start date (defaults to 6 April), hours in a working day and the shift reminder lead time, ready for the upcoming time-off and rota features.",
+      "Staff can set or change their own clock-in PIN from Account Management, ready for the upcoming clock-in terminal."
+    ]
+  },
+  {
+    "version": "1.4.1",
+    "releaseDate": "2026-09-24",
+    "summary": "Added the Rota Builder for planning and publishing shifts, and a My Shifts page for staff.",
+    "details": [
+      "Added a Rota Builder under Manage > Rota where managers plan shifts for their location a week or a whole month at a time, with each shift colour-coded by position.",
+      "Shifts start as drafts that only managers can see. Publishing makes them visible to staff, and only the shifts that were added, changed or removed since the last publish count as changes - so a last-minute tweak can be published on its own.",
+      "Each staff member's weekly hours are shown next to their name, and a warning appears when a week doesn't meet their contract (for example, fewer than one shift of two hours or more). Hours worked at other locations in the same company count towards the week.",
+      "Shifts can't overlap another shift the same person has at any location, and shifts that run past midnight are supported.",
+      "Added \"Copy last week\" (and \"Copy from 4 weeks earlier\" in the month view) to fill a rota from a previous one as drafts, skipping anyone who already has a shift at that time.",
+      "On a phone the Rota Builder switches to a day-by-day list with a day picker.",
+      "Added a My Shifts page (and a Shifts button on the phone navigation bar) where staff see their published shifts for the next six weeks.",
+      "Removed the old placeholder Clock In page and the sample shift cards on the home page, which showed made-up data. Clocking in returns with the new clock-in terminal.",
+      "Deleting a user now keeps their past shift history for payroll records under an anonymous placeholder, and cancels any future shifts they had."
+    ]
+  },
+  {
+    "version": "1.4.2",
+    "releaseDate": "2026-09-24",
+    "summary": "Added clock-in terminals, QR clock-in from your phone, and timesheets.",
+    "details": [
+      "A tablet at the venue can now be paired as a clock-in terminal under Manage > Rota > Clock-In Terminals. It shows who's on the rota today, by first name and surname initial; staff tap their name and enter their PIN to clock in or out.",
+      "Staff who forget their PIN, or haven't set one, can scan the code shown on the terminal with their phone instead, signing in first if they need to. The code changes every 30 seconds, so it only works for someone standing at the tablet.",
+      "Clocking in is only allowed around a published shift at that location - by default from an hour before it starts until an hour after it ends. The window can be changed under Rota Settings. Clocking out is always allowed.",
+      "Five wrong PINs lock that person out on every terminal for 30 seconds, and each further lockout lasts twice as long, up to an hour. Entering the right PIN resets it.",
+      "Managers can unpair a terminal at any time, and it stops working straight away.",
+      "Added a Timesheets page under Manage > Rota showing each person's clocked time next to their rota, including late starts, early finishes and shifts nobody clocked in for. Managers can approve time individually or all at once, and add or correct time for cover shifts and forgotten clock-ins.",
+      "Time left on the clock for 16 hours is closed automatically and flagged for a manager to check, as is clocking out at a different location from the one you clocked in at.",
+      "My Shifts has a new My hours tab showing your clocked time for the last three weeks and whether it's been approved.",
+      "Deleting a user keeps their timesheet history for payroll records under an anonymous placeholder, as it already did for shifts."
+    ]
+  },
+  {
+    "version": "1.4.3",
+    "releaseDate": "2026-09-24",
+    "summary": "Added time-off requests, holiday allowances and approvals.",
+    "details": [
+      "Staff can request time off from the new Time off tab on My Shifts (or Time Off in the menu). It shows how much of each allowance is left this holiday year, what's booked and what's waiting for a decision.",
+      "While filling in a request you see what it costs in days and hours, and a warning if it takes you over your allowance or you're already on the rota that day. Going over doesn't block the request; your manager decides.",
+      "Managers approve or reject requests under Manage > Rota > Time Off Requests, with the person's remaining allowance and who else is off at the same time shown beside each one. A rejection needs a reason, which the person sees. An approval can be withdrawn; if the time off has already started, only the days from tomorrow are cancelled and the days already taken stay recorded. Managers can't approve their own time off - another manager or an admin decides it.",
+      "Managers can record time off for someone directly, including past dates, for example when someone calls in sick.",
+      "Time-off types (Paid holiday, Unpaid leave and Sickness to start with) are managed under Manage > Rota > Time Off Types. Each type can be paid or unpaid, and can count against an allowance or not.",
+      "Allowances are set per holiday year as a company default, per position or for one person, in days or hours - for example 28 days of holiday for everyone, 30 for Managers, and unlimited unpaid leave for Customer Service Advisors. The holiday year starts on 6 April unless changed in Rota Settings.",
+      "Approved and requested time off now appears on the Rota Builder beside that person's shifts. Scheduling someone on a day they're off shows a warning, and nobody gets a \"not enough shifts\" warning for a week they're off entirely.",
+      "Managers now see a badge with the number of time-off requests waiting for them next to Time Off Requests in the menu, and on the Rota heading so it shows even when that group is collapsed. It updates as soon as someone asks for, cancels or gets a decision on time off - no refresh needed.",
+      "Section headings on several pages and dialogs (including Onboarding, Staff Document Types, Roles, the What's New dialog, and the music and projection dialogs) show as headings again instead of plain text."
+    ]
+  },
+  {
+    "version": "1.4.4",
+    "releaseDate": "2026-09-25",
+    "summary": "Added rota and time-off emails, shift reminders, and three new dashboard widgets.",
+    "details": [
+      "Publishing the rota now emails each person affected, listing only their own new, changed and removed shifts - so a last-minute change reaches just the people it touches.",
+      "Staff get a reminder email before each shift. It goes out 24 hours ahead by default; the lead time, and a switch to turn reminders off, are in Rota Settings. A shift published at short notice isn't reminded twice.",
+      "Managers get an email when someone at their location asks for time off, with a link straight to the request.",
+      "Staff get an email when their time off is approved, rejected, withdrawn, cut short or recorded for them, including the manager's reason.",
+      "New My Shifts dashboard widget: your next shifts, and your time off, for the days ahead you choose.",
+      "New Who's On Today widget: everyone on the rota at a location today, who's on now, later or finished, and whether they've clocked in. It updates as people clock in. On a signed-out kiosk screen it only appears if a location is picked in its settings, and then shows first names only.",
+      "New Time Off to Approve widget for managers, listing requests waiting at their location and updating live."
+    ]
+  },
+  {
+    "version": "1.4.5",
+    "releaseDate": "2026-09-25",
+    "summary": "Added phone notifications, notification settings, and a prompt to add Lanyard to your home screen.",
+    "details": [
+      "Lanyard can now send notifications to your phone or computer for rota changes, shift reminders and time-off decisions (and, for managers, new time-off requests). Turn them on for each device under Account > Notifications.",
+      "On iPhone and iPad, notifications work once Lanyard is added to the Home Screen (iOS 16.4 or later). On Android and on computers they also work in the browser.",
+      "Phone users now see a short popup suggesting they add Lanyard to their home screen, with steps for their phone and browser. On Android it can install the app in one tap. It doesn't appear on the first page after signing in, and can be put off for two weeks or turned off for good.",
+      "Account > Notifications lets you choose, for each kind of notification, whether it comes by push, by email or both. Email stays on for everything unless you turn it off. You can also send yourself a test notification and see or remove the devices notifications go to.",
+      "Signing out turns off notifications on that device, so a shared phone or computer doesn't keep getting the last person's alerts.",
+      "Managers can see on a person's Rota tab whether they have the app installed and notifications on.",
+      "Lanyard has a new app icon for home screens, and installs properly on Android."
+    ]
+  },
+  {
+    "version": "1.4.6",
+    "releaseDate": "2026-09-25",
+    "summary": "Added open shifts, call-offs and shift swaps.",
+    "details": [
+      "Managers can put a shift on the rota with nobody on it yet: choose \"Open shift\" as the staff member, or use the new Open shifts row at the top of the Rota Builder. When it's published, everyone who could work it (right position, not already working, not booked off) gets a notification.",
+      "If someone calls in sick, click their shift on the Rota Builder and choose \"Open up for cover\". They're taken off it and told, and it's offered to everyone who could cover.",
+      "Staff see open shifts under My Shifts > Up for grabs and can ask for one. By default a manager decides who gets it; each location can switch that off so the first person to pick it up gets it.",
+      "Staff can say \"Can't make it\" on one of their shifts, with a reason. A manager decides; if they agree, the shift becomes open and is offered to everyone who could cover it.",
+      "Staff can ask to swap a shift. Colleagues who could work it are told and can offer one of their own shifts in return; the person picks the offer they want. Where the location needs approval, a manager then approves the swap, and both shifts change hands at once.",
+      "New Manage > Rota > Shift Requests page for managers, with pick-ups, call-offs and agreed swaps waiting at their location, and the switch for whether pick-ups and swaps need approval. The Rota menu badge now counts these as well as time-off requests. Managers can't approve requests involving their own shifts.",
+      "New notification settings for open shifts, swaps, decisions on your requests, and (for managers) requests to review. They come by push by default; email can be switched on for each."
+    ]
+  },
+  {
+    "version": "1.4.7",
+    "releaseDate": "2026-09-25",
+    "summary": "Added chat: direct messages and group conversations, with reporting.",
+    "details": [
+      "New Chat page (in the menu, and on the phone's bottom bar in place of Account): message anyone at your company, or start a named group. Messages can be bold, italic, lists and links; press Enter to send and Shift+Enter for a new line.",
+      "Reply to a message, edit or delete your own, and mute a conversation. Unread counts show next to Chat and on each conversation, and new messages appear straight away.",
+      "Chat notifications come to your phone by push (not while you're looking at that conversation, and not for muted ones). If messages sit unread for a day you get one summary email naming the conversations - never what they say. Both can be switched off in Account > Notifications, where you can also hide message text on your lock screen.",
+      "Direct messages are private to the two people in them. Nobody else can read them, including managers and admins.",
+      "Report a message that's abusive or inappropriate. Your managers see that one message only - not the rest of the conversation - and the sender isn't told who reported it. You can block the sender at the same time; blocking stops direct messages both ways.",
+      "Managers review reports under Manage > Chat Reports: dismiss a report, remove the message for everyone, or stop the sender posting in chat for a day, a week, a month or until lifted. The person who reported it is told it's been reviewed."
+    ]
+  },
+  {
+    "version": "1.4.8",
+    "releaseDate": "2026-09-25",
+    "summary": "Added team channels, pinned posts, and open-shift and swap cards in chat.",
+    "details": [
+      "Every location now has a team channel (for example \"Peterborough team\") and every company an everyone channel. You're in the channels for wherever you work, and they update by themselves when that changes. New starters can read back through the channel's history.",
+      "Managers can pin posts in their location's channel, either an existing message or a new post written under Manage > Chat Channels; admins can do this in any channel. Pinned posts stay at the top of the channel and at the top of the Chat page, and everyone in the channel gets a notification.",
+      "Managers can remove any message in their location's channel (it shows as \"Removed by a manager\"), and can switch off staff posting there if a channel is being misused. Manage > Chat Channels lists recent removals.",
+      "When a shift is opened up for cover or someone asks for a swap, a card appears in that location's channel showing whether it's still up for grabs, with a link to pick it up or offer a swap.",
+      "New notification settings for channel messages (off by default) and pinned posts (on by default).",
+      "Only the person who started a group, or a manager or admin in it, can now rename the group or add people to it. Everyone else can still post, mute it or leave.",
+      "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
+      "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
   }
 ]

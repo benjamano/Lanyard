@@ -1,0 +1,18 @@
+.settings-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.settings-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.8rem;
+}

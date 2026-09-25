@@ -1,0 +1,11 @@
+.pair-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pair-dialog ::deep .pair-hint {
+    margin-top: -8px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}

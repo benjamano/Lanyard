@@ -1,0 +1,156 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaService _rotaService
+@inject ITimeOffService _timeOffService
+
+@* Per-viewer like My Training: whoever is looking sees their own shifts. On a kiosk nobody is
+   signed in, so it says so rather than showing an empty rota. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "My Shifts")</span>
+            @if (!_isLoading && !_loadFailed && _currentUserId is not null)
+            {
+                <span class="sw-count">Next @Widget.DaysAhead days</span>
+            }
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="sw-empty"><FluentSpinner /></div>
+        }
+        else if (_loadFailed)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load your shifts</FluentBadge>
+            </div>
+        }
+        else if (_currentUserId is null)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Sign in to see your shifts</FluentBadge>
+            </div>
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">No shifts in the next @Widget.DaysAhead days</FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="sw-list">
+                @foreach (Item item in _items)
+                {
+                    <div class="sw-row @(item.IsTimeOff ? "is-time-off" : string.Empty)" @onclick="@Open">
+                        <span class="sw-text">
+                            <span class="sw-primary">@item.Primary</span>
+                            <span class="sw-secondary">@item.Secondary</span>
+                        </span>
+                        @if (item.Badge is string badge)
+                        {
+                            <span class="sw-status">
+                                <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@item.BadgeColor">@badge</FluentBadge>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required MyShiftsWidget Widget { get; set; }
+
+    // False while the dashboard layout is being edited, so dragging doesn't navigate away.
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private record Item(DateOnly Date, DateTime SortKey, string Primary, string Secondary, string? Badge, BadgeColor BadgeColor, bool IsTimeOff);
+
+    private string? _currentUserId;
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private List<Shift> _shifts = [];
+    private List<TimeOffRequest> _timeOff = [];
+    private List<Item> _items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (user.IsSuccess && !string.IsNullOrEmpty(user.Data))
+        {
+            _currentUserId = user.Data;
+
+            // The widest window the settings allow is loaded once; changing the settings then just
+            // re-filters (OnParametersSet) instead of querying again.
+            DateOnly today = RotaTime.Today(DateTime.UtcNow);
+            DateTime fromUtc = RotaTime.StartOfDayUtc(today);
+            DateTime toUtc = RotaTime.StartOfDayUtc(today.AddDays(MyShiftsWidget.MaxDaysAhead));
+
+            Result<List<Shift>> shifts = await _rotaService.GetShiftsForUserAsync(_currentUserId, fromUtc, toUtc);
+            Result<List<TimeOffRequest>> timeOff = await _timeOffService.GetRequestsForUserAsync(_currentUserId, today);
+
+            _loadFailed = !shifts.IsSuccess || !timeOff.IsSuccess;
+            _shifts = shifts.Data ?? [];
+            _timeOff = (timeOff.Data ?? []).Where(x => x.IsLive).ToList();
+        }
+
+        _isLoading = false;
+        ApplyFilter();
+    }
+
+    protected override void OnParametersSet() => ApplyFilter();
+
+    private void ApplyFilter()
+    {
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        DateOnly lastDay = today.AddDays(Math.Clamp(Widget.DaysAhead, 1, MyShiftsWidget.MaxDaysAhead) - 1);
+
+        IEnumerable<Item> shiftItems = _shifts
+            .Where(s => s.EndUtc > DateTime.UtcNow && s.LocalDate() <= lastDay)
+            .Select(s => new Item(
+                s.LocalDate(),
+                s.StartUtc,
+                DayText(s.LocalDate(), today),
+                string.Join(" · ", new[] { s.TimeRange(), s.StaffPosition?.Name, s.Location?.Name }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                s.StartUtc <= DateTime.UtcNow && s.EndUtc > DateTime.UtcNow ? "On now" : null,
+                BadgeColor.Success,
+                false));
+
+        IEnumerable<Item> timeOffItems = Widget.ShowTimeOff
+            ? _timeOff
+                .Where(t => t.StartDate <= lastDay)
+                .Select(t => new Item(
+                    t.StartDate,
+                    RotaTime.StartOfDayUtc(t.StartDate),
+                    TimeOffFormat.DateRange(t.StartDate, t.EndDate),
+                    t.TimeOffType?.Name ?? "Time off",
+                    t.Status == TimeOffStatus.Approved ? "Off" : "Asked",
+                    t.Status == TimeOffStatus.Approved ? BadgeColor.Informative : BadgeColor.Warning,
+                    true))
+            : [];
+
+        _items = shiftItems.Concat(timeOffItems)
+            .OrderBy(x => x.SortKey)
+            .Take(Math.Clamp(Widget.MaxItems, 1, MyShiftsWidget.MaxSupportedItems))
+            .ToList();
+    }
+
+    private static string DayText(DateOnly date, DateOnly today) =>
+        date == today ? "Today" : date == today.AddDays(1) ? "Tomorrow" : date.DayLabel();
+
+    private void Open()
+    {
+        if (AllowTrigger)
+        {
+            _navigationManager.NavigateTo("/rota");
+        }
+    }
+}

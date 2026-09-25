@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -493,6 +494,21 @@ public class SecurityService : ISecurityService
         return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex, locationName);
     }
 
+    private async Task RestoreShiftsAsync(string userId, ScheduleRetention.Snapshot snapshot)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await ScheduleRetention.RestoreAsync(ctx, snapshot);
+            await ctx.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // Nothing more can be done automatically; make it loud so it can be put right by hand.
+            _logger.LogError(ex, "Deleting user {UserId} failed and their {RowCount} rota/timesheet rows could not be restored", userId, snapshot.Count);
+        }
+    }
+
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
         try
@@ -514,10 +530,35 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
             }
 
-            IdentityResult result = await _userManager.DeleteAsync(user);
+            // Shift and timesheet history outlive the account (docs/DATA_RETENTION.md), and both
+            // UserId FKs are Restrict so the delete below would fail rather than cascade them away. Re-point it
+            // to the placeholder account first and cancel anything still in the future. Identity
+            // deletes the user on its own context, so this can't share a transaction with it -
+            // instead a snapshot is kept and put back if the delete doesn't go through.
+            ScheduleRetention.Snapshot shiftSnapshot;
+
+            await using (ApplicationDbContext shiftCtx = await _factory.CreateDbContextAsync())
+            {
+                shiftSnapshot = await ScheduleRetention.DetachUserAsync(shiftCtx, userId, DateTime.UtcNow);
+                await shiftCtx.SaveChangesAsync();
+            }
+
+            IdentityResult result;
+
+            try
+            {
+                result = await _userManager.DeleteAsync(user);
+            }
+            catch
+            {
+                await RestoreShiftsAsync(userId, shiftSnapshot);
+                throw;
+            }
 
             if (!result.Succeeded)
             {
+                await RestoreShiftsAsync(userId, shiftSnapshot);
+
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<bool>.Fail($"Failed to delete user: {errors}");
             }
@@ -843,15 +884,8 @@ public class SecurityService : ISecurityService
             unformattedKey);
     }
 
-    private static string BuildQrCodeDataUri(string authenticatorUri)
-    {
-        using QRCodeGenerator qrGenerator = new();
-        using QRCodeData qrData = qrGenerator.CreateQrCode(authenticatorUri, QRCodeGenerator.ECCLevel.Q);
-        PngByteQRCode qrCode = new(qrData);
-        byte[] bytes = qrCode.GetGraphic(10);
-
-        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
-    }
+    private static string BuildQrCodeDataUri(string authenticatorUri) =>
+        Lanyard.Application.Services.Common.QrCodeDataUri.Create(authenticatorUri);
 
     private static string FormatKeyForDisplay(string key)
     {

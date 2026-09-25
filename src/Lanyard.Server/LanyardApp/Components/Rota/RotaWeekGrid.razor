@@ -1,0 +1,103 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+<div class="rota-scroll">
+    <div class="rota-week-grid" role="grid" aria-label="@($"Rota for the week of {WeekStart.DayLabel()}")">
+        <div class="rota-corner" role="columnheader">Staff</div>
+        @foreach (DateOnly day in Days)
+        {
+            <div class="rota-day-header @(day == Today ? "is-today" : string.Empty)" role="columnheader">
+                <span class="rota-day-name">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
+                <span class="rota-day-number">@day.ToString("d MMM", RotaDisplayExtensions.Uk)</span>
+            </div>
+        }
+
+        @* Shifts with nobody on them yet: staff see these on My Shifts and can ask for them. *@
+        <div class="rota-name-cell rota-open-name" role="rowheader">
+            <div class="rota-name">Open shifts</div>
+            <div class="rota-name-meta">Anyone who could work them can ask</div>
+        </div>
+        @foreach (DateOnly day in Days)
+        {
+            DateOnly cellDay = day;
+
+            <div class="rota-day-cell rota-open-cell @(day == Today ? "is-today" : string.Empty)" role="gridcell">
+                @foreach (Shift shift in View.OpenShifts.Where(s => s.LocalDate() == day))
+                {
+                    <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                }
+                <button type="button" class="rota-add" title="@($"Add an open shift on {day.DayLabel()}")"
+                        @onclick="@(() => OnAdd.InvokeAsync(new RotaCellRef(RotaCellRef.OpenShift, cellDay)))">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Add())" />
+                </button>
+            </div>
+        }
+
+        @foreach (RotaStaffRow row in View.Rows)
+        {
+            List<ContractWarning> weekWarnings = row.Warnings.Where(w => w.WeekStart == WeekStart).ToList();
+
+            <div class="rota-name-cell @(weekWarnings.Count > 0 ? "has-warning" : string.Empty)" role="rowheader">
+                <div class="rota-name">@row.DisplayName</div>
+                <div class="rota-name-meta">
+                    @if (row.PrimaryPosition?.StaffPosition is StaffPosition position)
+                    {
+                        <span class="rota-position-dot theme-colour-swatch" style="@PositionColours.CssVariables(position.ColorIndex)" aria-hidden="true"></span>
+                        <span class="rota-position-name">@position.Name</span>
+                    }
+                    else if (!row.IsLocationMember)
+                    {
+                        <span class="rota-position-name">No longer at this location</span>
+                    }
+                </div>
+                <div class="rota-name-meta">
+                    <span class="rota-hours" title="Paid hours this week, across every location">
+                        @RotaDisplayExtensions.FormatHours(row.HoursByWeek.GetValueOrDefault(WeekStart))
+                    </span>
+                    <ContractWarningBadge Warnings="@weekWarnings" />
+                </div>
+            </div>
+
+            @foreach (DateOnly day in Days)
+            {
+                DateOnly cellDay = day;
+
+                <div class="rota-day-cell @(day == Today ? "is-today" : string.Empty)" role="gridcell">
+                    @if (row.TimeOffOn(day) is TimeOffRequest timeOff)
+                    {
+                        <TimeOffChip Request="@timeOff" />
+                    }
+                    @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == day))
+                    {
+                        <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                    }
+                    @if (row.IsLocationMember)
+                    {
+                        <button type="button" class="rota-add" title="@($"Add a shift for {row.DisplayName} on {day.DayLabel()}")"
+                                @onclick="@(() => OnAdd.InvokeAsync(new RotaCellRef(row.User.Id, cellDay)))">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Add())" />
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required RotaRangeView View { get; set; }
+
+    [Parameter, EditorRequired]
+    public required DateOnly WeekStart { get; set; }
+
+    [Parameter]
+    public DateOnly Today { get; set; }
+
+    [Parameter]
+    public EventCallback<RotaCellRef> OnAdd { get; set; }
+
+    [Parameter]
+    public EventCallback<Shift> OnEdit { get; set; }
+
+    private IEnumerable<DateOnly> Days => Enumerable.Range(0, 7).Select(i => WeekStart.AddDays(i));
+}

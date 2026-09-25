@@ -1,0 +1,55 @@
+@using Lanyard.Application.Services.Notifications
+@using Lanyard.Infrastructure.Enum
+
+@* How to put Lanyard on this device's home screen, in that device's own words. Shared by the
+   install popup and the Notifications card. *@
+<ol class="install-steps">
+    @if (Device.IsApple)
+    {
+        <li>
+            <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.ShareIos())" Color="Color.Custom" CustomColor="currentColor" /></span>
+            <span>Tap <strong>Share</strong> @ShareWhere</span>
+        </li>
+        <li>
+            <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.AddSquare())" Color="Color.Custom" CustomColor="currentColor" /></span>
+            <span>Choose <strong>Add to Home Screen</strong>. Scroll down the list if you can't see it.</span>
+        </li>
+        <li>
+            <span class="install-step-icon"><img src="icon-192.png" alt="" /></span>
+            <span>Tap <strong>Add</strong>, then open Lanyard from your Home Screen and sign in once more.</span>
+        </li>
+    }
+    else if (Device.Platform == DevicePlatform.Android)
+    {
+        <li>
+            <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.MoreVertical())" Color="Color.Custom" CustomColor="currentColor" /></span>
+            <span>Open the browser menu <strong>⋮</strong> @(Device.Browser == "Samsung Internet" ? "(≡ at the bottom)" : "at the top right")</span>
+        </li>
+        <li>
+            <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.AddSquare())" Color="Color.Custom" CustomColor="currentColor" /></span>
+            <span>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong></span>
+        </li>
+        <li>
+            <span class="install-step-icon"><img src="icon-192.png" alt="" /></span>
+            <span>Open Lanyard from your home screen</span>
+        </li>
+    }
+    else
+    {
+        <li>
+            <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.AddSquare())" Color="Color.Custom" CustomColor="currentColor" /></span>
+            <span>Use the install button in the address bar, or the browser menu's <strong>Install Lanyard</strong></span>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired]
+    public required DeviceDescription Device { get; set; }
+
+    // Safari's Share button sits in the bottom toolbar on iPhone (inside ⋯ on newer iOS) and at
+    // the top on iPad; Chrome and Edge on iOS keep it in the address bar.
+    private string ShareWhere => Device.Browser != "Safari" ? "in the address bar"
+        : Device.Platform == DevicePlatform.IPad ? "at the top right of Safari"
+        : "in Safari's toolbar (tap ⋯ first if you can't see it)";
+}

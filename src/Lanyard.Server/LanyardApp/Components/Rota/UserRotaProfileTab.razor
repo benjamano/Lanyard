@@ -1,0 +1,241 @@
+@using Lanyard.Application.Services.Notifications
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.App.Components.Rota.TimeOff
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IStaffPositionService _staffPositionService
+@inject ITimeOffService _timeOffService
+@inject IAppInstallationService _appInstallationService
+
+<div class="rota-profile">
+    @if (isLoading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (CompanyId is null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+            This user isn't a member of exactly one active company, so their rota profile can't be edited yet. Add them to a
+            location under the Account tab first.
+        </FluentMessageBar>
+    }
+    else
+    {
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Positions</FluentText>
+
+            @if (companyPositions.Count == 0)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">
+                    No positions have been set up for this company yet. Add some under Manage &gt; Rota &gt; Positions.
+                </FluentText>
+            }
+            else
+            {
+                <div class="rota-profile-positions">
+                    @foreach (StaffPosition position in companyPositions)
+                    {
+                        <FluentCheckbox Label="@position.Name" Value="@selectedPositionIds.Contains(position.Id)"
+                                        ValueChanged="@(isChecked => TogglePosition(position.Id, isChecked))" />
+                    }
+                </div>
+
+                @if (selectedPositionIds.Count > 1)
+                {
+                    <FluentSelect TOption="StaffPosition" TValue="string" Items="@SelectedPositions" OptionText="@(x => x.Name)"
+                                  OptionValue="@(x => x.Id.ToString())" @bind-Value="primaryPositionId"
+                                  Label="Primary position" Width="100%" />
+                    <FluentText Style="color: var(--colorNeutralForeground3);">
+                        Contract requirements and time-off allowances follow the primary position.
+                    </FluentText>
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                              Disabled="@isSavingPositions" OnClick="@SavePositionsAsync">
+                    @(isSavingPositions ? "Saving..." : "Save Positions")
+                </FluentButton>
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <ContractRequirementEditor @key="@SavedPrimaryPositionId" CompanyId="@CompanyId.Value" UserId="@UserId"
+                                       PrimaryPositionId="@SavedPrimaryPositionId" Title="Contract requirements for this person" />
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <TimeOffAllowanceEditor @key="@SavedPrimaryPositionId" CompanyId="@CompanyId.Value" UserId="@UserId"
+                                    PrimaryPositionId="@SavedPrimaryPositionId" Title="Time-off allowances for this person"
+                                    OnSaved="@LoadBalancesAsync" />
+            @if (balances is not null && balances.Balances.Count > 0)
+            {
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">This holiday year so far</FluentText>
+                <TimeOffBalanceCards Balances="@balances" />
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">App and notifications</FluentText>
+            @* Who will actually see a call-off or rota change the moment it happens. *@
+            @if (reach is null)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">Couldn't load this person's devices.</FluentText>
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" Wrap="true">
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(reach.InstalledDevices > 0 ? BadgeColor.Success : BadgeColor.Informative)">
+                        @(reach.InstalledDevices switch { 0 => "App not installed", 1 => "App installed on 1 device", int n => $"App installed on {n} devices" })
+                    </FluentBadge>
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="@(reach.PushDevices > 0 ? BadgeColor.Success : BadgeColor.Informative)">
+                        @(reach.PushDevices switch { 0 => "Notifications off", 1 => "Notifications on for 1 device", int n => $"Notifications on for {n} devices" })
+                    </FluentBadge>
+                </FluentStack>
+                @if (reach.PushDevices == 0)
+                {
+                    <FluentText Style="color: var(--colorNeutralForeground3);">They'll still get rota emails. They can switch notifications on under Account › Notifications.</FluentText>
+                }
+            }
+        </section>
+
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Clock-in PIN</FluentText>
+            <ClockInPinEditor UserId="@UserId" SetByManager="true" />
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    // Resolved by the user editor (it already needs the user's company for the Documents tab);
+    // null when the user is in no company or more than one, which this tab can't act on.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
+    private bool isLoading = true;
+
+    private List<StaffPosition> companyPositions = [];
+    private List<UserPosition> userPositions = [];
+    private HashSet<Guid> selectedPositionIds = [];
+    private string? primaryPositionId;
+    private bool isSavingPositions;
+    private TimeOffBalances? balances;
+    private DeviceReachSummary? reach;
+
+    private List<StaffPosition> SelectedPositions =>
+        companyPositions.Where(x => selectedPositionIds.Contains(x.Id)).ToList();
+
+    // The contract editor's inherited hints depend on the *saved* primary, not the one being
+    // picked in the dropdown - it re-keys (and reloads) only once Save Positions succeeds.
+    private Guid? SavedPrimaryPositionId =>
+        userPositions.FirstOrDefault(x => x.IsPrimary)?.StaffPositionId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+
+        if (CompanyId is null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        Result<DeviceReachSummary> reachResult = await _appInstallationService.GetSummaryAsync(UserId);
+        reach = reachResult.Data;
+
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(CompanyId.Value);
+        Result<List<UserPosition>> userPositionsResult = await _staffPositionService.GetUserPositionsAsync(UserId);
+
+        companyPositions = positionsResult.IsSuccess ? positionsResult.Data ?? [] : [];
+        userPositions = userPositionsResult.IsSuccess ? userPositionsResult.Data ?? [] : [];
+
+        selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
+        primaryPositionId = SavedPrimaryPositionId?.ToString();
+
+        await LoadBalancesAsync();
+
+        isLoading = false;
+    }
+
+    private async Task LoadBalancesAsync()
+    {
+        if (CompanyId is not int companyId)
+        {
+            return;
+        }
+
+        Result<TimeOffBalances> result = await _timeOffService.GetBalancesAsync(UserId, companyId, RotaTime.Today(DateTime.UtcNow));
+        balances = result.IsSuccess ? result.Data : null;
+    }
+
+    private void TogglePosition(Guid positionId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedPositionIds.Add(positionId);
+        }
+        else
+        {
+            selectedPositionIds.Remove(positionId);
+        }
+
+        // Keep the primary pointing at something that is still selected.
+        if (!Guid.TryParse(primaryPositionId, out Guid primary) || !selectedPositionIds.Contains(primary))
+        {
+            primaryPositionId = selectedPositionIds.FirstOrDefault().ToString();
+        }
+    }
+
+    private async Task SavePositionsAsync()
+    {
+        isSavingPositions = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSavingPositions = false;
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        Guid? primary = Guid.TryParse(primaryPositionId, out Guid parsed) && selectedPositionIds.Contains(parsed) ? parsed : null;
+
+        Result<List<UserPosition>> result = await _staffPositionService.SetUserPositionsAsync(
+            scopeResult.Data, UserId, selectedPositionIds.ToList(), primary);
+
+        isSavingPositions = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save positions: {result.Error}");
+            return;
+        }
+
+        userPositions = result.Data ?? [];
+        selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
+        primaryPositionId = SavedPrimaryPositionId?.ToString();
+
+        await LoadBalancesAsync();
+
+        _toastService.ShowSuccess("Positions saved.");
+    }
+}

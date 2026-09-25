@@ -1,0 +1,24 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@if (Warnings.Count > 0)
+{
+    <span class="contract-warning-badge" title="@Tooltip" aria-label="@Tooltip" role="img">
+        <FluentIcon Value="@(new Icons.Filled.Size16.Warning())" Color="Color.Warning" />
+        @if (Warnings.Count > 1)
+        {
+            <span class="contract-warning-count">@Warnings.Count</span>
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required IReadOnlyList<ContractWarning> Warnings { get; set; }
+
+    // The month view spans several weeks, so each message needs its week; the week view doesn't.
+    [Parameter]
+    public bool IncludeWeek { get; set; }
+
+    private string Tooltip => string.Join("\n", Warnings.Select(w =>
+        IncludeWeek ? $"w/c {w.WeekStart.DayLabel()}: {w.Message}" : w.Message));
+}

@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Lanyard.Application.Services.Scheduling;
+
 namespace Lanyard.Application.Services.Gdpr;
 
 public class GdprService : IGdprService
@@ -273,6 +275,60 @@ public class GdprService : IGdprService
                 folder.CreatedBy = null;
             }
 
+            List<ContractRequirement> updatedContracts = await ctx.ContractRequirements
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (ContractRequirement contract in updatedContracts)
+            {
+                contract.UpdatedByUserId = null;
+            }
+
+            List<UserClockInPin> pinsSetByUser = await ctx.UserClockInPins
+                .Where(x => x.SetByUserId == userId)
+                .ToListAsync();
+
+            foreach (UserClockInPin pin in pinsSetByUser)
+            {
+                pin.SetByUserId = null;
+            }
+
+            // Decisions and records this person made on other people's time off keep their
+            // outcome but lose the name. Their own requests are removed in RemoveOwnedRecordsAsync.
+            List<TimeOffRequest> timeOffActedOn = await ctx.TimeOffRequests
+                .Where(x => x.UserId != userId && (x.DecidedByUserId == userId || x.RequestedByUserId == userId))
+                .ToListAsync();
+
+            foreach (TimeOffRequest request in timeOffActedOn)
+            {
+                if (request.DecidedByUserId == userId)
+                {
+                    request.DecidedByUserId = null;
+                }
+
+                if (request.RequestedByUserId == userId)
+                {
+                    request.RequestedByUserId = null;
+                }
+            }
+
+            List<TimeOffAllowance> allowancesUpdated = await ctx.TimeOffAllowances
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (TimeOffAllowance allowance in allowancesUpdated)
+            {
+                allowance.UpdatedByUserId = null;
+            }
+
+            // Shift and timesheet history is retained (6 years), so it's re-pointed at the
+            // placeholder account rather than deleted; future shifts are cancelled and an open
+            // time entry is closed. Must run before the user row is
+            // deleted - Shift.UserId is a Restrict FK precisely so this can't be skipped silently.
+            // (The snapshot is discarded - erasure anonymises regardless of whether the account
+            // delete that follows succeeds, the same as every other attribution scrubbed here.)
+            _ = await ScheduleRetention.DetachUserAsync(ctx, userId, DateTime.UtcNow, gdprErasure: true);
+
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);
@@ -305,6 +361,46 @@ public class GdprService : IGdprService
                 .ToListAsync();
 
             ctx.UserLocationMemberships.RemoveRange(memberships);
+
+            // Scheduling rows that exist only because of this person: their positions, their
+            // clock-in PIN and any personal contract override. (Shifts and time entries, added by
+            // later scheduling work, are retained-and-anonymised instead - see DATA_RETENTION.md.)
+            List<UserPosition> userPositions = await ctx.UserPositions
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.UserPositions.RemoveRange(userPositions);
+
+            List<UserClockInPin> pins = await ctx.UserClockInPins
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.UserClockInPins.RemoveRange(pins);
+
+            List<ContractRequirement> personalContracts = await ctx.ContractRequirements
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.ContractRequirements.RemoveRange(personalContracts);
+
+            // Leave requests and personal allowances are the person's own records (see
+            // DATA_RETENTION.md), so they go rather than being anonymised.
+            List<TimeOffRequest> timeOffRequests = await ctx.TimeOffRequests
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.TimeOffRequests.RemoveRange(timeOffRequests);
+
+            List<TimeOffAllowance> personalAllowances = await ctx.TimeOffAllowances
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            ctx.TimeOffAllowances.RemoveRange(personalAllowances);
+
+            // Their devices and notification choices exist only for them.
+            ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());
+            ctx.NotificationPreferences.RemoveRange(await ctx.NotificationPreferences.Where(x => x.UserId == userId).ToListAsync());
+            ctx.AppInstallations.RemoveRange(await ctx.AppInstallations.Where(x => x.UserId == userId).ToListAsync());
 
             await ctx.SaveChangesAsync();
 

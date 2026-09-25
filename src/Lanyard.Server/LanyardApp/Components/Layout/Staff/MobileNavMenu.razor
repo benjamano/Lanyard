@@ -1,3 +1,7 @@
+@implements IDisposable
+
+@inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
+
 @* No NotAuthorized branch: the bar itself (not just its content) should not render at all
    until the user is signed in - a fixed-position bar with just a "Login" link on it is
    redundant clutter, especially on the login page itself. *@
@@ -8,19 +12,18 @@
             <FluentAppBar Orientation="Orientation.Horizontal" Class="w-100" PopoverShowSearch="true">
                 <div class="d-flex align-items-center w-100">
                     <div style="flex: 1;">
-                        <FluentAppBarItem Href="/account/manage" Match="NavLinkMatch.All"
-                                          IconRest="new Icons.Regular.Size28.Person()" IconActive="new Icons.Filled.Size28.Person()"
-                                          Text="Account" />
+                        @* Chat took Account's place here; Account is still in the menu. *@
+                        <FluentAppBarItem Href="/chat" Match="NavLinkMatch.Prefix"
+                                          IconRest="new Icons.Regular.Size28.Chat()" IconActive="new Icons.Filled.Size28.Chat()"
+                                          Text="Chat" Count="@ChatUnread.Count" />
                     </div>
                     <div class="d-flex align-items-center justify-content-center">
                         <FluentAppBarItem Href="/" Match="NavLinkMatch.All" IconRest="new Icons.Regular.Size28.Home()"
                                           IconActive="new Icons.Filled.Size28.Home()" Text="Home" />
 
-                        <AuthorizeView Roles="Admin,CanClockIn" Context="clockInAuthContext">
-                            <FluentAppBarItem Href="/rota/clockin" Match="NavLinkMatch.All"
-                                              IconRest="new Icons.Regular.Size28.Clock()" IconActive="new Icons.Filled.Size28.Clock()"
-                                              Text="Clock In" />
-                        </AuthorizeView>
+                        <FluentAppBarItem Href="/rota" Match="NavLinkMatch.All"
+                                          IconRest="new Icons.Regular.Size28.CalendarLtr()" IconActive="new Icons.Filled.Size28.CalendarLtr()"
+                                          Text="Shifts" />
                         <FluentAppBarItem Href="/training" Match="NavLinkMatch.Prefix"
                                           IconRest="new Icons.Regular.Size28.Book()" IconActive="new Icons.Filled.Size28.Book()"
                                           Text="Training" />
@@ -44,6 +47,16 @@
 </AuthorizeView>
 
 @code {
+    protected override async Task OnInitializedAsync()
+    {
+        ChatUnread.Changed += OnChatUnreadChanged;
+        await ChatUnread.StartAsync();
+    }
+
+    private void OnChatUnreadChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => ChatUnread.Changed -= OnChatUnreadChanged;
+
     // Kept off Href deliberately - see the matching comment in NavMenu.razor. /api/auth/logout is a
     // controller endpoint with no @page, so routing the click through Blazor's interactive router
     // makes it push a routeless URL into history before falling back to a full browser navigation.

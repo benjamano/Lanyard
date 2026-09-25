@@ -7,7 +7,7 @@
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size24.Settings())" />
-            <FluentText Typo="Typography.PaneHeader">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
                 @(string.IsNullOrEmpty(_clientName) ? "Client Settings" : $"{_clientName} Settings")
             </FluentText>
         </FluentStack>

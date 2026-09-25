@@ -28,6 +28,8 @@
     <script src="@Assets["js/autoLogout.js"]"></script>
     <script src="@Assets["js/dmxKeybinds.js"]"></script>
     <script src="@Assets["js/viewportWatcher.js"]"></script>
+    <script src="@Assets["js/lanyardPush.js"]"></script>
+    <script src="@Assets["js/lanyardInstall.js"]"></script>
     <script src="@Assets["js/trainingScrollGate.js"]"></script>
     <script src="@Assets["js/courseImageEditor.js"]"></script>
     <script src="@Assets["js/kioskWidgetEditor.js"]"></script>
@@ -99,9 +101,66 @@
         }
     </style>
 
+    <style>
+        /* Theme-aware colour swatch. The app's light/dark toggle is the data-theme attribute
+        on the body element (set by Fluent's IThemeService), which scoped .razor.css can never
+        reach - CSS isolation stamps its scope attribute onto every selector in a chain, the
+        body included, so a body-anchored dark rule in a .razor.css silently never matches. An element sets both
+        `--swatch-light` and `--swatch-dark` inline (the palette values are per-item data,
+        not styling) and this global rule picks whichever the current theme calls for. */
+        .theme-colour,
+        .theme-colour-swatch {
+        --theme-colour: var(--swatch-light);
+        }
+
+        [data-theme="dark"] .theme-colour,
+        [data-theme="dark"] .theme-colour-swatch {
+        --theme-colour: var(--swatch-dark);
+        }
+
+        /* .theme-colour only resolves --theme-colour (for a scoped stylesheet to use as a border,
+        tint, etc.); .theme-colour-swatch also paints it as the background. */
+        .theme-colour-swatch {
+        background: var(--theme-colour);
+        }
+
+        /* Nav category badges. FluentNavCategory only takes a plain-text Title, so a count on a
+        category header (e.g. Rota's time-off requests waiting for approval) is set as a
+        data-pending-count attribute, which lands on the category's button, and drawn here to
+        match FluentCounterBadge. Global because the button is rendered by Fluent, so NavMenu's
+        scoped CSS can't reach it. The badge sits just before the expand chevron. */
+        button.fluent-navcategoryitem[data-pending-count]::after {
+        content: attr(data-pending-count);
+        order: 1;
+        margin-inline-start: auto;
+        box-sizing: border-box;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10000px;
+        background: var(--colorBrandBackground);
+        color: var(--colorNeutralForegroundOnBrand, #fff);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+        }
+
+        button.fluent-navcategoryitem[data-pending-count] .expand-icon {
+        order: 2;
+        margin-inline-start: 0;
+        }
+    </style>
+
     <script src="@Assets["js/bootCloak.js"]"></script>
 
     <link rel="manifest" href="manifest.webmanifest" />
+    @* iPhone/iPad home-screen install: its own icon (iOS ignores manifest icons) and name, and
+       standalone mode, which is what lets a home-screen Lanyard receive push notifications. *@
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Lanyard" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#0d6efd" />
 </head>
 
@@ -118,6 +177,7 @@
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
     <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js"></script>
     <script src="_content/Blazored.TextEditor/Blazored-BlazorQuill.js"></script>
+    <script src="@Assets["js/lanyardChat.js"]"></script>
 
     @if (NavigationManager.Uri.Contains("localhost", StringComparison.OrdinalIgnoreCase))
     {

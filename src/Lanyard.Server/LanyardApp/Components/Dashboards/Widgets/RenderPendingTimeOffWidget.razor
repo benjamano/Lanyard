@@ -1,0 +1,160 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+@implements IDisposable
+
+@inject ITimeOffService _timeOffService
+@inject ITimeOffEventBus _timeOffEventBus
+
+@* Time off waiting for the viewing manager's decision at their location, updated live as
+   requests come in or are decided. Anyone who can't decide them just gets a short note. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "Time off to approve")</span>
+            @if (_state == State.Ready)
+            {
+                <span class="sw-count">@_views.Count waiting</span>
+            }
+        </div>
+
+        @switch (_state)
+        {
+            case State.Loading:
+                <div class="sw-empty"><FluentSpinner /></div>
+                break;
+            case State.Failed:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load requests</FluentBadge>
+                </div>
+                break;
+            case State.NotManager:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
+                </div>
+                break;
+            case State.NoLocation:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Sign in to a location to see its requests</FluentBadge>
+                </div>
+                break;
+            default:
+                @if (_views.Count == 0)
+                {
+                    <div class="sw-empty">
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">Nothing waiting</FluentBadge>
+                    </div>
+                }
+                else
+                {
+                    <div class="sw-list">
+                        @foreach (TimeOffRequestView view in _views.Take(Math.Clamp(Widget.MaxItems, 1, PendingTimeOffWidget.MaxSupportedItems)))
+                        {
+                            <div class="sw-row" @onclick="@Open">
+                                <span class="sw-text">
+                                    <span class="sw-primary">@view.DisplayName</span>
+                                    <span class="sw-secondary">
+                                        @TimeOffFormat.DateRange(view.Request.StartDate, view.Request.EndDate) · @view.Request.TimeOffType?.Name · @TimeOffFormat.Days(view.Request.Hours, view.HoursPerDay)
+                                    </span>
+                                </span>
+                                @if (view.Warnings.Count > 0)
+                                {
+                                    <span class="sw-status" title="@string.Join(" ", view.Warnings)">
+                                        <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@BadgeColor.Warning">Check</FluentBadge>
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                break;
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required PendingTimeOffWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private enum State { Loading, Failed, NotManager, NoLocation, Ready }
+
+    private State _state = State.Loading;
+    private LocationScope? _scope;
+    private string? _viewerId;
+    private List<TimeOffRequestView> _views = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> me = await _securityService.GetCurrentUserIdAsync();
+
+        _scope = scope.IsSuccess ? scope.Data : null;
+        _viewerId = me.IsSuccess ? me.Data : null;
+
+        await LoadAsync();
+
+        if (_state != State.NotManager)
+        {
+            _timeOffEventBus.OnChanged += OnTimeOffChanged;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_scope is null || !(_scope.IsAdmin || _scope.IsManager))
+        {
+            _state = State.NotManager;
+            return;
+        }
+
+        // An Admin can sign in without a location; the list is per location, so say that rather
+        // than suggesting they aren't allowed to see it.
+        if (_scope.LocationId is not int locationId)
+        {
+            _state = State.NoLocation;
+            return;
+        }
+
+        Result<List<TimeOffRequestView>> result = await _timeOffService.GetRequestsForLocationAsync(_scope, locationId, TimeOffListFilter.Pending);
+
+        if (!result.IsSuccess)
+        {
+            _state = State.Failed;
+            return;
+        }
+
+        // A manager's own request is waiting on someone else.
+        _views = (result.Data ?? [])
+            .Where(v => _scope.IsAdmin || v.Request.UserId != _viewerId)
+            .ToList();
+        _state = State.Ready;
+    }
+
+    private void OnTimeOffChanged(int locationId)
+    {
+        if (locationId != _scope?.LocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void Open()
+    {
+        if (AllowTrigger)
+        {
+            _navigationManager.NavigateTo("/manage/rota/time-off");
+        }
+    }
+
+    public void Dispose() => _timeOffEventBus.OnChanged -= OnTimeOffChanged;
+}

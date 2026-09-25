@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Antiforgery;
@@ -24,6 +25,7 @@ namespace Lanyard.API.Controllers
         private readonly IEmailService _emailService;
         private readonly ILogger<AuthController> _logger;
         private readonly IAntiforgery _antiforgery;
+        private readonly IPushSubscriptionService _pushSubscriptionService;
 
         public AuthController(
             UserManager<UserProfile> userManager,
@@ -31,7 +33,8 @@ namespace Lanyard.API.Controllers
             ICompanyLocationService companyLocationService,
             IEmailService emailService,
             ILogger<AuthController> logger,
-            IAntiforgery antiforgery)
+            IAntiforgery antiforgery,
+            IPushSubscriptionService pushSubscriptionService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -39,6 +42,7 @@ namespace Lanyard.API.Controllers
             _emailService = emailService;
             _logger = logger;
             _antiforgery = antiforgery;
+            _pushSubscriptionService = pushSubscriptionService;
         }
 
         [HttpPost("login")]
@@ -217,7 +221,7 @@ namespace Lanyard.API.Controllers
         // instead of validating anything.
         [EnableRateLimiting("ip-fixed")]
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromForm] string? returnUrl = null)
+        public async Task<IActionResult> Logout([FromForm] string? returnUrl = null, [FromForm(Name = PushSignOut.EndpointField)] string? pushEndpoint = null)
         {
             try
             {
@@ -228,6 +232,19 @@ namespace Lanyard.API.Controllers
                 _logger.LogWarning("Rejected a sign-out POST with an invalid antiforgery token: {Error}", ex.Message);
 
                 return BadRequest("Invalid or missing antiforgery token.");
+            }
+
+            // This browser's push subscription goes with the session (see PushSignOut).
+            string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (!string.IsNullOrEmpty(pushEndpoint) && !string.IsNullOrEmpty(userId))
+            {
+                Result<bool> removed = await _pushSubscriptionService.RemoveAsync(userId, pushEndpoint);
+
+                if (!removed.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't remove the push subscription for {UserId} at sign-out: {Error}", userId, removed.Error);
+                }
             }
 
             await _signInManager.SignOutAsync();
@@ -245,7 +262,7 @@ namespace Lanyard.API.Controllers
         // navigation is a GET. The redirect is the same one the POST performs, so from the user's
         // side the extra hop is invisible.
         [HttpGet("logout")]
-        public IActionResult LogoutGet([FromQuery] string? returnUrl = null)
+        public IActionResult LogoutGet([FromQuery] string? returnUrl = null, [FromQuery] bool keepNotifications = false)
         {
             AntiforgeryTokenSet tokens = _antiforgery.GetAndStoreTokens(HttpContext);
 
@@ -269,12 +286,13 @@ namespace Lanyard.API.Controllers
                     <form id="signOutForm" method="post" action="/api/auth/logout">
                         <input type="hidden" name="{encoder.Encode(tokens.FormFieldName)}" value="{encoder.Encode(tokens.RequestToken ?? string.Empty)}" />
                         <input type="hidden" name="returnUrl" value="{encoder.Encode(safeReturnUrl)}" />
+                        {PushSignOut.HiddenField}
                         <noscript>
                             <p>Signing you out.</p>
                             <button type="submit">Continue</button>
                         </noscript>
                     </form>
-                    <script>document.getElementById('signOutForm').submit();</script>
+                    {(keepNotifications ? PushSignOut.PlainSubmitScript("signOutForm") : PushSignOut.SubmitScript("signOutForm"))}
                 </body>
                 </html>
                 """;

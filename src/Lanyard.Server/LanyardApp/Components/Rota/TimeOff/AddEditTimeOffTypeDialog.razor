@@ -1,0 +1,95 @@
+@inject ITimeOffPolicyService _timeOffPolicyService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarPerson())" />
+            <FluentText As="@TextTag.H3">@(Existing is null ? "New time-off type" : "Edit time-off type")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="type-dialog">
+            <FluentTextInput @bind-Value="name" Label="Name" Required="true" Width="100%" Placeholder="e.g. Compassionate leave" />
+            <FluentTextInput @bind-Value="description" Label="Description (optional)" Width="100%" Placeholder="Shown to staff when they pick this type" />
+            <FluentSwitch @bind-Value="isPaid" Label="Paid" />
+            <FluentSwitch @bind-Value="deducts" Label="Counts against an allowance" />
+            <FluentText Class="type-hint">
+                @(deducts
+                    ? "Each request is taken off the person's allowance for this type. Set allowances below the list."
+                    : "Recorded on the rota, but never taken from anyone's allowance - like sickness.")
+            </FluentText>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">@(isBusy ? "Saving..." : Existing is null ? "Create" : "Save")</FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public TimeOffType? Existing { get; set; }
+
+    private string? name;
+    private string? description;
+    private bool isPaid = true;
+    private bool deducts = true;
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        if (Existing is not null)
+        {
+            name = Existing.Name;
+            description = Existing.Description;
+            isPaid = Existing.IsPaid;
+            deducts = Existing.DeductsFromAllowance;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            errorMessage = "Couldn't confirm your location. Refresh the page and try again.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<TimeOffType> result = await _timeOffPolicyService.SaveTypeAsync(scope.Data, new TimeOffType
+        {
+            Id = Existing?.Id ?? Guid.Empty,
+            CompanyId = CompanyId,
+            Name = name ?? string.Empty,
+            Description = description,
+            IsPaid = isPaid,
+            DeductsFromAllowance = deducts,
+            IsActive = Existing?.IsActive ?? true
+        });
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(true);
+    }
+}

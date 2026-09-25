@@ -871,6 +871,48 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
+        public async Task DeleteUserAsync_RetainsPastShiftsUnderPlaceholderAndCancelsFutureOnes()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            string userId = createResult.Data!.User.Id;
+            Guid pastId = Guid.NewGuid();
+            Guid futureId = Guid.NewGuid();
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.Shifts.Add(new Shift { Id = pastId, LocationId = 1, UserId = userId, CreateByUserId = "manager", StartUtc = DateTime.UtcNow.AddDays(-3), EndUtc = DateTime.UtcNow.AddDays(-3).AddHours(6), PublishedDateUtc = DateTime.UtcNow.AddDays(-5) });
+                ctx.Shifts.Add(new Shift { Id = futureId, LocationId = 1, UserId = userId, CreateByUserId = "manager", StartUtc = DateTime.UtcNow.AddDays(3), EndUtc = DateTime.UtcNow.AddDays(3).AddHours(6), PublishedDateUtc = DateTime.UtcNow.AddDays(-1) });
+                await ctx.SaveChangesAsync();
+            }
+
+            Result<bool> deleteResult = await adminService.DeleteUserAsync(userId);
+
+            Assert.IsTrue(deleteResult.IsSuccess, deleteResult.Error);
+
+            await using ApplicationDbContext verify = new(options);
+            Shift past = await verify.Shifts.SingleAsync(x => x.Id == pastId);
+            Shift future = await verify.Shifts.SingleAsync(x => x.Id == futureId);
+            Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, past.UserId);
+            Assert.IsTrue(past.IsActive);
+            Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, future.UserId);
+            Assert.IsFalse(future.IsActive);
+        }
+
+        [TestMethod]
         public async Task DeleteUserAsync_NonAdminNonManager_Fails()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

@@ -1,0 +1,121 @@
+.reports-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+}
+
+.reports-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.reports-filters {
+    display: flex;
+    gap: 6px;
+}
+
+.report-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 12px;
+}
+
+.report-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.report-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.report-card-top ::deep fluent-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.report-who {
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.report-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.report-reason {
+    font-weight: 600;
+}
+
+.report-snapshot {
+    padding: 10px 12px;
+    border-left: 4px solid var(--colorPaletteRedBorder2, #d13438);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+    overflow-wrap: anywhere;
+}
+
+.report-snapshot-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+}
+
+.report-snapshot-body ::deep p {
+    margin: 0;
+}
+
+.report-details {
+    color: var(--colorNeutralForeground2);
+    overflow-wrap: anywhere;
+}
+
+.report-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.suspensions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.suspension-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.suspension-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+}
+
+.suspension-list li + li {
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+@media (max-width: 600px) {
+    .report-cards {
+        grid-template-columns: 1fr;
+    }
+}

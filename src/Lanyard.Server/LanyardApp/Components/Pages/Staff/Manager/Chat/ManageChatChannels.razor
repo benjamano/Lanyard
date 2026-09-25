@@ -1,0 +1,170 @@
+@page "/manage/chat/channels"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Chat
+@using Lanyard.Application.Services.Chat
+@using Lanyard.Infrastructure.DTO.Chat
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IChatModerationService Moderation
+
+<PageTitle>Chat Channels</PageTitle>
+
+@* The channels a manager looks after: their location's (Managers), or every location's and the
+   company's (Admins). Pinned posts, whether staff can post, and what's been removed lately. *@
+<div class="channels-page">
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (channels is null)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        <div class="channel-cards">
+            @foreach (ChatChannelAdminView view in channels)
+            {
+                ChatConversation channel = view.Channel;
+
+                <section class="channel-card">
+                    <div class="channel-top">
+                        <div>
+                            <div class="channel-name">@channel.Name</div>
+                            <div class="channel-meta">
+                                @(channel.Kind == ChatConversationKind.CompanyChannel ? "Everyone at the company" : "Everyone at the location")
+                                · @view.MemberCount people · @view.PinnedCount pinned
+                            </div>
+                        </div>
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Open())"
+                                      OnClick="@(() => _navigationManager.NavigateTo($"/chat/{channel.Id}"))">Open</FluentButton>
+                    </div>
+
+                    <FluentSwitch Value="@channel.StaffCanPost" ValueChanged="@((bool v) => SetPostingAsync(view, v))" Label="Staff can post" />
+                    @if (!channel.StaffCanPost)
+                    {
+                        <div class="channel-meta">Only managers can post. Staff can still read it.</div>
+                    }
+
+                    <div>
+                        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Pin())" OnClick="@(() => WritePinnedAsync(view))">
+                            Write a pinned post
+                        </FluentButton>
+                    </div>
+                </section>
+            }
+        </div>
+
+        <section class="removals">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Removed in the last 30 days</FluentText>
+            @if (removals is null || removals.Count == 0)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">Nothing has been removed from these channels.</FluentText>
+            }
+            else
+            {
+                <ul class="removal-list">
+                    @foreach (ChatRemovalView removal in removals)
+                    {
+                        <li>
+                            <span><strong>@removal.AuthorName</strong> in @removal.ChannelName</span>
+                            <span class="channel-meta">
+                                Sent @RotaTime.ToVenueLocal(removal.SentUtc).ToString("ddd d MMM, HH:mm", RotaFormat.Uk)
+                                · removed by @removal.RemovedByName @RotaTime.ToVenueLocal(removal.RemovedUtc).ToString("ddd d MMM", RotaFormat.Uk)
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private LocationScope? scope;
+    private string? userId;
+    private List<ChatChannelAdminView>? channels;
+    private List<ChatRemovalView>? removals;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !user.IsSuccess)
+        {
+            loadError = scopeResult.Error ?? user.Error ?? "Couldn't work out who you are.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        userId = user.Data;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<List<ChatChannelAdminView>> result = await Moderation.GetChannelsAsync(scope);
+
+        if (!result.IsSuccess)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        channels = result.Data ?? [];
+        removals = (await Moderation.GetRecentRemovalsAsync(scope)).Data;
+    }
+
+    private async Task SetPostingAsync(ChatChannelAdminView view, bool staffCanPost)
+    {
+        if (scope is null || userId is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await Moderation.SetStaffCanPostAsync(scope, view.Channel.Id, staffCanPost, userId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't change that.");
+        }
+        else
+        {
+            _toastService.ShowSuccess(staffCanPost ? $"Everyone can post in {view.Channel.Name} again." : $"Only managers can post in {view.Channel.Name} now.");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task WritePinnedAsync(ChatChannelAdminView view)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<PinnedPostDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PinnedPostDialog.ChannelId), view.Channel.Id);
+            options.Parameters.Add(nameof(PinnedPostDialog.ChannelName), view.Channel.Name ?? "the channel");
+            options.Parameters.Add(nameof(PinnedPostDialog.UserId), userId);
+        });
+
+        if (result.Value is true)
+        {
+            _toastService.ShowSuccess($"Pinned in {view.Channel.Name}. Everyone there has been told.");
+            await LoadAsync();
+        }
+    }
+}

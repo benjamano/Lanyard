@@ -1,0 +1,153 @@
+/* A month is ~31 columns, so this scrolls sideways with the name column pinned (sticky) - the
+   planning overview for building a month at once. Detailed editing is the week view. */
+.rota-month-scroll {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 4px;
+}
+
+.rota-month-grid {
+    display: grid;
+    width: max-content;
+}
+
+.month-corner,
+.month-day-header,
+.month-name-cell,
+.month-day-cell {
+    border-right: 1px solid var(--colorNeutralStroke2);
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    min-width: 0;
+}
+
+.month-corner,
+.month-name-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--colorNeutralBackground1);
+    box-shadow: 1px 0 0 var(--colorNeutralStroke2);
+}
+
+.month-corner {
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    padding: 6px;
+    font-weight: 600;
+    background: var(--colorNeutralBackground3);
+}
+
+.month-day-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+    background: var(--colorNeutralBackground3);
+}
+
+.month-day-name {
+    font-size: 0.7rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.month-day-number {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* A heavier rule before each Monday so the month reads as weeks, which is what contracts are
+   measured in. */
+.week-start {
+    border-left: 2px solid var(--colorNeutralStroke1);
+}
+
+.weekend:not(.is-today) {
+    background-color: color-mix(in srgb, var(--colorNeutralForeground3) 6%, transparent);
+}
+
+.is-today {
+    background-color: color-mix(in srgb, var(--colorBrandBackground) 9%, transparent);
+}
+
+.month-name-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 6px;
+}
+
+.month-name-cell.has-warning {
+    box-shadow: inset 3px 0 0 #bc4b09, 1px 0 0 var(--colorNeutralStroke2);
+}
+
+.month-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    min-width: 0;
+}
+
+.month-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.month-position-dot {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+}
+
+.month-name-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.month-day-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px;
+    min-height: 44px;
+}
+
+.month-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 18px;
+    margin-top: auto;
+    padding: 0;
+    border: 1px dashed transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--colorNeutralForeground3);
+    cursor: pointer;
+    opacity: 0.35;
+}
+
+.month-day-cell:hover .month-add,
+.month-add:focus-visible {
+    opacity: 1;
+    border-color: var(--colorNeutralStroke1);
+}
+
+.month-open-name,
+.month-open-cell {
+    background: var(--colorNeutralBackground2);
+}
+
+.month-open-name {
+    box-shadow: inset 3px 0 0 var(--colorBrandStroke1);
+}

@@ -7,6 +7,7 @@
 @using Lanyard.Application.Services.StaffDocuments
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Rota
 
 @inject IGdprService _gdprService
 @inject INotificationService ToastService
@@ -184,6 +185,19 @@ else
                 </div>
             </FluentTab>
 
+            <FluentTab Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
+                <div class="rota-tab-content">
+                    @if (isLoadingDocuments)
+                    {
+                        <FluentSpinner />
+                    }
+                    else
+                    {
+                        <UserRotaProfileTab UserId="@user.Id" CompanyId="@userCompanyId" />
+                    }
+                </div>
+            </FluentTab>
+
             <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
                     <AuthorizeView Roles="Admin" Context="authContext">
@@ -228,6 +242,7 @@ else
     private bool isDeleting;
 
     private bool isLoadingDocuments = true;
+    private int? userCompanyId;
     private List<StaffDocumentType>? documentTypes;
     private List<StaffDocument>? staffDocuments;
 
@@ -286,6 +301,10 @@ else
         isLoadingDocuments = true;
 
         Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(user.Id);
+
+        // Also feeds the Rota tab - a user in no company (or two) has no single company to
+        // resolve positions, contracts and allowances against.
+        userCompanyId = brandingResult.IsSuccess ? brandingResult.Data?.CompanyId : null;
 
         if (!brandingResult.IsSuccess || brandingResult.Data is null)
         {

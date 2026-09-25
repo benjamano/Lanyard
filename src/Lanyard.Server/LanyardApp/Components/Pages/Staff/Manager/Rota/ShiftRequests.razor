@@ -1,0 +1,334 @@
+@page "/manage/rota/requests"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Rota
+@using Lanyard.App.Components.Rota.Claims
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@implements IDisposable
+
+@inject IShiftClaimService _shiftClaimService
+@inject IShiftClaimEventBus _shiftClaimEventBus
+
+<PageTitle>Shift Requests</PageTitle>
+
+@* Pick-ups, call-offs and swaps waiting for a manager at one location, plus the location's switch
+   for whether pick-ups and swaps need approval at all. *@
+<div class="requests-page">
+    <div class="requests-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="TerminalLocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+
+        @if (review is not null)
+        {
+            <div class="requests-setting">
+                <FluentSwitch Value="@review.ClaimsNeedApproval" ValueChanged="@SetApprovalAsync"
+                              Label="Pick-ups and swaps need a manager's approval" />
+                <div class="requests-hint">
+                    @(review.ClaimsNeedApproval
+                        ? "Staff ask for open shifts and agree swaps; you decide who gets what here."
+                        : "The first person to pick up an open shift gets it, and swaps happen as soon as both people agree. Call-offs always come here.")
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (review is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (review.Count == 0)
+    {
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
+                <FluentText Weight="TextWeight.Semibold">Nothing waiting for you</FluentText>
+                <FluentText Style="color: var(--colorNeutralForeground3);">
+                    When someone asks for an open shift, can't make one of theirs, or agrees a swap, it appears here.
+                    To open up a shift yourself, click it on the Rota Builder and choose Open up for cover.
+                </FluentText>
+            </FluentStack>
+        </FluentCard>
+    }
+    else
+    {
+        @if (review.Drops.Count > 0)
+        {
+            <section class="requests-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Can't make it (@review.Drops.Count)</FluentText>
+                <div class="request-cards">
+                    @foreach (ClaimReviewItem item in review.Drops)
+                    {
+                        <section class="request-card">
+                            <div class="request-card-top">
+                                <div>
+                                    <div class="request-name">@item.PersonName</div>
+                                    <div class="request-shift">@item.Shift.Describe()</div>
+                                </div>
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Call-off</FluentBadge>
+                            </div>
+                            @if (item.Claim.Note is string note)
+                            {
+                                <div class="request-note">“@note”</div>
+                            }
+                            <div class="request-meta">Asked @RequestedLabel(item.Claim)</div>
+                            <Actions Item="@item" ApproveLabel="Let them off" RejectLabel="Keep them on"
+                                     OnApprove="@(() => DecideAsync(item, true, "Let them off the shift", "Let them off",
+                                         "The shift becomes open, and everyone who could work it is told."))"
+                                     OnReject="@(() => DecideAsync(item, false, "Keep them on the shift", "Keep them on", null))" />
+                        </section>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (review.Pickups.Count > 0)
+        {
+            <section class="requests-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Open shifts asked for (@review.Pickups.Count)</FluentText>
+                <div class="request-cards">
+                    @foreach (PickupGroup group in review.Pickups)
+                    {
+                        <section class="request-card">
+                            <div class="request-card-top">
+                                <div>
+                                    <div class="request-name">@group.Shift.Describe()</div>
+                                    <div class="request-meta">@group.Claims.Count @(group.Claims.Count == 1 ? "person wants" : "people want") it</div>
+                                </div>
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Open shift</FluentBadge>
+                            </div>
+                            <ul class="request-people">
+                                @foreach (ClaimReviewItem item in group.Claims)
+                                {
+                                    <li>
+                                        <div class="request-person">
+                                            <span class="request-person-name">@item.PersonName</span>
+                                            <span class="request-meta">Asked @RequestedLabel(item.Claim)</span>
+                                            @if (item.Claim.Note is string note)
+                                            {
+                                                <span class="request-note">“@note”</span>
+                                            }
+                                        </div>
+                                        <Actions Item="@item" ApproveLabel="Give it to them" RejectLabel="No"
+                                                 OnApprove="@(() => DecideAsync(item, true, $"Give the shift to {item.PersonName}", "Give it to them",
+                                                     group.Claims.Count > 1 ? "Everyone else who asked is told it went to someone else." : null))"
+                                                 OnReject="@(() => DecideAsync(item, false, $"Turn down {item.PersonName}", "Turn down", null))" />
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (review.Swaps.Count > 0)
+        {
+            <section class="requests-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Swaps agreed (@review.Swaps.Count)</FluentText>
+                <div class="request-cards">
+                    @foreach (ClaimReviewItem item in review.Swaps)
+                    {
+                        <section class="request-card">
+                            <div class="request-card-top">
+                                <div class="request-name">@item.PersonName ⇄ @item.OtherPersonName</div>
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Swap</FluentBadge>
+                            </div>
+                            <div class="swap-lines">
+                                <div><span class="swap-who">@item.OtherPersonName takes</span> @item.Shift.Describe()</div>
+                                <div><span class="swap-who">@item.PersonName takes</span> @item.OtherShift?.Describe()</div>
+                            </div>
+                            @if (item.Claim.Note is string note)
+                            {
+                                <div class="request-note">“@note”</div>
+                            }
+                            <Actions Item="@item" ApproveLabel="Approve swap" RejectLabel="Turn down"
+                                     OnApprove="@(() => DecideAsync(item, true, "Approve the swap", "Approve swap", "Both shifts change hands now, and both people are told."))"
+                                     OnReject="@(() => DecideAsync(item, false, "Turn down the swap", "Turn down", "They keep their own shifts."))" />
+                        </section>
+                    }
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private LocationScope? scope;
+    private string? currentUserId;
+    private List<TerminalLocationOption> locationOptions = [];
+    private int? locationId;
+    private int? loadedLocationId;
+    private ShiftClaimReview? review;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        currentUserId = userResult.IsSuccess ? userResult.Data : null;
+
+        // A request made from someone's phone shows up here live.
+        _shiftClaimEventBus.OnChanged += OnClaimsChanged;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            locationOptions = locations.IsSuccess && locations.Data is not null
+                ? locations.Data.OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new TerminalLocationOption(own, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own) ? own : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations yet.";
+            return;
+        }
+
+        if (locationId != loadedLocationId)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location || currentUserId is null)
+        {
+            return;
+        }
+
+        loadedLocationId = location;
+
+        Result<ShiftClaimReview> result = await _shiftClaimService.GetReviewAsync(scope, location, currentUserId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        review = result.Data;
+    }
+
+    private void OnClaimsChanged(int changedLocationId)
+    {
+        if (changedLocationId != loadedLocationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => _shiftClaimEventBus.OnChanged -= OnClaimsChanged;
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            _navigationManager.NavigateTo($"/manage/rota/requests?location={id}");
+        }
+    }
+
+    private async Task SetApprovalAsync(bool value)
+    {
+        if (scope is null || locationId is not int location || currentUserId is null)
+        {
+            return;
+        }
+
+        Result<LocationSchedulingSettings> saved = await _shiftClaimService.SaveLocationSettingsAsync(scope, location, value, currentUserId);
+
+        if (!saved.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't save the setting: {saved.Error}");
+        }
+        else
+        {
+            _toastService.ShowSuccess(value ? "Pick-ups and swaps now need your approval." : "Pick-ups and swaps now go ahead without approval.");
+        }
+
+        await LoadAsync();
+    }
+
+    private static string RequestedLabel(ShiftClaim claim) => RotaTime.ToVenueLocal(claim.RequestedUtc).ToString("ddd d MMM, HH:mm", RotaFormat.Uk);
+
+    private async Task DecideAsync(ClaimReviewItem item, bool approve, string title, string confirmLabel, string? consequence)
+    {
+        if (currentUserId is null)
+        {
+            _toastService.ShowError("Couldn't confirm who you are. Refresh the page and try again.");
+            return;
+        }
+
+        List<string> summary = item.Claim.Kind switch
+        {
+            ShiftClaimKind.Swap => [$"{item.OtherPersonName} takes {item.Shift.Describe()}", $"{item.PersonName} takes {item.OtherShift?.Describe()}"],
+            ShiftClaimKind.Drop => [$"{item.PersonName} can't make {item.Shift.Describe()}"],
+            _ => [$"{item.PersonName} wants {item.Shift.Describe()}"]
+        };
+
+        DialogResult result = await _dialogService.ShowDialogAsync<DecideShiftClaimDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.ClaimId), item.Claim.Id);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.DeciderUserId), currentUserId);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.Approve), approve);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.Title), title);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.ConfirmLabel), confirmLabel);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.Summary), summary);
+            options.Parameters.Add(nameof(DecideShiftClaimDialog.Consequence), consequence);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+}

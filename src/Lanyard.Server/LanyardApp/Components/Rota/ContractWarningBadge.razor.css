@@ -1,0 +1,12 @@
+.contract-warning-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    cursor: help;
+    flex-shrink: 0;
+}
+
+.contract-warning-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+}

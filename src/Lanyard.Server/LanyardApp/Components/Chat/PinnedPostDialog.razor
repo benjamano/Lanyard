@@ -1,0 +1,66 @@
+@inject IChatModerationService Moderation
+
+@* A manager writes a post straight into a channel, pinned at the top, and everyone in it is told. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Pin())" />
+            <FluentText As="@TextTag.H3">Pinned post in @ChannelName</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="pinned-dialog">
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                It stays at the top of the channel until it's unpinned, and everyone in @ChannelName gets a notification.
+            </FluentText>
+            <ChatComposer Submit="PostAsync" Placeholder="e.g. Staff meeting on Monday at 9 in the party room" />
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required Guid ChannelId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string ChannelName { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    private string? errorMessage;
+
+    private async Task<bool> PostAsync(string html)
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            errorMessage = scope.Error ?? "Couldn't confirm your location.";
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
+        Result<ChatMessage> posted = await Moderation.PostPinnedAsync(scope.Data, ChannelId, html, UserId);
+
+        if (!posted.IsSuccess)
+        {
+            errorMessage = posted.Error;
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
+        await InvokeAsync(() => Dialog.CloseAsync(true));
+        return true;
+    }
+}

@@ -1,0 +1,49 @@
+@page "/manage/rota/positions"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Rota
+
+<PageTitle>Positions</PageTitle>
+
+<div class="p-2">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+        @if (companies is null)
+        {
+            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentSpinner />
+                <FluentText>Loading...</FluentText>
+            </FluentStack>
+        }
+        else if (companies.Count == 0)
+        {
+            <FluentText>No companies exist yet. Add one under Companies &amp; Locations first.</FluentText>
+        }
+        else
+        {
+            @if (companies.Count > 1)
+            {
+                <FluentSelect TOption="Company" TValue="string" Items="@companies" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                              @bind-Value="selectedCompanyId" Label="Company" Width="320px" />
+            }
+
+            @if (SelectedCompany is not null)
+            {
+                <StaffPositionManager CompanyId="@SelectedCompany.Id" />
+            }
+        }
+    </FluentStack>
+</div>
+
+@code {
+    private List<Company>? companies;
+    private string? selectedCompanyId;
+
+    private Company? SelectedCompany => companies?.FirstOrDefault(c => c.Id.ToString() == selectedCompanyId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        companies = await ManagerCompanyAccess.GetCompaniesForCurrentUserAsync(_securityService, _companyLocationService);
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+    }
+}

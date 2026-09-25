@@ -3,6 +3,7 @@
 
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Layout.Staff
+@using Lanyard.App.Components.Notifications
 @using Lanyard.Application.Services.Authentication
 
 @inject INotificationService ToastService
@@ -35,6 +36,13 @@
         </FluentCard>
 
         <FluentCard Width="100%">
+            <div class="account-manage-section" id="notifications">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Notifications</FluentText>
+                <NotificationsCard />
+            </div>
+        </FluentCard>
+
+        <FluentCard Width="100%">
             <div class="account-manage-section">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Security</FluentText>
                 <FluentButton Appearance="ButtonAppearance.Outline"
@@ -49,6 +57,13 @@
             <div class="account-manage-section">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Two-Factor Authentication</FluentText>
                 <TwoFactorCard />
+            </div>
+        </FluentCard>
+
+        <FluentCard Width="100%">
+            <div class="account-manage-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Clock-in PIN</FluentText>
+                <ClockInPinCard />
             </div>
         </FluentCard>
 

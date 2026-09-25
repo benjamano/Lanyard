@@ -1,0 +1,147 @@
+@page "/chat"
+@page "/chat/{ConversationId:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+@using Lanyard.App.Components.Chat
+@using Lanyard.Application.Services.Chat
+@using Lanyard.Infrastructure.DTO.Chat
+
+@implements IDisposable
+
+@inject IChatService ChatService
+@inject IChatEventBus ChatEvents
+
+<PageTitle>Chat</PageTitle>
+
+@* Inbox beside the open conversation on a wide screen; on a phone one or the other, with a back
+   button in the conversation. The address says which conversation is open, so notifications can
+   link straight to it. *@
+@if (loadError is not null)
+{
+    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@loadError</FluentMessageBar>
+}
+else if (userId is not null && companyId is int company)
+{
+    <div class="chat-page @(ConversationId is not null ? "has-thread" : string.Empty)">
+        <div class="chat-inbox">
+            <ChatInbox Items="@inbox" Pinned="@pinned" SelectedId="@ConversationId" OnNew="NewConversationAsync" />
+        </div>
+        <div class="chat-thread">
+            @if (ConversationId is Guid id)
+            {
+                <ChatThreadView ConversationId="@id" UserId="@userId" CompanyId="@company" ShowBack="true"
+                                OnBack="@(() => _navigationManager.NavigateTo("/chat"))" OnGone="LeftAsync" />
+            }
+            else
+            {
+                <div class="chat-placeholder">
+                    <FluentIcon Value="@(new Icons.Regular.Size48.Chat())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground4)" />
+                    <FluentText Style="color: var(--colorNeutralForeground3);">Choose a conversation, or start a new one.</FluentText>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid? ConversationId { get; set; }
+
+    private string? userId;
+    private int? companyId;
+    private List<ChatInboxItem>? inbox;
+    private List<ChatPinnedPost>? pinned;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            loadError = $"Couldn't load chat: {user.Error}";
+            return;
+        }
+
+        if (scope.Data?.CompanyId is not int company)
+        {
+            loadError = "Sign in at one of your locations to use chat.";
+            return;
+        }
+
+        userId = user.Data;
+        companyId = company;
+        ChatEvents.OnChanged += OnChatEvent;
+
+        Result<bool> channels = await ChatService.EnsureChannelsAsync(userId);
+
+        if (!channels.IsSuccess)
+        {
+            _toastService.ShowError(channels.Error ?? "Couldn't set up your channels.");
+        }
+
+        await LoadInboxAsync();
+    }
+
+    private async Task LoadInboxAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        Result<List<ChatInboxItem>> result = await ChatService.GetInboxAsync(userId);
+        inbox = result.Data ?? [];
+        pinned = (await ChatService.GetPinnedForUserAsync(userId)).Data;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load your conversations.");
+        }
+    }
+
+    private void OnChatEvent(ChatEvent chatEvent)
+    {
+        if (userId is null || (chatEvent.MemberUserIds.Count > 0 && !chatEvent.MemberUserIds.Contains(userId)))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadInboxAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task NewConversationAsync()
+    {
+        if (userId is null || companyId is not int company)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<NewConversationDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(NewConversationDialog.UserId), userId);
+            options.Parameters.Add(nameof(NewConversationDialog.CompanyId), company);
+        });
+
+        if (!result.Cancelled && result.Value is Guid id)
+        {
+            await LoadInboxAsync();
+            _navigationManager.NavigateTo($"/chat/{id}");
+        }
+    }
+
+    private async Task LeftAsync()
+    {
+        await LoadInboxAsync();
+        _navigationManager.NavigateTo("/chat");
+    }
+
+    public void Dispose() => ChatEvents.OnChanged -= OnChatEvent;
+}

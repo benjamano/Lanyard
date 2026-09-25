@@ -1,0 +1,385 @@
+.thread {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--colorNeutralBackground2);
+}
+
+.thread-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    min-height: 56px;
+}
+
+.thread-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.thread-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thread-subtitle {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.thread-icon-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--colorNeutralForeground2);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.thread-icon-button:hover {
+    background: var(--colorNeutralBackground3);
+}
+
+.thread-menu,
+.msg-actions {
+    position: relative;
+}
+
+.menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+}
+
+.menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 21;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    padding: 4px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    box-shadow: var(--shadow16);
+}
+
+.menu button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.menu button:hover {
+    background: var(--colorNeutralBackground3);
+}
+
+.menu button.danger {
+    color: var(--colorPaletteRedForeground1);
+}
+
+.thread-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.thread-older,
+.thread-empty {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0 16px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.thread-day {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0 6px;
+}
+
+.thread-day span {
+    padding: 2px 10px;
+    border-radius: 10px;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground3);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.msg {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 2px;
+}
+
+.msg.starts-run {
+    margin-top: 10px;
+}
+
+.msg.is-mine {
+    align-items: flex-end;
+}
+
+.msg-author {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--colorNeutralForeground2);
+    margin: 0 0 2px 4px;
+}
+
+.msg-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: min(560px, 85%);
+}
+
+.msg.is-mine .msg-line {
+    flex-direction: row-reverse;
+}
+
+.msg-bubble {
+    min-width: 0;
+    padding: 6px 10px 4px;
+    border-radius: 12px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    overflow-wrap: anywhere;
+}
+
+.msg.is-mine .msg-bubble {
+    background: color-mix(in srgb, var(--colorBrandBackground) 14%, var(--colorNeutralBackground1));
+    border-color: color-mix(in srgb, var(--colorBrandBackground) 30%, transparent);
+}
+
+.msg-bubble.is-deleted {
+    font-style: italic;
+    color: var(--colorNeutralForeground3);
+}
+
+/* The message HTML is a MarkupString, so its elements carry no scope attribute; ::deep reaches them. */
+.msg-body ::deep p {
+    margin: 0;
+}
+
+.msg-body ::deep ol,
+.msg-body ::deep ul {
+    margin: 2px 0;
+    padding-left: 20px;
+}
+
+.msg-body ::deep li[data-list="bullet"] {
+    list-style-type: disc;
+}
+
+.msg-body ::deep a {
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+    text-decoration: underline;
+}
+
+.msg-meta {
+    margin-top: 2px;
+    font-size: 0.7rem;
+    color: var(--colorNeutralForeground3);
+    text-align: right;
+}
+
+.msg-reply {
+    display: flex;
+    flex-direction: column;
+    margin: 2px 0 6px;
+    padding: 4px 8px;
+    border-left: 3px solid var(--colorBrandStroke1);
+    border-radius: 4px;
+    background: var(--colorNeutralBackground3);
+    font-size: 0.8rem;
+}
+
+.msg-reply-author {
+    font-weight: 600;
+}
+
+.msg-reply-text {
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The options button stays reachable on touch screens but doesn't compete with the message on
+   a mouse until hovered. */
+.msg-action-button {
+    width: 28px;
+    height: 28px;
+    opacity: 0.4;
+}
+
+.msg:hover .msg-action-button,
+.msg-action-button:focus-visible {
+    opacity: 1;
+}
+
+.msg.is-mine .msg-menu {
+    right: auto;
+    left: 0;
+}
+
+.msg-menu {
+    min-width: 140px;
+}
+
+/* Pinned posts: one line under the header, opening into the full list. */
+.thread-pinned {
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    background: color-mix(in srgb, var(--colorBrandBackground) 6%, var(--colorNeutralBackground1));
+}
+
+.pinned-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 14px;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pinned-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pinned-more {
+    flex-shrink: 0;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+    font-weight: 600;
+}
+
+.pinned-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.pinned-list li {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    overflow-wrap: anywhere;
+}
+
+.pinned-meta {
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+    margin-bottom: 2px;
+}
+
+.pinned-unpin {
+    margin-top: 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--colorNeutralForeground3);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.msg-pinned {
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+    font-weight: 600;
+}
+
+/* Open-shift and swap cards: a small panel with the live status and, while it's still open,
+   a link to act on it. */
+.msg-card {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 220px;
+    padding: 2px 0;
+    border-left: 4px solid var(--colorNeutralStroke1);
+    padding-left: 10px;
+}
+
+.msg-card.is-open {
+    border-left-color: var(--colorPaletteGreenBorder2, #107c10);
+}
+
+.msg-card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--colorNeutralForeground3);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.msg-card-detail {
+    font-weight: 600;
+}
+
+.msg-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.msg-card-status {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground2);
+}
+
+.msg-card-action {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 75%, var(--colorNeutralForeground1));
+}

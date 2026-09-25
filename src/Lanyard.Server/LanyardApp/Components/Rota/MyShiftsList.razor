@@ -1,0 +1,207 @@
+@using Lanyard.App.Components.Rota.Claims
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IRotaService _rotaService
+@inject IShiftClaimService _shiftClaimService
+
+@if (shifts is null)
+{
+    <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentSpinner />
+        <FluentText>Loading...</FluentText>
+    </FluentStack>
+}
+else if (shifts.Count == 0)
+{
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="6">
+            <FluentText Weight="TextWeight.Semibold">No shifts yet</FluentText>
+            <FluentText>You have no published shifts in the next @WeeksAhead weeks. When your manager publishes the rota, your shifts appear here.</FluentText>
+        </FluentStack>
+    </FluentCard>
+}
+else
+{
+    <div class="my-shifts">
+        @foreach (IGrouping<DateOnly, Shift> week in shifts.GroupBy(s => RotaTime.GetWeekStart(s.LocalDate())))
+        {
+            <section class="my-shifts-week">
+                <div class="my-shifts-week-header">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">@WeekLabel(week.Key)</FluentText>
+                    <FluentText Class="my-shifts-week-hours">@RotaDisplayExtensions.FormatHours(week.Sum(s => s.PaidHours))</FluentText>
+                </div>
+
+                @foreach (Shift shift in week)
+                {
+                    DateOnly day = shift.LocalDate();
+
+                    <div class="my-shift theme-colour @(day == today ? "is-today" : string.Empty)"
+                         style="@PositionColours.CssVariables(shift.StaffPosition?.ColorIndex)">
+                        <div class="my-shift-day">
+                            <span class="my-shift-weekday">@day.ToString("ddd", RotaDisplayExtensions.Uk)</span>
+                            <span class="my-shift-date">@day.Day</span>
+                            <span class="my-shift-month">@day.ToString("MMM", RotaDisplayExtensions.Uk)</span>
+                        </div>
+                        <div class="my-shift-details">
+                            <div class="my-shift-time">
+                                @shift.TimeRange()
+                                @if (day == today)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Brand">Today</FluentBadge>
+                                }
+                            </div>
+                            <div class="my-shift-meta">
+                                @(shift.StaffPosition?.Name ?? "Shift") at @(shift.Location?.Name ?? "work")
+                                @if (shift.BreakMinutes > 0)
+                                {
+                                    <span> · @shift.BreakMinutes min break</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(shift.Notes))
+                            {
+                                <div class="my-shift-notes">@shift.Notes</div>
+                            }
+                            @if (OpenRequestOn(shift) is ShiftClaim request)
+                            {
+                                <div class="my-shift-request">
+                                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">
+                                        @(request.Kind == ShiftClaimKind.Drop ? "You've said you can't make it" : "You're looking for a swap")
+                                    </FluentBadge>
+                                    <a href="/rota/open">See progress</a>
+                                </div>
+                            }
+                            else if (CanChange(shift))
+                            {
+                                <div class="my-shift-actions">
+                                    <button type="button" class="my-shift-action" @onclick="@(() => AskAsync(shift, ShiftClaimKind.Swap))">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.ArrowSwap())" Color="Color.Custom" CustomColor="currentColor" />
+                                        Ask to swap
+                                    </button>
+                                    <button type="button" class="my-shift-action" @onclick="@(() => AskAsync(shift, ShiftClaimKind.Drop))">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.CalendarCancel())" Color="Color.Custom" CustomColor="currentColor" />
+                                        Can't make it
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int WeeksAhead { get; set; } = 6;
+
+    // Swap and call-off buttons; off where there's no room for them (the dashboard widget).
+    [Parameter]
+    public bool ShowRequestActions { get; set; } = true;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private List<Shift>? shifts;
+    private List<ShiftClaim> openClaims = [];
+    private string? userId;
+    private DateOnly today;
+
+    private ShiftClaim? OpenRequestOn(Shift shift) =>
+        openClaims.FirstOrDefault(c => c.ShiftId == shift.Id && c.Kind is ShiftClaimKind.Drop or ShiftClaimKind.Swap);
+
+    // A shift that hasn't started, exactly as published: what the person was told is what they're
+    // asking to change.
+    private bool CanChange(Shift shift) =>
+        ShowRequestActions && shift.StartUtc > DateTime.UtcNow && shift.GetState() == ShiftState.Published;
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userResult.IsSuccess || string.IsNullOrEmpty(userResult.Data))
+        {
+            _toastService.ShowError($"Couldn't load your shifts: {userResult.Error}");
+            shifts = [];
+            return;
+        }
+
+        userId = userResult.Data;
+
+        // From the start of today, so a shift that's already under way still shows.
+        DateTime fromUtc = RotaTime.StartOfDayUtc(today);
+        DateTime toUtc = RotaTime.StartOfDayUtc(today.AddDays(WeeksAhead * 7));
+
+        Result<List<Shift>> result = await _rotaService.GetShiftsForUserAsync(userResult.Data, fromUtc, toUtc);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't load your shifts: {result.Error}");
+        }
+
+        shifts = result.IsSuccess ? result.Data ?? [] : [];
+
+        await LoadClaimsAsync();
+    }
+
+    private async Task LoadClaimsAsync()
+    {
+        if (!ShowRequestActions || userId is null)
+        {
+            return;
+        }
+
+        Result<List<ShiftClaim>> claims = await _shiftClaimService.GetOpenClaimsForUserAsync(userId);
+        openClaims = claims.Data ?? [];
+    }
+
+    private async Task AskAsync(Shift shift, ShiftClaimKind kind)
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        Result<LocationSchedulingSettings> settings = await _shiftClaimService.GetLocationSettingsAsync(shift.LocationId);
+
+        DialogResult result = await _dialogService.ShowDialogAsync<RequestShiftChangeDialog>(options =>
+        {
+            options.Width = "460px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.Shift), shift);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.UserId), userId);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.Kind), kind);
+            options.Parameters.Add(nameof(RequestShiftChangeDialog.NeedsApproval), settings.Data?.ClaimsNeedApproval ?? true);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadClaimsAsync();
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    // Called by the page when something changed on the Up for grabs tab (a swap went through).
+    public async Task ReloadAsync()
+    {
+        await OnInitializedAsync();
+        StateHasChanged();
+    }
+
+    private string WeekLabel(DateOnly weekStart)
+    {
+        DateOnly thisWeek = RotaTime.GetWeekStart(today);
+
+        if (weekStart == thisWeek)
+        {
+            return "This week";
+        }
+
+        return weekStart == thisWeek.AddDays(7)
+            ? "Next week"
+            : $"Week of {weekStart.ToString("d MMMM", RotaDisplayExtensions.Uk)}";
+    }
+}

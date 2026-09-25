@@ -22,3 +22,11 @@ body[data-theme="dark"] img.adapt-to-theme {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* "Time Off Requests" with its waiting-for-approval count pushed to the right-hand end. */
+.nav-item-with-count {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+}

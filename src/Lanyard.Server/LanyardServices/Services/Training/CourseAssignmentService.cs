@@ -771,10 +771,7 @@ public class CourseAssignmentService(
         }
     }
 
-    private string? BuildLogoUrl(TrainingBranding branding) =>
-        branding is { CompanyId: int companyId, LogoFileId: Guid logoFileId }
-            ? $"{_emailOptions.Value.PublicBaseUrl.TrimEnd('/')}/api/companies/{companyId}/logo?v={logoFileId:N}"
-            : null;
+    private string? BuildLogoUrl(TrainingBranding branding) => EmailBranding.LogoUrl(_emailOptions.Value, branding);
 
     public async Task<Result<bool>> RecordSectionTransitionAsync(Guid assignmentId, string requestingUserId, Guid? departedSectionId, Guid? arrivedSectionId, DateTime transitionTimeUtc)
     {
