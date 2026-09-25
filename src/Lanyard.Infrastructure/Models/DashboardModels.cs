@@ -324,3 +324,69 @@ public class AnnouncementsWidget : DashboardWidget
 
     public int MaxItems { get; set; }
 }
+
+// The viewer's own upcoming shifts, and optionally their time off. Per-viewer like
+// MyTrainingWidget: one shared dashboard shows each staff member their own rota.
+public class MyShiftsWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+    public const int MaxDaysAhead = 42;
+
+    [SetsRequiredMembers]
+    public MyShiftsWidget()
+    {
+        Type = WidgetType.MyShifts;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 5;
+        DaysAhead = 14;
+        ShowTimeOff = true;
+    }
+
+    public int MaxItems { get; set; }
+    public int DaysAhead { get; set; }
+    public bool ShowTimeOff { get; set; }
+}
+
+// Everyone on the rota at one location today, and whether they've clocked in. The location is
+// the one picked in the widget settings, or else the viewer's own. With nobody signed in (a
+// kiosk screen) it only shows when a location has been picked, and then by first name only,
+// since those screens can face customers.
+public class WhoIsOnTodayWidget : DashboardWidget
+{
+    [SetsRequiredMembers]
+    public WhoIsOnTodayWidget()
+    {
+        Type = WidgetType.WhoIsOnToday;
+
+        GridW = 4;
+        GridH = 4;
+
+        ShowClockStatus = true;
+    }
+
+    public int? LocationId { get; set; }
+    public bool ShowClockStatus { get; set; }
+}
+
+// Time-off requests waiting for the viewing manager's decision at their location. Shows nothing
+// useful to anyone who can't decide them.
+public class PendingTimeOffWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+
+    [SetsRequiredMembers]
+    public PendingTimeOffWidget()
+    {
+        Type = WidgetType.PendingTimeOff;
+
+        GridW = 4;
+        GridH = 3;
+
+        MaxItems = 5;
+    }
+
+    public int MaxItems { get; set; }
+}

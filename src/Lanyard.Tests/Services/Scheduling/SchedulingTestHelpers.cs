@@ -1,4 +1,7 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
+using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -116,3 +119,19 @@ internal sealed class TestClock(DateTime utcNow) : TimeProvider
 
     public void Advance(TimeSpan by) => UtcNow = UtcNow.Add(by);
 }
+
+// Stands in for the real queue: records what would have been sent, so tests can assert who is
+// notified about what without a background worker.
+internal sealed class RecordingNotificationDispatcher : INotificationDispatcher
+{
+    public List<NotificationJob> Jobs { get; } = [];
+
+    public void Enqueue(IEnumerable<string> userIds, NotificationTopic topic, NotificationPayload payload)
+    {
+        foreach (string userId in userIds.Distinct())
+        {
+            Jobs.Add(new NotificationJob(userId, topic, payload));
+        }
+    }
+}
+

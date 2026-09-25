@@ -16,5 +16,8 @@ public enum WidgetType
     MyTraining = 11,
     Greeting = 12,
     Announcements = 13,
-    ProjectionStatus = 14
+    ProjectionStatus = 14,
+    MyShifts = 15,
+    WhoIsOnToday = 16,
+    PendingTimeOff = 17
 }

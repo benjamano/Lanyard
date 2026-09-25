@@ -36,4 +36,14 @@ public interface IRotaService
 
     // Published, active shifts for one person across all locations, for My Shifts.
     Task<Result<List<Shift>>> GetShiftsForUserAsync(string userId, DateTime fromUtc, DateTime toUtc);
+
+    // Published, active shifts whose reminder is due at nowUtc under their company's settings
+    // (reminders switched on, start within the lead time, not yet reminded for this start time).
+    // SendEmail is false for a shift that was published inside its own reminder window: the rota
+    // email has only just told them, so the reminder is claimed quietly instead.
+    Task<Result<List<ShiftReminderDue>>> GetShiftsDueForReminderAsync(DateTime nowUtc);
+
+    // Marks the reminder as sent for this start time. Fails if it already was, the shift has moved
+    // or gone, or another sweep claimed it first - the caller then sends nothing.
+    Task<Result<bool>> ClaimShiftReminderAsync(Guid shiftId, DateTime startUtc);
 }

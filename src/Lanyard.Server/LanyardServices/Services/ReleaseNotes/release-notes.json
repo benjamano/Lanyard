@@ -428,5 +428,19 @@
       "Managers now see a badge with the number of time-off requests waiting for them next to Time Off Requests in the menu, and on the Rota heading so it shows even when that group is collapsed. It updates as soon as someone asks for, cancels or gets a decision on time off - no refresh needed.",
       "Section headings on several pages and dialogs (including Onboarding, Staff Document Types, Roles, the What's New dialog, and the music and projection dialogs) show as headings again instead of plain text."
     ]
+  },
+  {
+    "version": "1.4.4",
+    "releaseDate": "2026-09-25",
+    "summary": "Added rota and time-off emails, shift reminders, and three new dashboard widgets.",
+    "details": [
+      "Publishing the rota now emails each person affected, listing only their own new, changed and removed shifts - so a last-minute change reaches just the people it touches.",
+      "Staff get a reminder email before each shift. It goes out 24 hours ahead by default; the lead time, and a switch to turn reminders off, are in Rota Settings. A shift published at short notice isn't reminded twice.",
+      "Managers get an email when someone at their location asks for time off, with a link straight to the request.",
+      "Staff get an email when their time off is approved, rejected, withdrawn, cut short or recorded for them, including the manager's reason.",
+      "New My Shifts dashboard widget: your next shifts, and your time off, for the days ahead you choose.",
+      "New Who's On Today widget: everyone on the rota at a location today, who's on now, later or finished, and whether they've clocked in. It updates as people clock in. On a signed-out kiosk screen it only appears if a location is picked in its settings, and then shows first names only.",
+      "New Time Off to Approve widget for managers, listing requests waiting at their location and updating live."
+    ]
   }
 ]

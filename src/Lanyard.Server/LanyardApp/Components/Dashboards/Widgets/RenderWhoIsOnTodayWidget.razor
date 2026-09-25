@@ -1,0 +1,222 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+@implements IDisposable
+
+@inject ITimeEntryService _timeEntryService
+@inject ITerminalEventBus _terminalEventBus
+
+@* Who's working at one location today. The location is the one picked in the widget settings,
+   else the viewer's own. A signed-out screen (a kiosk, which may face customers) only shows
+   anything when a location has been picked, and then first names only - Ben's call. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "Who's on today")</span>
+            @if (_locationName is not null)
+            {
+                <span class="sw-count">@_locationName</span>
+            }
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="sw-empty"><FluentSpinner /></div>
+        }
+        else if (_loadFailed)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load today's rota</FluentBadge>
+            </div>
+        }
+        else if (_locationId is null)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Pick a location in the widget settings</FluentBadge>
+            </div>
+        }
+        else if (_board.Count == 0)
+        {
+            <div class="sw-empty">
+                <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Nobody's on the rota here today</FluentBadge>
+            </div>
+        }
+        else
+        {
+            <div class="sw-list">
+                @foreach ((string heading, List<DayBoardEntry> entries) in Sections)
+                {
+                    <div class="sw-section">@heading</div>
+                    @foreach (DayBoardEntry entry in entries)
+                    {
+                        <div class="sw-row is-static @(entry.Status == DayBoardStatus.Finished ? "is-finished" : string.Empty)">
+                            <span class="sw-text">
+                                <span class="sw-primary">@(_firstNamesOnly ? entry.FirstName : entry.DisplayName)</span>
+                                <span class="sw-secondary">@Secondary(entry)</span>
+                            </span>
+                            @if (Widget.ShowClockStatus && ClockBadge(entry) is (string text, BadgeColor color))
+                            {
+                                <span class="sw-status">
+                                    <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@color">@text</FluentBadge>
+                                </span>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required WhoIsOnTodayWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    // Clock-ins arrive live from the terminal; the timer catches shifts starting and ending.
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+
+    private List<DayBoardEntry> _board = [];
+    private int? _locationId;
+    private int? _viewerLocationId;
+    private string? _locationName;
+    private int? _nameFor;
+    private bool _firstNamesOnly;
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private int? _loadedFor;
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCancellation;
+
+    private IEnumerable<(string Heading, List<DayBoardEntry> Entries)> Sections
+    {
+        get
+        {
+            List<DayBoardEntry> onNow = _board.Where(x => x.Status is DayBoardStatus.OnNow or DayBoardStatus.NoShift).ToList();
+            List<DayBoardEntry> later = _board.Where(x => x.Status == DayBoardStatus.Later).ToList();
+            List<DayBoardEntry> finished = _board.Where(x => x.Status == DayBoardStatus.Finished).ToList();
+
+            if (onNow.Count > 0) yield return ("On now", onNow);
+            if (later.Count > 0) yield return ("Later today", later);
+            if (finished.Count > 0) yield return ("Finished", finished);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+        _firstNamesOnly = !user.IsSuccess || string.IsNullOrEmpty(user.Data);
+
+        if (!_firstNamesOnly)
+        {
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+            _viewerLocationId = scope.IsSuccess ? scope.Data?.LocationId : null;
+        }
+
+        _terminalEventBus.OnClock += OnClock;
+        StartRefreshTimer();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // A signed-out screen never falls back to "the viewer's location" - there isn't one.
+        _locationId = Widget.LocationId ?? _viewerLocationId;
+
+        if (_locationId != _loadedFor || _isLoading)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadedFor = _locationId;
+
+        if (_locationId is not int locationId)
+        {
+            _board = [];
+            _locationName = null;
+            _isLoading = false;
+            return;
+        }
+
+        Result<List<DayBoardEntry>> board = await _timeEntryService.GetDayBoardAsync(locationId);
+        _loadFailed = !board.IsSuccess;
+        _board = board.Data ?? [];
+
+        if (_nameFor != locationId)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            _locationName = locations.Data?.FirstOrDefault(x => x.Id == locationId)?.Name;
+            _nameFor = locationId;
+        }
+
+        _isLoading = false;
+    }
+
+    private static string Secondary(DayBoardEntry entry)
+    {
+        string time = entry.StartUtc is DateTime start && entry.EndUtc is DateTime end
+            ? RotaFormat.TimeRange(start, end)
+            : "No shift today";
+
+        return entry.PositionName is string position ? $"{time} · {position}" : time;
+    }
+
+    private static (string, BadgeColor)? ClockBadge(DayBoardEntry entry) => entry.Status switch
+    {
+        DayBoardStatus.OnNow or DayBoardStatus.NoShift => entry.IsClockedIn ? ("Clocked in", BadgeColor.Success) : ("Not clocked in", BadgeColor.Warning),
+        DayBoardStatus.Later => entry.IsClockedIn ? ("Clocked in", BadgeColor.Success) : null,
+        _ => entry.IsClockedIn ? ("Still clocked in", BadgeColor.Warning) : null
+    };
+
+    private void OnClock(TerminalClockEvent clockEvent)
+    {
+        if (clockEvent.LocationId != _locationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void StartRefreshTimer()
+    {
+        _refreshCancellation = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(RefreshInterval);
+        CancellationToken token = _refreshCancellation.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        _terminalEventBus.OnClock -= OnClock;
+        _refreshCancellation?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCancellation?.Dispose();
+    }
+}

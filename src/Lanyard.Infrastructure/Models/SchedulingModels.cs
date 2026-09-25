@@ -129,6 +129,10 @@ namespace Lanyard.Infrastructure.Models
 
         public int ShiftReminderLeadHours { get; set; } = 24;
 
+        // Company-wide on/off for shift reminder emails. Per-person choices come later with
+        // notification settings; until then this is the only switch.
+        public bool SendShiftReminders { get; set; } = true;
+
         // How early before a shift starts (and how late after it ends) the terminal will let
         // someone clock in. Outside it the clock-in is refused - an unscheduled or cover shift is
         // added by a manager on the Timesheets page instead.
@@ -181,6 +185,13 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? PublishedStartUtc { get; set; }
 
         public bool RemovalPending { get; set; }
+
+        // The StartUtc this shift's reminder email was sent for. Compared against StartUtc, so
+        // moving the shift re-arms the reminder without anything having to clear it. Claimed
+        // before the email is queued with a single conditional UPDATE (RotaService.
+        // ClaimShiftReminderAsync) - not a concurrency token, which would add this column to every
+        // shift update and make an ordinary rota save fail if it overlapped a claim.
+        public DateTime? ReminderSentForStartUtc { get; set; }
 
         public bool IsActive { get; set; } = true;
 

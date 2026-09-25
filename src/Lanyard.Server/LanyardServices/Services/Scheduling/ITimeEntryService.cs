@@ -36,4 +36,9 @@ public interface ITimeEntryService
     Task<Result<int>> ApproveAllAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string approverUserId);
 
     Task<Result<bool>> DeactivateEntryAsync(LocationScope scope, Guid entryId, string actingUserId);
+
+    // Everyone on the published rota at the location today (one line per shift, in start order)
+    // plus anyone on the clock there with no shift today. For the "Who's on today" widget, which
+    // decides for itself what a signed-out screen may show.
+    Task<Result<List<DayBoardEntry>>> GetDayBoardAsync(int locationId);
 }

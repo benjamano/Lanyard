@@ -21,7 +21,8 @@ public record ClockState(bool IsClockedIn, DateTime? SinceUtc, string? LocationN
 
 // Raised in-process when anyone clocks at a terminal, so the terminal's screen can greet a person
 // who clocked in by scanning its QR code on their own phone.
-public record TerminalClockEvent(Guid TerminalId, string GreetingName, ClockDirection Direction, DateTime AtUtc, ClockMethod Method);
+// LocationId is the terminal's location, so boards for other sites can ignore the event.
+public record TerminalClockEvent(Guid TerminalId, string GreetingName, ClockDirection Direction, DateTime AtUtc, ClockMethod Method, int LocationId);
 
 // One line of a person's timesheet: a clocked entry, a published shift nobody clocked for, or both.
 public record TimesheetLine(DateOnly Date, Shift? Shift, TimeEntry? Entry)
@@ -42,3 +43,30 @@ public record TimesheetView(int LocationId, string LocationName, DateOnly From, 
 {
     public int AwaitingApprovalCount => People.Sum(x => x.AwaitingApprovalCount);
 }
+
+public enum DayBoardStatus
+{
+    // Later today.
+    Later = 0,
+
+    // Under way now.
+    OnNow = 1,
+
+    // Already finished today.
+    Finished = 2,
+
+    // On the clock with no shift here today (cover, or a manager's manual entry).
+    NoShift = 3
+}
+
+// One line of the "Who's on today" board. FirstName is what a signed-out kiosk shows.
+public record DayBoardEntry(
+    string UserId,
+    string DisplayName,
+    string FirstName,
+    string? PositionName,
+    DateTime? StartUtc,
+    DateTime? EndUtc,
+    DayBoardStatus Status,
+    bool IsClockedIn);
+

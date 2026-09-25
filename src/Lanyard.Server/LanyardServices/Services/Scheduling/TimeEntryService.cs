@@ -140,6 +140,84 @@ public class TimeEntryService(
         }
     }
 
+    public async Task<Result<List<DayBoardEntry>>> GetDayBoardAsync(int locationId)
+    {
+        try
+        {
+            DateTime now = Now;
+            DateOnly today = RotaTime.Today(now);
+            DateTime dayStartUtc = RotaTime.StartOfDayUtc(today);
+            DateTime dayEndUtc = RotaTime.StartOfDayUtc(today.AddDays(1));
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Shift> todaysShifts = await ctx.Shifts
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.User)
+                .Include(x => x.StaffPosition)
+                // Any shift that overlaps today, so a night shift that started yesterday and is still
+                // running counts as on now.
+                .Where(x => x.LocationId == locationId && x.IsActive && x.PublishedDateUtc != null
+                    && x.StartUtc < dayEndUtc && x.EndUtc > dayStartUtc
+                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .OrderBy(x => x.StartUtc)
+                .ToListAsync();
+
+            // An entry open longer than StaleOpenEntry is someone who forgot to clock out (it's
+            // closed on their next clock action), not someone at work - leave it off the board.
+            DateTime staleBefore = now - StaleOpenEntry;
+
+            List<TimeEntry> openHere = await ctx.TimeEntries
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.User)
+                .Where(x => x.LocationId == locationId && x.IsActive && x.ClockOutUtc == null && x.ClockInUtc > staleBefore
+                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .ToListAsync();
+
+            HashSet<string> clockedInHere = openHere.Select(x => x.UserId).ToHashSet();
+
+            List<DayBoardEntry> board = todaysShifts
+                .Where(x => x.User is not null)
+                .Select(shift => new DayBoardEntry(
+                    shift.UserId,
+                    RotaNames.For(shift.User),
+                    FirstNameOf(shift.User!),
+                    shift.StaffPosition?.Name,
+                    shift.StartUtc,
+                    shift.EndUtc,
+                    now < shift.StartUtc ? DayBoardStatus.Later : now < shift.EndUtc ? DayBoardStatus.OnNow : DayBoardStatus.Finished,
+                    clockedInHere.Contains(shift.UserId)))
+                .ToList();
+
+            HashSet<string> scheduled = todaysShifts.Select(x => x.UserId).ToHashSet();
+
+            board.AddRange(openHere
+                .Where(x => x.User is not null && !scheduled.Contains(x.UserId))
+                .DistinctBy(x => x.UserId)
+                .Select(entry => new DayBoardEntry(
+                    entry.UserId,
+                    RotaNames.For(entry.User),
+                    FirstNameOf(entry.User!),
+                    null,
+                    null,
+                    null,
+                    DayBoardStatus.NoShift,
+                    true)));
+
+            return Result<List<DayBoardEntry>>.Ok(board);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load who's on today at location {LocationId}", locationId);
+            return Result<List<DayBoardEntry>>.Fail($"Failed to load who's on today: {ex.Message}");
+        }
+    }
+
+    private static string FirstNameOf(UserProfile user) =>
+        !string.IsNullOrWhiteSpace(user.FirstName) ? user.FirstName.Trim() : RotaNames.For(user).Split(' ')[0];
+
     public async Task<Result<ClockActionResult>> ClockByPinAsync(Guid terminalId, string userId, string pin)
     {
         try
@@ -346,7 +424,7 @@ public class TimeEntryService(
     {
         ClockActionResult result = new(user.GetGreetingName(), direction, atUtc, shiftSummary, clockedHours);
 
-        _eventBus.Publish(new TerminalClockEvent(session.TerminalId, result.GreetingName, direction, atUtc, method));
+        _eventBus.Publish(new TerminalClockEvent(session.TerminalId, result.GreetingName, direction, atUtc, method, session.LocationId));
 
         return result;
     }

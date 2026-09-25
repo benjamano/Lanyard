@@ -140,7 +140,10 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<MyTrainingWidget>(WidgetType.MyTraining)
                 .HasValue<GreetingWidget>(WidgetType.Greeting)
                 .HasValue<AnnouncementsWidget>(WidgetType.Announcements)
-                .HasValue<ProjectionStatusWidget>(WidgetType.ProjectionStatus);
+                .HasValue<ProjectionStatusWidget>(WidgetType.ProjectionStatus)
+                .HasValue<MyShiftsWidget>(WidgetType.MyShifts)
+                .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
+                .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -178,6 +181,20 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AnnouncementsWidget>()
                 .Property(x => x.MaxItems)
                 .HasColumnName("AnnouncementsWidget_MaxItems");
+
+            // The scheduling widgets share names with siblings too (MaxItems above; LocationId is
+            // new but pinned up front for the same reason), so each gets its own column.
+            modelBuilder.Entity<MyShiftsWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("MyShiftsWidget_MaxItems");
+
+            modelBuilder.Entity<PendingTimeOffWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("PendingTimeOffWidget_MaxItems");
+
+            modelBuilder.Entity<WhoIsOnTodayWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("WhoIsOnTodayWidget_LocationId");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).

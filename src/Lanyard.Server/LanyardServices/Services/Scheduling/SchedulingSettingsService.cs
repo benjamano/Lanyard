@@ -60,6 +60,7 @@ public class SchedulingSettingsService(IDbContextFactory<ApplicationDbContext> f
             existing.FinancialYearStartDay = settings.FinancialYearStartDay;
             existing.HoursPerDay = settings.HoursPerDay;
             existing.ShiftReminderLeadHours = settings.ShiftReminderLeadHours;
+            existing.SendShiftReminders = settings.SendShiftReminders;
             existing.ClockInWindowMinutes = settings.ClockInWindowMinutes;
             existing.UpdateDate = DateTime.UtcNow;
 
