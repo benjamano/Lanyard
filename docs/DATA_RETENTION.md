@@ -47,6 +47,28 @@ nothing about them is stored, and a queued email is lost if the app restarts bef
 only record kept is `Shift.ReminderSentForStartUtc`, which stops a reminder being sent twice.
 Emails carry names, dates, shift times and any reason a manager gave - nothing more sensitive.
 
+### Push notifications and notification settings
+
+Push notifications carry the same content as the matching email, encrypted end to end: the browser
+vendor's push service (Google, Apple, Mozilla) relays them but cannot read them. Three tables hold
+per-person data, all **deleted with the account** (cascading foreign keys; removed explicitly by
+GDPR erasure):
+
+- `PushSubscriptions` - one row per device where the person switched notifications on: the push
+  service address, the two encryption keys the browser gave us, a device label ("Chrome on
+  Android") and when it was last used. A row goes when the person signs out on that device, turns
+  notifications off, removes it from their device list, when the push service says it no longer
+  exists, after five failed sends in a row, or **after 90 days without Lanyard being opened on that
+  device** (daily sweep, `PushDeviceCleanupHostedService`).
+- `AppInstallations` - one row per device where Lanyard is used as an installed app, with a device
+  label and first/last seen dates, so a manager can see who will get alerts. Also removed after 90
+  days unseen.
+- `NotificationPreferences` - the person's push/email choice per topic, only where it differs from
+  the default.
+
+Snoozes for the "Add to your Home Screen" prompt and a random device id are kept in the browser's
+own storage, not on the server.
+
 ### Time off
 
 Time-off requests (`TimeOffRequest`) and personal allowance overrides (`TimeOffAllowance` rows

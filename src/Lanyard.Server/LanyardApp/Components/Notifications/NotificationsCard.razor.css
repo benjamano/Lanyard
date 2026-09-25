@@ -1,0 +1,140 @@
+.notifications-card {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.notifications-card section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.notifications-device-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+}
+
+.notifications-device-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Matches a Fluent primary button; a native element so the tap reaches the JS listener directly. */
+.notifications-enable {
+    font: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    min-height: 32px;
+    padding: 5px 16px;
+    border-radius: var(--borderRadiusMedium, 4px);
+    border: 1px solid transparent;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    cursor: pointer;
+}
+
+.notifications-enable:hover {
+    background: var(--colorBrandBackgroundHover);
+}
+
+.notifications-enable:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.notifications-install summary {
+    cursor: pointer;
+    color: var(--colorBrandForeground1);
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.notifications-device-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.notifications-device-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 8px 8px 12px;
+}
+
+.notifications-device-list li + li {
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.notifications-device-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.notifications-device-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: 12px;
+}
+
+/* Label, then a narrow column per channel. Two switches fit beside the text at phone width, so the
+   same layout serves both. */
+.notifications-topic-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 56px 56px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.notifications-topic-row + .notifications-topic-row {
+    border-top: 1px solid var(--colorNeutralStroke3);
+}
+
+.notifications-topic-header {
+    padding-top: 0;
+}
+
+.notifications-topic-header span {
+    text-align: center;
+    color: var(--colorNeutralForeground3);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.notifications-topic-group {
+    margin-top: 8px;
+    color: var(--colorNeutralForeground3);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.notifications-topic-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.notifications-topic-label {
+    font-weight: 600;
+}
+
+.notifications-topic-description {
+    color: var(--colorNeutralForeground3);
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.notifications-topic-row ::deep fluent-switch {
+    justify-self: center;
+}

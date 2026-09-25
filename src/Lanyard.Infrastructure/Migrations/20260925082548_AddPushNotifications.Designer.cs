@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925082548_AddPushNotifications")]
+    partial class AddPushNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -364,9 +367,7 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExecutedAt");
-
-                    b.HasIndex("AutomationRuleId", "ExecutedAt");
+                    b.HasIndex("AutomationRuleId");
 
                     b.ToTable("AutomationRuleExecutions");
                 });
@@ -861,8 +862,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("CourseId");
 
                     b.HasIndex("LocationId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("CourseAssignments");
                 });
@@ -1818,8 +1817,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BpmAnalysisStatus");
 
                     b.HasIndex("FileMetadataId");
 

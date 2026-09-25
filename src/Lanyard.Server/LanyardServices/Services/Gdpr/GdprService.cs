@@ -397,6 +397,11 @@ public class GdprService : IGdprService
 
             ctx.TimeOffAllowances.RemoveRange(personalAllowances);
 
+            // Their devices and notification choices exist only for them.
+            ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());
+            ctx.NotificationPreferences.RemoveRange(await ctx.NotificationPreferences.Where(x => x.UserId == userId).ToListAsync());
+            ctx.AppInstallations.RemoveRange(await ctx.AppInstallations.Where(x => x.UserId == userId).ToListAsync());
+
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);

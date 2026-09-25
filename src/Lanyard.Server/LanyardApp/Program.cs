@@ -25,6 +25,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Reflection;
 using System.Security.Claims;
 using Lanyard.App.Services;
@@ -122,6 +123,18 @@ builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
 builder.Services.AddSingleton<NotificationDispatcher>();
 builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
 builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();
+builder.Services.Configure<PushOptions>(builder.Configuration.GetSection("Push"));
+builder.Services.AddSingleton(sp => VapidKeys.Create(
+    sp.GetRequiredService<IOptions<PushOptions>>().Value,
+    sp.GetRequiredService<IOptions<EmailOptions>>().Value.PublicBaseUrl,
+    builder.Environment.IsDevelopment(),
+    sp.GetRequiredService<ILogger<VapidKeys>>()));
+builder.Services.AddHttpClient(WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<IPushSender, WebPushSender>();
+builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
+builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
+builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
 builder.Services.AddHostedService<NotificationDeliveryHostedService>();
 builder.Services.AddHostedService<ShiftReminderHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();

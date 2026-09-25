@@ -1,0 +1,242 @@
+@using Lanyard.Application.Services.Notifications
+@using Microsoft.Extensions.Logging
+
+@implements IDisposable
+
+@inject IJSRuntime JS
+@inject IPushSender PushSender
+@inject IPushSubscriptionService PushSubscriptionService
+@inject TimeProvider TimeProvider
+@inject ILogger<InstallAppPrompt> Logger
+
+@* "Add Lanyard to your Home Screen" for phone users in a browser tab, and "Turn on notifications"
+   once it's installed (or on Android, where the browser can do push too). When it appears is
+   decided by InstallPromptRules; snoozes are remembered on the device by lanyardInstall.js. *@
+@if (kind != InstallPromptKind.None && device is not null)
+{
+    <div class="install-prompt" role="dialog" aria-labelledby="install-prompt-title">
+        <div class="install-prompt-head">
+            <img src="icon-192.png" alt="" class="install-prompt-icon" />
+            <div class="install-prompt-heading">
+                <div id="install-prompt-title" class="install-prompt-title">@Title</div>
+                <div class="install-prompt-subtitle">@Subtitle</div>
+            </div>
+            <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                          Title="Close" aria-label="Close" OnClick="NotNowAsync" />
+        </div>
+
+        @if (kind is InstallPromptKind.InstallIos or InstallPromptKind.InstallAndroidSteps)
+        {
+            <InstallSteps Device="@device" />
+        }
+
+        <div class="install-prompt-actions">
+            @switch (kind)
+            {
+                case InstallPromptKind.InstallNative:
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowDownload())" OnClick="InstallAsync">Install</FluentButton>
+                    break;
+
+                case InstallPromptKind.EnableNotifications:
+                    @* Plain element, not a FluentButton: the JS listener must sit on the element the
+                       tap lands on, and Fluent re-renders its inner parts. *@
+                    <button type="button" class="install-prompt-primary" @ref="enableButton" disabled="@isSaving">
+                        @(isSaving ? "Turning on..." : "Turn on")
+                    </button>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ChooseTopics">Choose what I get</FluentButton>
+                    break;
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="NotNowAsync">Not now</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="NeverAskAsync">Don't ask again</FluentButton>
+        </div>
+    </div>
+}
+
+@code {
+    // Pages where a popup would get in the way: signing in, and the QR clock-in page mid clock-in.
+    // (The clock-in terminal and kiosks use EmptyLayout, so this component isn't on them at all.)
+    // The account page carries the full Notifications card instead.
+    private static readonly string[] ExcludedPrefixes = ["/login", "/rota/scan", "/account/manage", "/logout", "/handlelogout"];
+
+    private InstallPromptKind kind = InstallPromptKind.None;
+    private DeviceDescription? device;
+    private DeviceReport? deviceReport;
+    private string? userId;
+    private ElementReference enableButton;
+    private DotNetObjectReference<InstallAppPrompt>? dotNetRef;
+    private bool bound;
+    private bool isSaving;
+
+    private string SnoozeKey => kind == InstallPromptKind.EnableNotifications ? "notify" : "install";
+
+    private string Title => kind == InstallPromptKind.EnableNotifications
+        ? "Turn on notifications"
+        : device?.IsApple == true ? "Add Lanyard to your Home Screen" : "Get Lanyard on your home screen";
+
+    private string Subtitle => kind switch
+    {
+        InstallPromptKind.EnableNotifications => "Get shift reminders and rota changes on this device.",
+        InstallPromptKind.InstallIos when device?.IosSupportsPush == false => "Opens full screen, one tap from your Home Screen.",
+        InstallPromptKind.InstallIos => "The best way to use Lanyard on iPhone, and the only way to get shift alerts on it.",
+        _ => "Shift alerts on your phone and a full-screen app, one tap away."
+    };
+
+    protected override void OnInitialized()
+    {
+        _navigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await EvaluateAsync();
+            return;
+        }
+
+        if (kind == InstallPromptKind.EnableNotifications && !bound && PushSender.PublicKey is not null)
+        {
+            bound = true;
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await PushTurnOn.BindAsync(JS, enableButton, dotNetRef, PushSender.PublicKey);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(EvaluateAsync);
+    }
+
+    private async Task EvaluateAsync()
+    {
+        // Already up: leave it where it is rather than jumping between variants mid-read.
+        if (kind != InstallPromptKind.None)
+        {
+            return;
+        }
+
+        try
+        {
+            string path = new Uri(_navigationManager.Uri).AbsolutePath;
+
+            await JS.InvokeAsync<int>("lanyardInstall.countPageView");
+
+            if (ExcludedPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            BrowserInstallState state = await JS.InvokeAsync<BrowserInstallState>("lanyardInstall.getState");
+            InstallPromptState promptState = state.ToPromptState();
+
+            // Without server keys there's nothing to turn on.
+            if (!PushSender.IsConfigured)
+            {
+                promptState = promptState with { PushSupported = false };
+            }
+
+            InstallPromptKind decided = InstallPromptRules.Decide(promptState, TimeProvider.GetUtcNow().UtcDateTime);
+
+            if (decided == InstallPromptKind.None)
+            {
+                return;
+            }
+
+            if (decided == InstallPromptKind.EnableNotifications)
+            {
+                Result<string> user = await _securityService.GetCurrentUserIdAsync();
+                userId = user.Data;
+            }
+
+            device = promptState.Device;
+            deviceReport = new DeviceReport(state.UserAgent, state.MaxTouchPoints, state.IsStandalone);
+            kind = decided;
+            bound = false;
+
+            await JS.InvokeVoidAsync("lanyardInstall.markShown");
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Install prompt check failed");
+        }
+    }
+
+    private async Task InstallAsync()
+    {
+        try
+        {
+            string outcome = await JS.InvokeAsync<string>("lanyardInstall.promptInstall");
+
+            if (outcome != "accepted")
+            {
+                await JS.InvokeVoidAsync("lanyardInstall.snooze", "install", InstallPromptRules.NotNowSnooze.TotalDays);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        kind = InstallPromptKind.None;
+    }
+
+    [JSInvokable]
+    public async Task OnPushResult(string permission, PushSubscriptionInput? subscription)
+    {
+        isSaving = true;
+        StateHasChanged();
+
+        await PushTurnOn.HandleResultAsync(permission, subscription, userId, deviceReport ?? new DeviceReport(null, 0, false), PushSubscriptionService, _toastService);
+
+        isSaving = false;
+        kind = InstallPromptKind.None;
+        StateHasChanged();
+    }
+
+    private void ChooseTopics()
+    {
+        kind = InstallPromptKind.None;
+        _navigationManager.NavigateTo("/account/manage#notifications");
+    }
+
+    private async Task NotNowAsync()
+    {
+        await SetAsideAsync("lanyardInstall.snooze", InstallPromptRules.NotNowSnooze.TotalDays);
+    }
+
+    private async Task NeverAskAsync()
+    {
+        await SetAsideAsync("lanyardInstall.neverAsk", null);
+    }
+
+    private async Task SetAsideAsync(string function, double? days)
+    {
+        string key = SnoozeKey;
+        kind = InstallPromptKind.None;
+
+        try
+        {
+            if (days is double d)
+            {
+                await JS.InvokeVoidAsync(function, key, d);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync(function, key);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _navigationManager.LocationChanged -= OnLocationChanged;
+        dotNetRef?.Dispose();
+    }
+}

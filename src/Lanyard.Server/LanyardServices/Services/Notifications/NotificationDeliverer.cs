@@ -17,6 +17,7 @@ public class NotificationDeliverer(
     IEmailService emailService,
     IOptions<EmailOptions> emailOptions,
     ITrainingBrandingResolver brandingResolver,
+    IPushSender pushSender,
     TimeProvider timeProvider,
     ILogger<NotificationDeliverer> logger) : INotificationDeliverer
 {
@@ -24,6 +25,7 @@ public class NotificationDeliverer(
     private readonly IEmailService _emailService = emailService;
     private readonly EmailOptions _emailOptions = emailOptions.Value;
     private readonly ITrainingBrandingResolver _brandingResolver = brandingResolver;
+    private readonly IPushSender _pushSender = pushSender;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<NotificationDeliverer> _logger = logger;
 
@@ -43,6 +45,47 @@ public class NotificationDeliverer(
                 return;
             }
 
+            NotificationPreference? saved = await ctx.NotificationPreferences
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.UserId == user.Id && x.Topic == job.Topic, cancellationToken);
+
+            TopicPreference preference = saved is null
+                ? NotificationTopics.Default(job.Topic)
+                : new TopicPreference(job.Topic, saved.Push, saved.Email);
+
+            // Each channel is independent: a failed email doesn't stop the push, or the other way round.
+            if (preference.Email)
+            {
+                await SendEmailAsync(job, user);
+            }
+
+            if (preference.Push && _pushSender.IsConfigured)
+            {
+                PushContent content = PushContentBuilder.Build(job.Payload, RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime));
+                PushSendSummary summary = await _pushSender.SendToUserAsync(user.Id, content, cancellationToken: cancellationToken);
+
+                if (summary.Devices > 0)
+                {
+                    _logger.LogInformation("Pushed {Topic} notification to {Delivered} of {Devices} devices for {UserId}",
+                        job.Topic, summary.Delivered, summary.Devices, job.UserId);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled error delivering {Topic} notification to {UserId}", job.Topic, job.UserId);
+        }
+    }
+
+    private async Task SendEmailAsync(NotificationJob job, UserProfile user)
+    {
+        try
+        {
             // Branding follows the location the notification is about, with the person's own
             // company as the first choice - the same order training emails use.
             TrainingBranding branding = await _brandingResolver.ResolveAsync(user.Id, job.Payload.LocationId, null);
@@ -76,15 +119,11 @@ public class NotificationDeliverer(
                 return;
             }
 
-            _logger.LogInformation("Delivered {Topic} notification to {UserId}", job.Topic, job.UserId);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
+            _logger.LogInformation("Emailed {Topic} notification to {UserId}", job.Topic, job.UserId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error delivering {Topic} notification to {UserId}", job.Topic, job.UserId);
+            _logger.LogError(ex, "Error emailing {Topic} notification to {UserId}", job.Topic, job.UserId);
         }
     }
 
