@@ -136,6 +136,8 @@ builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExe
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
+builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 
@@ -183,7 +185,17 @@ if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(bu
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
+    options.UseNpgsql(connectionString, b =>
+    {
+        b.MigrationsAssembly("Lanyard.Infrastructure");
+
+        // Several read paths Include two or more collections at once (a course with its
+        // sections, questions, options, attempts and answers; a program's steps with template
+        // parameters and parameter values). As one SQL statement those multiply into a row per
+        // combination of child rows, each repeating the parent's large text columns. Split
+        // queries load each collection with its own statement instead.
+        b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
 
 if (builder.Environment.IsDevelopment())
 {
