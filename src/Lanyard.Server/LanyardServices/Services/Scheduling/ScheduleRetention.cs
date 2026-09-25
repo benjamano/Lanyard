@@ -57,6 +57,27 @@ public static class ScheduleRetention
             .Where(x => x.UserId == userId || x.DecidedByUserId == userId)
             .ToListAsync();
 
+        // Other people's requests tied to this person's: offers on their swaps, the swap they'd
+        // agreed to with their offer, and anything involving their future shifts (cancelled below). Loaded
+        // up front so the snapshot can put them back if the delete fails.
+        List<Guid> ownOpenIds = claims.Where(x => x.UserId == userId && x.IsOpen).Select(x => x.Id).ToList();
+        List<Guid> parentIds = claims
+            .Where(x => x.UserId == userId && x.Kind == ShiftClaimKind.SwapOffer && x.Status == ShiftClaimStatus.Accepted && x.ParentClaimId != null)
+            .Select(x => x.ParentClaimId!.Value)
+            .ToList();
+        List<Guid> cancelledShiftIds = shifts.Where(x => x.UserId == userId && x.StartUtc > nowUtc).Select(x => x.Id).ToList();
+
+        List<ShiftClaim> linked = await ctx.ShiftClaims
+            .Open()
+            .Where(x => x.UserId != userId
+                && ((x.ParentClaimId != null && ownOpenIds.Contains(x.ParentClaimId.Value))
+                    || parentIds.Contains(x.Id)
+                    || cancelledShiftIds.Contains(x.ShiftId)
+                    || (x.OfferedShiftId != null && cancelledShiftIds.Contains(x.OfferedShiftId.Value))))
+            .ToListAsync();
+
+        claims.AddRange(linked.Where(x => claims.All(c => c.Id != x.Id)));
+
         Snapshot snapshot = new(
             shifts.Select(x => new ShiftFields(x.Id, x.UserId, x.IsActive, x.RemovalPending, x.CreateByUserId, x.UpdateByUserId, x.PublishedByUserId)).ToList(),
             entries.Select(x => new TimeEntryFields(x.Id, x.UserId, x.ClockOutUtc, x.ClockOutMethod, x.NeedsReview, x.ReviewReason, x.CreateByUserId, x.UpdateByUserId, x.ApprovedByUserId)).ToList(),
@@ -83,6 +104,21 @@ public static class ScheduleRetention
             {
                 claim.DecidedByUserId = null;
             }
+        }
+
+        // A swap whose chosen offer came from this person goes back to collecting offers; anything
+        // else tied to them can't happen any more.
+        foreach (ShiftClaim claim in linked.Where(x => x.IsOpen))
+        {
+            if (parentIds.Contains(claim.Id) && !cancelledShiftIds.Contains(claim.ShiftId))
+            {
+                claim.Status = ShiftClaimStatus.Pending;
+                continue;
+            }
+
+            claim.Status = ShiftClaimStatus.Withdrawn;
+            claim.DecidedUtc = nowUtc;
+            claim.DecisionReason = "Someone involved has left.";
         }
 
         foreach (Shift shift in shifts)

@@ -30,50 +30,92 @@ internal static class ShiftClaimRules
         return settings?.ClaimsNeedApproval ?? true;
     }
 
+    // What decides whether someone can work a shift, loaded once for a window so many shifts can be
+    // checked in memory (My Shifts' Up for grabs checks every open shift and every swap pairing).
+    public sealed record WorkerCalendar(HashSet<int> Locations, HashSet<Guid> Positions, List<(Guid Id, DateTime StartUtc, DateTime EndUtc)> Shifts, HashSet<DateOnly> DaysOff)
+    {
+        public static readonly WorkerCalendar Empty = new([], [], [], []);
+    }
+
+    // Calendars for several people across [fromUtc, toUtc): memberships, positions, active shifts
+    // and approved time off - four queries whatever the number of people.
+    public static async Task<Dictionary<string, WorkerCalendar>> LoadCalendarsAsync(ApplicationDbContext ctx, IReadOnlyCollection<string> userIds, DateTime fromUtc, DateTime toUtc)
+    {
+        List<string> ids = userIds.Distinct().ToList();
+
+        var memberships = await ctx.UserLocationMemberships
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => ids.Contains(x.UserId))
+            .Select(x => new { x.UserId, x.LocationId })
+            .ToListAsync();
+
+        var positions = await ctx.UserPositions
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => ids.Contains(x.UserId))
+            .Select(x => new { x.UserId, x.StaffPositionId })
+            .ToListAsync();
+
+        var shifts = await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.IsActive && x.UserId != null && ids.Contains(x.UserId) && x.StartUtc < toUtc && x.EndUtc > fromUtc)
+            .Select(x => new { UserId = x.UserId!, x.Id, x.StartUtc, x.EndUtc })
+            .ToListAsync();
+
+        DateOnly fromDay = RotaTime.LocalDate(fromUtc);
+        DateOnly toDay = RotaTime.LocalDate(toUtc);
+
+        List<TimeOffRequest> timeOff = await TimeOffService.LiveTimeOffQuery(ctx, ids, fromDay, toDay)
+            .Where(x => x.Status == TimeOffStatus.Approved)
+            .ToListAsync();
+
+        return ids.ToDictionary(id => id, id => new WorkerCalendar(
+            memberships.Where(x => x.UserId == id).Select(x => x.LocationId).ToHashSet(),
+            positions.Where(x => x.UserId == id).Select(x => x.StaffPositionId).ToHashSet(),
+            shifts.Where(x => x.UserId == id).Select(x => (x.Id, x.StartUtc, x.EndUtc)).ToList(),
+            timeOff.Where(x => x.UserId == id)
+                .SelectMany(x => Enumerable.Range(0, x.EndDate.DayNumber - x.StartDate.DayNumber + 1).Select(d => x.StartDate.AddDays(d)))
+                .ToHashSet()));
+    }
+
     // Why this person can't work this shift, or null if they can. The same rules as the rota
     // builder: at the location, holding the shift's position (if it has one), not already working
     // then, and not on approved time off that day. givingUpShiftId is a shift they hand over in
-    // the same move (a swap), which doesn't count as a clash.
-    public static async Task<string?> WhyCantWorkAsync(ApplicationDbContext ctx, string userId, Shift shift, Guid? givingUpShiftId, bool aboutViewer)
+    // the same move (a swap), which doesn't count as a clash. The calendar must cover the shift.
+    public static string? WhyCantWork(WorkerCalendar calendar, Shift shift, Guid? givingUpShiftId, bool aboutViewer)
     {
         string you = aboutViewer ? "You" : "They";
         string youre = aboutViewer ? "You're" : "They're";
 
-        bool isMember = await ctx.UserLocationMemberships
-            .AsNoTracking()
-            .AnyAsync(x => x.UserId == userId && x.LocationId == shift.LocationId);
-
-        if (!isMember)
+        if (!calendar.Locations.Contains(shift.LocationId))
         {
             return $"{youre} not at this location.";
         }
 
-        if (shift.StaffPositionId is Guid positionId)
+        if (shift.StaffPositionId is Guid positionId && !calendar.Positions.Contains(positionId))
         {
-            bool holds = await ctx.UserPositions.AsNoTracking().AnyAsync(x => x.UserId == userId && x.StaffPositionId == positionId);
-
-            if (!holds)
-            {
-                return $"{you} don't work as {shift.StaffPosition?.Name ?? "this position"}.";
-            }
+            return $"{you} don't work as {shift.StaffPosition?.Name ?? "this position"}.";
         }
 
-        Guid ignore = givingUpShiftId ?? Guid.Empty;
-
-        bool clash = await ctx.Shifts
-            .AsNoTracking()
-            .AnyAsync(x => x.IsActive && x.UserId == userId && x.Id != shift.Id && x.Id != ignore
-                && x.StartUtc < shift.EndUtc && x.EndUtc > shift.StartUtc);
+        bool clash = calendar.Shifts.Any(x => x.Id != shift.Id && x.Id != givingUpShiftId
+            && x.StartUtc < shift.EndUtc && x.EndUtc > shift.StartUtc);
 
         if (clash)
         {
             return $"{youre} already working then.";
         }
 
-        DateOnly day = RotaTime.LocalDate(shift.StartUtc);
-        bool off = await TimeOffService.LiveTimeOffQuery(ctx, [userId], day, day).AnyAsync(x => x.Status == TimeOffStatus.Approved);
+        return calendar.DaysOff.Contains(RotaTime.LocalDate(shift.StartUtc)) ? $"{youre} booked off that day." : null;
+    }
 
-        return off ? $"{youre} booked off that day." : null;
+    // One person, one shift: loads just the calendar around that shift.
+    public static async Task<string?> WhyCantWorkAsync(ApplicationDbContext ctx, string userId, Shift shift, Guid? givingUpShiftId, bool aboutViewer)
+    {
+        Dictionary<string, WorkerCalendar> calendars = await LoadCalendarsAsync(ctx, [userId], shift.StartUtc.AddDays(-1), shift.EndUtc.AddDays(1));
+
+        return WhyCantWork(calendars.GetValueOrDefault(userId, WorkerCalendar.Empty), shift, givingUpShiftId, aboutViewer);
     }
 
     // Everyone who could pick up this open shift right now, for the announcement.
@@ -89,6 +131,7 @@ internal static class ShiftClaimRules
 
         HashSet<string> busy = (await ctx.Shifts
             .AsNoTracking()
+            .TagWithCallSite()
             .Where(x => x.IsActive && x.UserId != null && candidates.Contains(x.UserId) && x.Id != shift.Id
                 && x.StartUtc < shift.EndUtc && x.EndUtc > shift.StartUtc)
             .Select(x => x.UserId!)
@@ -116,6 +159,7 @@ internal static class ShiftClaimRules
     {
         IQueryable<string> members = ctx.UserLocationMemberships
             .AsNoTracking()
+            .TagWithCallSite()
             .Where(x => x.LocationId == shift.LocationId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
             .Select(x => x.UserId);
 
@@ -161,7 +205,8 @@ internal static class ShiftClaimRules
         List<Guid> except = exceptClaimIds?.ToList() ?? [];
 
         List<ShiftClaim> open = await ctx.ShiftClaims
-            .Where(x => (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted) && !except.Contains(x.Id)
+            .Open()
+            .Where(x => !except.Contains(x.Id)
                 && (shiftIds.Contains(x.ShiftId) || (x.OfferedShiftId != null && shiftIds.Contains(x.OfferedShiftId.Value))))
             .ToListAsync();
 
@@ -183,6 +228,38 @@ internal static class ShiftClaimRules
         }
 
         return open;
+    }
+
+    // Tells each person whose request was withdrawn (by WithdrawForShiftsAsync) that it's gone and
+    // why - otherwise someone who said "I can't make it" would believe their manager knew. Call
+    // after saving.
+    public static async Task NotifyWithdrawnAsync(ApplicationDbContext ctx, INotificationDispatcher notifications, IReadOnlyCollection<ShiftClaim> withdrawn)
+    {
+        if (withdrawn.Count == 0)
+        {
+            return;
+        }
+
+        List<Guid> shiftIds = withdrawn.Select(x => x.ShiftId).Distinct().ToList();
+
+        Dictionary<Guid, Shift> shifts = await ctx.Shifts
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Include(x => x.Location)
+            .Include(x => x.StaffPosition)
+            .Where(x => shiftIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        foreach (ShiftClaim claim in withdrawn)
+        {
+            if (!shifts.TryGetValue(claim.ShiftId, out Shift? shift))
+            {
+                continue;
+            }
+
+            notifications.Enqueue([claim.UserId], NotificationTopic.ShiftClaimDecided, new ShiftClaimDecidedPayload(
+                shift.LocationId, shift.Location?.Name ?? "your location", claim.Kind, false, RotaService.ToEmailLine(shift), null, claim.DecisionReason));
+        }
     }
 
     public static void Close(ShiftClaim claim, ShiftClaimStatus status, string? reason, string? decidedByUserId, DateTime nowUtc)

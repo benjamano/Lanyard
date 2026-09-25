@@ -56,18 +56,20 @@ public class ShiftClaimService(
                 .Include(x => x.Shift).ThenInclude(x => x!.Location)
                 .Include(x => x.Shift).ThenInclude(x => x!.StaffPosition)
                 .Include(x => x.OfferedShift).ThenInclude(x => x!.StaffPosition)
-                .Where(x => x.UserId == userId
-                    && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted)
-                    && x.Shift!.StartUtc > now)
+                .Open()
+                .Where(x => x.UserId == userId && x.Shift!.StartUtc > now)
                 .ToListAsync();
 
             Dictionary<int, bool> approvalByLocation = await ApprovalByLocationAsync(ctx, myLocations);
 
-            HashSet<Guid> myPositions = (await ctx.UserPositions
-                .AsNoTracking()
-                .Where(x => x.UserId == userId)
-                .Select(x => x.StaffPositionId)
-                .ToListAsync()).ToHashSet();
+            // Everything eligibility depends on, loaded once for the whole window and checked in
+            // memory: a query per shift (or per swap pairing) adds up fast on this page.
+            DateTime windowStart = now.AddDays(-1);
+            DateTime windowEnd = horizon.AddDays(1);
+
+            ShiftClaimRules.WorkerCalendar me = (await ShiftClaimRules.LoadCalendarsAsync(ctx, [userId], windowStart, windowEnd))
+                .GetValueOrDefault(userId, ShiftClaimRules.WorkerCalendar.Empty);
+            HashSet<Guid> myPositions = me.Positions;
 
             // Open shifts at the person's locations.
             List<Shift> openShifts = await ShiftClaimRules.Settled(ctx.Shifts)
@@ -90,7 +92,7 @@ public class ShiftClaimService(
                 }
 
                 ShiftClaim? mine = myOpenClaims.FirstOrDefault(x => x.Kind == ShiftClaimKind.Pickup && x.ShiftId == shift.Id);
-                string? reason = mine is null ? await ShiftClaimRules.WhyCantWorkAsync(ctx, userId, shift, null, aboutViewer: true) : null;
+                string? reason = mine is null ? ShiftClaimRules.WhyCantWork(me, shift, null, aboutViewer: true) : null;
 
                 openViews.Add(new OpenShiftView(shift, approvalByLocation.GetValueOrDefault(shift.LocationId, true), mine, reason));
             }
@@ -116,6 +118,9 @@ public class ShiftClaimService(
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
 
+            Dictionary<string, ShiftClaimRules.WorkerCalendar> requesters =
+                await ShiftClaimRules.LoadCalendarsAsync(ctx, swaps.Select(x => x.UserId).ToList(), windowStart, windowEnd);
+
             List<SwapRequestView> swapViews = [];
 
             foreach (ShiftClaim swap in swaps)
@@ -137,10 +142,12 @@ public class ShiftClaimService(
 
                 if (myOffer is null)
                 {
+                    ShiftClaimRules.WorkerCalendar requester = requesters.GetValueOrDefault(swap.UserId, ShiftClaimRules.WorkerCalendar.Empty);
+
                     foreach (Shift mine in myShifts.Where(x => x.LocationId == theirShift.LocationId))
                     {
-                        if (await ShiftClaimRules.WhyCantWorkAsync(ctx, userId, theirShift, mine.Id, aboutViewer: true) is null
-                            && await ShiftClaimRules.WhyCantWorkAsync(ctx, swap.UserId, mine, theirShift.Id, aboutViewer: false) is null)
+                        if (ShiftClaimRules.WhyCantWork(me, theirShift, mine.Id, aboutViewer: true) is null
+                            && ShiftClaimRules.WhyCantWork(requester, mine, theirShift.Id, aboutViewer: false) is null)
                         {
                             canOffer.Add(mine);
                         }
@@ -158,8 +165,8 @@ public class ShiftClaimService(
                 .TagWithCallSite()
                 .Include(x => x.User)
                 .Include(x => x.OfferedShift).ThenInclude(x => x!.StaffPosition)
-                .Where(x => x.ParentClaimId != null && mySwapIds.Contains(x.ParentClaimId.Value)
-                    && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted))
+                .Open()
+                .Where(x => x.ParentClaimId != null && mySwapIds.Contains(x.ParentClaimId.Value))
                 .ToListAsync();
 
             List<MyClaimView> myViews = myOpenClaims
@@ -174,7 +181,7 @@ public class ShiftClaimService(
                         .ToList()))
                 .ToList();
 
-            return Result<ShiftMarketplace>.Ok(new ShiftMarketplace(openViews, swapViews, myViews));
+            return Result<ShiftMarketplace>.Ok(new ShiftMarketplace(openViews, swapViews, myViews) { LocationIds = myLocations });
         }
         catch (Exception ex)
         {
@@ -193,9 +200,8 @@ public class ShiftClaimService(
             List<ShiftClaim> claims = await ctx.ShiftClaims
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.UserId == userId
-                    && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted)
-                    && x.Shift!.StartUtc > now)
+                .Open()
+                .Where(x => x.UserId == userId && x.Shift!.StartUtc > now)
                 .ToListAsync();
 
             return Result<List<ShiftClaim>>.Ok(claims);
@@ -260,20 +266,22 @@ public class ShiftClaimService(
                 // of the update, so two people tapping at once can't both get it.
                 await using IDbContextTransaction? transaction = ctx.Database.IsRelational() ? await ctx.Database.BeginTransactionAsync() : null;
 
-                if (!await TakeOpenShiftAsync(ctx, shiftId, userId, userId, now))
+                if (!await ReassignAsync(ctx, shiftId, null, userId, userId, now))
                 {
                     return Result<ShiftClaim>.Fail("Someone has just picked up that shift.");
                 }
 
                 ShiftClaimRules.Close(claim, ShiftClaimStatus.Approved, null, null, now);
                 ctx.ShiftClaims.Add(claim);
-                await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shiftId], "Someone else picked up the shift first.", now);
+                List<ShiftClaim> beaten = await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shiftId], "Someone else picked up the shift first.", now);
                 await ctx.SaveChangesAsync();
 
                 if (transaction is not null)
                 {
                     await transaction.CommitAsync();
                 }
+
+                await NotifySafelyAsync(() => ShiftClaimRules.NotifyWithdrawnAsync(ctx, _notifications, beaten), claim.Id);
             }
 
             _logger.LogInformation("{UserId} {Action} open shift {ShiftId}", userId, needsApproval ? "asked for" : "picked up", shiftId);
@@ -388,7 +396,7 @@ public class ShiftClaimService(
             DateTime now = Now;
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            ShiftClaim? swap = await ctx.ShiftClaims.AsNoTracking().FirstOrDefaultAsync(x => x.Id == swapClaimId && x.Kind == ShiftClaimKind.Swap);
+            ShiftClaim? swap = await ctx.ShiftClaims.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == swapClaimId && x.Kind == ShiftClaimKind.Swap);
 
             if (swap is null || swap.Status != ShiftClaimStatus.Pending)
             {
@@ -420,8 +428,7 @@ public class ShiftClaimService(
                 return Result<ShiftClaim>.Fail("You can only swap for a shift at the same location.");
             }
 
-            bool alreadyOffered = await ctx.ShiftClaims.AnyAsync(x => x.ParentClaimId == swapClaimId && x.UserId == userId
-                && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted));
+            bool alreadyOffered = await ctx.ShiftClaims.Open().AnyAsync(x => x.ParentClaimId == swapClaimId && x.UserId == userId);
 
             if (alreadyOffered)
             {
@@ -516,8 +523,21 @@ public class ShiftClaimService(
             }
             else
             {
-                List<ShiftClaim> otherOffers = await ExecuteSwapAsync(ctx, swap, offer, mine, theirs!, userId, now);
+                await using IDbContextTransaction? transaction = ctx.Database.IsRelational() ? await ctx.Database.BeginTransactionAsync() : null;
+
+                List<ShiftClaim>? otherOffers = await ExecuteSwapAsync(ctx, swap, offer, mine, theirs!, userId, now);
+
+                if (otherOffers is null)
+                {
+                    return Result<ShiftClaim>.Fail("One of the shifts has just changed. Check your shifts and try again.");
+                }
+
                 await ctx.SaveChangesAsync();
+
+                if (transaction is not null)
+                {
+                    await transaction.CommitAsync();
+                }
 
                 await NotifySafelyAsync(() => NotifySwapDoneAsync(ctx, swap, offer, mine, theirs!, otherOffers), swap.Id);
             }
@@ -558,7 +578,8 @@ public class ShiftClaimService(
             if (claim.Kind == ShiftClaimKind.Swap)
             {
                 List<ShiftClaim> offers = await ctx.ShiftClaims
-                    .Where(x => x.ParentClaimId == claimId && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted))
+                    .Open()
+                    .Where(x => x.ParentClaimId == claimId)
                     .ToListAsync();
 
                 offers.ForEach(x => ShiftClaimRules.Close(x, ShiftClaimStatus.Withdrawn, "They no longer need a swap.", null, now));
@@ -655,7 +676,7 @@ public class ShiftClaimService(
                         }
 
                         problem = OwnRequest(scope, claim.UserId, viewerUserId) ?? OwnRequest(scope, offer.UserId, viewerUserId)
-                            ?? await SwapProblemAsync(ctx, claim, offer, shift, offer.OfferedShift);
+                            ?? await SwapProblemAsync(ctx, claim, offer, shift, offer.OfferedShift, now);
                         swaps.Add(new ClaimReviewItem(claim, shift, RotaNames.For(claim.User), offer.OfferedShift, RotaNames.For(offer.User), offer, problem));
                         break;
                 }
@@ -721,6 +742,10 @@ public class ShiftClaimService(
                 return Result<bool>.Fail("That request has already been dealt with.");
             }
 
+            // Shifts change hands through conditional updates (ReassignAsync); these and the claim
+            // changes land together or not at all.
+            await using IDbContextTransaction? transaction = ctx.Database.IsRelational() ? await ctx.Database.BeginTransactionAsync() : null;
+
             Func<Task>? notify;
 
             switch (claim.Kind, approve)
@@ -735,7 +760,13 @@ public class ShiftClaimService(
                         return Result<bool>.Fail(problem);
                     }
 
-                    ShiftClaimRules.Assign(shift, claim.UserId, deciderUserId, now);
+                    // Only if it's still open at the moment of the update: two managers approving
+                    // different people at once can't both hand it out.
+                    if (!await ReassignAsync(ctx, shift.Id, null, claim.UserId, deciderUserId, now))
+                    {
+                        return Result<bool>.Fail("Someone already has this shift.");
+                    }
+
                     ShiftClaimRules.Close(claim, ShiftClaimStatus.Approved, null, deciderUserId, now);
 
                     // Everyone else who asked is told it went to someone else.
@@ -782,7 +813,13 @@ public class ShiftClaimService(
                         return Result<bool>.Fail(problem);
                     }
 
-                    List<ShiftClaim> otherOffers = await ExecuteSwapAsync(ctx, claim, offer!, mine!, theirs!, deciderUserId, now);
+                    List<ShiftClaim>? otherOffers = await ExecuteSwapAsync(ctx, claim, offer!, mine!, theirs!, deciderUserId, now);
+
+                    if (otherOffers is null)
+                    {
+                        return Result<bool>.Fail("One of the shifts has changed since the swap was agreed.");
+                    }
+
                     notify = () => NotifySwapDoneAsync(ctx, claim, offer!, mine!, theirs!, otherOffers);
                     break;
                 }
@@ -794,7 +831,15 @@ public class ShiftClaimService(
                     ShiftClaimRules.Close(claim, ShiftClaimStatus.Rejected, reason, deciderUserId, now);
                     ShiftClaimRules.Close(offer, ShiftClaimStatus.Rejected, reason, deciderUserId, now);
 
-                    notify = () =>
+                    // The swap is over, so the offers nobody chose are too.
+                    List<ShiftClaim> otherOffers = await ctx.ShiftClaims
+                        .Open()
+                        .Where(x => x.ParentClaimId == claim.Id && x.Id != offer.Id)
+                        .ToListAsync();
+
+                    otherOffers.ForEach(x => ShiftClaimRules.Close(x, ShiftClaimStatus.Rejected, "The swap didn't go ahead.", deciderUserId, now));
+
+                    notify = async () =>
                     {
                         Decided([claim.UserId], shift, ShiftClaimKind.Swap, false, theirs, reason);
 
@@ -803,7 +848,15 @@ public class ShiftClaimService(
                             Decided([offer.UserId], theirs, ShiftClaimKind.SwapOffer, false, shift, reason);
                         }
 
-                        return Task.CompletedTask;
+                        foreach (ShiftClaim other in otherOffers)
+                        {
+                            Shift? offered = other.OfferedShiftId is Guid id ? await LoadShiftAsync(ctx, id, tracked: false) : null;
+
+                            if (offered is not null)
+                            {
+                                Decided([other.UserId], offered, ShiftClaimKind.SwapOffer, false, shift, "The swap didn't go ahead.");
+                            }
+                        }
                     };
                     break;
                 }
@@ -821,6 +874,12 @@ public class ShiftClaimService(
             }
 
             await ctx.SaveChangesAsync();
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+
             await NotifySafelyAsync(notify, claim.Id);
 
             _logger.LogInformation("{DeciderId} {Decision} {Kind} request {ClaimId}", deciderUserId, approve ? "approved" : "turned down", claim.Kind, claimId);
@@ -872,11 +931,13 @@ public class ShiftClaimService(
             ShiftEmailLine line = RotaService.ToEmailLine(shift);
 
             ShiftClaimRules.Assign(shift, null, actingUserId, now);
-            await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shift.Id], "A manager opened the shift up for cover.", now);
+            List<ShiftClaim> withdrawn = await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shift.Id], "A manager opened the shift up for cover.", now);
             await ctx.SaveChangesAsync();
 
             await NotifySafelyAsync(async () =>
             {
+                await ShiftClaimRules.NotifyWithdrawnAsync(ctx, _notifications, withdrawn);
+
                 _notifications.Enqueue([previousUserId], NotificationTopic.RotaChanged,
                     new RotaChangedPayload(shift.LocationId, LocationName(shift), [], [], [line]));
 
@@ -977,6 +1038,7 @@ public class ShiftClaimService(
             await ctx.SaveChangesAsync();
 
             _logger.LogInformation("{UserId} set ClaimsNeedApproval={Value} at location {LocationId}", actingUserId, claimsNeedApproval, locationId);
+            _eventBus.Publish(locationId);
 
             return Result<LocationSchedulingSettings>.Ok(settings);
         }
@@ -1005,6 +1067,7 @@ public class ShiftClaimService(
         IQueryable<Shift> shifts = tracked ? ctx.Shifts : ctx.Shifts.AsNoTracking();
 
         return await shifts
+            .TagWithCallSite()
             .Include(x => x.Location)
             .Include(x => x.StaffPosition)
             .FirstOrDefaultAsync(x => x.Id == shiftId);
@@ -1030,13 +1093,11 @@ public class ShiftClaimService(
         !scope.IsAdmin && claimUserId == viewerUserId ? "This involves your own shift, so another manager needs to decide it." : null;
 
     private static Task<bool> HasOpenClaimAsync(ApplicationDbContext ctx, string userId, Guid shiftId, ShiftClaimKind kind) =>
-        ctx.ShiftClaims.AnyAsync(x => x.UserId == userId && x.ShiftId == shiftId && x.Kind == kind
-            && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted));
+        ctx.ShiftClaims.Open().AnyAsync(x => x.UserId == userId && x.ShiftId == shiftId && x.Kind == kind);
 
     private static Task<bool> HasOpenRequestOnOwnShiftAsync(ApplicationDbContext ctx, string userId, Guid shiftId) =>
-        ctx.ShiftClaims.AnyAsync(x => x.UserId == userId && x.ShiftId == shiftId
-            && (x.Kind == ShiftClaimKind.Drop || x.Kind == ShiftClaimKind.Swap)
-            && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted));
+        ctx.ShiftClaims.Open().AnyAsync(x => x.UserId == userId && x.ShiftId == shiftId
+            && (x.Kind == ShiftClaimKind.Drop || x.Kind == ShiftClaimKind.Swap));
 
     // Loads (tracked) the two shifts of a swap and checks the swap can still happen.
     private static async Task<(Shift? Mine, Shift? Theirs, string? Problem)> LoadSwapShiftsAsync(ApplicationDbContext ctx, ShiftClaim swap, ShiftClaim offer, DateTime now)
@@ -1077,17 +1138,23 @@ public class ShiftClaimService(
     }
 
     // Swaps the people on the two shifts and settles every claim involved. Returns the offers that
-    // weren't chosen, to be told. Changes are left for the caller to save.
-    private static async Task<List<ShiftClaim>> ExecuteSwapAsync(ApplicationDbContext ctx, ShiftClaim swap, ShiftClaim offer, Shift mine, Shift theirs, string actingUserId, DateTime now)
+    // weren't chosen, to be told, or null when either shift no longer belongs to who it should (a
+    // concurrent swap got there first) - the caller must then not save, and rolls back its
+    // transaction. Claim changes are left for the caller to save.
+    private static async Task<List<ShiftClaim>?> ExecuteSwapAsync(ApplicationDbContext ctx, ShiftClaim swap, ShiftClaim offer, Shift mine, Shift theirs, string actingUserId, DateTime now)
     {
-        ShiftClaimRules.Assign(mine, offer.UserId, actingUserId, now);
-        ShiftClaimRules.Assign(theirs, swap.UserId, actingUserId, now);
+        if (!await ReassignAsync(ctx, mine.Id, swap.UserId, offer.UserId, actingUserId, now)
+            || !await ReassignAsync(ctx, theirs.Id, offer.UserId, swap.UserId, actingUserId, now))
+        {
+            return null;
+        }
 
         ShiftClaimRules.Close(swap, ShiftClaimStatus.Approved, null, actingUserId, now);
         ShiftClaimRules.Close(offer, ShiftClaimStatus.Approved, null, actingUserId, now);
 
         List<ShiftClaim> otherOffers = await ctx.ShiftClaims
-            .Where(x => x.ParentClaimId == swap.Id && x.Id != offer.Id && (x.Status == ShiftClaimStatus.Pending || x.Status == ShiftClaimStatus.Accepted))
+            .Open()
+            .Where(x => x.ParentClaimId == swap.Id && x.Id != offer.Id)
             .ToListAsync();
 
         otherOffers.ForEach(x => ShiftClaimRules.Close(x, ShiftClaimStatus.Rejected, "They swapped with someone else.", null, now));
@@ -1136,24 +1203,26 @@ public class ShiftClaimService(
     }
 
     private static async Task<string> NameOfAsync(ApplicationDbContext ctx, string userId) =>
-        RotaNames.For(await ctx.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId));
+        RotaNames.For(await ctx.Users.AsNoTracking().TagWithCallSite().FirstOrDefaultAsync(x => x.Id == userId));
 
     private static string LocationName(Shift shift) => shift.Location?.Name ?? "your location";
 
     private static async Task<Dictionary<int, bool>> ApprovalByLocationAsync(ApplicationDbContext ctx, List<int> locationIds) =>
         await ctx.LocationSchedulingSettings
             .AsNoTracking()
+            .TagWithCallSite()
             .Where(x => locationIds.Contains(x.LocationId))
             .ToDictionaryAsync(x => x.LocationId, x => x.ClaimsNeedApproval);
 
-    // First come, first served: only takes the shift if it's still open at the moment of the
-    // update, in one conditional UPDATE, so two people picking it up at once can't both get it.
-    private static async Task<bool> TakeOpenShiftAsync(ApplicationDbContext ctx, Guid shiftId, string userId, string actingUserId, DateTime now)
+    // Moves a published shift from one person (null = open) to another, only if it still belongs to
+    // fromUserId at the moment of the update - one conditional UPDATE - so two pick-ups, approvals
+    // or swaps racing for the same shift can't both win. False when it had already moved.
+    private static async Task<bool> ReassignAsync(ApplicationDbContext ctx, Guid shiftId, string? fromUserId, string? userId, string actingUserId, DateTime now)
     {
         if (ctx.Database.IsRelational())
         {
             int updated = await ctx.Shifts
-                .Where(x => x.Id == shiftId && x.UserId == null && x.IsActive && x.PublishedDateUtc != null)
+                .Where(x => x.Id == shiftId && x.UserId == fromUserId && x.IsActive && x.PublishedDateUtc != null)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(x => x.UserId, userId)
                     .SetProperty(x => x.UpdateDate, now)
@@ -1167,7 +1236,7 @@ public class ShiftClaimService(
         }
 
         // The EF in-memory provider (tests) has no ExecuteUpdate.
-        Shift? shift = await ctx.Shifts.FirstOrDefaultAsync(x => x.Id == shiftId && x.UserId == null && x.IsActive);
+        Shift? shift = await ctx.Shifts.FirstOrDefaultAsync(x => x.Id == shiftId && x.UserId == fromUserId && x.IsActive);
 
         if (shift is null)
         {

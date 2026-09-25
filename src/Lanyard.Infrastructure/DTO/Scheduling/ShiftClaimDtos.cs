@@ -21,6 +21,9 @@ public record MyClaimView(ShiftClaim Claim, Shift Shift, Shift? OfferedShift, Li
 
 public record ShiftMarketplace(List<OpenShiftView> OpenShifts, List<SwapRequestView> SwapRequests, List<MyClaimView> MyClaims)
 {
+    // The viewer's locations: only changes at these need the page refreshed.
+    public List<int> LocationIds { get; init; } = [];
+
     // For the "Up for grabs" badge: things the viewer could act on right now.
     public int ActionableCount =>
         OpenShifts.Count(x => x.MyClaim is null && x.NotEligibleReason is null)

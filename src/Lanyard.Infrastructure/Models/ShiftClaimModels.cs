@@ -43,7 +43,11 @@ namespace Lanyard.Infrastructure.Models
         // Why it was turned down or withdrawn, in words the person can read.
         public string? DecisionReason { get; set; }
 
-        public bool IsOpen => Status is ShiftClaimStatus.Pending or ShiftClaimStatus.Accepted;
+        // Still in progress: waiting for a manager, for offers, or for the requester's choice.
+        // The one definition of "open"; queries use it through ShiftClaimQueries.Open().
+        public static readonly ShiftClaimStatus[] OpenStatuses = [ShiftClaimStatus.Pending, ShiftClaimStatus.Accepted];
+
+        public bool IsOpen => OpenStatuses.Contains(Status);
     }
 
     // Per-location rota rules. One row per location, created on first save; no row = the defaults.

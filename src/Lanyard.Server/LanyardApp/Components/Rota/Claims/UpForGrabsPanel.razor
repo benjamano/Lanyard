@@ -217,10 +217,14 @@ else
         market = result.Data;
     }
 
-    // Any change at any location reloads; it's one person's view, and the event carries no detail
-    // worth filtering on beyond the location.
+    // Only changes at the viewer's own locations matter; everything else would just be a wasted reload.
     private void OnClaimsChanged(int locationId)
     {
+        if (market is not null && !market.LocationIds.Contains(locationId))
+        {
+            return;
+        }
+
         _ = InvokeAsync(async () =>
         {
             await LoadAsync();

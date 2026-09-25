@@ -418,6 +418,58 @@ public class ShiftClaimServiceTests
         Assert.IsFalse((await w.Service.WithdrawAsync(w.Amy.Id, offer.Id)).IsSuccess, "Can't withdraw someone else's offer");
     }
 
+    [TestMethod]
+    public async Task Swap_TurnedDown_ClosesTheOtherOffersToo()
+    {
+        World w = await SeedAsync();
+        Shift amys = await ShiftAsync(w, w.Amy.Id);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, dayOffset: 1);
+        Shift priyas = await ShiftAsync(w, w.Priya.Id, dayOffset: 2);
+
+        ShiftClaim swap = (await w.Service.RequestSwapAsync(w.Amy.Id, amys.Id, null)).Data!;
+        ShiftClaim tomOffer = (await w.Service.OfferSwapAsync(w.Tom.Id, swap.Id, toms.Id)).Data!;
+        ShiftClaim priyaOffer = (await w.Service.OfferSwapAsync(w.Priya.Id, swap.Id, priyas.Id)).Data!;
+        await w.Service.AcceptOfferAsync(w.Amy.Id, tomOffer.Id);
+        w.Notifications.Jobs.Clear();
+
+        await w.Service.DecideAsync(w.ManagerScope, swap.Id, false, "Short that day", w.Manager.Id);
+
+        Assert.AreEqual(ShiftClaimStatus.Rejected, (await ClaimAsync(w, priyaOffer.Id)).Status);
+        CollectionAssert.AreEquivalent(new[] { w.Amy.Id, w.Tom.Id, w.Priya.Id }, Told(w, NotificationTopic.ShiftClaimDecided));
+    }
+
+    [TestMethod]
+    public async Task Review_FlagsASwapWhoseOtherShiftHasStarted()
+    {
+        World w = await SeedAsync();
+        Shift amys = await ShiftAsync(w, w.Amy.Id);
+
+        Shift started;
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            started = new Shift
+            {
+                Id = Guid.NewGuid(), LocationId = w.Location.Id, UserId = w.Tom.Id, StaffPositionId = w.Csa.Id,
+                StartUtc = Now.AddHours(-2), EndUtc = Now.AddHours(2), IsActive = true,
+                CreateDate = Now.AddDays(-5), CreateByUserId = w.Manager.Id, PublishedDateUtc = Now.AddDays(-4), PublishedStartUtc = Now.AddHours(-2)
+            };
+            ctx.Shifts.Add(started);
+
+            ShiftClaim swap = new() { Id = Guid.NewGuid(), ShiftId = amys.Id, UserId = w.Amy.Id, Kind = ShiftClaimKind.Swap, Status = ShiftClaimStatus.Accepted, RequestedUtc = Now };
+            ctx.ShiftClaims.Add(swap);
+            ctx.ShiftClaims.Add(new ShiftClaim
+            {
+                Id = Guid.NewGuid(), ShiftId = amys.Id, UserId = w.Tom.Id, Kind = ShiftClaimKind.SwapOffer, Status = ShiftClaimStatus.Accepted,
+                ParentClaimId = swap.Id, OfferedShiftId = started.Id, RequestedUtc = Now
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        ShiftClaimReview review = (await w.Service.GetReviewAsync(w.ManagerScope, w.Location.Id, w.Manager.Id)).Data!;
+
+        StringAssert.Contains(review.Swaps.Single().Problem, "already started");
+    }
+
     // ---- Shifts changing underneath requests -----------------------------------------------
 
     [TestMethod]
@@ -436,6 +488,27 @@ public class ShiftClaimServiceTests
 
         Assert.IsTrue(saved.IsSuccess, saved.Error);
         Assert.AreEqual(ShiftClaimStatus.Withdrawn, (await ClaimAsync(w, drop.Id)).Status);
+    }
+
+    [TestMethod]
+    public async Task EditingAShift_TellsThePersonTheirRequestWasWithdrawn()
+    {
+        World w = await SeedAsync();
+        Shift amys = await ShiftAsync(w, w.Amy.Id);
+        await w.Service.RequestDropAsync(w.Amy.Id, amys.Id, "Can't");
+        w.Notifications.Jobs.Clear();
+
+        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(w.Options);
+        RotaService rota = new(factory, new ContractRequirementService(factory), w.Notifications, NullLogger<RotaService>.Instance);
+
+        Shift edited = await ReloadAsync(w, amys.Id);
+        edited.EndUtc = edited.EndUtc.AddHours(-1);
+        await rota.SaveShiftAsync(w.ManagerScope, edited, w.Manager.Id);
+
+        ShiftClaimDecidedPayload told = (ShiftClaimDecidedPayload)w.Notifications.Jobs.Single(x => x.Topic == NotificationTopic.ShiftClaimDecided && x.UserId == w.Amy.Id).Payload;
+        Assert.IsFalse(told.Approved);
+        Assert.AreEqual(ShiftClaimKind.Drop, told.Kind);
+        StringAssert.Contains(told.Reason, "changed the shift");
     }
 
     [TestMethod]
@@ -544,6 +617,33 @@ public class ShiftClaimServiceTests
         ShiftClaim after = await ClaimAsync(w, claim.Id);
         Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, after.UserId);
         Assert.AreEqual(ShiftClaimStatus.Withdrawn, after.Status);
+    }
+
+    [TestMethod]
+    public async Task DeletingAnAccount_ReopensTheSwapTheyHadAgreedTo_AndClosesOffersOnTheirs()
+    {
+        World w = await SeedAsync();
+        Shift amys = await ShiftAsync(w, w.Amy.Id);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, dayOffset: 1);
+        Shift priyas = await ShiftAsync(w, w.Priya.Id, dayOffset: 2);
+
+        // Amy has agreed Tom's offer (waiting for a manager); Tom's own swap has an offer from Priya.
+        ShiftClaim amysSwap = (await w.Service.RequestSwapAsync(w.Amy.Id, amys.Id, null)).Data!;
+        ShiftClaim tomOffer = (await w.Service.OfferSwapAsync(w.Tom.Id, amysSwap.Id, toms.Id)).Data!;
+        await w.Service.AcceptOfferAsync(w.Amy.Id, tomOffer.Id);
+
+        Shift tomsOther = await ShiftAsync(w, w.Tom.Id, dayOffset: 3);
+        ShiftClaim tomsSwap = (await w.Service.RequestSwapAsync(w.Tom.Id, tomsOther.Id, null)).Data!;
+        ShiftClaim priyaOffer = (await w.Service.OfferSwapAsync(w.Priya.Id, tomsSwap.Id, priyas.Id)).Data!;
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            await ScheduleRetention.DetachUserAsync(ctx, w.Tom.Id, Now);
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.AreEqual(ShiftClaimStatus.Pending, (await ClaimAsync(w, amysSwap.Id)).Status);
+        Assert.AreEqual(ShiftClaimStatus.Withdrawn, (await ClaimAsync(w, priyaOffer.Id)).Status);
     }
 
     [TestMethod]

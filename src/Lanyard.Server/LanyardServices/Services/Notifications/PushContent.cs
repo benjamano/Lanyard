@@ -55,7 +55,7 @@ public static class PushContentBuilder
         // With one shift involved, name it; otherwise the counts say more than a list would.
         List<ShiftEmailLine> all = [.. rota.Added, .. rota.Changed, .. rota.Removed];
         string kind = rota.Added.Count == 1 ? "new" : rota.Changed.Count == 1 ? "changed" : "removed";
-        string body = all.Count == 1 ? $"{Line(all[0])} ({kind})" : string.Join(", ", parts);
+        string body = all.Count == 1 ? $"{ShiftClaimNotices.Line(all[0])} ({kind})" : string.Join(", ", parts);
 
         return new PushContent(title, body, "/rota", $"rota-{rota.LocationId}", PushMessageUrgency.Normal, TimeSpan.FromDays(3));
     }
@@ -104,13 +104,6 @@ public static class PushContentBuilder
 
         return new PushContent(notice.Title, string.Join(" · ", notice.Lines), notice.Url, notice.Tag,
             urgent ? PushMessageUrgency.High : PushMessageUrgency.Normal, TimeSpan.FromDays(2));
-    }
-
-    private static string Line(ShiftEmailLine line)
-    {
-        string text = $"{line.Date.ToString("ddd d MMM", RotaFormat.Uk)} · {line.TimeRange}";
-
-        return line.PositionName is { Length: > 0 } position ? $"{text} · {position}" : text;
     }
 
     private static string Count(int count, string one, string many) => $"{count} {(count == 1 ? one : many)}";

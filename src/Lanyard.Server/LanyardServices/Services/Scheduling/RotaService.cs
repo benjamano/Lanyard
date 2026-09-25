@@ -15,7 +15,8 @@ public class RotaService(
     IDbContextFactory<ApplicationDbContext> factory,
     IContractRequirementService contractRequirementService,
     INotificationDispatcher notifications,
-    ILogger<RotaService> logger) : IRotaService
+    ILogger<RotaService> logger,
+    IShiftClaimEventBus? claimEvents = null) : IRotaService
 {
     private static readonly TimeSpan MaxShiftLength = TimeSpan.FromHours(24);
 
@@ -23,6 +24,7 @@ public class RotaService(
     private readonly IContractRequirementService _contractRequirementService = contractRequirementService;
     private readonly INotificationDispatcher _notifications = notifications;
     private readonly ILogger<RotaService> _logger = logger;
+    private readonly IShiftClaimEventBus? _claimEvents = claimEvents;
 
     public async Task<Result<RotaRangeView>> GetRangeViewAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, bool includeAllMembers = false)
     {
@@ -420,12 +422,12 @@ public class RotaService(
             }
 
             // Any pick-up, call-off or swap on the old version of this shift no longer matches it.
-            if (existing is not null && (reassignPublished || existing.UpdateDate == now))
-            {
-                await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [existing.Id], "A manager changed the shift.", now);
-            }
+            List<ShiftClaim> withdrawn = existing is not null && (reassignPublished || existing.UpdateDate == now)
+                ? await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [existing.Id], "A manager changed the shift.", now)
+                : [];
 
             await ctx.SaveChangesAsync();
+            await AfterClaimsChangedAsync(ctx, saved.LocationId, withdrawn, openShiftChanged: saved.UserId is null || existing?.UserId is null);
 
             return Result<ShiftSaveResult>.Ok(new ShiftSaveResult(saved, warnings));
         }
@@ -461,8 +463,9 @@ public class RotaService(
             shift.UpdateDate = now;
             shift.UpdateByUserId = actingUserId;
 
-            await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shift.Id], "A manager removed the shift.", now);
+            List<ShiftClaim> withdrawn = await ShiftClaimRules.WithdrawForShiftsAsync(ctx, [shift.Id], "A manager removed the shift.", now);
             await ctx.SaveChangesAsync();
+            await AfterClaimsChangedAsync(ctx, shift.LocationId, withdrawn, openShiftChanged: shift.UserId is null);
 
             return Result<bool>.Ok(true);
         }
@@ -801,6 +804,11 @@ public class RotaService(
                 _logger.LogError(ex, "Rota published at location {LocationId} but its emails couldn't be queued", locationId);
             }
 
+            if (opened.Count > 0)
+            {
+                _claimEvents?.Publish(locationId);
+            }
+
             _logger.LogInformation("Published {ShiftCount} rota changes for {PeopleAffected} people at location {LocationId} ({From} to {To}) by {UserId}",
                 result.ShiftCount, result.PeopleAffected, locationId, from, to, actingUserId);
 
@@ -833,6 +841,26 @@ public class RotaService(
         catch (Exception ex)
         {
             return Result<List<Shift>>.Fail($"Failed to load shifts: {ex.Message}");
+        }
+    }
+
+    // After saving a shift change: tells the people whose requests it withdrew, and refreshes open
+    // Up for grabs and Shift Requests pages. The change is already saved, so a failure here is
+    // logged, never reported as the save failing.
+    private async Task AfterClaimsChangedAsync(ApplicationDbContext ctx, int locationId, List<ShiftClaim> withdrawn, bool openShiftChanged)
+    {
+        try
+        {
+            await ShiftClaimRules.NotifyWithdrawnAsync(ctx, _notifications, withdrawn);
+
+            if (withdrawn.Count > 0 || openShiftChanged)
+            {
+                _claimEvents?.Publish(locationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Saved a shift at location {LocationId} but couldn't tell people about their withdrawn requests", locationId);
         }
     }
 
