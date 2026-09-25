@@ -85,6 +85,15 @@ public class SecurityService : ISecurityService
     private async Task<bool> IsCurrentUserAdminOrManagerAsync() =>
         await IsCurrentUserInRoleAsync("Admin") || await IsCurrentUserInRoleAsync("Manager");
 
+    // This service is scoped (one per circuit / request). The layout, nav menu, greeting card
+    // and several pages each ask for the current user's profile during one page load, so the
+    // row is remembered briefly per instance instead of being fetched again for each of them.
+    // UpdateUserProfileAsync clears it; the TTL covers changes made from another session.
+    private static readonly TimeSpan CurrentProfileCacheTtl = TimeSpan.FromMinutes(1);
+    private UserProfile? _cachedCurrentProfile;
+    private string? _cachedCurrentProfileUserId;
+    private DateTime _cachedCurrentProfileAtUtc;
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
         try
@@ -94,6 +103,13 @@ public class SecurityService : ISecurityService
             if (!getResult.IsSuccess || getResult.Data == null)
             {
                 return Result<UserProfile>.Fail("User ID is not available");
+            }
+
+            if (_cachedCurrentProfile is not null
+                && _cachedCurrentProfileUserId == getResult.Data
+                && DateTime.UtcNow - _cachedCurrentProfileAtUtc < CurrentProfileCacheTtl)
+            {
+                return Result<UserProfile>.Ok(_cachedCurrentProfile);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -107,6 +123,10 @@ public class SecurityService : ISecurityService
             {
                 return Result<UserProfile>.Fail("User not found");
             }
+
+            _cachedCurrentProfile = user;
+            _cachedCurrentProfileUserId = user.Id;
+            _cachedCurrentProfileAtUtc = DateTime.UtcNow;
 
             return Result<UserProfile>.Ok(user);
         }
@@ -172,6 +192,8 @@ public class SecurityService : ISecurityService
 
         ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
         await ctx.SaveChangesAsync();
+
+        _cachedCurrentProfile = null;
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()

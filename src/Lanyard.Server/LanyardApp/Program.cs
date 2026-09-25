@@ -1,4 +1,5 @@
 ﻿using Amazon.S3;
+using Microsoft.AspNetCore.Localization;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
@@ -342,6 +343,16 @@ if (app.Environment.IsDevelopment() == false)
 }
 
 app.UseRateLimiter();
+
+// Per-user date/time format from the culture cookie (see UserCultureCookie). Cookie only: the
+// browser's Accept-Language must not override an explicit preference, and nothing in the app
+// switches culture via the query string. Defaults to en-GB (the business is UK based).
+RequestLocalizationOptions localizationOptions = new RequestLocalizationOptions()
+    .SetDefaultCulture(UserCultureCookie.DefaultCulture)
+    .AddSupportedCultures(UserCultureCookie.SupportedCultures)
+    .AddSupportedUICultures(UserCultureCookie.SupportedCultures);
+localizationOptions.RequestCultureProviders = [new CookieRequestCultureProvider()];
+app.UseRequestLocalization(localizationOptions);
 
 string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
 

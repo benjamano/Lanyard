@@ -138,7 +138,7 @@
         _player.OnSongChanged += HandleSongChanged;
         _player.OnPlaybackStatusChanged += HandlePlaybackStatusChanged;
 
-        Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistsAsync();
+        Result<IEnumerable<Playlist>> result = await _playlistService.GetActivePlaylistSummariesAsync();
 
         if (result.IsSuccess)
         {
@@ -233,8 +233,11 @@
 
         if (playlistSongsResult.IsSuccess)
         {
+            // Materialised once here: SongList caches what it is handed, and a lazy OrderBy would
+            // otherwise be re-sorted on every enumeration.
             songs = playlistSongsResult.Data!
-                .OrderBy(s => s.Song!.Name);
+                .OrderBy(s => s.Song!.Name)
+                .ToList();
         }
         else
         {
@@ -270,7 +273,7 @@
                 Playlist = null,
                 Song = x,
                 SongId = x.Id
-            }),
+            }).ToList(),
             true)
         );
     }
@@ -294,7 +297,7 @@
             return;
         }
 
-        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistsAsync();
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistSummariesAsync();
 
         if (playlistResult.IsSuccess)
         {

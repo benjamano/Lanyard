@@ -13,7 +13,7 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
     {
         try
         {
-            ApplicationDbContext context = _factory.CreateDbContext();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             IEnumerable<Playlist> playlists = await context.Playlists
                 .AsNoTracking()
@@ -30,11 +30,31 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
         }
     }
 
+    public async Task<Result<IEnumerable<Playlist>>> GetActivePlaylistSummariesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
+
+            IEnumerable<Playlist> playlists = await context.Playlists
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(playlist => playlist.DeleteDate == null)
+                .ToListAsync();
+
+            return Result<IEnumerable<Playlist>>.Ok(playlists);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<Playlist>>.Fail($"An error occurred while retrieving active playlists: {ex.Message}");
+        }
+    }
+
     public async Task<Result<IEnumerable<PlaylistSongMember>>> GetPlaylistMembersAsync(Guid playlistId)
     {
         try
         {
-            ApplicationDbContext context = _factory.CreateDbContext();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             IEnumerable<PlaylistSongMember> members = await context.PlaylistSongMembers
                 .AsNoTracking()
@@ -56,7 +76,7 @@ public class PlaylistService(IDbContextFactory<ApplicationDbContext> _factory) :
     {
         try
         {
-            ApplicationDbContext context = _factory.CreateDbContext();
+            await using ApplicationDbContext context = await _factory.CreateDbContextAsync();
 
             PlaylistSongMember? member = await context.PlaylistSongMembers
                 .TagWithCallSite()

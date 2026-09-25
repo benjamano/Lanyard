@@ -74,6 +74,13 @@ public class AutomationExecutionRetentionHostedService(
 
         await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
+        // ExecuteDelete needs a relational provider; the EF InMemory database the integration
+        // test host runs on would throw on every sweep.
+        if (!ctx.Database.IsRelational())
+        {
+            return 0;
+        }
+
         // Set-based deletes: nothing is loaded into memory. Children go first because
         // ExecuteDelete bypasses EF's cascade handling (the database FK cascades too, but this
         // keeps the behaviour identical on every provider).
