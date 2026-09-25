@@ -501,7 +501,7 @@
     ]
   },
   {
-    "version": "1.4.9",
+    "version": "1.4.10",
     "releaseDate": "2026-09-25",
     "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
     "details": [
@@ -515,7 +515,8 @@
       "My Training shows the course, due date and status on a phone without scrolling, and long course names wrap onto a second line. Before, some names showed only as \"…\".",
       "On a phone, the Rota Builder's day picker fits a whole week on screen.",
       "The DMX desk's client picker moves onto its own line on narrow phones.",
-      "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read."
+      "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read.",
+      "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages."
     ]
   }
 ]
