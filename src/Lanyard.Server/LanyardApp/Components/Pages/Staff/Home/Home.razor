@@ -32,7 +32,7 @@
                     </FluentText>
                     <FluentText>
                         "@_homeScreenDashboard.Name" is set as
-                        @(_homeScreenIsOrganisationDefault ? "everyone's home screen" : "your home screen"),
+                        @(HomeScreenIsOrganisationDefault ? "everyone's home screen" : "your home screen"),
                         but nothing has been added to it.
                     </FluentText>
                     <FluentLink Href="/account/manage">
@@ -49,7 +49,7 @@ else
     <FluentGrid AdaptiveRendering="true" Spacing="2">
         <FluentGridItem HiddenWhen="@GridItemHidden.SmAndUp" Sm="12" Xs="12">
             <FluentCard Appearance="@CardAppearance.Outline" Padding="@Padding.Top0" Height="100%">
-                <CompanyLogo Url="@_companyLogoUrl" />
+                <CompanyLogo Url="@CompanyLogoUrl" />
             </FluentCard>
             @* <FluentDivider /> *@
         </FluentGridItem>
@@ -109,41 +109,68 @@ else
 
 @code {
     private bool _showPreviewContent = false;
-    private string? _companyLogoUrl = null;
 
     private Dashboard? _homeScreenDashboard;
     private List<DashboardWidget> _homeScreenWidgets = [];
-    private bool _personalDashboardUnavailable = false;
-    private bool _homeScreenIsOrganisationDefault = false;
+
+    // This page prerenders, then initialises again on the interactive circuit. Everything the
+    // prerender pass resolved that is cheap to serialise is carried across so the interactive pass
+    // skips the scope, branding and home-screen-selection lookups. The Dashboard itself is not
+    // persisted - its widgets hold a back-reference to it, so the graph is cyclic - only its id is,
+    // and that one query is repeated. Initialized is only set once both lookups succeeded, so a
+    // failed prerender-time lookup is retried on the interactive pass rather than persisted.
+    // SkipLastSnapshot: after a circuit pause/resume the page re-resolves everything fresh.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool Initialized { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public string? CompanyLogoUrl { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public Guid? HomeScreenDashboardId { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool PersonalDashboardUnavailable { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool HomeScreenIsOrganisationDefault { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
-        Task logoTask = GetCurrentCompanyLogoUrlAsync();
-        Task homeScreenTask = LoadHomeScreenDashboardAsync();
+        if (Initialized)
+        {
+            await LoadHomeScreenDashboardWidgetsAsync();
+            return;
+        }
 
-        await Task.WhenAll(logoTask, homeScreenTask);
+        Task<bool> logoTask = GetCurrentCompanyLogoUrlAsync();
+        Task<bool> homeScreenTask = LoadHomeScreenDashboardAsync();
+
+        bool[] results = await Task.WhenAll(logoTask, homeScreenTask);
+
+        Initialized = results.All(x => x);
     }
 
     // Fired here rather than in OnInitializedAsync so the user sees it exactly once - that method
     // also runs during prerender, where a toast is discarded.
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender && _personalDashboardUnavailable)
+        if (firstRender && PersonalDashboardUnavailable)
         {
-            _toastService.ShowInfo(_homeScreenIsOrganisationDefault
+            _toastService.ShowInfo(HomeScreenIsOrganisationDefault
                 ? "Your home screen dashboard is no longer available, showing the dashboard set for everyone instead."
                 : "Your home screen dashboard is no longer available, showing the standard home page.");
         }
     }
 
-    private async Task LoadHomeScreenDashboardAsync()
+    private async Task<bool> LoadHomeScreenDashboardAsync()
     {
         Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
 
         if (!userIdResult.IsSuccess || string.IsNullOrEmpty(userIdResult.Data))
         {
             _logger.LogWarning("Failed to resolve the current user for the home screen dashboard: {Error}", userIdResult.Error);
-            return;
+            return false;
         }
 
         // Resolves the user's own choice, then the organisation-wide default an Admin or Manager
@@ -153,16 +180,23 @@ else
         if (!selectionResult.IsSuccess || selectionResult.Data is null)
         {
             _logger.LogWarning("Failed to load the home screen dashboard setting: {Error}", selectionResult.Error);
-            return;
+            return false;
         }
 
         // Set when the user had picked a dashboard that has since been deleted. The selection has
         // already fallen through to the organisation default (or to nothing) - this only decides
         // whether to explain why they are not seeing what they chose.
-        _personalDashboardUnavailable = selectionResult.Data.PersonalDashboardUnavailable;
-        _homeScreenIsOrganisationDefault = selectionResult.Data.IsOrganisationDefault;
+        PersonalDashboardUnavailable = selectionResult.Data.PersonalDashboardUnavailable;
+        HomeScreenIsOrganisationDefault = selectionResult.Data.IsOrganisationDefault;
+        HomeScreenDashboardId = selectionResult.Data.DashboardId;
 
-        if (selectionResult.Data.DashboardId is not Guid dashboardId)
+        await LoadHomeScreenDashboardWidgetsAsync();
+        return true;
+    }
+
+    private async Task LoadHomeScreenDashboardWidgetsAsync()
+    {
+        if (HomeScreenDashboardId is not Guid dashboardId)
         {
             return;
         }
@@ -183,14 +217,14 @@ else
         _homeScreenDashboard = dashboard;
     }
 
-    private async Task GetCurrentCompanyLogoUrlAsync()
+    private async Task<bool> GetCurrentCompanyLogoUrlAsync()
     {
         Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
 
         if (!scopeResult.Success || scopeResult.Data is not { CompanyId: int companyId })
         {
             _logger.LogWarning("Failed to resolve the current location scope for the home page logo: {Error}", scopeResult.Error);
-            return;
+            return false;
         }
 
         Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
@@ -198,11 +232,12 @@ else
         if (!branding.Success || branding.Data is null)
         {
             _logger.LogWarning("Failed to get company branding for company {CompanyId}: {Error}", companyId, branding.Error);
-            return;
+            return false;
         }
 
-        _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
+        CompanyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
             ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
             : null;
+        return true;
     }
 }
