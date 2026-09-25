@@ -335,7 +335,8 @@
       "File downloads, music and kiosk videos are now cacheable by the browser for a day, so thumbnails and repeated plays don't re-fetch the same bytes.",
       "The File Manager, file pickers and image grid now show only the files and folders that actually live in the selected folder. The root folder used to list every file in every folder.",
       "The image picker no longer reloads its folder (and flashes its spinner) every time the surrounding page re-renders.",
-      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation."
+      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }
 ]
