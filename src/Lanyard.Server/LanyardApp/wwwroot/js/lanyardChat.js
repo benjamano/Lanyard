@@ -42,6 +42,16 @@ window.lanyardChat = (() => {
                 }
             });
 
+            // Android keyboards (Gboard etc.) hold the word being typed as an IME composition until
+            // space or a suggestion is picked, and Quill doesn't update its "blank" state (which
+            // shows the placeholder) until the composition ends, so the placeholder sat under the
+            // typed word. Keep it in step with what's actually in the box while composing.
+            quill.root.addEventListener('input', () => {
+                if (quill.composition && quill.composition.isComposing) {
+                    quill.root.classList.toggle('ql-blank', quill.root.textContent.length === 0 && !quill.root.querySelector('li'));
+                }
+            });
+
             let sending = false;
 
             async function send() {

@@ -1,8 +1,10 @@
-/* Fills the space between the header and the footer; the lists scroll inside it, not the page. */
+/* Fills the content area (itself sized between the header and footer); the lists scroll inside
+   it, not the page. A 100dvh sum of guessed header/footer heights came out taller than the real
+   space and gave the page its own needless scrollbar. */
 .chat-page {
     display: grid;
     grid-template-columns: minmax(260px, 340px) 1fr;
-    height: calc(100dvh - 44px - 24px - 56px);
+    height: 100%;
     min-height: 420px;
     border: 1px solid var(--colorNeutralStroke2);
     border-radius: 8px;
@@ -36,7 +38,6 @@
 @media (max-width: 767.98px) {
     .chat-page {
         grid-template-columns: 1fr;
-        height: calc(100dvh - 44px - 24px - 80px);
         min-height: 360px;
     }
 
