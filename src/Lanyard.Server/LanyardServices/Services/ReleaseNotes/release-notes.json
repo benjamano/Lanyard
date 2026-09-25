@@ -330,6 +330,12 @@
       "Scene steps no longer smear out over time as the channels are sent one after another - all channels in a step land together.",
       "A scene running for a kiosk that is offline no longer queries the database on every step.",
       "Kiosk client 1.0.40 is required: a kiosk still running an older client will not respond to DMX scenes or the virtual desk until it auto-updates on its next restart.",
+      "Kiosk \"Play a Video\" steps now stream the video straight from storage. Previously the server loaded the entire file into memory and pushed it to the kiosk screen as inline text on every step, which for a large video meant hundreds of megabytes of work per step per kiosk.",
+      "Seeking or looping in a video or song no longer re-downloads the whole file: the server now asks storage for just the bytes the player requests.",
+      "File downloads, music and kiosk videos are now cacheable by the browser for a day, so thumbnails and repeated plays don't re-fetch the same bytes.",
+      "The File Manager, file pickers and image grid now show only the files and folders that actually live in the selected folder. The root folder used to list every file in every folder.",
+      "The image picker no longer reloads its folder (and flashes its spinner) every time the surrounding page re-renders.",
+      "The server now shares one storage connection for all file operations instead of creating a new one per page and request, and releases its database connections promptly after every file operation.",
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }
