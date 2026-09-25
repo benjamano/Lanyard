@@ -505,7 +505,7 @@
     "releaseDate": "2026-09-25",
     "summary": "New Lanyard app icon, and the phone's status bar now matches your company's colour, Faster reconnecting when you come back to Lanyard on your phone.",
     "details": [
-      "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still."
+      "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
       "If the connection dropped while the app was in the background, Lanyard now notices within about 15 seconds instead of 30, rather than looking connected but ignoring taps.",
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
