@@ -112,6 +112,9 @@
 
     <Routes @rendermode="PageRenderMode" />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    @* Not unused: FluentNumberInput and Fluent's masked date/time inputs need window.IMask. Without
+       it they fetch it from unpkg.com, which the CSP blocks, and the page fails to render. *@
+    <script src="https://cdn.jsdelivr.net/npm/imask@7.6.1/dist/imask.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
     <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js"></script>
     <script src="_content/Blazored.TextEditor/Blazored-BlazorQuill.js"></script>
