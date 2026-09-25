@@ -36,8 +36,13 @@
    edges: the content area is itself the horizontal scroll box, so anything poking past its 12px
    margin just makes the whole page scroll sideways. */
 @media (max-width: 767.98px) {
+    /* App.razor gives the content area 80px of bottom padding on a phone so long pages scroll
+       clear of the fixed bottom nav. The chat doesn't scroll the page, so that padding is just
+       a gap under it: grow into it, and pull the margin back by the same so nothing overflows. */
     .chat-page {
         grid-template-columns: 1fr;
+        height: calc(100% + 80px);
+        margin-bottom: -80px;
         min-height: 360px;
     }
 

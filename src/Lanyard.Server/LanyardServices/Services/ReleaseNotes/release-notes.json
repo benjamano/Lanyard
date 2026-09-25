@@ -517,7 +517,7 @@
       "The DMX desk's client picker moves onto its own line on narrow phones.",
       "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read.",
       "Fixed the \"Write a message\" placeholder in Chat staying visible under what you're typing on an Android phone until you pressed space.",
-      "Removed an unnecessary scrollbar down the side of the Chat page."
+      "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side."
     ]
   }
 ]
