@@ -339,7 +339,7 @@
       "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production.",
       "The login company picker and the sign-in form no longer reload (and briefly blank out) a moment after the page first appears.",
       "The home page no longer fetches your home screen dashboard settings and company branding twice on every load.",
-      "Fixed the \"your home screen dashboard is no longer available\" notice never actually appearing when the dashboard you had chosen was deleted."
+      "Fixed the \"your home screen dashboard is no longer available\" notice never actually appearing when the dashboard you had chosen was deleted.",
       "Added database indexes for the training assignment list (per user), the automation execution log (newest-first and per rule) and the song BPM backfill sweep, so those screens stay fast as the tables grow.",
       "Automation rule execution history is now kept for 90 days (configurable via Automation:ExecutionLog:RetentionDays) instead of forever.",
       "Opening a course, an assignment or a projection program now loads its sections, questions, attempts and parameters with separate queries instead of one multiplied result set that repeated the course text for every combination of rows.",
