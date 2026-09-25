@@ -36,6 +36,16 @@ public class TimeEntryService(
 
     private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
 
+    private string TooManyWrongPins(DateTime lockedUntilUtc)
+    {
+        TimeSpan wait = lockedUntilUtc - Now;
+        string when = wait <= TimeSpan.FromSeconds(60)
+            ? $"{Math.Max(1, (int)Math.Ceiling(wait.TotalSeconds))} seconds"
+            : $"{(int)Math.Ceiling(wait.TotalMinutes)} minutes";
+
+        return $"Too many wrong PINs. Try again in {when}, or scan the QR code with your phone.";
+    }
+
     public async Task<Result<List<TerminalRosterEntry>>> GetTerminalRosterAsync(Guid terminalId)
     {
         try
@@ -71,11 +81,16 @@ public class TimeEntryService(
                 .OrderBy(x => x.StartUtc)
                 .ToListAsync();
 
+            // An entry left open longer than StaleOpenEntry is someone who forgot to clock out; their
+            // next tap closes it and clocks them *in* (ClockAsync), so they aren't shown as on the
+            // clock here either.
+            DateTime freshFrom = now - StaleOpenEntry;
+
             List<TimeEntry> openHere = await ctx.TimeEntries
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Include(x => x.User)
-                .Where(x => x.LocationId == locationId && x.IsActive && x.ClockOutUtc == null
+                .Where(x => x.LocationId == locationId && x.IsActive && x.ClockOutUtc == null && x.ClockInUtc > freshFrom
                     && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
                 .ToListAsync();
 
@@ -83,7 +98,7 @@ public class TimeEntryService(
 
             HashSet<string> clockedIn = (await ctx.TimeEntries
                 .AsNoTracking()
-                .Where(x => userIds.Contains(x.UserId) && x.IsActive && x.ClockOutUtc == null)
+                .Where(x => userIds.Contains(x.UserId) && x.IsActive && x.ClockOutUtc == null && x.ClockInUtc > freshFrom)
                 .Select(x => x.UserId)
                 .ToListAsync()).ToHashSet();
 
@@ -107,7 +122,7 @@ public class TimeEntryService(
 
                     return new TerminalRosterEntry(
                         id,
-                        RotaNames.For(users[id]),
+                        RotaNames.Public(users[id]),
                         shift is null ? null : RotaFormat.TimeRange(shift.StartUtc, shift.EndUtc),
                         shift?.StartUtc,
                         clockedIn.Contains(id),
@@ -214,9 +229,9 @@ public class TimeEntryService(
                 return Result<ClockActionResult>.Fail(session.Error ?? "This device has been unpaired.");
             }
 
-            if (_tokenService.IsPinLocked(terminalId, userId))
+            if (_tokenService.PinLockedUntil(userId) is DateTime lockedUntil)
             {
-                return Result<ClockActionResult>.Fail("Too many wrong PINs. Wait 30 seconds and try again.");
+                return Result<ClockActionResult>.Fail(TooManyWrongPins(lockedUntil));
             }
 
             Result<ClockInPinStatus> status = await _pinService.GetStatusAsync(userId);
@@ -235,14 +250,19 @@ public class TimeEntryService(
 
             if (!verified.Data)
             {
-                bool nowLocked = _tokenService.RegisterPinFailure(terminalId, userId);
+                DateTime? nowLockedUntil = _tokenService.RegisterPinFailure(userId);
 
-                return Result<ClockActionResult>.Fail(nowLocked
-                    ? "Too many wrong PINs. Wait 30 seconds and try again."
+                if (nowLockedUntil is not null)
+                {
+                    _logger.LogWarning("PIN locked for {UserId} after repeated wrong PINs at terminal {TerminalId}", userId, terminalId);
+                }
+
+                return Result<ClockActionResult>.Fail(nowLockedUntil is DateTime until
+                    ? TooManyWrongPins(until)
                     : "That PIN isn't right. Try again.");
             }
 
-            _tokenService.ClearPinFailures(terminalId, userId);
+            _tokenService.ClearPinFailures(userId);
 
             return await ClockAsync(session.Data, userId, ClockMethod.Pin);
         }
@@ -558,7 +578,9 @@ public class TimeEntryService(
                 }
             }
 
-            if (entry.ClockInUtc > now.AddMinutes(5))
+            // A clock-out in the future too: the terminal only checks for an open entry, so a
+            // closed 09:00-17:00 entry typed in at 10:00 would let a clock-in at 12:00 overlap it.
+            if (entry.ClockInUtc > now.AddMinutes(5) || entry.ClockOutUtc > now.AddMinutes(5))
             {
                 return Result<TimeEntry>.Fail("Time can't be recorded in the future.");
             }

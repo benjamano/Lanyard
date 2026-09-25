@@ -402,10 +402,10 @@
     "releaseDate": "2026-09-24",
     "summary": "Added clock-in terminals, QR clock-in from your phone, and timesheets.",
     "details": [
-      "A tablet at the venue can now be paired as a clock-in terminal under Manage > Rota > Clock-In Terminals. It shows who's on the rota today; staff tap their name and enter their PIN to clock in or out.",
-      "Staff who forget their PIN, or haven't set one, can scan the code shown on the terminal with their own signed-in phone instead. The code changes every 30 seconds, so it only works for someone standing at the tablet.",
+      "A tablet at the venue can now be paired as a clock-in terminal under Manage > Rota > Clock-In Terminals. It shows who's on the rota today, by first name and surname initial; staff tap their name and enter their PIN to clock in or out.",
+      "Staff who forget their PIN, or haven't set one, can scan the code shown on the terminal with their phone instead, signing in first if they need to. The code changes every 30 seconds, so it only works for someone standing at the tablet.",
       "Clocking in is only allowed around a published shift at that location - by default from an hour before it starts until an hour after it ends. The window can be changed under Rota Settings. Clocking out is always allowed.",
-      "Five wrong PINs in a minute locks that person out on that terminal for 30 seconds.",
+      "Five wrong PINs lock that person out on every terminal for 30 seconds, and each further lockout lasts twice as long, up to an hour. Entering the right PIN resets it.",
       "Managers can unpair a terminal at any time, and it stops working straight away.",
       "Added a Timesheets page under Manage > Rota showing each person's clocked time next to their rota, including late starts, early finishes and shifts nobody clocked in for. Managers can approve time individually or all at once, and add or correct time for cover shifts and forgotten clock-ins.",
       "Time left on the clock for 16 hours is closed automatically and flagged for a manager to check, as is clocking out at a different location from the one you clocked in at.",
