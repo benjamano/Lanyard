@@ -499,5 +499,19 @@
       "Chat is now kept for two years. Messages older than that are deleted automatically (pinned posts stay until they're unpinned), along with reports two years after they were dealt with.",
       "Removed the old CanClockIn role from Manage > Roles. It controlled the placeholder clock-in page, and clocking in now works from the rota for everyone with a shift."
     ]
+  },
+  {
+    "version": "1.4.9",
+    "releaseDate": "2026-09-25",
+    "summary": "Pages fit on a phone screen again, with no sideways scrolling.",
+    "details": [
+      "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",
+      "Tables that are too wide for a phone now scroll within their own box. The rest of the page stays still.",
+      "The tabs on My Shifts, Training and similar pages move onto a second row on a phone, so you can see every tab.",
+      "My Training shows the course, due date and status on a phone without scrolling, and long course names wrap onto a second line. Before, some names showed only as \"…\".",
+      "On a phone, the Rota Builder's day picker fits a whole week on screen.",
+      "The DMX desk's client picker moves onto its own line on narrow phones.",
+      "The Projection Programs and Projection Templates editors show their panels one above another on a phone. Before, the panels were too narrow to read."
+    ]
   }
 ]

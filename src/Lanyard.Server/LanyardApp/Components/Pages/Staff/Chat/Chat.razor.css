@@ -30,16 +30,14 @@
     background: var(--colorNeutralBackground2);
 }
 
-/* Phone: one pane at a time, full width, clear of the bottom nav bar. */
+/* Phone: one pane at a time, clear of the bottom nav bar. No negative-margin bleed to the screen
+   edges: the content area is itself the horizontal scroll box, so anything poking past its 12px
+   margin just makes the whole page scroll sideways. */
 @media (max-width: 767.98px) {
     .chat-page {
         grid-template-columns: 1fr;
         height: calc(100dvh - 44px - 24px - 80px);
         min-height: 360px;
-        border-radius: 0;
-        border-left: none;
-        border-right: none;
-        margin: 0 -12px;
     }
 
     .chat-inbox {

@@ -18,7 +18,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 0 0 52px;
+    /* Grows to fill, so a week's 7 days fit a phone with no sideways scroll; a month's 31 still
+       overflow and swipe, which is what the strip's overflow-x is there for. */
+    flex: 1 0 44px;
     padding: 6px 0;
     border: 1px solid var(--colorNeutralStroke1);
     border-radius: 6px;
