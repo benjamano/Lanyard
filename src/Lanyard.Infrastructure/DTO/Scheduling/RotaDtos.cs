@@ -73,6 +73,21 @@ public static class RotaNames
 
         return string.IsNullOrWhiteSpace(name) ? user.UserName ?? "Unknown" : name;
     }
+
+    // For screens anyone can see (the clock-in terminal): "Amy C.", enough to find yourself
+    // and to tell two Amys apart, without a full name. Never falls back to an email address.
+    public static string Public(UserProfile? user)
+    {
+        string first = user?.FirstName?.Trim() ?? string.Empty;
+        string last = user?.LastName?.Trim() ?? string.Empty;
+
+        if (first.Length == 0)
+        {
+            return user?.UserName ?? "Unknown";
+        }
+
+        return last.Length == 0 ? first : $"{first} {last[0]}.";
+    }
 }
 
 // The one place rota numbers are formatted, shared by contract-warning messages (service layer)
