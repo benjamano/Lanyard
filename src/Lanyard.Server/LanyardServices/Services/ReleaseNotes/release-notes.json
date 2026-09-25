@@ -311,7 +311,7 @@
     ]
   },
   {
-    "version": "1.3.22",
+    "version": "1.3.21",
     "releaseDate": "2026-09-24",
     "summary": "Performance and reliability improvements across staff pages, kiosks, DMX lighting, music and file streaming.",
     "details": [
@@ -343,7 +343,8 @@
       "Training analytics rankings (top scores, fastest completions) are computed in the database and return only the top rows.",
       "Dashboard pickers (home screen settings, program flow, dashboard list) no longer load every widget of every dashboard just to show names.",
       "User lists used for name lookups and the \"is this the first user?\" check no longer load and track every account row.",
-      "Automation actions checking whether a kiosk is online now run a single existence query instead of loading every connected kiosk."
+      "Automation actions checking whether a kiosk is online now run a single existence query instead of loading every connected kiosk.",
+      "The server no longer writes every SQL statement to the log, which was the single largest source of log volume in production."
     ]
   }
 ]
