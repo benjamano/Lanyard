@@ -6,8 +6,14 @@ using Lib.Net.Http.WebPush;
 namespace Lanyard.Application.Services.Notifications;
 
 // One push notification as the service worker shows it. Tag groups notifications on the phone:
-// a newer one with the same tag replaces the older one instead of stacking up.
-public record PushContent(string Title, string Body, string Url, string Tag, PushMessageUrgency Urgency, TimeSpan TimeToLive);
+// a newer one with the same tag replaces the older one instead of stacking up. Chat is set for
+// chat messages only: the service worker uses it to show the conversation as a thread.
+public record PushContent(string Title, string Body, string Url, string Tag, PushMessageUrgency Urgency, TimeSpan TimeToLive,
+    ChatPushLine? Chat = null);
+
+// One chat message as the service worker adds it to the conversation's notification. Conversation
+// is null for a direct message. Text is empty for anyone who has turned message text off.
+public record ChatPushLine(string Sender, string Text, string? Conversation);
 
 // The push wording for each notification payload. Kept short enough for a lock screen, and in
 // the same words as the matching email subject so the two read as one message.
@@ -112,13 +118,15 @@ public static class PushContentBuilder
 
     // "Tom Hughes" / "Tom Hughes in Weekend crew", with the message (or just that there is one,
     // for anyone who has turned message text off - Preview is empty then). Same tag per
-    // conversation, so a burst of messages shows as one notification that keeps updating.
+    // conversation, so a burst of messages shows as one notification: the service worker stacks
+    // them into a thread from Chat, and falls back to Title/Body if it can't.
     private static PushContent ChatMessage(ChatMessagePayload chat)
     {
         string title = chat.IsGroup ? $"{chat.AuthorName} in {chat.ConversationName}" : chat.AuthorName;
         string body = string.IsNullOrWhiteSpace(chat.Preview) ? "New message" : chat.Preview;
 
-        return new PushContent(title, body, $"/chat/{chat.ConversationId}", $"chat-{chat.ConversationId:N}", PushMessageUrgency.High, TimeSpan.FromDays(1));
+        return new PushContent(title, body, $"/chat/{chat.ConversationId}", $"chat-{chat.ConversationId:N}", PushMessageUrgency.High, TimeSpan.FromDays(1),
+            new ChatPushLine(chat.AuthorName, chat.Preview.Trim(), chat.IsGroup ? chat.ConversationName : null));
     }
 
     private static PushContent FromChatNotice(NotificationPayload payload)

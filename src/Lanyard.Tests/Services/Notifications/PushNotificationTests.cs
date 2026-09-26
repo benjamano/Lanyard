@@ -191,6 +191,41 @@ public class PushNotificationTests
     }
 
     [TestMethod]
+    public void PushContent_ChatMessage_CarriesTheLineForTheThread()
+    {
+        Guid id = Guid.NewGuid();
+        DateOnly today = new(2026, 9, 24);
+
+        PushContent direct = PushContentBuilder.Build(new ChatMessagePayload(id, false, "Tom Hughes", "Tom Hughes", "Are you in today?"), today);
+        Assert.AreEqual("Tom Hughes", direct.Title);
+        Assert.AreEqual(new ChatPushLine("Tom Hughes", "Are you in today?", null), direct.Chat);
+        Assert.AreEqual($"chat-{id:N}", direct.Tag);
+
+        PushContent group = PushContentBuilder.Build(new ChatMessagePayload(id, true, "Weekend crew", "Tom Hughes", "Running late"), today);
+        Assert.AreEqual("Tom Hughes in Weekend crew", group.Title);
+        Assert.AreEqual(new ChatPushLine("Tom Hughes", "Running late", "Weekend crew"), group.Chat);
+    }
+
+    [TestMethod]
+    public void PushContent_ChatMessage_WithPreviewsOff_HasNoText()
+    {
+        PushContent content = PushContentBuilder.Build(new ChatMessagePayload(Guid.NewGuid(), false, "Tom Hughes", "Tom Hughes", ""), new DateOnly(2026, 9, 24));
+
+        Assert.AreEqual("New message", content.Body);
+        Assert.AreEqual("", content.Chat!.Text);
+    }
+
+    [TestMethod]
+    public void PushContent_NonChat_HasNoChatLine()
+    {
+        PushContent content = PushContentBuilder.Build(
+            new ShiftReminderPayload(1, "Peterborough", new ShiftEmailLine(new DateOnly(2026, 9, 25), "09:00–17:00", null)),
+            new DateOnly(2026, 9, 24));
+
+        Assert.IsNull(content.Chat);
+    }
+
+    [TestMethod]
     public void TopicHeader_KeepsOnlyAllowedCharacters()
     {
         Assert.AreEqual("shift-reminder-20260925", WebPushSender.TopicHeader("shift-reminder-20260925"));
