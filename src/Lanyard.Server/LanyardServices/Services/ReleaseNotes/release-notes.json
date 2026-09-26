@@ -503,7 +503,7 @@
   {
     "version": "1.4.11",
     "releaseDate": "2026-09-25",
-    "summary": "The installed app now uses your company's logo as its icon, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
+    "summary": "The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
     "details": [
       "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
@@ -511,6 +511,7 @@
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
       "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge.",
       "When you install Lanyard on your phone, the app icon is now your company's logo, if your company has uploaded one. Otherwise it's still the λ. If you've already installed Lanyard, Android switches the icon over by itself within a day or so. On an iPhone, remove Lanyard from your home screen and add it again.",
+      "When the app icon is your company's logo, a small Lanyard λ now sits in its bottom-right corner so you can tell it's Lanyard. It's black or white, whichever stands out, and is left off if your logo fills that corner.",
       "On Android phones with themed icons switched on, the Lanyard app icon now changes colour to match your other apps. Remove Lanyard from your home screen and add it again to get the new icon.",
       "The loading spinner shown while Lanyard starts up is now Lanyard green instead of blue.",
       "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",
@@ -524,7 +525,8 @@
       "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side.",
       "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages.",
       "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules.",
-      "Lanyard now keeps you signed in, including in the installed app on your phone. Before, you were often signed out whenever your phone closed the app in the background. There's a new \"Keep me signed in\" box on the login page, ticked by default. You stay signed in for 90 days, and that restarts each time you use Lanyard. Untick the box on a shared computer, and you'll be signed out when the browser closes."
+      "Lanyard now keeps you signed in, including in the installed app on your phone. Before, you were often signed out whenever your phone closed the app in the background. There's a new \"Keep me signed in\" box on the login page, ticked by default. You stay signed in for 90 days, and that restarts each time you use Lanyard. Untick the box on a shared computer, and you'll be signed out when the browser closes.",
+      "When you install Lanyard on your phone or computer, the app is now named after your company (for example \"Acme Leisure\") instead of \"Lanyard\". The install prompt and the steps under Account > Notifications use your company's name and logo too. If you've already installed it, Android may update the name by itself or ask you to confirm the update. On an iPhone, remove it from your home screen and add it again."
     ]
   }
 ]

@@ -25,6 +25,6 @@ public interface IAppIconService
     /// <summary>A square PNG of the logo, padded onto a background it stays visible on.</summary>
     Task<Result<byte[]>> RenderLogoIconAsync(Guid logoFileId, int size, AppIconPurpose purpose, CancellationToken cancellationToken);
 
-    /// <summary>The web app manifest JSON for a company that has a logo.</summary>
-    string BuildCompanyManifestJson(CompanyBrandingInfo branding, Guid logoFileId);
+    /// <summary>The web app manifest JSON for a company: its name, colour, and logo icons if it has a logo.</summary>
+    string BuildCompanyManifestJson(CompanyBrandingInfo branding);
 }

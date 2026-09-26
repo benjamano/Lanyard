@@ -355,7 +355,8 @@ public class CompanyLocationServiceTests
         Result<CompanyBrandingInfo> result = await service.GetCompanyBrandingAsync(company.Id);
 
         Assert.IsTrue(result.Success, result.Error);
-        Assert.AreEqual("#C8102E", result.Data!.ThemeColorHex);
+        Assert.AreEqual(company.Name, result.Data!.Name);
+        Assert.AreEqual("#C8102E", result.Data.ThemeColorHex);
         Assert.AreEqual(logoFileId, result.Data.LogoFileId);
         Assert.AreEqual(backgroundImageFileId, result.Data.BackgroundImageFileId);
     }

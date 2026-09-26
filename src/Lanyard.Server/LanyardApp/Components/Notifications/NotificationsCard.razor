@@ -38,14 +38,14 @@
                     <FluentText Style="color: var(--colorNeutralForeground3);">
                         @if (device!.IosSupportsPush)
                         {
-                            <text>On iPhone and iPad, notifications only work once Lanyard is on your Home Screen:</text>
+                            <text>On iPhone and iPad, notifications only work once @installLinks.AppName is on your Home Screen:</text>
                         }
                         else
                         {
-                            <text>Notifications need iOS 16.4 or later. You can still add Lanyard to your Home Screen:</text>
+                            <text>Notifications need iOS 16.4 or later. You can still add @installLinks.AppName to your Home Screen:</text>
                         }
                     </FluentText>
-                    <InstallSteps Device="@(device!)" />
+                    <InstallSteps Device="@(device!)" AppName="@installLinks.AppName" IconHref="@installLinks.AppleTouchIconHref" />
                     break;
 
                 case DeviceState.Unsupported:
@@ -86,8 +86,8 @@
             @if (showInstallSteps)
             {
                 <details class="notifications-install">
-                    <summary>Add Lanyard to your home screen</summary>
-                    <InstallSteps Device="@(device!)" />
+                    <summary>Add @installLinks.AppName to your home screen</summary>
+                    <InstallSteps Device="@(device!)" AppName="@installLinks.AppName" IconHref="@installLinks.AppleTouchIconHref" />
                 </details>
             }
         </section>
@@ -196,6 +196,7 @@
     private bool isManager;
     private bool isBusy;
     private bool showInstallSteps;
+    private AppInstallLinks installLinks = AppInstallLinks.Default;
     private bool bound;
     private List<PushDeviceView> devices = [];
     private List<TopicPreference> preferences = [];
@@ -235,6 +236,17 @@
 
             userId = user.Data;
             isManager = await _securityService.IsCurrentUserInRoleAsync("Admin") || await _securityService.IsCurrentUserInRoleAsync("Manager");
+
+            // Install steps name the app as it'll appear once installed - the same company MainLayout brands with.
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+            if (scope is { IsSuccess: true, Data.CompanyId: int companyId })
+            {
+                Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
+                if (branding is { IsSuccess: true, Data: CompanyBrandingInfo info })
+                {
+                    installLinks = AppInstallLinks.For(info);
+                }
+            }
 
             Result<bool> previews = await PreferenceService.GetShowMessagePreviewsAsync(userId);
             showPreviews = !previews.IsSuccess || previews.Data;
