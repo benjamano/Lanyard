@@ -288,6 +288,9 @@
     private bool scrollToBottom;
     private double? keepFromHeight;
 
+    // Set once the conversation has been marked read; the next render clears its push notification.
+    private bool clearNotifications;
+
     // Whether the page is actually on screen. Only then does the conversation count as being
     // read (no push, marked read); a tab in the background or a locked phone doesn't.
     private bool pageVisible = true;
@@ -410,6 +413,7 @@
         if (pageVisible)
         {
             await ChatService.MarkReadAsync(UserId, ConversationId);
+            clearNotifications = true;
         }
     }
 
@@ -476,6 +480,12 @@
                 {
                     await OnVisibilityChanged(false);
                 }
+            }
+
+            if (clearNotifications && pageVisible)
+            {
+                clearNotifications = false;
+                await JS.InvokeVoidAsync("lanyardChat.clearNotifications", $"chat-{ConversationId:N}");
             }
 
             if (keepFromHeight is double height)
