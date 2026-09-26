@@ -503,7 +503,7 @@
   {
     "version": "1.4.11",
     "releaseDate": "2026-09-25",
-    "summary": "The installed app now uses your company's logo as its icon, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
+    "summary": "The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
     "details": [
       "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
@@ -523,7 +523,8 @@
       "Fixed the \"Write a message\" placeholder in Chat staying visible under what you're typing on an Android phone until you pressed space.",
       "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side.",
       "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages.",
-      "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules."
+      "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules.",
+      "When you install Lanyard on your phone or computer, the app is now named after your company (for example \"Acme Leisure\") instead of \"Lanyard\". The install prompt and the steps under Account > Notifications use your company's name and logo too. If you've already installed it, Android may update the name by itself or ask you to confirm the update. On an iPhone, remove it from your home screen and add it again."
     ]
   }
 ]

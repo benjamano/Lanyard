@@ -196,12 +196,12 @@
 
     <script src="@Assets["js/bootCloak.js"]"></script>
 
-    @* Both point at the company's logo icons when the company is known - see ResolveInstallLinksAsync. *@
+    @* These, and the home-screen title below, follow the company when it's known - see ResolveInstallLinksAsync. *@
     <link rel="manifest" href="@_installLinks.ManifestHref" />
     @* iPhone/iPad home-screen install: its own icon (iOS ignores manifest icons) and name, and
        standalone mode, which is what lets a home-screen Lanyard receive push notifications. *@
     <link rel="apple-touch-icon" href="@_installLinks.AppleTouchIconHref" />
-    <meta name="apple-mobile-web-app-title" content="Lanyard" />
+    <meta name="apple-mobile-web-app-title" content="@_installLinks.AppName" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="@BrandConstants.PrimaryColorHex" />
@@ -265,9 +265,9 @@
         }
     }
 
-    // Which company's logo an install from this page should use: the one picked on the login page
+    // Which company's name and logo an install from this page should use: the one picked on the login page
     // (?company=), else the signed-in user's company, else the last company this device saw (the
-    // cookie lanyardSetAppCompany sets). Nothing known, or no logo -> the default λ icons.
+    // cookie lanyardSetAppCompany sets). Nothing known -> Lanyard's own name and λ icons.
     private async Task<AppInstallLinks> ResolveInstallLinksAsync()
     {
         Result<CompanyBrandingInfo>? branding = null;
@@ -289,7 +289,7 @@
         }
 
         return branding is { IsSuccess: true, Data: CompanyBrandingInfo info }
-            ? AppInstallLinks.For(info.CompanyId, info.LogoFileId)
+            ? AppInstallLinks.For(info)
             : AppInstallLinks.Default;
     }
 

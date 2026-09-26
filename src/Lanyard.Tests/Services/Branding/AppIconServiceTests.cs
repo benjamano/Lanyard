@@ -209,15 +209,17 @@ public class AppIconServiceTests
     }
 
     [TestMethod]
-    public void BuildCompanyManifestJson_UsesCompanyColourAndLogoIconsWithoutMonochrome()
+    public void BuildCompanyManifestJson_UsesCompanyNameColourAndLogoIconsWithoutMonochrome()
     {
         (AppIconService service, _) = GetService([]);
-        CompanyBrandingInfo branding = new(7, "#c8102e", LogoFileId, null);
+        CompanyBrandingInfo branding = new(7, "Acme Leisure", "#c8102e", LogoFileId, null);
 
-        using JsonDocument manifest = JsonDocument.Parse(service.BuildCompanyManifestJson(branding, LogoFileId));
+        using JsonDocument manifest = JsonDocument.Parse(service.BuildCompanyManifestJson(branding));
         JsonElement root = manifest.RootElement;
 
         Assert.AreEqual("/", root.GetProperty("id").GetString(), "Must keep the same app id as the default manifest.");
+        Assert.AreEqual("Acme Leisure", root.GetProperty("name").GetString());
+        Assert.AreEqual("Acme Leisure", root.GetProperty("short_name").GetString());
         Assert.AreEqual("#c8102e", root.GetProperty("theme_color").GetString());
 
         List<JsonElement> icons = root.GetProperty("icons").EnumerateArray().ToList();
@@ -228,9 +230,48 @@ public class AppIconServiceTests
     }
 
     [TestMethod]
-    public void AppInstallLinks_For_CompanyWithoutLogo_UsesDefaults()
+    public void BuildCompanyManifestJson_CompanyWithoutLogo_KeepsNameButUsesDefaultIcons()
     {
-        Assert.AreEqual(AppInstallLinks.Default, AppInstallLinks.For(7, null));
-        Assert.AreEqual($"/api/companies/7/manifest.webmanifest?v={LogoFileId:N}", AppInstallLinks.For(7, LogoFileId).ManifestHref);
+        (AppIconService service, _) = GetService([]);
+        CompanyBrandingInfo branding = new(7, "Acme Leisure", null, null, null);
+
+        using JsonDocument manifest = JsonDocument.Parse(service.BuildCompanyManifestJson(branding));
+        JsonElement root = manifest.RootElement;
+
+        Assert.AreEqual("Acme Leisure", root.GetProperty("name").GetString());
+        List<string> srcs = root.GetProperty("icons").EnumerateArray().Select(x => x.GetProperty("src").GetString()!).ToList();
+        CollectionAssert.Contains(srcs, "/icon-192.png");
+        Assert.IsTrue(srcs.All(x => !x.StartsWith("/api/")));
+    }
+
+    [TestMethod]
+    public void BuildCompanyManifestJson_BlankCompanyName_FallsBackToLanyard()
+    {
+        (AppIconService service, _) = GetService([]);
+        CompanyBrandingInfo branding = new(7, "   ", null, LogoFileId, null);
+
+        using JsonDocument manifest = JsonDocument.Parse(service.BuildCompanyManifestJson(branding));
+
+        Assert.AreEqual("Lanyard", manifest.RootElement.GetProperty("name").GetString());
+    }
+
+    [TestMethod]
+    public void AppInstallLinks_For_CompanyWithoutLogo_StillUsesCompanyManifestAndName()
+    {
+        AppInstallLinks links = AppInstallLinks.For(new CompanyBrandingInfo(7, " Acme Leisure ", null, null, null));
+
+        StringAssert.StartsWith(links.ManifestHref, "/api/companies/7/manifest.webmanifest?v=");
+        Assert.AreEqual(AppInstallLinks.Default.AppleTouchIconHref, links.AppleTouchIconHref);
+        Assert.AreEqual("Acme Leisure", links.AppName);
+    }
+
+    [TestMethod]
+    public void AppInstallLinks_For_ManifestVersionChangesWithNameButIsStable()
+    {
+        CompanyBrandingInfo branding = new(7, "Acme", "#c8102e", LogoFileId, null);
+
+        Assert.AreEqual(AppInstallLinks.For(branding).ManifestHref, AppInstallLinks.For(branding).ManifestHref);
+        Assert.AreNotEqual(AppInstallLinks.For(branding).ManifestHref, AppInstallLinks.For(branding with { Name = "Acme Leisure" }).ManifestHref);
+        Assert.AreEqual($"/api/companies/7/app-icon/180?v={LogoFileId:N}", AppInstallLinks.For(branding).AppleTouchIconHref);
     }
 }

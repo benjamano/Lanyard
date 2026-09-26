@@ -69,7 +69,7 @@
         <AuthorizeView>
             <Authorized>
                 <DeviceSync />
-                <InstallAppPrompt />
+                <InstallAppPrompt AppName="@_installLinks.AppName" IconHref="@_installLinks.AppleTouchIconHref" />
             </Authorized>
         </AuthorizeView>
         <ErrorBoundary @ref="_errorBoundary">
@@ -121,6 +121,7 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+    private AppInstallLinks _installLinks = AppInstallLinks.Default;
     private string? _locationDisplayName;
 
     // The login page's background image should bleed to the viewport edges - the standard
@@ -163,7 +164,7 @@
         _companyLogoUrl = null;
         _locationDisplayName = null;
         int? brandedCompanyId = null;
-        AppInstallLinks installLinks = AppInstallLinks.Default;
+        _installLinks = AppInstallLinks.Default;
 
         try
         {
@@ -184,7 +185,7 @@
                         : null;
 
                     brandedCompanyId = companyId;
-                    installLinks = AppInstallLinks.For(companyId, branding.Data.LogoFileId);
+                    _installLinks = AppInstallLinks.For(branding.Data);
                 }
             }
         }
@@ -206,7 +207,7 @@
 
             if (brandedCompanyId is int appCompanyId)
             {
-                await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, installLinks.ManifestHref, installLinks.AppleTouchIconHref);
+                await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, _installLinks.ManifestHref, _installLinks.AppleTouchIconHref, _installLinks.AppName);
             }
         }
         catch { }

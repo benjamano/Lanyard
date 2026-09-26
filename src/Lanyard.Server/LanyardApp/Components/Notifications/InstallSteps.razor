@@ -1,7 +1,7 @@
 @using Lanyard.Application.Services.Notifications
 @using Lanyard.Infrastructure.Enum
 
-@* How to put Lanyard on this device's home screen, in that device's own words. Shared by the
+@* How to put the app on this device's home screen, in that device's own words. Shared by the
    install popup and the Notifications card. *@
 <ol class="install-steps">
     @if (Device.IsApple)
@@ -15,8 +15,8 @@
             <span>Choose <strong>Add to Home Screen</strong>. Scroll down the list if you can't see it.</span>
         </li>
         <li>
-            <span class="install-step-icon"><img src="icon-192.png" alt="" /></span>
-            <span>Tap <strong>Add</strong>, then open Lanyard from your Home Screen and sign in once more.</span>
+            <span class="install-step-icon"><img src="@IconHref" alt="" /></span>
+            <span>Tap <strong>Add</strong>, then open @AppName from your Home Screen and sign in once more.</span>
         </li>
     }
     else if (Device.Platform == DevicePlatform.Android)
@@ -30,15 +30,15 @@
             <span>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong></span>
         </li>
         <li>
-            <span class="install-step-icon"><img src="icon-192.png" alt="" /></span>
-            <span>Open Lanyard from your home screen</span>
+            <span class="install-step-icon"><img src="@IconHref" alt="" /></span>
+            <span>Open @AppName from your home screen</span>
         </li>
     }
     else
     {
         <li>
             <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.AddSquare())" Color="Color.Custom" CustomColor="currentColor" /></span>
-            <span>Use the install button in the address bar, or the browser menu's <strong>Install Lanyard</strong></span>
+            <span>Use the install button in the address bar, or the browser menu's <strong>Install @AppName</strong></span>
         </li>
     }
 </ol>
@@ -46,6 +46,10 @@
 @code {
     [Parameter, EditorRequired]
     public required DeviceDescription Device { get; set; }
+
+    // What the installed app is called and looks like - the company's, when it's known.
+    [Parameter] public string AppName { get; set; } = AppInstallLinks.DefaultAppName;
+    [Parameter] public string IconHref { get; set; } = "icon-192.png";
 
     // Safari's Share button sits in the bottom toolbar on iPhone (inside ⋯ on newer iOS) and at
     // the top on iPad; Chrome and Edge on iOS keep it in the address bar.

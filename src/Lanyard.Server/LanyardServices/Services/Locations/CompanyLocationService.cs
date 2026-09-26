@@ -378,7 +378,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -415,7 +415,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             Company company = companies[0];
 
             return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(
-                company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+                company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -440,7 +440,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.Name, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {

@@ -96,35 +96,53 @@ public class AppIconService(IFileService fileService, IMemoryCache cache) : IApp
         }
     }
 
-    public string BuildCompanyManifestJson(CompanyBrandingInfo branding, Guid logoFileId)
+    public string BuildCompanyManifestJson(CompanyBrandingInfo branding)
     {
-        string iconBase = $"/api/companies/{branding.CompanyId}/app-icon";
-        string version = logoFileId.ToString("N");
+        string appName = AppInstallLinks.AppNameFor(branding.Name);
 
-        // Same id, name and scope as wwwroot/manifest.webmanifest, so it stays the one installed
-        // Lanyard app: Android swaps the existing home-screen icon over on its next manifest check
-        // instead of treating it as a second app. No "monochrome" icon - Android's themed icons would
-        // recolour it to a flat silhouette, which a full-colour logo doesn't survive.
+        // Same id and scope as wwwroot/manifest.webmanifest, so it stays the one installed Lanyard
+        // app: Android swaps the existing home-screen icon and name over on its next manifest check
+        // instead of treating it as a second app.
         object manifest = new
         {
             id = "/",
-            name = "Lanyard",
-            short_name = "Lanyard",
+            name = appName,
+            short_name = appName,
             start_url = "/",
             scope = "/",
             display = "standalone",
             background_color = "#ffffff",
             theme_color = BrandConstants.ResolveAccentColor(branding.ThemeColorHex),
-            icons = new object[]
-            {
-                new { src = $"{iconBase}/192?v={version}", sizes = "192x192", type = "image/png", purpose = "any" },
-                new { src = $"{iconBase}/512?v={version}", sizes = "512x512", type = "image/png", purpose = "any" },
-                new { src = $"{iconBase}/512?maskable=true&v={version}", sizes = "512x512", type = "image/png", purpose = "maskable" }
-            }
+            icons = branding.LogoFileId is Guid logoFileId ? LogoIcons(branding.CompanyId, logoFileId) : DefaultIcons
         };
 
         return JsonSerializer.Serialize(manifest);
     }
+
+    // No "monochrome" icon - Android's themed icons would recolour it to a flat silhouette, which a
+    // full-colour logo doesn't survive.
+    private static object[] LogoIcons(int companyId, Guid logoFileId)
+    {
+        string iconBase = $"/api/companies/{companyId}/app-icon";
+        string version = logoFileId.ToString("N");
+
+        return
+        [
+            new { src = $"{iconBase}/192?v={version}", sizes = "192x192", type = "image/png", purpose = "any" },
+            new { src = $"{iconBase}/512?v={version}", sizes = "512x512", type = "image/png", purpose = "any" },
+            new { src = $"{iconBase}/512?maskable=true&v={version}", sizes = "512x512", type = "image/png", purpose = "maskable" }
+        ];
+    }
+
+    // The λ icons from wwwroot/manifest.webmanifest, rooted because this manifest is served from /api.
+    private static readonly object[] DefaultIcons =
+    [
+        new { src = "/favicon-144.png", sizes = "144x144", type = "image/png", purpose = "any" },
+        new { src = "/icon-192.png", sizes = "192x192", type = "image/png", purpose = "any" },
+        new { src = "/icon-512.png", sizes = "512x512", type = "image/png", purpose = "any" },
+        new { src = "/icon-maskable-512.png", sizes = "512x512", type = "image/png", purpose = "maskable" },
+        new { src = "/icon-monochrome-512.png", sizes = "512x512", type = "image/png", purpose = "monochrome" }
+    ];
 
     private static byte[] RenderIcon(SKBitmap logo, int size, AppIconPurpose purpose)
     {

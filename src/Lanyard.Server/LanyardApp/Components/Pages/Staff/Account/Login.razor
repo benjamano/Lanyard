@@ -170,9 +170,9 @@ else
     [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public string? BackgroundImageUrl { get; set; }
 
-    // Which logo the installed app's icon should use - see OnAfterRenderAsync.
+    // Which name and logo the installed app should use - see OnAfterRenderAsync.
     [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
-    public Guid? SelectedLogoFileId { get; set; }
+    public CompanyBrandingInfo? SelectedBranding { get; set; }
 
     // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
     private string? _pendingThemeColor;
@@ -217,7 +217,7 @@ else
         LocationOptions = [];
         SelectedAccentColor = null;
         SelectedLogoUrl = null;
-        SelectedLogoFileId = null;
+        SelectedBranding = null;
         BackgroundImageUrl = null;
 
         if (CompanyId is null)
@@ -243,7 +243,7 @@ else
 
         SelectedAccentColor = branding.Data!.ThemeColorHex;
         SelectedLogoUrl = branding.Data!.LogoFileId is Guid ? $"/api/companies/{CompanyId}/logo" : null;
-        SelectedLogoFileId = branding.Data!.LogoFileId;
+        SelectedBranding = branding.Data;
         BackgroundImageUrl = branding.Data!.BackgroundImageFileId is Guid ? $"/api/companies/{CompanyId}/background" : null;
 
         // Reflects the chosen company's brand color in the page's overall Fluent theme (not
@@ -272,13 +272,14 @@ else
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Picking a company only changes the query string in-circuit, so App.razor's <head> still
-        // links whatever manifest the page first loaded with. Swap it to this company's logo icons,
+        // links whatever manifest the page first loaded with. Swap it to this company's name and icons,
         // so "Install app"/"Add to Home Screen" from here uses them.
-        if (CompanyId is int appCompanyId && StateLoaded && appCompanyId != _appliedAppCompanyId)
+        if (CompanyId is int appCompanyId && StateLoaded && SelectedBranding is CompanyBrandingInfo selectedBranding
+            && appCompanyId != _appliedAppCompanyId)
         {
             _appliedAppCompanyId = appCompanyId;
-            AppInstallLinks installLinks = AppInstallLinks.For(appCompanyId, SelectedLogoFileId);
-            await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, installLinks.ManifestHref, installLinks.AppleTouchIconHref);
+            AppInstallLinks installLinks = AppInstallLinks.For(selectedBranding);
+            await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, installLinks.ManifestHref, installLinks.AppleTouchIconHref, installLinks.AppName);
         }
 
         if (_pendingThemeColor is null || _pendingThemeColor == _appliedThemeColor)

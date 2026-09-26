@@ -107,9 +107,9 @@ namespace Lanyard.API.Controllers
         }
     
 
-        // The installed app's manifest for one company (linked from App.razor's <head>). A company
-        // with no logo - or one that can't be found - gets the default λ manifest, so installing
-        // Lanyard never fails just because branding isn't set up.
+        // The installed app's manifest for one company (linked from App.razor's <head>): the company's
+        // name, colour and - if it has a logo - logo icons. A company that can't be found gets the
+        // default λ manifest, so installing Lanyard never fails just because branding isn't set up.
         [HttpGet("{companyId:int}/manifest.webmanifest")]
         [AllowAnonymous]
         [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
@@ -117,12 +117,12 @@ namespace Lanyard.API.Controllers
         {
             Result<CompanyBrandingInfo> branding = await _companyLocationService.GetCompanyBrandingAsync(companyId);
 
-            if (!branding.Success || branding.Data?.LogoFileId is not Guid logoFileId)
+            if (!branding.Success || branding.Data is null)
             {
                 return Redirect("/manifest.webmanifest");
             }
 
-            return Content(_appIconService.BuildCompanyManifestJson(branding.Data, logoFileId), "application/manifest+json");
+            return Content(_appIconService.BuildCompanyManifestJson(branding.Data), "application/manifest+json");
         }
 
         // The company's logo as a square app icon. Like GetLogo it takes only a companyId and
