@@ -33,6 +33,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Services\ReleaseNotes\release-notes.json" />
+    <!-- The white λ on transparency, stamped as a badge onto icons made from a company's logo. -->
+    <EmbeddedResource Include="..\LanyardApp\wwwroot\icon-monochrome-512.png" LogicalName="Lanyard.AppIconBadge.png" Link="Services\Branding\icon-monochrome-512.png" />
   </ItemGroup>
 
 </Project>

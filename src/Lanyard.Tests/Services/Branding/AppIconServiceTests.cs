@@ -44,15 +44,17 @@ public class AppIconServiceTests
 
     private static SKBitmap Decode(byte[] png) => SKBitmap.Decode(png) ?? throw new AssertFailedException("Icon is not a valid image.");
 
-    // Bounds of every pixel that differs from the icon's corner (background) colour.
-    private static SKRectI ContentBounds(SKBitmap icon)
+    // Bounds of every pixel that differs from the icon's corner (background) colour, optionally only
+    // looking within `area` (e.g. to leave the λ badge out).
+    private static SKRectI ContentBounds(SKBitmap icon, SKRectI? area = null)
     {
         SKColor background = icon.GetPixel(0, 0);
+        SKRectI scan = area ?? new SKRectI(0, 0, icon.Width, icon.Height);
         int left = icon.Width, top = icon.Height, right = -1, bottom = -1;
 
-        for (int y = 0; y < icon.Height; y++)
+        for (int y = scan.Top; y < scan.Bottom; y++)
         {
-            for (int x = 0; x < icon.Width; x++)
+            for (int x = scan.Left; x < scan.Right; x++)
             {
                 if (icon.GetPixel(x, y) == background)
                 {
@@ -67,6 +69,27 @@ public class AppIconServiceTests
         }
 
         return new SKRectI(left, top, right + 1, bottom + 1);
+    }
+
+    // How many pixels in `area` are close to `colour` - enough of them means the λ badge was drawn there.
+    private static int CountPixelsNear(SKBitmap icon, SKRectI area, SKColor colour)
+    {
+        int count = 0;
+
+        for (int y = area.Top; y < area.Bottom; y++)
+        {
+            for (int x = area.Left; x < area.Right; x++)
+            {
+                SKColor pixel = icon.GetPixel(x, y);
+
+                if (Math.Abs(pixel.Red - colour.Red) < 16 && Math.Abs(pixel.Green - colour.Green) < 16 && Math.Abs(pixel.Blue - colour.Blue) < 16)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
 
     [TestMethod]
@@ -114,7 +137,8 @@ public class AppIconServiceTests
         Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, 512, AppIconPurpose.Any, CancellationToken.None);
 
         using SKBitmap icon = Decode(result.Data!);
-        SKRectI bounds = ContentBounds(icon);
+        // The λ badge sits in the bottom-right below the logo, so only measure above it.
+        SKRectI bounds = ContentBounds(icon, new SKRectI(0, 0, 512, 340));
 
         Assert.IsTrue(Math.Abs(bounds.Width - 410) <= 2, $"Width was {bounds.Width}");
         Assert.IsTrue(Math.Abs(bounds.Height - 102) <= 2, $"Height was {bounds.Height}");
@@ -130,7 +154,8 @@ public class AppIconServiceTests
         Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, 512, AppIconPurpose.Maskable, CancellationToken.None);
 
         using SKBitmap icon = Decode(result.Data!);
-        SKRectI bounds = ContentBounds(icon);
+        // Measure the logo only, above the λ badge (checked separately below).
+        SKRectI bounds = ContentBounds(icon, new SKRectI(0, 0, 512, 310));
 
         // Android's safe zone is a centred circle with radius 40% of the icon (204.8px at 512).
         float halfDiagonal = MathF.Sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height) / 2f;
@@ -161,6 +186,95 @@ public class AppIconServiceTests
 
         using SKBitmap icon = Decode(result.Data!);
         Assert.AreEqual(SKColors.White, icon.GetPixel(0, 0));
+    }
+
+    [TestMethod]
+    [DataRow(180)]
+    [DataRow(192)]
+    [DataRow(512)]
+    public async Task RenderLogoIconAsync_WideLogo_GetsDarkLambdaBadgeInBottomRightOnWhite(int size)
+    {
+        byte[] logo = MakePng(400, 100, SKColors.Transparent, SKColors.DarkRed, SKRect.Create(0, 0, 400, 100));
+        (AppIconService service, _) = GetService(logo);
+
+        Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, size, AppIconPurpose.Any, CancellationToken.None);
+
+        using SKBitmap icon = Decode(result.Data!);
+        SKRectI badgeArea = new(size * 7 / 10, size * 7 / 10, size * 9 / 10, size * 9 / 10);
+
+        Assert.AreEqual(SKColors.White, icon.GetPixel(0, 0));
+        Assert.IsTrue(CountPixelsNear(icon, badgeArea, SKColor.Parse("#171717")) > badgeArea.Width * badgeArea.Height / 10,
+            "Expected a dark λ in the bottom-right corner.");
+
+        // Nothing drawn past 90%, so iOS's rounded corner can't clip it.
+        SKRectI edge = new(size * 91 / 100, 0, size, size);
+        Assert.AreEqual(0, CountPixelsNear(icon, edge, SKColor.Parse("#171717")));
+    }
+
+    [TestMethod]
+    public async Task RenderLogoIconAsync_WhiteLogoOnTransparent_GetsWhiteLambdaBadgeOnDark()
+    {
+        // A white wordmark with transparent gaps (between letters, say), so it gets the dark background.
+        byte[] logo = MakePng(400, 100, SKColors.Transparent, SKColors.White, SKRect.Create(0, 0, 400, 90));
+        (AppIconService service, _) = GetService(logo);
+
+        Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, 512, AppIconPurpose.Any, CancellationToken.None);
+
+        using SKBitmap icon = Decode(result.Data!);
+        SKRectI badgeArea = new(358, 358, 461, 461);
+
+        Assert.AreEqual(SKColor.Parse("#171717"), icon.GetPixel(0, 0));
+        Assert.IsTrue(CountPixelsNear(icon, badgeArea, SKColors.White) > badgeArea.Width * badgeArea.Height / 10,
+            "Expected a white λ in the bottom-right corner.");
+    }
+
+    [TestMethod]
+    public async Task RenderLogoIconAsync_LogoFillingCorner_GetsNoBadge()
+    {
+        // A solid square fills 80% of the icon, reaching right into the bottom-right corner.
+        byte[] logo = MakePng(100, 100, SKColors.Transparent, SKColors.Navy, SKRect.Create(0, 0, 100, 100));
+        (AppIconService service, _) = GetService(logo);
+
+        Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, 512, AppIconPurpose.Any, CancellationToken.None);
+
+        using SKBitmap icon = Decode(result.Data!);
+        SKRectI badgeArea = new(358, 358, 461, 461);
+
+        Assert.AreEqual(0, CountPixelsNear(icon, badgeArea, SKColor.Parse("#171717")));
+        Assert.AreEqual(0, CountPixelsNear(icon, badgeArea, SKColors.White));
+    }
+
+    [TestMethod]
+    public async Task RenderLogoIconAsync_MaskableBadgeStaysInsideSafeZoneCircle()
+    {
+        // A wide logo leaves the corner clear, so the badge is drawn.
+        byte[] logo = MakePng(400, 100, SKColors.Transparent, SKColors.DarkGreen, SKRect.Create(0, 0, 400, 100));
+        (AppIconService service, _) = GetService(logo);
+
+        Result<byte[]> result = await service.RenderLogoIconAsync(LogoFileId, 512, AppIconPurpose.Maskable, CancellationToken.None);
+
+        using SKBitmap icon = Decode(result.Data!);
+        int badgePixels = 0;
+
+        for (int y = 256; y < 512; y++)
+        {
+            for (int x = 256; x < 512; x++)
+            {
+                SKColor pixel = icon.GetPixel(x, y);
+
+                // Dark pixels are the badge: the logo is green and the background white.
+                if (pixel.Red > 64 || pixel.Green > 64 || pixel.Blue > 64)
+                {
+                    continue;
+                }
+
+                badgePixels++;
+                float distance = MathF.Sqrt((x - 256f) * (x - 256f) + (y - 256f) * (y - 256f));
+                Assert.IsTrue(distance <= 512 * 0.4f, $"Badge pixel at ({x},{y}) is {distance}px from the centre.");
+            }
+        }
+
+        Assert.IsTrue(badgePixels > 0, "Expected a λ badge on the maskable icon.");
     }
 
     [TestMethod]
