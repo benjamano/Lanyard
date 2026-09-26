@@ -301,10 +301,13 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 
 builder.Services.AddAuthorization();
 
-// Configure cookie to persist login across sessions
+// Configure cookie to persist login across sessions. Only applies when "Keep me signed in" is
+// ticked - otherwise it's a session cookie the browser drops on close (which on a phone is
+// whenever the OS kills the installed app). Sliding, so anyone who opens the app at least once
+// every ~45 days stays signed in; password changes still sign them out via the security stamp.
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.ExpireTimeSpan = TimeSpan.FromDays(90);
     options.SlidingExpiration = true;
     options.LoginPath = "/HandleLogin";
     options.LogoutPath = "/HandleLogout";

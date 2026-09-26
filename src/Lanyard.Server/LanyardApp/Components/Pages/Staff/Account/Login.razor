@@ -103,6 +103,12 @@ else
                             <FluentText>Loading Companies...</FluentText>
                         }
 
+                        @* The checkbox has no Name, so it isn't posted itself - the hidden input carries its
+                           state. It's ticked from the first render, so a submit before the circuit connects
+                           still keeps the user signed in. *@
+                        <FluentCheckbox @bind-Value="_rememberMe" Label="Keep me signed in" />
+                        <input type="hidden" name="rememberMe" value="@(_rememberMe ? "true" : "false")" />
+
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
                                      Class="login-submit-row">
                             <FluentButton Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
@@ -173,6 +179,10 @@ else
     // Which name and logo the installed app should use - see OnAfterRenderAsync.
     [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public CompanyBrandingInfo? SelectedBranding { get; set; }
+
+    // On by default: staff mostly log in from their own phone, where the installed app should
+    // stay signed in. Untick on a shared computer so closing the browser signs you out.
+    private bool _rememberMe = true;
 
     // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
     private string? _pendingThemeColor;

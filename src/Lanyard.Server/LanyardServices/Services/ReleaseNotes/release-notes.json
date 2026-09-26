@@ -525,6 +525,7 @@
       "On a phone, the Chat page now fills the screen down to the bottom bar, without an unnecessary scrollbar down the side.",
       "When you open the menu on a phone, it opens already scrolled to the page you are on, so you no longer have to scroll down to reach nearby pages.",
       "Shift and clock-in times can now be set to any time of day. Before, the time boxes wouldn't go earlier than 8am or later than 6pm, so evening and overnight shifts couldn't be added. This also applies to the time on scheduled automation rules and kiosk restart schedules.",
+      "Lanyard now keeps you signed in, including in the installed app on your phone. Before, you were often signed out whenever your phone closed the app in the background. There's a new \"Keep me signed in\" box on the login page, ticked by default. You stay signed in for 90 days, and that restarts each time you use Lanyard. Untick the box on a shared computer, and you'll be signed out when the browser closes.",
       "When you install Lanyard on your phone or computer, the app is now named after your company (for example \"Acme Leisure\") instead of \"Lanyard\". The install prompt and the steps under Account > Notifications use your company's name and logo too. If you've already installed it, Android may update the name by itself or ask you to confirm the update. On an iPhone, remove it from your home screen and add it again."
     ]
   }
