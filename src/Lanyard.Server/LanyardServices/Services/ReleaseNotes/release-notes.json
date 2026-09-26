@@ -511,6 +511,7 @@
       "When Lanyard is installed on an Android phone, the bar at the top of the screen now uses your company's theme colour instead of blue. It also works in Chrome's toolbar.",
       "The app icon, browser tab icon and the Lanyard logo in emails now use the λ logo instead of the old lanyard badge.",
       "When you install Lanyard on your phone, the app icon is now your company's logo, if your company has uploaded one. Otherwise it's still the λ. If you've already installed Lanyard, Android switches the icon over by itself within a day or so. On an iPhone, remove Lanyard from your home screen and add it again.",
+      "When the app icon is your company's logo, a small Lanyard λ now sits in its bottom-right corner so you can tell it's Lanyard. It's black or white, whichever stands out, and is left off if your logo fills that corner.",
       "On Android phones with themed icons switched on, the Lanyard app icon now changes colour to match your other apps. Remove Lanyard from your home screen and add it again to get the new icon.",
       "The loading spinner shown while Lanyard starts up is now Lanyard green instead of blue.",
       "Fixed pages sliding sideways on phones. This happened on Chat, My Shifts, Automation, Dashboards and Roles.",

@@ -34,6 +34,27 @@ public class AppIconService(IFileService fileService, IMemoryCache cache) : IApp
     // e.g. a white mark meant for a dark header, which would vanish on the default white background.
     private const double LightLogoLuminanceThreshold = 0.85;
 
+    // The Lanyard λ badge stamped in the icon's bottom-right corner, so a company's logo on a home
+    // screen is still recognisable as the Lanyard app. Sizes and positions are shares of the icon's
+    // width. "Any" icons anchor the badge's bottom-right at 90%, clear of iOS's rounded corner.
+    // Maskable icons anchor it at 77%, just inside the safe-zone circle (radius 40%) at 45 degrees,
+    // so Android's crop never cuts it off.
+    private const float AnyBadgeHeightRatio = 0.2f;
+    private const float AnyBadgeAnchorRatio = 0.9f;
+    private const float MaskableBadgeHeightRatio = 0.15f;
+    private const float MaskableBadgeAnchorRatio = 0.77f;
+
+    // Gap kept clear of the logo around the badge, and how far a pixel there may stray from the
+    // area's average colour (per channel, 0-255) and still count as background. A few stray pixels
+    // (JPEG noise, anti-aliasing) are allowed before the corner counts as taken by the logo.
+    private const float BadgeClearanceRatio = 0.025f;
+    private const int BadgeBackgroundTolerance = 40;
+    private const double BadgeMaxStrayPixelShare = 0.01;
+
+    private static readonly SKColor DarkBackground = SKColor.Parse("#171717");
+
+    private static readonly Lazy<(SKBitmap Glyph, SKRectI Bounds)> BadgeGlyph = new(LoadBadgeGlyph);
+
     public IReadOnlyCollection<int> SupportedSizes => Sizes;
 
     public async Task<Result<byte[]>> RenderLogoIconAsync(Guid logoFileId, int size, AppIconPurpose purpose, CancellationToken cancellationToken)
@@ -143,20 +164,117 @@ public class AppIconService(IFileService fileService, IMemoryCache cache) : IApp
         float drawHeight = height * scale;
         SKRect destination = SKRect.Create((size - drawWidth) / 2f, (size - drawHeight) / 2f, drawWidth, drawHeight);
 
-        using SKSurface surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
-        SKCanvas canvas = surface.Canvas;
+        using SKBitmap icon = new(size, size, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using SKCanvas canvas = new(icon);
 
-        canvas.Clear(hasTransparency && IsLightLogo(logo, content) ? SKColor.Parse("#171717") : SKColors.White);
+        canvas.Clear(hasTransparency && IsLightLogo(logo, content) ? DarkBackground : SKColors.White);
 
         using SKImage logoImage = SKImage.FromBitmap(logo);
         using SKPaint paint = new() { IsAntialias = true };
         canvas.DrawImage(logoImage, SKRect.Create(content.Left, content.Top, content.Width, content.Height), destination,
             new SKSamplingOptions(SKCubicResampler.Mitchell), paint);
+        canvas.Flush();
 
-        using SKImage snapshot = surface.Snapshot();
-        using SKData data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
+        DrawBadgeIfCornerIsClear(icon, canvas, purpose);
+
+        using SKData data = icon.Encode(SKEncodedImageFormat.Png, 100);
 
         return data.ToArray();
+    }
+
+    // Stamps the λ in the bottom-right corner, black or white, whichever stands out from what's
+    // behind it. Only when that corner is empty background: a logo that reaches into it (a square
+    // one filling the icon, say) is left alone rather than having the badge drawn over it.
+    private static void DrawBadgeIfCornerIsClear(SKBitmap icon, SKCanvas canvas, AppIconPurpose purpose)
+    {
+        (SKBitmap glyph, SKRectI glyphBounds) = BadgeGlyph.Value;
+        int size = icon.Width;
+
+        (float heightRatio, float anchorRatio) = purpose == AppIconPurpose.Maskable
+            ? (MaskableBadgeHeightRatio, MaskableBadgeAnchorRatio)
+            : (AnyBadgeHeightRatio, AnyBadgeAnchorRatio);
+
+        float badgeHeight = size * heightRatio;
+        float badgeWidth = badgeHeight * glyphBounds.Width / glyphBounds.Height;
+        float anchor = size * anchorRatio;
+        SKRect badge = new(anchor - badgeWidth, anchor - badgeHeight, anchor, anchor);
+
+        SKRect checkArea = badge;
+        checkArea.Inflate(size * BadgeClearanceRatio, size * BadgeClearanceRatio);
+
+        if (!TryGetUniformColour(icon, SKRectI.Round(checkArea), out SKColor background))
+        {
+            return;
+        }
+
+        double luminance = (0.2126 * background.Red + 0.7152 * background.Green + 0.0722 * background.Blue) / 255d;
+        SKColor badgeColour = luminance > 0.5 ? DarkBackground : SKColors.White;
+
+        // The glyph is a white λ on transparency; SrcIn keeps its shape and swaps in the badge colour.
+        using SKColorFilter tint = SKColorFilter.CreateBlendMode(badgeColour, SKBlendMode.SrcIn);
+        using SKPaint paint = new() { IsAntialias = true, ColorFilter = tint };
+        using SKImage glyphImage = SKImage.FromBitmap(glyph);
+        canvas.DrawImage(glyphImage, SKRect.Create(glyphBounds.Left, glyphBounds.Top, glyphBounds.Width, glyphBounds.Height), badge,
+            new SKSamplingOptions(SKCubicResampler.Mitchell), paint);
+        canvas.Flush();
+    }
+
+    // Whether every pixel in the area (bar a few strays) is close to one colour, and that colour.
+    private static bool TryGetUniformColour(SKBitmap bitmap, SKRectI area, out SKColor colour)
+    {
+        area.Intersect(new SKRectI(0, 0, bitmap.Width, bitmap.Height));
+        colour = SKColors.Empty;
+
+        if (area.IsEmpty)
+        {
+            return false;
+        }
+
+        long red = 0, green = 0, blue = 0;
+
+        for (int y = area.Top; y < area.Bottom; y++)
+        {
+            for (int x = area.Left; x < area.Right; x++)
+            {
+                SKColor pixel = bitmap.GetPixel(x, y);
+                red += pixel.Red;
+                green += pixel.Green;
+                blue += pixel.Blue;
+            }
+        }
+
+        long count = (long)area.Width * area.Height;
+        colour = new SKColor((byte)(red / count), (byte)(green / count), (byte)(blue / count));
+
+        long strays = 0;
+
+        for (int y = area.Top; y < area.Bottom; y++)
+        {
+            for (int x = area.Left; x < area.Right; x++)
+            {
+                SKColor pixel = bitmap.GetPixel(x, y);
+
+                if (Math.Abs(pixel.Red - colour.Red) > BadgeBackgroundTolerance
+                    || Math.Abs(pixel.Green - colour.Green) > BadgeBackgroundTolerance
+                    || Math.Abs(pixel.Blue - colour.Blue) > BadgeBackgroundTolerance)
+                {
+                    strays++;
+                }
+            }
+        }
+
+        return strays <= count * BadgeMaxStrayPixelShare;
+    }
+
+    // The same white λ as wwwroot/icon-monochrome-512.png (embedded from there), trimmed to the glyph.
+    private static (SKBitmap Glyph, SKRectI Bounds) LoadBadgeGlyph()
+    {
+        using Stream stream = typeof(AppIconService).Assembly.GetManifestResourceStream("Lanyard.AppIconBadge.png")
+            ?? throw new InvalidOperationException("The app icon badge resource is missing.");
+
+        SKBitmap glyph = SKBitmap.Decode(stream) ?? throw new InvalidOperationException("The app icon badge could not be read.");
+
+        return (glyph, FindOpaqueBounds(glyph).Bounds);
     }
 
     // The smallest rectangle holding every pixel that isn't fully transparent, and whether the image
