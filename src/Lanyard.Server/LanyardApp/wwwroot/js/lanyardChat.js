@@ -162,6 +162,20 @@ window.lanyardChat = (() => {
             if (el) {
                 el.scrollTop = el.scrollHeight - previousHeight;
             }
+        },
+
+        // Once a conversation has been read, its push notification goes, as in a messaging app, so
+        // the next message starts a fresh thread instead of adding to ones already seen.
+        async clearNotifications(tag) {
+            if (!('serviceWorker' in navigator)) {
+                return;
+            }
+
+            const registration = await navigator.serviceWorker.getRegistration();
+
+            if (registration) {
+                (await registration.getNotifications({ tag })).forEach(x => x.close());
+            }
         }
     };
 })();

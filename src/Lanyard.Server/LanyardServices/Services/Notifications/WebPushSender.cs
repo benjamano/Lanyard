@@ -222,9 +222,15 @@ public class WebPushSender(
     private static PushMessage BuildMessage(PushContent content, bool trimmed)
     {
         int limit = trimmed ? TrimmedBodyLength : MaxBodyLength;
-        string body = content.Body.Length > limit ? content.Body[..(limit - 1)] + "…" : content.Body;
+        string body = Shorten(content.Body, limit);
 
-        string json = JsonSerializer.Serialize(new { title = content.Title, body, url = content.Url, tag = content.Tag }, JsonOptions);
+        // A chat message repeats its text in chat (the service worker builds the thread from that),
+        // so both are cut to the same length.
+        object? chat = content.Chat is ChatPushLine line
+            ? new { sender = line.Sender, text = Shorten(line.Text, limit), conversation = line.Conversation }
+            : null;
+
+        string json = JsonSerializer.Serialize(new { title = content.Title, body, url = content.Url, tag = content.Tag, chat }, JsonOptions);
 
         return new PushMessage(json)
         {
@@ -233,6 +239,8 @@ public class WebPushSender(
             Topic = TopicHeader(content.Tag)
         };
     }
+
+    private static string Shorten(string text, int limit) => text.Length > limit ? text[..(limit - 1)] + "…" : text;
 
     // The Topic header lets the push service replace an undelivered older message with this one.
     // It allows only URL-safe base64 characters, at most 32 of them. A longer tag is hashed rather
