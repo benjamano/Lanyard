@@ -9,14 +9,9 @@
             <div class="components-failed-to-connect-visible">
                 <FluentIcon Value="@(new Icons.Regular.Size48.ErrorCircle())" Color="Color.Error"/>
             </div>
-            <div class="components-reconnect-first-attempt-visible">
+            <div class="components-reconnect-first-attempt-visible components-reconnect-repeated-attempt-visible">
                 <FluentText>
-                    Rejoining the server...
-                </FluentText>
-            </div>
-            <div class="components-reconnect-repeated-attempt-visible">
-                <FluentText>
-                    Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+                    Connection lost. Reconnecting...
                 </FluentText>
             </div>
             <div class="components-reconnect-failed-visible">
