@@ -1,0 +1,151 @@
+@* The page an anonymous visitor sees at "/". Rendered by RouteAuthorizationGate in place of the
+   usual redirect to login, so Home.razor (the staff dashboard) keeps its [Authorize] and signed-in
+   users never see this. Deliberately static: no data, no services beyond configuration. *@
+
+@inject IConfiguration Configuration
+
+<PageTitle>Lanyard - run your whole venue from one app</PageTitle>
+
+<div class="landing">
+    <section class="landing-hero">
+        <div class="landing-hero-inner">
+            <p class="landing-eyebrow">Venue operations for entertainment centres</p>
+            <h1 class="landing-title">Run your whole venue from one app.</h1>
+            <p class="landing-lede">
+                Lanyard brings your staff rota, training, onboarding and team chat together with live
+                control of the music, lighting, projection and laser tag scoring on site, from any
+                phone or desktop.
+            </p>
+            <div class="landing-actions">
+                @if (DemoEnabled)
+                {
+                    <FluentAnchorButton Href="#demo" Appearance="ButtonAppearance.Primary" Class="landing-cta"
+                                        IconStart="@(new Icons.Regular.Size20.PlayCircle())">
+                        Try the live demo
+                    </FluentAnchorButton>
+                }
+                <FluentAnchorButton Href="/login" Appearance="ButtonAppearance.Outline" Class="landing-cta landing-cta-secondary"
+                                    IconStart="@(new Icons.Regular.Size20.ArrowEnter())">
+                    Log in
+                </FluentAnchorButton>
+            </div>
+        </div>
+    </section>
+
+    <section class="landing-section" aria-labelledby="features-heading">
+        <h2 id="features-heading" class="landing-section-title">Everything the venue runs on</h2>
+        <p class="landing-section-lede">
+            One place for the people side of the business and the hardware side of the building.
+        </p>
+
+        <div class="landing-grid">
+            @foreach (Feature feature in Features)
+            {
+                <div class="landing-card">
+                    <div class="landing-card-icon">
+                        <FluentIcon Value="@feature.Icon" Color="Color.Custom" CustomColor="currentColor" />
+                    </div>
+                    <h3 class="landing-card-title">@feature.Title</h3>
+                    <p class="landing-card-text">@feature.Description</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="landing-section landing-section-alt" aria-labelledby="how-heading">
+        <h2 id="how-heading" class="landing-section-title">How it fits together</h2>
+        <div class="landing-split">
+            <div class="landing-split-item">
+                <h3 class="landing-card-title">A web app for your team</h3>
+                <p class="landing-card-text">
+                    Managers and staff sign in from a desktop or their phone, and can install it like
+                    an app. Each company gets its own branding, locations and roles, and sees only
+                    its own data.
+                </p>
+            </div>
+            <div class="landing-split-item">
+                <h3 class="landing-card-title">A kiosk app for the venue</h3>
+                <p class="landing-card-text">
+                    A small Windows app on the venue's PCs plays the music, drives the DMX lights,
+                    runs the screens and reads the laser tag system, taking commands from Lanyard in
+                    real time.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    @if (DemoEnabled)
+    {
+        <section id="demo" class="landing-section" aria-labelledby="demo-heading">
+            <h2 id="demo-heading" class="landing-section-title">Try the live demo</h2>
+            <p class="landing-section-lede">
+                Explore a made-up venue full of sample staff, rotas, courses and dashboards. Pick who
+                you'd like to be, no sign-up needed.
+            </p>
+
+            <div class="landing-grid landing-grid-roles">
+                @foreach (DemoRole role in DemoRoles)
+                {
+                    <div class="landing-card landing-role">
+                        <div class="landing-card-icon">
+                            <FluentIcon Value="@role.Icon" Color="Color.Custom" CustomColor="currentColor" />
+                        </div>
+                        <h3 class="landing-card-title">@role.Title</h3>
+                        <p class="landing-card-text">@role.Description</p>
+                        <FluentAnchorButton Href="@($"/api/auth/demo-login?role={role.Key}")" Appearance="ButtonAppearance.Primary"
+                                            Class="landing-role-button">
+                            Explore as @role.Title.ToLowerInvariant()
+                        </FluentAnchorButton>
+                    </div>
+                }
+            </div>
+
+            <p class="landing-note">
+                The demo is shared by everyone trying it, and resets to fresh sample data every night
+                at 4am UK time. Emails aren't sent from it, and there's no kiosk hardware attached, so
+                music and lighting controls won't play anything. Please don't enter real personal
+                details.
+            </p>
+        </section>
+    }
+</div>
+
+@code {
+    private sealed record Feature(Icon Icon, string Title, string Description);
+
+    private sealed record DemoRole(string Key, Icon Icon, string Title, string Description);
+
+    private bool DemoEnabled => Configuration.GetValue<bool>("Demo:Enabled");
+
+    private static readonly Feature[] Features =
+    [
+        new(new Icons.Regular.Size24.CalendarLtr(), "Rotas and clock-in",
+            "Build and publish the rota, let staff swap and pick up open shifts, and clock in on a shared tablet with a PIN."),
+        new(new Icons.Regular.Size24.BookOpen(), "Training and compliance",
+            "Write courses with quizzes, assign them by location, track completion and send reminders when they're due."),
+        new(new Icons.Regular.Size24.DocumentBulletList(), "Onboarding and documents",
+            "Welcome new starters automatically and keep certificates and right-to-work checks with expiry reminders."),
+        new(new Icons.Regular.Size24.Chat(), "Team chat",
+            "Direct messages, group chats and team channels, with pinned posts and shift swap cards."),
+        new(new Icons.Regular.Size24.MusicNote2(), "Music",
+            "Playlists and a song library played through the venue's speakers, controlled from any phone."),
+        new(new Icons.Regular.Size24.Lightbulb(), "DMX lighting",
+            "A lighting desk in the browser with fixtures, scenes and BPM-synced chases."),
+        new(new Icons.Regular.Size24.ProjectionScreenText(), "Projection and scoreboards",
+            "Run scoreboards, live camera feeds and media on the venue's screens, with live laser tag scores."),
+        new(new Icons.Regular.Size24.Flash(), "Automation",
+            "\"When a game starts, switch the lights and change the playlist\" - rules that run the venue for you."),
+        new(new Icons.Regular.Size24.DataArea(), "Dashboards",
+            "Build home screens from widgets: who's on today, training progress, announcements and more."),
+    ];
+
+    private static readonly DemoRole[] DemoRoles =
+    [
+        new("admin", new Icons.Regular.Size24.PersonKey(), "Admin",
+            "Everything: company settings, users and roles, the rota, training, and the venue controls."),
+        new("manager", new Icons.Regular.Size24.PeopleTeam(), "Manager",
+            "Run the rota, approve time off, assign training and manage the team at a location."),
+        new("staff", new Icons.Regular.Size24.Person(), "Staff member",
+            "See your shifts, do your training, request time off and chat with the team."),
+    ];
+}

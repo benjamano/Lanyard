@@ -50,3 +50,18 @@ html, body {
         display: none;
     }
 }
+
+/* The header is the brand colour, so the signed-out "Log in" button is drawn in white. Fluent's
+   button paints its text and border from design tokens inside its shadow DOM, so the tokens are
+   overridden here rather than the element's own color. */
+.header-login {
+    --colorNeutralForeground1: #fff;
+    --colorNeutralForeground1Hover: #fff;
+    --colorNeutralForeground1Pressed: #fff;
+    --colorNeutralStroke1: rgba(255, 255, 255, 0.8);
+    --colorNeutralStroke1Hover: #fff;
+    --colorNeutralStroke1Pressed: #fff;
+    --colorNeutralBackground1: transparent;
+    --colorNeutralBackground1Hover: rgba(255, 255, 255, 0.12);
+    --colorNeutralBackground1Pressed: rgba(255, 255, 255, 0.2);
+}

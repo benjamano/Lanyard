@@ -51,6 +51,22 @@
                     </AuthorizeView>
                 }
 
+                @* Signed-out visitors (the public homepage, mostly) get a way in from every page
+                   except the login page itself. *@
+                @if (!IsLoginPage)
+                {
+                    <AuthorizeView>
+                        <NotAuthorized>
+                            <div class="header-login">
+                                <FluentAnchorButton Href="/login" Appearance="ButtonAppearance.Outline"
+                                                    IconStart="@(new Icons.Regular.Size20.ArrowEnter().WithColor("white"))">
+                                    Log in
+                                </FluentAnchorButton>
+                            </div>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                }
+
                 <ThemeSelector />
             </FluentStack>
         </FluentStack>
@@ -64,7 +80,7 @@
         </AuthorizeView>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage ? Margin.All0 : Margin.All3)">
+    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage || _isPublicHome ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
         <AuthorizeView>
             <Authorized>
@@ -127,6 +143,22 @@
     // The login page's background image should bleed to the viewport edges - the standard
     // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
     private bool IsLoginPage => NavigationManager.Uri.Contains("/login");
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    // "/" for a signed-out visitor is the public homepage (see RouteAuthorizationGate), which has
+    // its own full-bleed hero, so it drops the content margin like the login page does.
+    private bool _isPublicHome;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        bool isRoot = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Split('?', '#')[0].Length == 0;
+        bool isAuthenticated = AuthenticationStateTask is not null
+            && (await AuthenticationStateTask).User.Identity?.IsAuthenticated == true;
+
+        _isPublicHome = isRoot && !isAuthenticated;
+    }
 
     protected override void OnInitialized()
     {

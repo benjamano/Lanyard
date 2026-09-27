@@ -598,7 +598,9 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             List<Company> companies = await ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive && x.Locations.Any(l => l.IsActive))
+                // The demo company is reached from the homepage's one-click demo buttons, not by
+                // picking it and typing a password.
+                .Where(x => x.IsActive && !x.IsDemo && x.Locations.Any(l => l.IsActive))
                 .OrderBy(x => x.Name)
                 .ToListAsync();
 
