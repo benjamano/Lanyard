@@ -1,4 +1,4 @@
-using Lanyard.Infrastructure.DTO;
+﻿using Lanyard.Infrastructure.DTO;
 using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
 using System.Runtime.InteropServices;
@@ -81,10 +81,19 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
             try
             {
                 // Match on endpoint ID first; fall back to the name in case the device was plugged
-                // into a different port and Windows gave it a fresh endpoint ID.
-                MMDevice? target = devices.FirstOrDefault(d => string.Equals(d.ID, settings.PreferredDeviceId, StringComparison.OrdinalIgnoreCase))
-                    ?? devices.FirstOrDefault(d => !string.IsNullOrWhiteSpace(settings.PreferredDeviceName)
-                        && string.Equals(d.FriendlyName, settings.PreferredDeviceName, StringComparison.OrdinalIgnoreCase));
+                // into a different port and Windows gave it a fresh endpoint ID. The fallback only
+                // applies when the name is unambiguous: two identical TVs share a friendly name, and
+                // while the preferred one sleeps its twin must not be forced to default instead.
+                MMDevice? target = devices.FirstOrDefault(d => string.Equals(d.ID, settings.PreferredDeviceId, StringComparison.OrdinalIgnoreCase));
+
+                if (target == null && !string.IsNullOrWhiteSpace(settings.PreferredDeviceName))
+                {
+                    List<MMDevice> nameMatches = devices
+                        .Where(d => string.Equals(d.FriendlyName, settings.PreferredDeviceName, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    target = nameMatches.Count == 1 ? nameMatches[0] : null;
+                }
 
                 if (target == null)
                 {

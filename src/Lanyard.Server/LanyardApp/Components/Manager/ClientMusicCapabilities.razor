@@ -137,19 +137,36 @@
             return;
         }
 
-        bool audioDeviceChanged = (client.PreferredAudioDeviceId ?? NoAudioDeviceId) != _selectedAudioDeviceId;
+        // Save onto a fresh copy of the row: the one loaded when the tab opened carries whatever
+        // connection ID the kiosk had then, and writing that back after a reconnect would point
+        // the push below (and every other command) at the dead connection.
+        Result<Client?> freshResult = await _clientService.GetClientFromIdAsync(client.Id);
+
+        if (!freshResult.IsSuccess || freshResult.Data == null)
+        {
+            _toastService.ShowError($"Failed to update client capabilities, {freshResult.Error}");
+            return;
+        }
+
+        Client freshClient = freshResult.Data;
+
+        // Compared against what's actually saved, so a save that failed last time is still treated as a change.
+        bool audioDeviceChanged = (freshClient.PreferredAudioDeviceId ?? NoAudioDeviceId) != _selectedAudioDeviceId;
         AudioDeviceOption? selectedAudioDevice = _audioDeviceOptions.FirstOrDefault(x => x.Id == _selectedAudioDeviceId);
 
-        client.PreferredAudioDeviceId = _selectedAudioDeviceId == NoAudioDeviceId ? null : _selectedAudioDeviceId;
-        client.PreferredAudioDeviceName = client.PreferredAudioDeviceId == null ? null : selectedAudioDevice?.Name;
+        freshClient.MusicCacheLimitMb = client.MusicCacheLimitMb;
+        freshClient.PreferredAudioDeviceId = _selectedAudioDeviceId == NoAudioDeviceId ? null : _selectedAudioDeviceId;
+        freshClient.PreferredAudioDeviceName = freshClient.PreferredAudioDeviceId == null ? null : selectedAudioDevice?.Name;
 
-        Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
+        Result<Client?> updateResult = await _clientService.UpdateClientAsync(freshClient);
 
         if (!updateResult.IsSuccess)
         {
             _toastService.ShowError($"Failed to update client capabilities, {updateResult.Error}");
             return;
         }
+
+        client = freshClient;
 
         if (!audioDeviceChanged)
         {
