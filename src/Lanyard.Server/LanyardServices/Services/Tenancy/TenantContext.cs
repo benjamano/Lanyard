@@ -11,8 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Lanyard.Application.Services.Tenancy;
 
 // Works out which company the current scope is acting for, for ApplicationDbContext's tenant
-// filter. Scoped: one per Blazor circuit or HTTP request, and a circuit's user never changes
-// (logging in or out is a full page load), so the answer is worked out once and kept.
+// filter. Scoped: one per Blazor circuit or HTTP request. Once a signed-in user has been seen the
+// answer is kept (a circuit's user never changes - logging in or out is a full page load);
+// "nobody signed in" is re-checked on every call, since the user can still turn up later.
 //
 //  - Signed-in user    -> their session's company (the company claim, or the company of the
 //                         location claim for sessions issued before the company claim existed).
@@ -86,20 +87,36 @@ public sealed class TenantContext(
             return;
         }
 
-        ClaimsPrincipal? user = GetCircuitUser() ?? httpContextAccessor.HttpContext?.User;
+        ClaimsPrincipal? user;
+
+        try
+        {
+            user = GetCircuitUser() ?? httpContextAccessor.HttpContext?.User;
+        }
+        catch (ObjectDisposedException)
+        {
+            // Asked for the first time after its circuit/request scope ended (e.g. a prerender's
+            // leftover async work). We can't tell who the caller was, so they get nothing - never
+            // system, which would see every company.
+            _isSystem = false;
+            _companyId = null;
+            _resolved = true;
+            return;
+        }
 
         if (user?.Identity?.IsAuthenticated != true)
         {
+            // Deliberately not cached. Within one request the user can appear after we're first
+            // asked - cookie authentication itself creates a context before HttpContext.User is
+            // set - and a cached "system" answer would then leave that user unfiltered.
             _isSystem = true;
             _companyId = null;
-        }
-        else
-        {
-            _isSystem = false;
-            _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
-            _companyId = ResolveCompanyId(user);
+            return;
         }
 
+        _isSystem = false;
+        _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
+        _companyId = ResolveCompanyId(user);
         _resolved = true;
     }
 
