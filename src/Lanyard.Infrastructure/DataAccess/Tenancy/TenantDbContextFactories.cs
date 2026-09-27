@@ -7,7 +7,14 @@ namespace Lanyard.Infrastructure.DataAccess.Tenancy;
 public sealed class TenantDbContextFactory(DbContextOptions<ApplicationDbContext> options, ITenantProvider tenant)
     : IDbContextFactory<ApplicationDbContext>
 {
-    public ApplicationDbContext CreateDbContext() => new(options, tenant);
+    public ApplicationDbContext CreateDbContext()
+    {
+        // Resolve now, while the caller's scope is certainly alive, rather than lazily on the
+        // first query, which can land after a prerender's scope has been disposed.
+        _ = tenant.IsSystem;
+
+        return new(options, tenant);
+    }
 }
 
 // For singletons and hosted services, which outlive any one user and so can't take the scoped

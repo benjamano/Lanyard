@@ -138,4 +138,39 @@ public class TenantContextTests
         Assert.IsNull(tenant.ManageableCompanyId);
         Assert.IsTrue(tenant.CanManageCompany(99));
     }
+
+    [TestMethod]
+    public void ScopeAlreadyDisposed_FailsClosedRatherThanSystem()
+    {
+        ServiceCollection services = new();
+        services.AddScoped<AuthenticationStateProvider>(_ => new FixedAuthStateProvider(new ClaimsPrincipal(new ClaimsIdentity())));
+        ServiceProvider root = services.BuildServiceProvider();
+        IServiceScope scope = root.CreateScope();
+
+        TenantContext tenant = new(
+            scope.ServiceProvider,
+            new HttpContextAccessor(),
+            new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+        scope.Dispose();
+
+        Assert.IsFalse(tenant.IsSystem);
+        Assert.IsNull(tenant.CompanyId);
+    }
+
+    // Cookie authentication creates a DbContext before HttpContext.User is set. An early
+    // "nobody signed in" answer must not stick, or that request's user would go unfiltered.
+    [TestMethod]
+    public void UserWhoAppearsLaterInTheRequest_IsPickedUp()
+    {
+        DefaultHttpContext httpContext = new();
+        TenantContext tenant = Build(new UnsetAuthStateProvider(), httpContext);
+
+        Assert.IsTrue(tenant.IsSystem);
+
+        httpContext.User = SignedIn(new Claim(LocationClaimTypes.CompanyId, "5"));
+
+        Assert.IsFalse(tenant.IsSystem);
+        Assert.AreEqual(5, tenant.CompanyId);
+    }
 }
