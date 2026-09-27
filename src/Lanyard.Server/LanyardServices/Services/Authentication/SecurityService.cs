@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Application.Services.Scheduling;
@@ -37,6 +38,9 @@ public class SecurityService : ISecurityService
     private readonly IOptions<EmailOptions> _emailOptions;
     private readonly IOnboardingService _onboardingService;
     private readonly ITenantContext? _tenant;
+    private readonly IDemoGuard? _demoGuard;
+
+    private async Task<bool> IsDemoSessionAsync() => _demoGuard is not null && await _demoGuard.IsDemoSessionAsync();
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -51,9 +55,11 @@ public class SecurityService : ISecurityService
         ICompanyLocationService companyLocationService,
         IOptions<EmailOptions> emailOptions,
         IOnboardingService onboardingService,
-        ITenantContext? tenant = null)
+        ITenantContext? tenant = null,
+        IDemoGuard? demoGuard = null)
     {
         _tenant = tenant;
+        _demoGuard = demoGuard;
         _authStateProvider = authStateProvider;
         _currentUserAccessor = currentUserAccessor;
         _factory = factory;
@@ -254,6 +260,13 @@ public class SecurityService : ISecurityService
 
         UserProfile? userProfile = await ctx.Users.FirstOrDefaultAsync(x => x.Id == updatedUserProfile.Id);
         if (userProfile is null) return;
+
+        // The demo's shared login accounts keep their seeded details for every visitor.
+        if (DemoAccounts.LoginUserIds.Contains(userProfile.Id))
+        {
+            _logger.LogInformation("Not updating demo login account {UserId}", userProfile.Id);
+            return;
+        }
 
         if (userProfile.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(userProfile) is string error)
         {
@@ -465,6 +478,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> SendSetPasswordLinkAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -501,6 +520,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -612,6 +637,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -691,6 +722,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> UnlockUserAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -740,6 +777,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsUserLoggedIn())
@@ -807,6 +850,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<AuthenticatorEnrollmentDto>> BeginAuthenticatorEnrollmentAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<AuthenticatorEnrollmentDto>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -842,6 +891,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -873,6 +928,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> EnableEmailTwoFactorAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -910,6 +971,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> DisableTwoFactorAsync(string currentPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -938,6 +1005,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> RegenerateRecoveryCodesAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();

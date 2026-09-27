@@ -17,6 +17,7 @@ using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Application.Services.Tenancy;
+using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Features;
@@ -257,6 +258,13 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 // Company tenancy: every context a component or scoped service gets is filtered to the caller's
 // company. See AddCompanyTenancy for how singletons are handled.
 builder.Services.AddCompanyTenancy();
+
+// The public demo company (off unless Demo__Enabled is set; see DemoOptions).
+builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
+builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
+builder.Services.AddScoped<IDemoGuard, DemoGuard>();
+builder.Services.AddSingleton<IDemoResetService, DemoResetService>();
+builder.Services.AddHostedService<DemoResetHostedService>();
 
 if (builder.Environment.IsDevelopment())
 {

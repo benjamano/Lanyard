@@ -65,3 +65,13 @@ html, body {
     --colorNeutralBackground1Hover: rgba(255, 255, 255, 0.12);
     --colorNeutralBackground1Pressed: rgba(255, 255, 255, 0.2);
 }
+
+.demo-banner {
+    margin-bottom: 12px;
+}
+
+.demo-banner-leave {
+    margin-left: 8px;
+    font-weight: 600;
+    white-space: nowrap;
+}

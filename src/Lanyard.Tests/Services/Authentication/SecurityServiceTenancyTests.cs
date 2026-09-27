@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Lanyard.Application.Services.Authentication;
+using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Onboarding;
@@ -87,7 +88,7 @@ public class SecurityServiceTenancyTests
     }
 
     // Signed in as callerB, an Admin of company B.
-    private static SecurityService ServiceFor(Fixture f)
+    private static SecurityService ServiceFor(Fixture f, bool isDemoSession = false)
     {
         ClaimsPrincipal principal = new(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, f.CallerB.Id), new Claim(ClaimTypes.Role, "Admin")], "Test"));
@@ -116,7 +117,42 @@ public class SecurityServiceTenancyTests
             companyLocations.Object,
             Options.Create(new EmailOptions()),
             new Mock<IOnboardingService>().Object,
-            new TestTenant(CompanyB));
+            new TestTenant(CompanyB),
+            DemoGuardFor(isDemoSession));
+    }
+
+    private static IDemoGuard DemoGuardFor(bool isDemoSession)
+    {
+        Mock<IDemoGuard> guard = new();
+        guard.Setup(x => x.IsDemoSessionAsync()).ReturnsAsync(isDemoSession);
+        return guard.Object;
+    }
+
+    // Everyone in the public demo shares the same accounts, so nobody may change a password or
+    // turn on two-factor sign-in there - it would lock the next visitor out.
+    [TestMethod]
+    public async Task InTheDemo_PasswordsAndTwoFactorCantBeChanged()
+    {
+        Fixture f = await SeedAsync();
+        SecurityService service = ServiceFor(f, isDemoSession: true);
+
+        Assert.IsFalse((await service.ChangePasswordAsync(f.CallerB.Id, "New-Own-Pw1")).IsSuccess);
+        Assert.IsFalse((await service.SendSetPasswordLinkAsync(f.StaffB.Id)).IsSuccess);
+        Assert.IsFalse((await service.EnableEmailTwoFactorAsync()).IsSuccess);
+        Assert.IsFalse((await service.BeginAuthenticatorEnrollmentAsync()).IsSuccess);
+
+        UserProfile caller = (await f.UserManager.FindByIdAsync(f.CallerB.Id))!;
+        Assert.IsTrue(await f.UserManager.CheckPasswordAsync(caller, "Original-Pw1"));
+    }
+
+    [TestMethod]
+    public async Task TheDemoLoginAccounts_CantBeDeletedOrUnlockedByVisitors()
+    {
+        Fixture f = await SeedAsync();
+        SecurityService service = ServiceFor(f, isDemoSession: true);
+
+        Assert.IsFalse((await service.DeleteUserAsync(DemoAccounts.AdminUserId)).IsSuccess);
+        Assert.IsFalse((await service.UnlockUserAsync(DemoAccounts.ManagerUserId)).IsSuccess);
     }
 
     [TestMethod]

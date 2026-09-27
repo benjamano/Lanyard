@@ -7,6 +7,7 @@
 @inject IThemeService ThemeService
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Lanyard.Application.Services.Demo.IDemoGuard DemoGuard
 
 <FluentProviders />
 
@@ -88,6 +89,16 @@
                 <InstallAppPrompt AppName="@_installLinks.AppName" IconHref="@_installLinks.AppleTouchIconHref" />
             </Authorized>
         </AuthorizeView>
+        @if (_isDemoSession)
+        {
+            <div class="demo-banner">
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    You're exploring the Lanyard demo. Other visitors share it, and it resets to fresh sample
+                    data every night at 4am UK time.
+                    <a href="/api/auth/logout" class="demo-banner-leave">Leave the demo</a>
+                </FluentMessageBar>
+            </div>
+        }
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
                 @Body
@@ -151,6 +162,9 @@
     // its own full-bleed hero, so it drops the content margin like the login page does.
     private bool _isPublicHome;
 
+    // Signed in to the public demo company: shows the banner above every page.
+    private bool _isDemoSession;
+
     protected override async Task OnParametersSetAsync()
     {
         bool isRoot = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Split('?', '#')[0].Length == 0;
@@ -158,6 +172,7 @@
             && (await AuthenticationStateTask).User.Identity?.IsAuthenticated == true;
 
         _isPublicHome = isRoot && !isAuthenticated;
+        _isDemoSession = isAuthenticated && await DemoGuard.IsDemoSessionAsync();
     }
 
     protected override void OnInitialized()
