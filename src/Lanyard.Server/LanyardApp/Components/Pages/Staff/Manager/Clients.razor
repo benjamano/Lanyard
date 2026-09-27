@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
+@using Lanyard.Shared.Enum
 
 @implements IDisposable
 
@@ -16,7 +17,7 @@
         Clients
     </FluentText>
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 0.6fr" Style="width: 100%;" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
@@ -47,9 +48,17 @@
                         <span>--:--:--</span>
                     }
                 </TemplateColumn>
-                <TemplateColumn Title="Settings">
-                    <FluentIcon OnClick="() => OpenClientSettingsDialog(context.Id)"
-                                Icon="Icons.Regular.Size20.Settings" Class="ms-1" role="button"></FluentIcon>
+                <TemplateColumn Title="Actions">
+                    <FluentStack HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center">
+                        <FluentButton Appearance="ButtonAppearance.Transparent" Title="Settings"
+                                      IconStart="@(new Icons.Regular.Size20.Settings())"
+                                      OnClick="() => OpenClientSettingsDialog(context.Id)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Restart" : "Restart (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenRestartClientDialogAsync(context)" />
+                    </FluentStack>
                 </TemplateColumn>
             </ChildContent>
             <LoadingContent>
@@ -135,6 +144,37 @@
         {
             _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }
+    }
+
+    private async Task OpenRestartClientDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<RestartClientDialog>(options =>
+        {
+            options.Header.Title = "Restart Client";
+            options.Width = "min(480px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(RestartClientDialog.ClientName), client.Name);
+        });
+
+        if (result.Cancelled || result.Value is not ClientRestartType restartType)
+        {
+            return;
+        }
+
+        Result<bool> restartResult = await _clientService.RestartClientAsync(client.Id, restartType);
+
+        if (restartResult.IsSuccess)
+        {
+            _toastService.ShowSuccess(restartType == ClientRestartType.Computer
+                ? $"{client.Name} accepted the restart, its PC will restart shortly."
+                : $"{client.Name} accepted the restart, it will reconnect in a few seconds.");
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to restart {client.Name}, {restartResult.Error}");
+        }
+
+        await GetClientsAsync();
     }
 
     private async Task OpenClientSettingsDialog(Guid clientId)

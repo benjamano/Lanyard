@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -39,6 +40,7 @@ public interface IClientService
     Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync();
     Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);
     Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId);
+    Task<Result<bool>> RestartClientAsync(Guid clientId, ClientRestartType restartType);
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);
     Task<Result<bool>> RemoveClientPrimaryDevice(Guid clientId, Guid deviceId);

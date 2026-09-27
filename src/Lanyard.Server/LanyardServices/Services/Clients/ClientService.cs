@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -1075,6 +1076,102 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     public async Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId)
     {
         return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher", commandArgument: null);
+    }
+
+    // Covers a relaunch plus reconnect with room to spare, so a double-click or an impatient
+    // second attempt can't stack restarts. Repeated quick exits would otherwise trip the
+    // Watchdog's crash-loop guard on kiosks whose Watchdog predates the restart exit code.
+    private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(60);
+
+    // How long to wait for the kiosk to acknowledge before reporting that it didn't respond.
+    private static readonly TimeSpan RestartAcknowledgementTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Tells a connected kiosk client to restart, either just the Lanyard Client application
+    /// (the Watchdog relaunches it) or the whole PC, and waits for the kiosk to acknowledge.
+    /// Fails rather than queueing if the client is offline: MostRecentConnectionId outlives
+    /// the connection, so a send to it would silently go nowhere. The acknowledgement is a
+    /// SignalR client result, so a kiosk built before remote restart existed (no handler)
+    /// comes back as a failure instead of a false "restart sent".
+    /// </summary>
+    public async Task<Result<bool>> RestartClientAsync(Guid clientId, ClientRestartType restartType)
+    {
+        try
+        {
+            if (!Enum.IsDefined(restartType))
+            {
+                return Result<bool>.Fail("Unknown restart type.");
+            }
+
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            if (!connectedResult.IsSuccess)
+            {
+                return Result<bool>.Fail(connectedResult.Error!);
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (!connectedResult.Data || string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client is not currently connected.");
+            }
+
+            (string, Guid) cooldownKey = ("RemoteRestartCooldown", clientId);
+
+            if (_cache.TryGetValue(cooldownKey, out _))
+            {
+                return Result<bool>.Fail("This client was restarted less than a minute ago. Give it a moment to come back before trying again.");
+            }
+
+            _logger.LogInformation("Sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+
+            bool accepted;
+
+            using (CancellationTokenSource timeout = new(RestartAcknowledgementTimeout))
+            {
+                try
+                {
+                    accepted = await _hubContext.Clients.Client(connectionId).InvokeAsync<bool>("RestartClient", restartType, timeout.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogWarning("Client {ClientId} did not acknowledge the {RestartType} restart command in time", clientId, restartType);
+                    return Result<bool>.Fail("The client didn't respond to the restart request. It may be frozen; restart it at the kiosk.");
+                }
+                catch (HubException ex)
+                {
+                    // Raised when the kiosk has no RestartClient handler to return a result,
+                    // i.e. it's running a client version from before remote restart.
+                    _logger.LogWarning("Client {ClientId} rejected the {RestartType} restart command: {Error}", clientId, restartType, ex.Message);
+                    return Result<bool>.Fail("This client's version doesn't support remote restart. Restart it at the kiosk once to update it.");
+                }
+            }
+
+            if (!accepted)
+            {
+                _logger.LogWarning("Client {ClientId} refused the {RestartType} restart command", clientId, restartType);
+                return Result<bool>.Fail("The client refused the restart request.");
+            }
+
+            _cache.Set(cooldownKey, true, RestartCooldown);
+
+            _logger.LogInformation("Client {ClientId} accepted the {RestartType} restart command", clientId, restartType);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
     }
 
     private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName, string? commandArgument)
