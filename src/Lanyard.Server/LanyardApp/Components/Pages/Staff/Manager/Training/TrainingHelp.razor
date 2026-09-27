@@ -1,5 +1,6 @@
 @page "/manage/training/help"
 @attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Training)]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager.Training.Help

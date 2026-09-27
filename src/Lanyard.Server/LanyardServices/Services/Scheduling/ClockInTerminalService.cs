@@ -1,3 +1,5 @@
+using Lanyard.Infrastructure.Enum;
+using Lanyard.Application.Services.Features;
 using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Locations;
@@ -29,6 +31,11 @@ public class ClockInTerminalService(
 
     // A plain SHA-256 is right here (unlike PINs): the token is 256 random bits, so there is
     // nothing to brute-force, and the hash has to be searchable to find the terminal.
+    // Returned instead of a session when the terminal's company no longer has shift management, so
+    // the terminal page can say so rather than claiming the tablet was unpaired. The pairing is
+    // kept: switching the feature back on brings the tablet straight back.
+    public const string FeatureOffError = "Shift management isn't turned on for this company.";
+
     public static string HashToken(string rawToken) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
 
@@ -141,6 +148,11 @@ public class ClockInTerminalService(
                 return Result<TerminalSession>.Fail("This device has been unpaired. A manager can pair it again from Manage > Rota > Clock-In Terminals.");
             }
 
+            if (!await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, terminal.LocationId, CompanyFeature.StaffScheduling))
+            {
+                return Result<TerminalSession>.Fail(FeatureOffError);
+            }
+
             await TouchAsync(ctx, terminal);
 
             return Result<TerminalSession>.Ok(ToSession(terminal));
@@ -165,6 +177,11 @@ public class ClockInTerminalService(
             if (terminal is null || !terminal.IsActive || terminal.Location is not { IsActive: true })
             {
                 return Result<TerminalSession>.Fail("This device has been unpaired.");
+            }
+
+            if (!await CompanyFeatureQueries.IsEnabledForLocationAsync(ctx, terminal.LocationId, CompanyFeature.StaffScheduling))
+            {
+                return Result<TerminalSession>.Fail(FeatureOffError);
             }
 
             await TouchAsync(ctx, terminal);

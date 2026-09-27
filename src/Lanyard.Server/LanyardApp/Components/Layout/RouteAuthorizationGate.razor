@@ -1,6 +1,9 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using System.Reflection
+@using Lanyard.App.Components.Layout.Staff
 @inject NavigationManager Navigation
+@inject ICompanyFeatureService CompanyFeatures
 
 @* Default-deny wrapper around AuthorizeRouteView. Blazor's [Authorize] attribute only takes
    effect for pages that carry it; a page with no [Authorize]/[AllowAnonymous] attribute at all
@@ -11,7 +14,14 @@
 @* No DefaultLayout is passed to AuthorizeRouteView here - the caller (Routes.razor) already
    wraps this component in a <LayoutView>, so passing a layout through as well would apply it
    a second time, nesting the whole page chrome inside itself. *@
-@if (_allowAnonymous || _isAuthenticated)
+@* A page marked [RequiresFeature] is also refused when the signed-in user's company doesn't have
+   that feature. Nothing renders while that check is pending, so a blocked page never gets far
+   enough to run its own OnInitializedAsync. *@
+@if (_blockedFeature is CompanyFeature blockedFeature)
+{
+    <FeatureUnavailable Feature="@blockedFeature" />
+}
+else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
 {
     <AuthorizeRouteView RouteData="@RouteData">
         <NotAuthorized>
@@ -32,14 +42,25 @@
 
     private bool _allowAnonymous;
     private bool _isAuthenticated;
+    private bool _featureCheckPending;
+    private CompanyFeature? _blockedFeature;
 
     protected override async Task OnParametersSetAsync()
     {
+        // Set before the first await: this component is reused across navigations, so without
+        // it the previous page's "allowed" state would render the new page while the check runs.
+        RequiresFeatureAttribute? requiredFeature = RouteData.PageType.GetCustomAttribute<RequiresFeatureAttribute>(inherit: true);
+        _featureCheckPending = requiredFeature is not null;
+        _blockedFeature = null;
+
         _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
 
         if (_allowAnonymous)
         {
+            // Anonymous pages have no user company to check. The clock-in terminal, the one
+            // anonymous page inside a paid module, checks its paired location's company instead.
             _isAuthenticated = false;
+            _featureCheckPending = false;
             return;
         }
 
@@ -55,6 +76,17 @@
             // ToBaseRelativePath gives "manage/users", which it rejects and sends home instead.
             string returnUrl = Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
             Navigation.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
+            return;
+        }
+
+        if (requiredFeature is not null)
+        {
+            if (!await CompanyFeatures.IsEnabledForCurrentUserAsync(requiredFeature.Feature))
+            {
+                _blockedFeature = requiredFeature.Feature;
+            }
+
+            _featureCheckPending = false;
         }
     }
 }

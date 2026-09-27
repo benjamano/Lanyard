@@ -1,0 +1,28 @@
+@* Shown by RouteAuthorizationGate in place of a page whose module the user's company doesn't have. *@
+
+<PageTitle>Not available</PageTitle>
+
+<div class="feature-unavailable">
+    <FluentCard>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size48.LockClosed())" Color="Color.Disabled" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Align="TextAlign.Center">
+                @_info.Name isn't turned on for your company
+            </FluentText>
+            <FluentText Align="TextAlign.Center">
+                Your company's Lanyard plan doesn't include @_info.Name.ToLowerInvariant(). If you think it should,
+                ask your manager to contact Lanyard.
+            </FluentText>
+            <FluentAnchorButton Href="/" Appearance="ButtonAppearance.Primary">Go to Home</FluentAnchorButton>
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public CompanyFeature Feature { get; set; }
+
+    private CompanyFeatureInfo _info = CompanyFeatureCatalog.Get(CompanyFeature.Training);
+
+    protected override void OnParametersSet() => _info = CompanyFeatureCatalog.Get(Feature);
+}

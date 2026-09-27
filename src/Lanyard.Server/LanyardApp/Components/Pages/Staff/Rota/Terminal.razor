@@ -121,6 +121,13 @@
             </div>
             break;
 
+        case TerminalMode.FeatureOff:
+            <div class="terminal-message">
+                <h1>Clock-in isn't available</h1>
+                <p>Shift management isn't turned on for this company, so this tablet can't be used to clock in.</p>
+            </div>
+            break;
+
         default:
             <div class="terminal-message">
                 <h1>@(mode == TerminalMode.Unpaired ? "This tablet has been unpaired" : "This tablet isn't a clock-in terminal yet")</h1>
@@ -132,7 +139,7 @@
 </div>
 
 @code {
-    private enum TerminalMode { Loading, NotPaired, Unpaired, OpenDirectly, Ready }
+    private enum TerminalMode { Loading, NotPaired, Unpaired, FeatureOff, OpenDirectly, Ready }
 
     // What the first (prerendered) request learned from the device cookie, carried into the live
     // page. The live page can't read the cookie itself - a Blazor Server circuit has no HTTP
@@ -182,6 +189,11 @@
         }
     }
 
+    private static TerminalMode FailedMode(Result<TerminalSession> result, string? token) =>
+        result.Error == ClockInTerminalService.FeatureOffError ? TerminalMode.FeatureOff
+        : string.IsNullOrEmpty(token) ? TerminalMode.NotPaired
+        : TerminalMode.Unpaired;
+
     protected override async Task OnInitializedAsync()
     {
         if (_applicationState.TryTakeFromJson(StateKey, out string? protectedBootstrap) && protectedBootstrap is not null)
@@ -207,7 +219,7 @@
 
             TerminalBootstrap bootstrap = resolved.IsSuccess && resolved.Data is not null
                 ? new TerminalBootstrap(TerminalMode.Ready, resolved.Data)
-                : new TerminalBootstrap(string.IsNullOrEmpty(token) ? TerminalMode.NotPaired : TerminalMode.Unpaired, null);
+                : new TerminalBootstrap(FailedMode(resolved, token), null);
 
             mode = bootstrap.Mode;
             session = bootstrap.Session;
@@ -246,7 +258,7 @@
 
             if (!check.IsSuccess)
             {
-                mode = TerminalMode.Unpaired;
+                mode = FailedMode(check, session.TerminalId.ToString());
                 StateHasChanged();
                 return;
             }
@@ -292,7 +304,7 @@
             if (!check.IsSuccess)
             {
                 StopLive();
-                mode = TerminalMode.Unpaired;
+                mode = FailedMode(check, session.TerminalId.ToString());
                 selected = null;
                 banner = null;
             }
