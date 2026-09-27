@@ -12,11 +12,13 @@ public class RemoteRestartController(IRemoteRestartService remoteRestartService,
 
     public void Register(HubConnection connection)
     {
-        connection.On<ClientRestartType>("RestartClient", restartType =>
+        // A client result, not a plain On(): the server awaits this return value, which is how
+        // it tells a kiosk that accepted the restart apart from one too old to have this handler.
+        connection.On<ClientRestartType, bool>("RestartClient", restartType =>
         {
             _logger.LogInformation("Received remote restart command: {RestartType}", restartType);
 
-            _remoteRestartService.Restart(restartType);
+            return _remoteRestartService.Restart(restartType);
         });
     }
 }

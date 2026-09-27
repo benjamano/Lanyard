@@ -166,8 +166,8 @@
         if (restartResult.IsSuccess)
         {
             _toastService.ShowSuccess(restartType == ClientRestartType.Computer
-                ? $"Restart sent, {client.Name}'s PC will restart shortly."
-                : $"Restart sent, {client.Name} will reconnect in a few seconds.");
+                ? $"{client.Name} accepted the restart, its PC will restart shortly."
+                : $"{client.Name} accepted the restart, it will reconnect in a few seconds.");
         }
         else
         {

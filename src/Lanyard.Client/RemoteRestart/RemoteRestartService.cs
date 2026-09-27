@@ -8,38 +8,51 @@ public class RemoteRestartService(ILogger<RemoteRestartService> logger) : IRemot
 {
     private const string WatchdogProcessName = "LanyardClient.Watchdog";
 
+    // Must match RestartRequestedExitCode in LanyardClient.Watchdog/Program.cs: the Watchdog
+    // relaunches on this code without counting it towards its crash-loop give-up.
+    private const int RestartRequestedExitCode = 75;
+
     // Long enough for the log line to flush and for someone at the kiosk to see the
     // Windows "you're about to be signed out" notice, short enough to feel immediate.
     private const int ComputerRestartDelaySeconds = 10;
 
+    // Gives the SignalR acknowledgement time to reach the server before the process exits.
+    private static readonly TimeSpan AcknowledgementGrace = TimeSpan.FromSeconds(1);
+
     private readonly ILogger<RemoteRestartService> _logger = logger;
 
-    public void Restart(ClientRestartType restartType)
+    public bool Restart(ClientRestartType restartType)
     {
         switch (restartType)
         {
             case ClientRestartType.Computer:
-                RestartComputer();
-                break;
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+                {
+                    _logger.LogWarning("Refusing remote PC restart; not running on Windows");
+                    return false;
+                }
+
+                _ = RunAfterGraceAsync(RestartComputer);
+                return true;
 
             case ClientRestartType.Application:
-                RestartApplication();
-                break;
+                _ = RunAfterGraceAsync(RestartApplication);
+                return true;
 
             default:
-                _logger.LogWarning("Ignoring restart command with unknown restart type {RestartType}", restartType);
-                break;
+                _logger.LogWarning("Refusing restart command with unknown restart type {RestartType}", restartType);
+                return false;
         }
+    }
+
+    private static async Task RunAfterGraceAsync(Action action)
+    {
+        await Task.Delay(AcknowledgementGrace);
+        action();
     }
 
     private void RestartComputer()
     {
-        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-        {
-            _logger.LogWarning("Ignoring remote PC restart; not running on Windows");
-            return;
-        }
-
         try
         {
             _logger.LogInformation("Restarting this PC in {Delay}s on request from the server", ComputerRestartDelaySeconds);
@@ -92,7 +105,7 @@ public class RemoteRestartService(ILogger<RemoteRestartService> logger) : IRemot
                 });
             }
 
-            Environment.Exit(0);
+            Environment.Exit(RestartRequestedExitCode);
         }
         catch (Exception ex)
         {
