@@ -33,7 +33,8 @@ public class ClockInTerminalService(
     // nothing to brute-force, and the hash has to be searchable to find the terminal.
     // Returned instead of a session when the terminal's company no longer has shift management, so
     // the terminal page can say so rather than claiming the tablet was unpaired. The pairing is
-    // kept: switching the feature back on brings the tablet straight back.
+    // kept: switching the feature back on brings the tablet back within a minute, since the
+    // terminal page reloads itself while it shows this.
     public const string FeatureOffError = "Shift management isn't turned on for this company.";
 
     public static string HashToken(string rawToken) =>

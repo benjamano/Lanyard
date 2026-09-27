@@ -20,6 +20,14 @@ public static class CompanyFeatureQueries
         return [.. disabled];
     }
 
+    public static async Task<bool> IsEnabledForCompanyAsync(ApplicationDbContext ctx, int companyId, CompanyFeature feature, CancellationToken cancellationToken = default)
+    {
+        return !await ctx.CompanyFeatureSettings
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(x => x.CompanyId == companyId && x.Feature == feature && !x.IsEnabled, cancellationToken);
+    }
+
     public static async Task<bool> IsEnabledForLocationAsync(ApplicationDbContext ctx, int locationId, CompanyFeature feature)
     {
         return !await ctx.CompanyFeatureSettings

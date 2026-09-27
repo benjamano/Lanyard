@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -687,6 +688,40 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             courseAssignmentServiceMock.Verify(c => c.AssignCourseToUsersAsync(course.Id, It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<LocationScope>(), It.IsAny<bool>()), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task CreateUserAsync_AutoAssignCourse_CompanyWithTrainingOff_IsNotAssigned()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 10, Feature = CompanyFeature.Training, IsEnabled = false });
+                await ctx.SaveChangesAsync();
+            }
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Location courseLocation = new() { Id = 1, CompanyId = 10, Name = "User Location" };
+            Course course = new() { Id = Guid.NewGuid(), Name = "Induction", AutoAssignOnUserCreation = true, LocationId = 1, Location = courseLocation, IsActive = true };
+            Mock<ICourseService> courseServiceMock = new();
+            courseServiceMock.Setup(c => c.GetCoursesAsync(It.IsAny<LocationScope>(), It.IsAny<bool>())).ReturnsAsync(Result<List<Course>>.Ok([course]));
+
+            Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object,
+                courseServiceMock: courseServiceMock, courseAssignmentServiceMock: courseAssignmentServiceMock);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(
+                new UserProfile { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+                locationIds: [1]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            courseAssignmentServiceMock.Verify(c => c.AssignCourseToUsersAsync(It.IsAny<Guid>(), It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<LocationScope>(), It.IsAny<bool>()), Times.Never);
         }
 
         [TestMethod]

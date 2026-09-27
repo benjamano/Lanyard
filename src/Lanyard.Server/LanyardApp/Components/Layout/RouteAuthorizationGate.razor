@@ -45,13 +45,24 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
     private bool _featureCheckPending;
     private CompanyFeature? _blockedFeature;
 
+    // The page type the current allow/block decision was made for.
+    private Type? _checkedPageType;
+
     protected override async Task OnParametersSetAsync()
     {
         // Set before the first await: this component is reused across navigations, so without
-        // it the previous page's "allowed" state would render the new page while the check runs.
+        // it the previous page's "allowed" state would render a newly reached page while the check
+        // runs. Moving within the page already on screen (e.g. /chat to /chat/{id}, or between the
+        // My Shifts tabs) keeps its current state instead - blanking it would dispose the page and
+        // rebuild it from scratch whenever the check had to go to the database.
         RequiresFeatureAttribute? requiredFeature = RouteData.PageType.GetCustomAttribute<RequiresFeatureAttribute>(inherit: true);
-        _featureCheckPending = requiredFeature is not null;
-        _blockedFeature = null;
+        bool samePage = RouteData.PageType == _checkedPageType;
+
+        if (!samePage)
+        {
+            _featureCheckPending = requiredFeature is not null;
+            _blockedFeature = null;
+        }
 
         _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
 
@@ -61,6 +72,8 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
             // anonymous page inside a paid module, checks its paired location's company instead.
             _isAuthenticated = false;
             _featureCheckPending = false;
+            _blockedFeature = null;
+            _checkedPageType = null;
             return;
         }
 
@@ -76,17 +89,17 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
             // ToBaseRelativePath gives "manage/users", which it rejects and sends home instead.
             string returnUrl = Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
             Navigation.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
+            _checkedPageType = null;
             return;
         }
 
         if (requiredFeature is not null)
         {
-            if (!await CompanyFeatures.IsEnabledForCurrentUserAsync(requiredFeature.Feature))
-            {
-                _blockedFeature = requiredFeature.Feature;
-            }
-
+            bool enabled = await CompanyFeatures.IsEnabledForCurrentUserAsync(requiredFeature.Feature);
+            _blockedFeature = enabled ? null : requiredFeature.Feature;
             _featureCheckPending = false;
         }
+
+        _checkedPageType = RouteData.PageType;
     }
 }

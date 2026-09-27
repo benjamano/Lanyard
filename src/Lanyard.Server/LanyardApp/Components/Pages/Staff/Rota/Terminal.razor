@@ -176,6 +176,12 @@
 
     private PersistingComponentStateSubscription? _persisting;
     private System.Threading.Timer? _ticker;
+
+    // While shift management is off the tablet keeps its pairing and reloads itself once a
+    // minute, so switching the feature back on brings it back without anyone touching it. A
+    // reload (rather than a cheaper check) because a tablet that booted into this state only has
+    // its cookie, which is only readable on a real page request.
+    private System.Threading.Timer? _featureOffRetry;
     private bool _live;
 
     private double QrProgressPercent
@@ -251,6 +257,12 @@
             return;
         }
 
+        if (mode == TerminalMode.FeatureOff)
+        {
+            ScheduleFeatureOffRetry();
+            return;
+        }
+
         if (mode == TerminalMode.Ready && session is not null)
         {
             // The handed-over session could be minutes old by now; confirm it's still live.
@@ -259,6 +271,7 @@
             if (!check.IsSuccess)
             {
                 mode = FailedMode(check, session.TerminalId.ToString());
+                ScheduleFeatureOffRetry();
                 StateHasChanged();
                 return;
             }
@@ -305,6 +318,7 @@
             {
                 StopLive();
                 mode = FailedMode(check, session.TerminalId.ToString());
+                ScheduleFeatureOffRetry();
                 selected = null;
                 banner = null;
             }
@@ -456,6 +470,16 @@
         }
     }
 
+    private void ScheduleFeatureOffRetry()
+    {
+        if (mode != TerminalMode.FeatureOff || _featureOffRetry is not null)
+        {
+            return;
+        }
+
+        _featureOffRetry = new System.Threading.Timer(_ => InvokeAsync(ReloadDirectly), null, RefreshInterval, Timeout.InfiniteTimeSpan);
+    }
+
     private void StopLive()
     {
         _live = false;
@@ -467,6 +491,7 @@
     public void Dispose()
     {
         StopLive();
+        _featureOffRetry?.Dispose();
         _persisting?.Dispose();
     }
 }
