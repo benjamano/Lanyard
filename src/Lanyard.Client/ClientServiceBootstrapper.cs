@@ -84,7 +84,7 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
             provider.GetRequiredService<VideoPublisherSignalRController>().Register,
             provider.GetRequiredService<RestartScheduleController>().Register,
-            provider.GetRequiredService<RemoteRestartController>().Register
+            provider.GetRequiredService<RemoteRestartController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register
         ];
     }
