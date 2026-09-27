@@ -6,6 +6,7 @@ using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Shared.DTO;
+using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -930,6 +931,55 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
     public async Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId)
     {
         return await SendVideoPublisherCommandAsync(clientId, "StopVideoPublisher", commandArgument: null);
+    }
+
+    /// <summary>
+    /// Tells a connected kiosk client to restart, either just the Lanyard Client application
+    /// (the Watchdog relaunches it) or the whole PC. Fails rather than queueing if the client
+    /// is offline: MostRecentConnectionId outlives the connection, so a send to it would
+    /// silently go nowhere and the caller would wrongly report success.
+    /// </summary>
+    public async Task<Result<bool>> RestartClientAsync(Guid clientId, ClientRestartType restartType)
+    {
+        try
+        {
+            if (!Enum.IsDefined(restartType))
+            {
+                return Result<bool>.Fail("Unknown restart type.");
+            }
+
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            if (!connectedResult.IsSuccess)
+            {
+                return Result<bool>.Fail(connectedResult.Error!);
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (!connectedResult.Data || string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client is not currently connected.");
+            }
+
+            _logger.LogInformation("Sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+
+            await _hubContext.Clients.Client(connectionId).SendAsync("RestartClient", restartType);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
     }
 
     private async Task<Result<bool>> SendVideoPublisherCommandAsync(Guid clientId, string commandName, string? commandArgument)
