@@ -4,6 +4,7 @@ using System.Reflection;
 using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -36,10 +37,10 @@ public class MusicControlActionExecutorTests
             .Options;
     }
 
-    private static Mock<IDbContextFactory<ApplicationDbContext>> GetFactoryMock(
+    private static Mock<ISystemDbContextFactory> GetFactoryMock(
         DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
 
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -54,7 +55,7 @@ public class MusicControlActionExecutorTests
     // the seam: a real MusicPlayerService over a mocked IHubContext lets the assertions name the
     // method actually dispatched ("Play" vs "Pause") instead of just that something happened.
     private static (MusicPlayerService Player, Mock<ISingleClientProxy> Proxy) GetMusicPlayer(
-        IDbContextFactory<ApplicationDbContext> factory)
+        ISystemDbContextFactory factory)
     {
         Mock<ISingleClientProxy> proxyMock = new();
         Mock<IHubClients> clientsMock = new();
@@ -77,12 +78,13 @@ public class MusicControlActionExecutorTests
     // so GetClientConnectionIdAsync exercises the same ClientService/cache lookup production does,
     // backed by the same InMemory context factory as the rest of the test.
     private static IServiceScopeFactory BuildClientServiceScopeFactory(
-        IDbContextFactory<ApplicationDbContext> factory,
+        ISystemDbContextFactory factory,
         IHubContext<SignalRControlHub> hubContext)
     {
         ServiceCollection services = new();
 
         services.AddSingleton(factory);
+        services.AddSingleton<IDbContextFactory<ApplicationDbContext>>(factory);
         services.AddSingleton(hubContext);
         services.AddSingleton<ILogger<ClientService>>(NullLogger<ClientService>.Instance);
         services.AddMemoryCache();
@@ -92,7 +94,7 @@ public class MusicControlActionExecutorTests
     }
 
     private static MusicControlActionExecutor GetExecutor(
-        IDbContextFactory<ApplicationDbContext> factory,
+        ISystemDbContextFactory factory,
         MusicPlayerService player)
     {
         return new MusicControlActionExecutor(
@@ -184,7 +186,7 @@ public class MusicControlActionExecutorTests
     public void CanHandle_ShouldReturnTrue_ForMusicControl()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         (MusicPlayerService player, _) = GetMusicPlayer(factory.Object);
 
         MusicControlActionExecutor executor = GetExecutor(factory.Object, player);
@@ -200,7 +202,7 @@ public class MusicControlActionExecutorTests
     public void CanHandle_ShouldReturnFalse_ForOtherActionTypes(string actionType)
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         (MusicPlayerService player, _) = GetMusicPlayer(factory.Object);
 
         MusicControlActionExecutor executor = GetExecutor(factory.Object, player);
@@ -214,7 +216,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldCallPlay_WhenOperationIsPlay()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         Guid clientId = Guid.NewGuid();
 
         string connectionId = NewConnectionId();
@@ -241,7 +243,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldCallPause_WhenOperationIsPause()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         Guid clientId = Guid.NewGuid();
 
         string connectionId = NewConnectionId();
@@ -270,7 +272,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldReturnClientNotConnected_WhenConnectionIdAbsentFromConnectedIds()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         Guid clientId = Guid.NewGuid();
 
         // The client row exists and even remembers a connection id, but that connection is not in
@@ -298,7 +300,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldReturnClientNotConnected_WhenClientNotFoundInDatabase()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
 
         (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetMusicPlayer(factory.Object);
         MusicControlActionExecutor executor = GetExecutor(factory.Object, player);
@@ -323,7 +325,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldReturnActionTypeNotSupported_WhenOperationIsUnknown()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
         Guid clientId = Guid.NewGuid();
 
         string connectionId = NewConnectionId();
@@ -350,7 +352,7 @@ public class MusicControlActionExecutorTests
     public async Task ExecuteAsync_ShouldReturnMusicOperationFailed_WhenExceptionThrown()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Mock<IDbContextFactory<ApplicationDbContext>> factory = GetFactoryMock(options);
+        Mock<ISystemDbContextFactory> factory = GetFactoryMock(options);
 
         (MusicPlayerService player, _) = GetMusicPlayer(factory.Object);
         MusicControlActionExecutor executor = GetExecutor(factory.Object, player);

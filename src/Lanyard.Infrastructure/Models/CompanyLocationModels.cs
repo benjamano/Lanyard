@@ -8,6 +8,10 @@ namespace Lanyard.Infrastructure.Models
         public DateTime CreateDate { get; set; }
         public DateTime UpdateDate { get; set; }
 
+        // The public demo company: hidden from the login company picker, reached via the one-click
+        // demo login, and wiped + reseeded every night. Never set this on a real customer.
+        public bool IsDemo { get; set; }
+
         public string? ThemeColorHex { get; set; }   // e.g. "#c8102e"; null => falls back to BrandConstants.PrimaryColorHex
         public Guid? LogoFileId { get; set; }         // FK -> FileMetadata.Id; null => navbar falls back to text-only wordmark
         public FileMetadata? LogoFile { get; set; }

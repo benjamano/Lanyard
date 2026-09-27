@@ -6,9 +6,10 @@ namespace Lanyard.Infrastructure.Models;
 // and never mutated or soft-deleted afterwards - so unlike most models here there is no IsActive
 // or DeleteDate. Live in-progress scores stay in the in-memory LaserGameStatusStore; only
 // completed games land in the database.
-public class GameResult
+public class GameResult : ICompanyOwned
 {
     public Guid Id { get; set; }
+    public int CompanyId { get; set; }
 
     public Guid ClientId { get; set; }
     public Client? Client { get; set; }

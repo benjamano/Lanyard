@@ -21,7 +21,7 @@ namespace Lanyard.Tests.DataAccess
     {
         // Kept as a named constant rather than a literal so that adding a capability role to
         // DatabaseSeeder.StandardRoles is a one-line update here, not a hunt through assertions.
-        private const int DatabaseSeederStandardRoleCount = 7;
+        private const int DatabaseSeederStandardRoleCount = 8;
 
         private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
         {
@@ -218,7 +218,11 @@ namespace Lanyard.Tests.DataAccess
 
             Assert.IsTrue(adminExists);
             Assert.AreEqual(DatabaseSeederStandardRoleCount, roleCount);
-            Assert.AreEqual(4, adminRoleAssignmentCount);
+            // Admin, Manager, Staff, CanControlMusic - plus PlatformAdmin, granted to the seed
+            // admin the first time that role is created.
+            Assert.AreEqual(5, adminRoleAssignmentCount);
+            Assert.IsTrue(await context.UserRoles.AnyAsync(ur =>
+                ur.UserId == ApplicationDbContext.SeedAdminUserId && ur.RoleId == ApplicationDbContext.SeedPlatformAdminRoleId));
         }
 
         [TestMethod]

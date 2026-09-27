@@ -1,5 +1,6 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.Data.Sqlite;
@@ -31,6 +32,10 @@ public class AutomationExecutionRetentionHostedServiceTests
 
         await using ApplicationDbContext ctx = new(_options);
         await ctx.Database.EnsureCreatedAsync();
+
+        // Company-owned rows (Client, AutomationRule) default to Play2Day and SQLite enforces the FK.
+        ctx.Companies.Add(new Company { Id = ApplicationDbContext.SeedPlay2DayCompanyId, Name = "Play2Day" });
+        await ctx.SaveChangesAsync();
     }
 
     [TestCleanup]
@@ -41,7 +46,7 @@ public class AutomationExecutionRetentionHostedServiceTests
 
     private AutomationExecutionRetentionHostedService GetService(int retentionDays)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(_options));
 

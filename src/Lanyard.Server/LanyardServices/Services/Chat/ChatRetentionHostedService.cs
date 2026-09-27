@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -49,7 +50,7 @@ public class ChatRetentionHostedService(
         try
         {
             using IServiceScope scope = _scopeFactory.CreateScope();
-            IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            ISystemDbContextFactory factory = scope.ServiceProvider.GetRequiredService<ISystemDbContextFactory>();
             await using ApplicationDbContext ctx = await factory.CreateDbContextAsync();
 
             ChatRetention.PurgeResult result = await ChatRetention.PurgeExpiredAsync(ctx, _timeProvider.GetUtcNow().UtcDateTime);

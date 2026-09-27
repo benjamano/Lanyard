@@ -3,6 +3,7 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
@@ -25,10 +26,10 @@ public class AutomationRuleServiceTests
             .Options;
     }
 
-    private static IDbContextFactory<ApplicationDbContext> GetFactory(
+    private static ISystemDbContextFactory GetFactory(
         DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
 
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
@@ -47,7 +48,7 @@ public class AutomationRuleServiceTests
     private static (AutomationRuleService Rules, AutomationEngineService Engine, RecordingActionExecutor Executor)
         GetService(DbContextOptions<ApplicationDbContext> options)
     {
-        IDbContextFactory<ApplicationDbContext> factory = GetFactory(options);
+        ISystemDbContextFactory factory = GetFactory(options);
         RecordingActionExecutor executor = new();
 
         AutomationEngineService engine = new(

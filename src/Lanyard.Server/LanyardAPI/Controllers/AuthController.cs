@@ -399,35 +399,49 @@ namespace Lanyard.API.Controllers
 
         private async Task<(bool ok, string? error)> ValidateAndBuildLocationClaimsAsync(UserProfile user, int? locationId, List<Claim> claims)
         {
-            bool isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
-
             if (locationId is null)
             {
                 return (false, "Please select your location.");
             }
 
-            if (isAdmin)
+            // Runs before the new cookie exists, so this request is anonymous and the list covers
+            // every company - which is what we need to check the choice against.
+            Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
+            LoginLocationOption? option = optionsResult.IsSuccess
+                ? optionsResult.Data!.FirstOrDefault(x => x.LocationId == locationId.Value)
+                : null;
+
+            if (option is null)
             {
-                Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
-
-                if (!optionsResult.IsSuccess || optionsResult.Data!.All(x => x.LocationId != locationId.Value))
-                {
-                    return (false, "The selected location is no longer available.");
-                }
-
-                claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
-
-                return (true, null);
+                return (false, "The selected location is no longer available.");
             }
 
-            Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
+            bool hasAccess;
 
-            if (!membershipResult.IsSuccess || membershipResult.Data != true)
+            if (await _userManager.IsInRoleAsync(user, LanyardRoles.PlatformAdmin))
+            {
+                hasAccess = true;
+            }
+            else if (await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                // Admin is admin of their own company: any location in a company they already
+                // belong to, but not the locations of companies they have nothing to do with.
+                Result<List<int>> userCompanyIds = await _companyLocationService.GetCompanyIdsForUserAsync(user.Id);
+                hasAccess = userCompanyIds.IsSuccess && userCompanyIds.Data!.Contains(option.CompanyId);
+            }
+            else
+            {
+                Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
+                hasAccess = membershipResult.IsSuccess && membershipResult.Data;
+            }
+
+            if (!hasAccess)
             {
                 return (false, "You do not have access to the selected location.");
             }
 
             claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
+            claims.Add(new Claim(LocationClaimTypes.CompanyId, option.CompanyId.ToString()));
 
             return (true, null);
         }

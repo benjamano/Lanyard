@@ -3,9 +3,10 @@ using Lanyard.Shared.Enum;
 
 namespace Lanyard.Infrastructure.Models;
 
-public class AutomationRule
+public class AutomationRule : ICompanyOwned
 {
     public Guid Id { get; set; }
+    public int CompanyId { get; set; }
 
     public required string Name { get; set; }
 

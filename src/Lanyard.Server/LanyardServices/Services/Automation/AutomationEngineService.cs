@@ -1,6 +1,7 @@
 #nullable enable
 
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
@@ -12,11 +13,11 @@ using System.Threading.Channels;
 namespace Lanyard.Application.Services;
 
 public class AutomationEngineService(
-    IDbContextFactory<ApplicationDbContext> contextFactory,
+    ISystemDbContextFactory contextFactory,
     IEnumerable<IActionExecutor> actionExecutors,
     ILogger<AutomationEngineService> logger)
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory = contextFactory;
+    private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IEnumerable<IActionExecutor> _actionExecutors = actionExecutors;
     private readonly ILogger<AutomationEngineService> _logger = logger;
 

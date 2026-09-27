@@ -1,6 +1,7 @@
 using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.AspNetCore.SignalR;
@@ -42,7 +43,7 @@ public class DmxServiceTests
             scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
 
             Service = new DmxService(
-                Mock.Of<IDbContextFactory<ApplicationDbContext>>(),
+                Mock.Of<ISystemDbContextFactory>(),
                 hubContext.Object,
                 Mock.Of<ILogger<DmxService>>(),
                 scopeFactory.Object);

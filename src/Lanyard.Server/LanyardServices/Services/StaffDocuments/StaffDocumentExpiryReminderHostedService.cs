@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -57,7 +58,7 @@ public class StaffDocumentExpiryReminderHostedService(
         using IServiceScope scope = _scopeFactory.CreateScope();
         IStaffDocumentService documentService = scope.ServiceProvider.GetRequiredService<IStaffDocumentService>();
         IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-        IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+        ISystemDbContextFactory factory = scope.ServiceProvider.GetRequiredService<ISystemDbContextFactory>();
         EmailOptions emailOptions = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
         ITrainingBrandingResolver brandingResolver = scope.ServiceProvider.GetRequiredService<ITrainingBrandingResolver>();
 

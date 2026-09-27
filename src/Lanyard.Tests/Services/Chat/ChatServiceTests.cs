@@ -1,6 +1,7 @@
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Chat;
 using Lanyard.Infrastructure.DTO.Notifications;
@@ -58,7 +59,7 @@ public class ChatServiceTests
         RecordingNotificationDispatcher notifications = new();
         ChatEventBus bus = new();
         ChatPresence presence = new();
-        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(options);
+        ISystemDbContextFactory factory = SchedulingTestHelpers.GetFactory(options);
 
         return new World(options, company, location, manager, amy, tom, priya, clock, notifications, presence,
             new ChatService(factory, notifications, bus, presence, clock, NullLogger<ChatService>.Instance),
@@ -482,7 +483,7 @@ public class ChatServiceTests
         w.Clock.Advance(TimeSpan.FromMinutes(1));
         await SendAsync(w, w.Tom, direct);
 
-        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(w.Options);
+        ISystemDbContextFactory factory = SchedulingTestHelpers.GetFactory(w.Options);
 
         Assert.AreEqual(0, await ChatDigestHostedService.SweepAsync(factory, w.Notifications, w.Clock.UtcNow.AddHours(23)));
         Assert.AreEqual(1, await ChatDigestHostedService.SweepAsync(factory, w.Notifications, w.Clock.UtcNow.AddHours(25)));
@@ -502,7 +503,7 @@ public class ChatServiceTests
         World w = await SeedAsync();
         ChatConversation direct = await DirectAsync(w, w.Amy, w.Tom);
         ChatConversation group = (await w.Chat.CreateGroupAsync(w.Tom.Id, w.Company.Id, "Crew", [w.Amy.Id])).Data!;
-        IDbContextFactory<ApplicationDbContext> factory = SchedulingTestHelpers.GetFactory(w.Options);
+        ISystemDbContextFactory factory = SchedulingTestHelpers.GetFactory(w.Options);
         DateTime start = w.Clock.UtcNow;
 
         // A message an hour, in two conversations, and Amy never opens chat.

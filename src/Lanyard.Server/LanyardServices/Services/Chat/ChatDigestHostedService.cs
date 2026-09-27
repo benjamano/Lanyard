@@ -1,5 +1,6 @@
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Enum;
@@ -44,7 +45,7 @@ public class ChatDigestHostedService(
                     using IServiceScope scope = _scopeFactory.CreateScope();
 
                     int sent = await SweepAsync(
-                        scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>(),
+                        scope.ServiceProvider.GetRequiredService<ISystemDbContextFactory>(),
                         scope.ServiceProvider.GetRequiredService<INotificationDispatcher>(),
                         _timeProvider.GetUtcNow().UtcDateTime);
 
@@ -69,7 +70,7 @@ public class ChatDigestHostedService(
     }
 
     // Public so tests can run a sweep at a chosen moment. Returns how many people were emailed.
-    public static async Task<int> SweepAsync(IDbContextFactory<ApplicationDbContext> factory, INotificationDispatcher notifications, DateTime nowUtc)
+    public static async Task<int> SweepAsync(ISystemDbContextFactory factory, INotificationDispatcher notifications, DateTime nowUtc)
     {
         DateTime cutoff = nowUtc - UnreadFor;
 

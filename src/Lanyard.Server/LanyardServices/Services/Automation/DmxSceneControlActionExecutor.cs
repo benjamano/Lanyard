@@ -2,6 +2,7 @@
 
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -12,11 +13,11 @@ namespace Lanyard.Application.Services;
 
 public class DmxSceneControlActionExecutor(
     IDmxSceneRunnerService sceneRunner,
-    IDbContextFactory<ApplicationDbContext> contextFactory,
+    ISystemDbContextFactory contextFactory,
     ILogger<DmxSceneControlActionExecutor> logger) : IActionExecutor
 {
     private readonly IDmxSceneRunnerService _sceneRunner = sceneRunner;
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory = contextFactory;
+    private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly ILogger<DmxSceneControlActionExecutor> _logger = logger;
 
     public const string StartScene = "StartScene";

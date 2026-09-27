@@ -46,9 +46,10 @@ namespace Lanyard.Infrastructure.Models
         Unsupported = 4
     }
 
-    public class Song
+    public class Song : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         public required string Name { get; set; }
         public required string AlbumName { get; set; }
@@ -76,9 +77,10 @@ namespace Lanyard.Infrastructure.Models
         public FileMetadata? FileMetadata { get; set; }
     }
 
-    public class Playlist
+    public class Playlist : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         public required string Name { get; set; }
         public string? Description { get; set; }

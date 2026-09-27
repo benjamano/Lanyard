@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -7,10 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace Lanyard.Application.Services;
 
 public class ProjectionProgramRunnerService(
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     ILogger<ProjectionProgramRunnerService> logger) : IProjectionProgramRunnerService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly ILogger<ProjectionProgramRunnerService> _logger = logger;
 
     // How often a held step re-checks for pause/skip/stop. Paused time doesn't count
