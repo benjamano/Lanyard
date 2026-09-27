@@ -868,6 +868,151 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    public async Task<Result<bool>> SetClientAvailableAudioDevicesAsync(Guid clientId, IEnumerable<ClientAvailableAudioDeviceDTO> devices)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            bool clientExists = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .AnyAsync();
+
+            if (!clientExists)
+            {
+                return Result<bool>.Fail("Client not found for the given client ID.");
+            }
+
+            List<ClientAvailableAudioDevice> existingDevices = await ctx.ClientAvailableAudioDevices
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId)
+                .ToListAsync();
+
+            // Keyed on the Windows endpoint ID rather than the name: two identical monitors
+            // report the same friendly name but always have distinct endpoint IDs.
+            foreach (ClientAvailableAudioDevice deviceFound in existingDevices)
+            {
+                if (!devices.Any(d => d.Id.Equals(deviceFound.DeviceId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    deviceFound.IsActive = false;
+                }
+            }
+
+            foreach (ClientAvailableAudioDeviceDTO incoming in devices)
+            {
+                ClientAvailableAudioDevice? match = existingDevices.FirstOrDefault(x => x.DeviceId.Equals(incoming.Id, StringComparison.OrdinalIgnoreCase));
+
+                if (match == null)
+                {
+                    ClientAvailableAudioDevice newDevice = new()
+                    {
+                        ClientId = clientId,
+                        DeviceId = incoming.Id,
+                        DeviceName = incoming.Name,
+                        IsActive = true
+                    };
+
+                    ctx.ClientAvailableAudioDevices.Add(newDevice);
+                    existingDevices.Add(newDevice);
+                }
+                else
+                {
+                    match.IsActive = true;
+                    match.DeviceName = incoming.Name;
+                }
+            }
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Updated available audio devices for client {ClientId}: {Devices}", clientId, string.Join(", ", devices.Select(d => d.Name)));
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting available audio devices for client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<ClientAvailableAudioDevice>>> GetClientAvailableAudioDevicesAsync(Guid clientId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            IEnumerable<ClientAvailableAudioDevice> devices = await ctx.ClientAvailableAudioDevices
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.ClientId == clientId)
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DeviceName)
+                .ToListAsync();
+
+            return Result<IEnumerable<ClientAvailableAudioDevice>>.Ok(devices);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<ClientAvailableAudioDevice>>.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Saves which output device the client should keep as its Windows default (null clears it,
+    /// leaving the default alone) and pushes it to the client straight away if it is connected.
+    /// Data is true when the setting was delivered live, false when it will apply on next connect.
+    /// </summary>
+    public async Task<Result<bool>> SetClientPreferredAudioDeviceAsync(Guid clientId, string? deviceId, string? deviceName)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .FirstOrDefaultAsync();
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found for the given client ID.");
+            }
+
+            bool clearing = string.IsNullOrWhiteSpace(deviceId);
+
+            client.PreferredAudioDeviceId = clearing ? null : deviceId;
+            client.PreferredAudioDeviceName = clearing ? null : deviceName;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set preferred audio device for client {ClientId} to {DeviceName} ({DeviceId})", clientId, client.PreferredAudioDeviceName, client.PreferredAudioDeviceId);
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            if (!connectedResult.IsSuccess || !connectedResult.Data || string.IsNullOrEmpty(client.MostRecentConnectionId))
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            ClientAudioSettingsDTO settings = new()
+            {
+                PreferredDeviceId = client.PreferredAudioDeviceId,
+                PreferredDeviceName = client.PreferredAudioDeviceName
+            };
+
+            await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveAudioSettings", settings);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting preferred audio device for client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync()
     {
         try

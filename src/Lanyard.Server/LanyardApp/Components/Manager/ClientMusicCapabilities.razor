@@ -18,7 +18,23 @@
                                  ValueChanged="@(v => { _cacheLimitStr = v; if (int.TryParse(v, out int n)) client!.MusicCacheLimitMb = n; })"
                                  Label="Music Cache Limit (MB)"
                                  TextInputType="TextInputType.Number" />
-                <FluentText Style="color: var(--neutral-foreground-hint);">Minimum @MinCacheLimitMb MB. A limit that's too low disables local caching, forcing every track to stream over the network.</FluentText>
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint);">Minimum @MinCacheLimitMb MB. A limit that's too low disables local caching, forcing every track to stream over the network.</FluentText>
+            </div>
+            <div>
+                <FluentSelect TOption="AudioDeviceOption" TValue="string"
+                              Items="@_audioDeviceOptions"
+                              OptionText="@(x => x.Label)"
+                              OptionValue="@(x => x.Id)"
+                              @bind-Value="_selectedAudioDeviceId"
+                              Label="Default Audio Output"
+                              Width="100%" />
+                @if (_selectedAudioDeviceIsMissing)
+                {
+                    <FluentText Style="display: block; color: var(--colorPaletteRedForeground1);">
+                        This device isn't connected to the client right now. The client will switch back to it as soon as it's plugged in again.
+                    </FluentText>
+                }
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint);">The client checks this every minute and switches Windows back to it, so a TV or projector that reconnects can't take over the sound. The list shows the devices the client reported when it last connected.</FluentText>
             </div>
             <FluentButton Type="ButtonType.Button" Appearance="ButtonAppearance.Outline" Disabled="!isClientConnected" IconStart="new Icons.Regular.Size20.ArrowDownload()" @onclick="GetCachedSongs">
                 Get Cached Songs
@@ -40,6 +56,15 @@
     private bool isClientConnected = false;
     private string _cacheLimitStr = "500";
 
+    private const string NoAudioDeviceId = "";
+
+    private List<AudioDeviceOption> _audioDeviceOptions = [];
+    private string _selectedAudioDeviceId = NoAudioDeviceId;
+
+    private record AudioDeviceOption(string Id, string Name, string Label, bool IsMissing = false);
+
+    private bool _selectedAudioDeviceIsMissing => _audioDeviceOptions.Any(x => x.Id == _selectedAudioDeviceId && x.IsMissing);
+
     protected override async Task OnParametersSetAsync()
     {
         _signalRProjectionControlHubEvents.OnReceiveCachedSongs -= HandleReceiveCachedSongs;
@@ -58,6 +83,7 @@
         {
             client = result.Data!;
             _cacheLimitStr = client.MusicCacheLimitMb.ToString();
+            await LoadAudioDeviceOptionsAsync();
         }
         else
         {
@@ -75,6 +101,32 @@
         }
     }
 
+    private async Task LoadAudioDeviceOptionsAsync()
+    {
+        List<AudioDeviceOption> options = [new(NoAudioDeviceId, string.Empty, "Don't manage (leave the Windows default)")];
+
+        Result<IEnumerable<ClientAvailableAudioDevice>> devicesResult = await _clientService.GetClientAvailableAudioDevicesAsync(ClientId!.Value);
+
+        if (devicesResult.IsSuccess)
+        {
+            options.AddRange(devicesResult.Data!.Select(x => new AudioDeviceOption(x.DeviceId, x.DeviceName, x.DeviceName)));
+        }
+        else
+        {
+            _toastService.ShowError($"Failed to load client audio devices, {devicesResult.Error}");
+        }
+
+        // Keep the saved choice selectable while it's unplugged, otherwise saving the tab would silently clear it.
+        if (!string.IsNullOrEmpty(client!.PreferredAudioDeviceId) && !options.Any(x => x.Id == client.PreferredAudioDeviceId))
+        {
+            string name = client.PreferredAudioDeviceName ?? "Unknown device";
+            options.Add(new AudioDeviceOption(client.PreferredAudioDeviceId, name, $"{name} (not connected)", IsMissing: true));
+        }
+
+        _audioDeviceOptions = options;
+        _selectedAudioDeviceId = client.PreferredAudioDeviceId ?? NoAudioDeviceId;
+    }
+
     private async Task UpdateClientCapabilitiesAsync()
     {
         if (client == null) return;
@@ -85,15 +137,40 @@
             return;
         }
 
+        bool audioDeviceChanged = (client.PreferredAudioDeviceId ?? NoAudioDeviceId) != _selectedAudioDeviceId;
+        AudioDeviceOption? selectedAudioDevice = _audioDeviceOptions.FirstOrDefault(x => x.Id == _selectedAudioDeviceId);
+
+        client.PreferredAudioDeviceId = _selectedAudioDeviceId == NoAudioDeviceId ? null : _selectedAudioDeviceId;
+        client.PreferredAudioDeviceName = client.PreferredAudioDeviceId == null ? null : selectedAudioDevice?.Name;
+
         Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
 
-        if (updateResult.IsSuccess)
+        if (!updateResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to update client capabilities, {updateResult.Error}");
+            return;
+        }
+
+        if (!audioDeviceChanged)
         {
             _toastService.ShowSuccess("Client capabilities updated, changes will propagate to this client on next restart.");
+            return;
+        }
+
+        // The audio device is pushed to the client straight away rather than waiting for a restart.
+        Result<bool> audioResult = await _clientService.SetClientPreferredAudioDeviceAsync(client.Id, client.PreferredAudioDeviceId, client.PreferredAudioDeviceName);
+
+        if (!audioResult.IsSuccess)
+        {
+            _toastService.ShowError($"Settings saved, but the audio device couldn't be sent to the client, {audioResult.Error}");
+        }
+        else if (audioResult.Data)
+        {
+            _toastService.ShowSuccess("Client capabilities updated. The default audio output has been applied on the client.");
         }
         else
         {
-            _toastService.ShowError($"Failed to update client capabilities, {updateResult.Error}");
+            _toastService.ShowSuccess("Client capabilities updated. The client is offline, so the default audio output will apply when it next connects.");
         }
     }
 
