@@ -148,7 +148,10 @@ public class ApplicationRolesService
 
             IList<UserProfile> usersInRole = await _umApi.GetUsersInRoleAsync(role.Name!);
 
-            return Result<List<UserProfile>>.Ok([.. usersInRole]);
+            // Roles are shared by every company; only this company's holders of the role count.
+            HashSet<string> companyUserIds = (await _sApi.GetActiveUsersAsync()).Select(x => x.Id).ToHashSet();
+
+            return Result<List<UserProfile>>.Ok([.. usersInRole.Where(x => companyUserIds.Contains(x.Id))]);
         }
         catch (Exception ex)
         {
@@ -286,7 +289,8 @@ public class ApplicationRolesService
             UserProfile? user = await _umApi.FindByIdAsync(userId);
             ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
 
-            if (user is null)
+            // GetUserByIdAsync refuses users outside the caller's company.
+            if (user is null || !(await _sApi.GetUserByIdAsync(user.Id)).IsSuccess)
             {
                 return Result<string>.Fail("User not found.");
             }
@@ -347,7 +351,8 @@ public class ApplicationRolesService
             UserProfile? user = await _umApi.FindByIdAsync(userId);
             ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
 
-            if (user is null)
+            // GetUserByIdAsync refuses users outside the caller's company.
+            if (user is null || !(await _sApi.GetUserByIdAsync(user.Id)).IsSuccess)
             {
                 return Result<string>.Fail("User not found.");
             }

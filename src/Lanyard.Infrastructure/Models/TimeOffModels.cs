@@ -6,7 +6,7 @@ namespace Lanyard.Infrastructure.Models
     // Company-scoped like StaffPosition, because leave policy is set by the company, not a site.
     // Whether a type eats into an allowance is a property of the type: sickness is recorded but
     // never counted against anyone's holiday.
-    public class TimeOffType
+    public class TimeOffType : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -36,7 +36,7 @@ namespace Lanyard.Infrastructure.Models
     // wins) or doesn't (and the tier below applies). No row at any tier means no allowance: 0 h.
     // Stored in hours so half days and short absences deduct exactly; the UI converts to days
     // with CompanySchedulingSettings.HoursPerDay.
-    public class TimeOffAllowance
+    public class TimeOffAllowance : ICompanyOwned
     {
         public Guid Id { get; set; }
 

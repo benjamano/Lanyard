@@ -8,7 +8,7 @@ namespace Lanyard.Infrastructure.Models
     // time-off allowances are tiered company -> position -> user, and a rota shift can be tagged
     // with the position being worked. Company-scoped (not location-scoped) for the same reason
     // as StaffDocumentType - it's company policy, and staff move between locations.
-    public class StaffPosition
+    public class StaffPosition : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -58,7 +58,7 @@ namespace Lanyard.Infrastructure.Models
     // override just MaxHoursPerWeek and still pick up the company's MinShiftsPerWeek. Three
     // partial unique indexes in ApplicationDbContext enforce one row per tier key (the same
     // NULL-is-distinct workaround CompanyOnboardingSettings needs).
-    public class ContractRequirement
+    public class ContractRequirement : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -112,7 +112,7 @@ namespace Lanyard.Infrastructure.Models
     // CompanyOnboardingSettings). Holds the knobs the scheduling module needs that are policy
     // rather than data: when the holiday year rolls over, how a "day" of leave converts to
     // hours, and how far ahead of a shift the reminder email goes out.
-    public class CompanySchedulingSettings
+    public class CompanySchedulingSettings : ICompanyOwned
     {
         public Guid Id { get; set; }
 

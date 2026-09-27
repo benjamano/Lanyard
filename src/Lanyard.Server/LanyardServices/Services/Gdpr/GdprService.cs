@@ -48,7 +48,8 @@ public class GdprService : IGdprService
 
             UserProfile? user = await _userManager.FindByIdAsync(userId);
 
-            if (user is null)
+            // GetUserByIdAsync refuses users outside the admin's own company.
+            if (user is null || !(await _securityService.GetUserByIdAsync(userId)).IsSuccess)
             {
                 return Result<bool>.Fail("User not found!");
             }

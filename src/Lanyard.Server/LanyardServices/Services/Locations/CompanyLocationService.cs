@@ -52,6 +52,18 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         }
     }
 
+    public async Task<Result<List<Company>>> GetSessionCompaniesAsync()
+    {
+        Result<List<Company>> companies = await GetCompaniesAsync();
+
+        if (!companies.IsSuccess || _tenant is null || _tenant.IsSystem)
+        {
+            return companies;
+        }
+
+        return Result<List<Company>>.Ok(companies.Data!.Where(x => x.Id == _tenant.CompanyId).ToList());
+    }
+
     public async Task<Result<Company>> SaveCompanyAsync(Company company)
     {
         try
@@ -353,6 +365,14 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             if (!CanManageCompany(locationCompanyId.Value))
             {
                 return Result<bool>.Fail(NoAccessToCompany);
+            }
+
+            // Otherwise a company admin could pull another company's user (say, its admin) into
+            // one of their own locations and then manage that account.
+            if (ManageableCompanyId is int onlyCompanyId
+                && await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == userId && x.Location!.CompanyId != onlyCompanyId))
+            {
+                return Result<bool>.Fail("This user belongs to another company.");
             }
 
             bool alreadyMember = await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == userId && x.LocationId == locationId);

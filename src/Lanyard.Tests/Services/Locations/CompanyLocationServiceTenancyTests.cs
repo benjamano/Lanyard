@@ -104,4 +104,27 @@ public class CompanyLocationServiceTenancyTests
         Assert.IsTrue((await service.SaveCompanyAsync(new Company { Name = "New Co" })).IsSuccess);
         Assert.IsTrue((await service.SaveLocationAsync(new Location { CompanyId = f.Theirs.Id, Name = "Wisbech" })).IsSuccess);
     }
+
+    [TestMethod]
+    public async Task CompanyAdmin_CannotPullAnotherCompanysUserIntoTheirLocation()
+    {
+        Fixture f = await SeedAsync();
+        CompanyLocationService service = ServiceFor(f, new TestTenant(f.Mine.Id));
+
+        // f.User belongs to the other company's location.
+        Result<bool> result = await service.AddUserToLocationAsync(f.User.Id, f.MyLocation.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        await using ApplicationDbContext ctx = new(f.Options);
+        Assert.IsFalse(await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == f.User.Id && x.LocationId == f.MyLocation.Id));
+    }
+
+    [TestMethod]
+    public async Task SessionCompanies_IsJustTheSignedInCompany_EvenForAPlatformAdmin()
+    {
+        Fixture f = await SeedAsync();
+        CompanyLocationService service = ServiceFor(f, new TestTenant(f.Mine.Id, isPlatformAdmin: true));
+
+        CollectionAssert.AreEqual(new[] { f.Mine.Id }, (await service.GetSessionCompaniesAsync()).Data!.Select(x => x.Id).ToArray());
+    }
 }

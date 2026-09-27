@@ -7,7 +7,7 @@ namespace Lanyard.Infrastructure.Models
     // Direct conversations are private to their two members by design - no screen or service method
     // shows one to anybody else, Admins included. The only exception is a single message a member
     // chose to report, and then only a snapshot of that message (ChatReport).
-    public class ChatConversation
+    public class ChatConversation : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -161,7 +161,7 @@ namespace Lanyard.Infrastructure.Models
 
     // A person barred from posting in chat (they can still read) until UntilUtc, or until lifted
     // when UntilUtc is null.
-    public class ChatSuspension
+    public class ChatSuspension : ICompanyOwned
     {
         public Guid Id { get; set; }
 

@@ -6,7 +6,7 @@ namespace Lanyard.Infrastructure.Models
     // First Aid certificate, etc). Company-scoped rather than Location-scoped because this is
     // HR/company policy, mirroring how branding (Company.ThemeColorHex/LogoFileId) already lives
     // on Company, not Location - see CompanyLocationModels.cs.
-    public class StaffDocumentType
+    public class StaffDocumentType : ICompanyOwned
     {
         public Guid Id { get; set; }
 

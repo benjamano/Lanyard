@@ -51,6 +51,8 @@ public class GdprServiceTests
         Mock<ISecurityService> mock = new();
         mock.Setup(s => s.IsCurrentUserInRoleAsync("Admin")).ReturnsAsync(isAdmin);
         mock.Setup(s => s.GetCurrentUserProfileAsync()).ReturnsAsync(Result<UserProfile>.Ok(performingAdmin));
+        // Every target is in the admin's company here; the company check itself lives in SecurityService.
+        mock.Setup(s => s.GetUserByIdAsync(It.IsAny<string>())).ReturnsAsync((string id) => Result<UserProfile>.Ok(new UserProfile { Id = id }));
         return mock;
     }
 
