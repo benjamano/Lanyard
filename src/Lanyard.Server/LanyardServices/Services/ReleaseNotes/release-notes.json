@@ -503,7 +503,7 @@
   {
     "version": "1.4.11",
     "releaseDate": "2026-09-25",
-    "summary": "The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
+    "summary": "Admins can choose which features each company gets. The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
     "details": [
       "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
@@ -529,7 +529,8 @@
       "When you install Lanyard on your phone or computer, the app is now named after your company (for example \"Acme Leisure\") instead of \"Lanyard\". The install prompt and the steps under Account > Notifications use your company's name and logo too. If you've already installed it, Android may update the name by itself or ask you to confirm the update. On an iPhone, remove it from your home screen and add it again.",      
       "Chat notifications on your phone now look more like a messaging app. New messages in the same conversation stack up in one notification as a thread, showing the last few messages. In a group or channel, each line shows who sent it. The notification shows the sender's initials in a coloured circle, and the Lanyard λ shows in the status bar. Opening the conversation clears its notification.",
       "Short connection drops no longer flash up a \"Reconnecting\" box. Lanyard now quietly tries to reconnect for a few seconds first, and only shows the box, which now just says \"Reconnecting...\", if the connection is still down after that.",
-      "You can now choose a default audio output for each kiosk PC, in its settings under Music. The kiosk checks every minute and switches Windows back to that output if something else has taken over. For example, a TV or projector that turns back on can no longer pull the music away from the speakers. Choosing a new output applies straight away if the kiosk is online."
+      "You can now choose a default audio output for each kiosk PC, in its settings under Music. The kiosk checks every minute and switches Windows back to that output if something else has taken over. For example, a TV or projector that turns back on can no longer pull the music away from the speakers. Choosing a new output applies straight away if the kiosk is online.",
+      "Admins can now choose which features each company gets, under Manage > Companies & Locations > Features. Shift management, training, chat, onboarding and announcements can each be switched on or off per company. When one is off, staff at that company don't see it in the menu, on the home screen or on dashboards, and its pages show a \"not turned on for your company\" message instead. Clock-in tablets at that company stop working until shift management is switched back on, then come back by themselves within a minute. With onboarding off, new staff aren't sent the welcome email; with training off, courses aren't auto-assigned to new staff. Nothing is deleted, so switching a feature back on brings everything back. Every company has every feature until an admin changes it."
     ]
   }
 ]

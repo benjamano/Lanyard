@@ -13,6 +13,7 @@
 @inject IShiftClaimEventBus ShiftClaimEventBus
 @inject Lanyard.App.Services.ChatUnreadTracker ChatUnread
 @inject Lanyard.Application.Services.Chat.IChatModerationService ChatModeration
+@inject ICompanyFeatureService CompanyFeatures
 
 <FluentStack Orientation="Orientation.Vertical" VerticalAlignment="VerticalAlignment.SpaceBetween"
              HorizontalAlignment="HorizontalAlignment.Stretch" Height="100%">
@@ -33,33 +34,45 @@
                 Home
             </FluentNavItem>
 
-            <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                           IconActive="@(new Icons.Filled.Size20.BookOpen())">
-                My Training
-            </FluentNavItem>
+            @if (Has(CompanyFeature.Training))
+            {
+                <FluentNavItem Href="/training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                               IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                    My Training
+                </FluentNavItem>
+            }
 
-            <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
-                           IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
-                My Shifts
-            </FluentNavItem>
+            @if (Has(CompanyFeature.StaffScheduling))
+            {
+                <FluentNavItem Href="/rota" IconRest="@(new Icons.Regular.Size20.CalendarLtr())"
+                               IconActive="@(new Icons.Filled.Size20.CalendarLtr())" Match="NavLinkMatch.All">
+                    My Shifts
+                </FluentNavItem>
+            }
 
-            <FluentNavItem Href="/chat" IconRest="@(new Icons.Regular.Size20.Chat())"
-                           IconActive="@(new Icons.Filled.Size20.Chat())">
-                <span class="nav-item-with-count">
-                    Chat
-                    @if (ChatUnread.Count > 0)
-                    {
-                        <FluentCounterBadge Count="@ChatUnread.Count" OverflowCount="99" aria-label="@($"{ChatUnread.Count} unread messages")" />
-                    }
-                </span>
-            </FluentNavItem>
+            @if (Has(CompanyFeature.Chat))
+            {
+                <FluentNavItem Href="/chat" IconRest="@(new Icons.Regular.Size20.Chat())"
+                               IconActive="@(new Icons.Filled.Size20.Chat())">
+                    <span class="nav-item-with-count">
+                        Chat
+                        @if (ChatUnread.Count > 0)
+                        {
+                            <FluentCounterBadge Count="@ChatUnread.Count" OverflowCount="99" aria-label="@($"{ChatUnread.Count} unread messages")" />
+                        }
+                    </span>
+                </FluentNavItem>
+            }
 
-            <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
-                           IconActive="@(new Icons.Filled.Size20.CalendarPerson())">
-                Time Off
-            </FluentNavItem>
+            @if (Has(CompanyFeature.StaffScheduling))
+            {
+                <FluentNavItem Href="/rota/time-off" IconRest="@(new Icons.Regular.Size20.CalendarPerson())"
+                               IconActive="@(new Icons.Filled.Size20.CalendarPerson())">
+                    Time Off
+                </FluentNavItem>
+            }
 
-            @if (_canPostAnnouncements)
+            @if (_canPostAnnouncements && Has(CompanyFeature.Announcements))
             {
                 <FluentNavItem Href="/manage/announcements" IconRest="@(new Icons.Regular.Size20.Megaphone())"
                                IconActive="@(new Icons.Filled.Size20.Megaphone())">
@@ -86,55 +99,67 @@
                         <FluentNavItem Href="/manage/companies-locations">Companies &amp; Locations</FluentNavItem>
                     }
 
-                    <FluentNavItem Href="/manage/onboarding">Onboarding</FluentNavItem>
-                    <FluentNavItem Href="/manage/staff-documents/types">Staff Document Types</FluentNavItem>
+                    @if (Has(CompanyFeature.Onboarding))
+                    {
+                        <FluentNavItem Href="/manage/onboarding">Onboarding</FluentNavItem>
+                        <FluentNavItem Href="/manage/staff-documents/types">Staff Document Types</FluentNavItem>
+                    }
                     <FluentNavItem Href="/manage/roles">Roles</FluentNavItem>
                     <FluentNavItem Href="/manage/users">Users</FluentNavItem>
-                    <FluentNavItem Href="/manage/chat/channels" Match="NavLinkMatch.All">Chat Channels</FluentNavItem>
-                    <FluentNavItem Href="/manage/chat/reports" Match="NavLinkMatch.All">
-                        <span class="nav-item-with-count">
-                            Chat Reports
-                            @if (_openChatReports > 0)
-                            {
-                                <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
-                            }
-                        </span>
-                    </FluentNavItem>
+                    @if (Has(CompanyFeature.Chat))
+                    {
+                        <FluentNavItem Href="/manage/chat/channels" Match="NavLinkMatch.All">Chat Channels</FluentNavItem>
+                        <FluentNavItem Href="/manage/chat/reports" Match="NavLinkMatch.All">
+                            <span class="nav-item-with-count">
+                                Chat Reports
+                                @if (_openChatReports > 0)
+                                {
+                                    <FluentCounterBadge Count="@_openChatReports" OverflowCount="99" aria-label="@($"{_openChatReports} reported messages to review")" />
+                                }
+                            </span>
+                        </FluentNavItem>
+                    }
                 </FluentNavCategory>
 
-                <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
-                                   IconActive="@(new Icons.Filled.Size20.BookOpen())">
-                    <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
-                    <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
-                </FluentNavCategory>
+                @if (Has(CompanyFeature.Training))
+                {
+                    <FluentNavCategory Title="Training" IconRest="@(new Icons.Regular.Size20.BookOpen())"
+                                       IconActive="@(new Icons.Filled.Size20.BookOpen())">
+                        <FluentNavItem Href="/manage/training" Match="NavLinkMatch.All">Dashboard</FluentNavItem>
+                        <FluentNavItem Href="/manage/training/courses">Courses</FluentNavItem>
+                    </FluentNavCategory>
+                }
 
-                <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@RotaTooltip" IconRest="@(new Icons.Regular.Size20.People())"
-                                   IconActive="@(new Icons.Filled.Size20.People())">
-                    <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/requests" Match="NavLinkMatch.All" Tooltip="@ShiftRequestsTooltip">
-                        <span class="nav-item-with-count">
-                            Shift Requests
-                            @if (_pendingShiftRequests > 0)
-                            {
-                                <FluentCounterBadge Count="@_pendingShiftRequests" OverflowCount="99" aria-label="@ShiftRequestsTooltip" />
-                            }
-                        </span>
-                    </FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All" Tooltip="@PendingTooltip">
-                        <span class="nav-item-with-count">
-                            Time Off Requests
-                            @if (_pendingTimeOff > 0)
-                            {
-                                <FluentCounterBadge Count="@_pendingTimeOff" OverflowCount="99" aria-label="@PendingTooltip" />
-                            }
-                        </span>
-                    </FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
-                    <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
-                </FluentNavCategory>
+                @if (Has(CompanyFeature.StaffScheduling))
+                {
+                    <FluentNavCategory Title="Rota" data-pending-count="@PendingCountAttribute" Tooltip="@RotaTooltip" IconRest="@(new Icons.Regular.Size20.People())"
+                                       IconActive="@(new Icons.Filled.Size20.People())">
+                        <FluentNavItem Href="/manage/rota" Match="NavLinkMatch.All">Rota Builder</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/timesheets">Timesheets</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/requests" Match="NavLinkMatch.All" Tooltip="@ShiftRequestsTooltip">
+                            <span class="nav-item-with-count">
+                                Shift Requests
+                                @if (_pendingShiftRequests > 0)
+                                {
+                                    <FluentCounterBadge Count="@_pendingShiftRequests" OverflowCount="99" aria-label="@ShiftRequestsTooltip" />
+                                }
+                            </span>
+                        </FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/time-off" Match="NavLinkMatch.All" Tooltip="@PendingTooltip">
+                            <span class="nav-item-with-count">
+                                Time Off Requests
+                                @if (_pendingTimeOff > 0)
+                                {
+                                    <FluentCounterBadge Count="@_pendingTimeOff" OverflowCount="99" aria-label="@PendingTooltip" />
+                                }
+                            </span>
+                        </FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/time-off/types">Time Off Types</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/terminals">Clock-In Terminals</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/positions">Positions</FluentNavItem>
+                        <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
+                    </FluentNavCategory>
+                }
             }
 
             @if (_isAdmin)
@@ -237,6 +262,13 @@
     private int? _shiftRequestsLocationId;
     private int _openChatReports;
 
+    // Modules this user's company doesn't have (CompanyFeatureService). Read once per circuit, like
+    // the roles above, so a switch flipped mid-session shows here after a reload; the route gate
+    // blocks the pages straight away regardless.
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
+
+    private bool Has(CompanyFeature feature) => !_hiddenFeatures.Contains(feature);
+
     // The category header only takes plain text, so its badge is drawn by a global style from this
     // attribute (see "Nav category badges" in App.razor) - otherwise the count would be hidden
     // whenever the Rota group is collapsed. Null leaves the attribute off, and with it the badge.
@@ -279,25 +311,36 @@
 
         if (_isAuthenticated)
         {
-            ChatUnread.Changed += OnChatUnreadChanged;
-            await ChatUnread.StartAsync();
+            _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
+
+            if (Has(CompanyFeature.Chat))
+            {
+                ChatUnread.Changed += OnChatUnreadChanged;
+                await ChatUnread.StartAsync();
+            }
 
             string? name = await SecurityService.GetCurrentUserName();
             _displayName = name?.Length > 20 ? name[..20] + "…" : name;
 
             if (_isManager)
             {
-                await RefreshPendingTimeOffAsync();
-                await RefreshPendingShiftRequestsAsync();
+                if (Has(CompanyFeature.StaffScheduling))
+                {
+                    await RefreshPendingTimeOffAsync();
+                    await RefreshPendingShiftRequestsAsync();
 
-                Result<LocationScope> reportScope = await _currentLocationContext.GetScopeAsync();
-                Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
-                _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
+                    // Live: a request made on someone's phone, or decided on the requests page,
+                    // updates the count here without a reload.
+                    TimeOffEventBus.OnChanged += OnTimeOffChanged;
+                    ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
+                }
 
-                // Live: a request made on someone's phone, or decided on the requests page, updates
-                // the count here without a reload.
-                TimeOffEventBus.OnChanged += OnTimeOffChanged;
-                ShiftClaimEventBus.OnChanged += OnShiftClaimsChanged;
+                if (Has(CompanyFeature.Chat))
+                {
+                    Result<LocationScope> reportScope = await _currentLocationContext.GetScopeAsync();
+                    Result<string> reportViewer = await SecurityService.GetCurrentUserIdAsync();
+                    _openChatReports = reportScope.Data is null ? 0 : (await ChatModeration.CountOpenForNavAsync(reportScope.Data, reportViewer.Data)).Data;
+                }
             }
 
             Result<IEnumerable<ReleaseNote>> releaseNotesResult = await ReleaseNotesService.GetReleaseNotesAsync();

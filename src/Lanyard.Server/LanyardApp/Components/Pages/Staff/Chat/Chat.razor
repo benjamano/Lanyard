@@ -1,6 +1,7 @@
 @page "/chat"
 @page "/chat/{ConversationId:guid}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [RequiresFeature(CompanyFeature.Chat)]
 
 @using Lanyard.App.Components.Chat
 @using Lanyard.Application.Services.Chat

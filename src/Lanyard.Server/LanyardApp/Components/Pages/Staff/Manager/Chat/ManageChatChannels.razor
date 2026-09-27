@@ -1,5 +1,6 @@
 @page "/manage/chat/channels"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Chat)]
 
 @using Lanyard.App.Components.Chat
 @using Lanyard.Application.Services.Chat

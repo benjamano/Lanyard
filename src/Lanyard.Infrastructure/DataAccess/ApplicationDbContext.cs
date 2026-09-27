@@ -80,6 +80,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffDocumentType> StaffDocumentTypes { get; set; }
         public DbSet<StaffDocument> StaffDocuments { get; set; }
         public DbSet<CompanyOnboardingSettings> CompanyOnboardingSettings { get; set; }
+        public DbSet<CompanyFeatureSetting> CompanyFeatureSettings { get; set; }
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
@@ -295,6 +296,18 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // At most one switch per feature per company. Cascade: a company's switches mean
+            // nothing without it.
+            modelBuilder.Entity<CompanyFeatureSetting>()
+                .HasIndex(x => new { x.CompanyId, x.Feature })
+                .IsUnique();
+
+            modelBuilder.Entity<CompanyFeatureSetting>()
+                .HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // Staff scheduling. Same (CompanyId, Name) uniqueness as StaffDocumentType.
             modelBuilder.Entity<StaffPosition>()

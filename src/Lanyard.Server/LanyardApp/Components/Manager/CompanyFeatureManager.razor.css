@@ -1,0 +1,21 @@
+.cfm-row {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 0;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.cfm-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.cfm ::deep .cfm-hint {
+    color: var(--colorNeutralForeground3);
+}
