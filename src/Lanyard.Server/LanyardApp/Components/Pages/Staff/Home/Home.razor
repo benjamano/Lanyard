@@ -12,6 +12,7 @@
 @inject ISecurityService _securityService
 @inject IDashboardService _dashboardService
 @inject ILogger<Home> _logger
+@inject ICompanyFeatureService _companyFeatureService
 
 <PageTitle>Staff Home</PageTitle>
 
@@ -55,9 +56,12 @@ else
         <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
             <GreetingCard />
         </FluentGridItem>
-            <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
-                <OutstandingTrainingCard />
-            </FluentGridItem>
+            @if (_showTraining)
+            {
+                <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12">
+                    <OutstandingTrainingCard />
+                </FluentGridItem>
+            }
             <FluentGridItem Lg="4" Md="6" Sm="12" Xs="12" HiddenWhen="GridItemHidden.MdAndDown">
                 <DigitalClock />
             </FluentGridItem>
@@ -92,8 +96,14 @@ else
     [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
     public bool HomeScreenIsOrganisationDefault { get; set; }
 
+    // Not persisted: it's one cached lookup, and a stale prerender value would show a module the
+    // company has just lost.
+    private bool _showTraining;
+
     protected override async Task OnInitializedAsync()
     {
+        _showTraining = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.Training);
+
         if (Initialized)
         {
             await LoadHomeScreenDashboardWidgetsAsync();

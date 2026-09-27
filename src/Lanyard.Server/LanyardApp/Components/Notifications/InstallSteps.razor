@@ -6,6 +6,13 @@
 <ol class="install-steps">
     @if (Device.IsApple)
     {
+        @if (IsIPhoneSafari)
+        {
+            <li>
+                <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.Navigation())" Color="Color.Custom" CustomColor="currentColor" /></span>
+                <span>Tap the menu button <strong>☰</strong> (three lines) in Safari's toolbar</span>
+            </li>
+        }
         <li>
             <span class="install-step-icon"><FluentIcon Value="@(new Icons.Regular.Size20.ShareIos())" Color="Color.Custom" CustomColor="currentColor" /></span>
             <span>Tap <strong>Share</strong> @ShareWhere</span>
@@ -51,9 +58,11 @@
     [Parameter] public string AppName { get; set; } = AppInstallLinks.DefaultAppName;
     [Parameter] public string IconHref { get; set; } = "icon-192.png";
 
-    // Safari's Share button sits in the bottom toolbar on iPhone (inside ⋯ on newer iOS) and at
-    // the top on iPad; Chrome and Edge on iOS keep it in the address bar.
+    private bool IsIPhoneSafari => Device.Browser == "Safari" && Device.Platform != DevicePlatform.IPad;
+
+    // On iPhone, Safari's Share sits inside the ☰ menu (its own step above); it's at the top
+    // right on iPad, and Chrome and Edge on iOS keep it in the address bar.
     private string ShareWhere => Device.Browser != "Safari" ? "in the address bar"
         : Device.Platform == DevicePlatform.IPad ? "at the top right of Safari"
-        : "in Safari's toolbar (tap ⋯ first if you can't see it)";
+        : "in the menu that opens";
 }

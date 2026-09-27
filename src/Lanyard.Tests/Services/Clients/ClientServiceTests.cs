@@ -1072,6 +1072,163 @@ namespace Lanyard.Tests.Services.Clients
         }
 
         [TestMethod]
+        public async Task SetClientAvailableAudioDevicesAsync_DeactivatesUnseenAndReactivatesReturningDevices()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<Client?> resultCreate = await service.CreateClientAsync(new Client { Name = "Client 1" });
+
+            Assert.IsTrue(resultCreate.Success);
+
+            Guid clientId = resultCreate.Data!.Id;
+
+            // Two identical TVs report the same friendly name - the endpoint ID is what tells them apart.
+            List<ClientAvailableAudioDeviceDTO> firstReport =
+            [
+                new() { ClientId = clientId, Id = "{0.0.0.00000000}.{speakers}", Name = "Speakers (Realtek)" },
+                new() { ClientId = clientId, Id = "{0.0.0.00000000}.{tv-1}", Name = "LG TV (NVIDIA High Definition Audio)" },
+                new() { ClientId = clientId, Id = "{0.0.0.00000000}.{tv-2}", Name = "LG TV (NVIDIA High Definition Audio)" }
+            ];
+
+            Result<bool> firstResult = await service.SetClientAvailableAudioDevicesAsync(clientId, firstReport);
+
+            Assert.IsTrue(firstResult.Success, firstResult.Error);
+
+            Result<IEnumerable<ClientAvailableAudioDevice>> afterFirst = await service.GetClientAvailableAudioDevicesAsync(clientId);
+
+            Assert.AreEqual(3, afterFirst.Data!.Count());
+
+            // A TV goes to sleep and drops off the list.
+            Result<bool> secondResult = await service.SetClientAvailableAudioDevicesAsync(clientId, firstReport.Take(2));
+
+            Assert.IsTrue(secondResult.Success, secondResult.Error);
+
+            Result<IEnumerable<ClientAvailableAudioDevice>> afterSecond = await service.GetClientAvailableAudioDevicesAsync(clientId);
+
+            CollectionAssert.AreEquivalent(new[] { "{0.0.0.00000000}.{speakers}", "{0.0.0.00000000}.{tv-1}" }, afterSecond.Data!.Select(x => x.DeviceId).ToArray());
+
+            // It wakes back up: the existing row is reactivated rather than duplicated.
+            Result<bool> thirdResult = await service.SetClientAvailableAudioDevicesAsync(clientId, firstReport);
+
+            Assert.IsTrue(thirdResult.Success, thirdResult.Error);
+
+            await using ApplicationDbContext ctx = new(options);
+
+            List<ClientAvailableAudioDevice> rows = await ctx.ClientAvailableAudioDevices.Where(x => x.ClientId == clientId).ToListAsync();
+
+            Assert.AreEqual(3, rows.Count, "Expected the returning device to reuse its row.");
+            Assert.IsTrue(rows.All(x => x.IsActive));
+        }
+
+        [TestMethod]
+        public async Task SetClientAvailableAudioDevicesAsync_ReturnsFailureWhenClientNotFound()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            ClientService service = GetService(options);
+
+            Result<bool> result = await service.SetClientAvailableAudioDevicesAsync(Guid.NewGuid(),
+                [new() { Id = "{speakers}", Name = "Speakers" }]);
+
+            Assert.IsFalse(result.Success);
+        }
+
+        [TestMethod]
+        public async Task SetClientPreferredAudioDeviceAsync_PushesSettingsToConnectedClient()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            var factoryMock = new Mock<IDbContextFactory<ApplicationDbContext>>();
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<System.Threading.CancellationToken>()))
+                .ReturnsAsync(() => new ApplicationDbContext(options));
+
+            Mock<ISingleClientProxy> clientProxyMock = new();
+            Mock<IHubClients> hubClientsMock = new();
+            hubClientsMock.Setup(c => c.Client("connection-1")).Returns(clientProxyMock.Object);
+
+            Mock<IHubContext<SignalRControlHub>> hubContextMock = new();
+            hubContextMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+
+            TestableClientService service = new(
+                factoryMock.Object,
+                hubContextMock.Object,
+                new Mock<Microsoft.Extensions.Logging.ILogger<ClientService>>().Object,
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                ["connection-1"]);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = "connection-1"
+            });
+
+            Result<bool> result = await service.SetClientPreferredAudioDeviceAsync(clientResult.Data!.Id, "{speakers}", "Speakers (Realtek)");
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsTrue(result.Data, "Expected the setting to be delivered live to the connected client.");
+
+            clientProxyMock.Verify(p => p.SendCoreAsync("ReceiveAudioSettings",
+                It.Is<object?[]>(args => args.Length == 1
+                    && ((ClientAudioSettingsDTO)args[0]!).PreferredDeviceId == "{speakers}"
+                    && ((ClientAudioSettingsDTO)args[0]!).PreferredDeviceName == "Speakers (Realtek)"),
+                It.IsAny<System.Threading.CancellationToken>()), Times.Once);
+
+            Result<Client?> saved = await service.GetClientFromIdAsync(clientResult.Data.Id);
+
+            Assert.AreEqual("{speakers}", saved.Data!.PreferredAudioDeviceId);
+            Assert.AreEqual("Speakers (Realtek)", saved.Data.PreferredAudioDeviceName);
+        }
+
+        [TestMethod]
+        public async Task SetClientPreferredAudioDeviceAsync_SavesWithoutPushingWhenClientOffline()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            TestableClientService service = GetServiceWithConnectedIds(options);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                MostRecentConnectionId = "connection-1"
+            });
+
+            Result<bool> result = await service.SetClientPreferredAudioDeviceAsync(clientResult.Data!.Id, "{speakers}", "Speakers (Realtek)");
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.IsFalse(result.Data, "Expected an offline client to get the setting on its next connect instead.");
+
+            Result<Client?> saved = await service.GetClientFromIdAsync(clientResult.Data.Id);
+
+            Assert.AreEqual("{speakers}", saved.Data!.PreferredAudioDeviceId);
+        }
+
+        [TestMethod]
+        public async Task SetClientPreferredAudioDeviceAsync_BlankIdClearsSetting()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+            TestableClientService service = GetServiceWithConnectedIds(options);
+
+            Result<Client?> clientResult = await service.CreateClientAsync(new Client
+            {
+                Name = "Client 1",
+                PreferredAudioDeviceId = "{speakers}",
+                PreferredAudioDeviceName = "Speakers (Realtek)"
+            });
+
+            Result<bool> result = await service.SetClientPreferredAudioDeviceAsync(clientResult.Data!.Id, "", "ignored");
+
+            Assert.IsTrue(result.Success, result.Error);
+
+            Result<Client?> saved = await service.GetClientFromIdAsync(clientResult.Data.Id);
+
+            Assert.IsNull(saved.Data!.PreferredAudioDeviceId);
+            Assert.IsNull(saved.Data.PreferredAudioDeviceName);
+        }
+
+        [TestMethod]
         public async Task GetClientAvailableVideoDevicesAsync_ReturnsEmptyListWhenClientNotFound()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();

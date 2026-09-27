@@ -2,6 +2,7 @@
 @page "/rota/time-off"
 @page "/rota/open"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 
 @using Lanyard.App.Components.Rota
 @using Lanyard.App.Components.Rota.TimeOff

@@ -1,0 +1,104 @@
+@* Per-company module switches (what the company pays for). Each switch saves as soon as it's
+   flipped - there's no separate Save, so what's shown is always what staff get. *@
+
+@inject ICompanyFeatureService CompanyFeatureService
+
+<div class="cfm">
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Features for @CompanyName</FluentText>
+                <FluentText Class="cfm-hint">
+                    Staff at this company only see the features switched on here. Turning one off hides it
+                    from the menu, the home screen and dashboards, and blocks its pages. Nothing is deleted,
+                    so switching it back on brings everything back. Admins always see every feature.
+                </FluentText>
+            </FluentStack>
+
+            @if (_features is null)
+            {
+                <FluentProgressBar />
+            }
+            else
+            {
+                @foreach (CompanyFeatureState state in _features)
+                {
+                    <div class="cfm-row" @key="state.Info.Feature">
+                        <div class="cfm-text">
+                            <FluentText Weight="TextWeight.Semibold">@state.Info.Name</FluentText>
+                            <FluentText Class="cfm-hint">@state.Info.Description</FluentText>
+                        </div>
+                        <FluentSwitch Value="@state.IsEnabled"
+                                      ValueChanged="@(value => SetEnabledAsync(state, value))"
+                                      Disabled="@(_saving == state.Info.Feature)"
+                                      aria-label="@($"{state.Info.Name} for {CompanyName}")" />
+                    </div>
+                }
+            }
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public string CompanyName { get; set; } = string.Empty;
+
+    private List<CompanyFeatureState>? _features;
+    private CompanyFeature? _saving;
+    private int _loadedCompanyId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_features is not null && _loadedCompanyId == CompanyId)
+        {
+            return;
+        }
+
+        _features = null;
+        _loadedCompanyId = CompanyId;
+
+        Result<List<CompanyFeatureState>> result = await CompanyFeatureService.GetFeaturesAsync(CompanyId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load features: {result.Error}");
+            _features = [];
+            return;
+        }
+
+        _features = result.Data!;
+    }
+
+    private async Task SetEnabledAsync(CompanyFeatureState state, bool isEnabled)
+    {
+        if (_features is null || state.IsEnabled == isEnabled)
+        {
+            return;
+        }
+
+        _saving = state.Info.Feature;
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+
+        Result<bool> result = scope.IsSuccess
+            ? await CompanyFeatureService.SetFeatureEnabledAsync(scope.Data!, CompanyId, state.Info.Feature, isEnabled, userId.Data)
+            : Result<bool>.Fail(scope.Error ?? "Couldn't work out who you are.");
+
+        _saving = null;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to update {state.Info.Name}: {result.Error}");
+            return;
+        }
+
+        int index = _features.IndexOf(state);
+        _features[index] = state with { IsEnabled = isEnabled };
+
+        _toastService.ShowSuccess($"{state.Info.Name} turned {(isEnabled ? "on" : "off")} for {CompanyName}.");
+    }
+}

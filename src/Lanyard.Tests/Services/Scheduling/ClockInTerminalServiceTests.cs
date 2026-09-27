@@ -3,6 +3,7 @@ using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -42,6 +43,37 @@ public class ClockInTerminalServiceTests
         Assert.IsTrue(session.IsSuccess, session.Error);
         Assert.AreEqual(location.Id, session.Data!.LocationId);
         Assert.AreEqual(location.Name, session.Data.LocationName);
+    }
+
+    [TestMethod]
+    public async Task ResolveAndActiveSession_RefuseATerminalWhoseCompanyHasNoShiftManagement()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        ClockInTerminalService service = GetService(options);
+        Result<PairedTerminal> paired = await service.PairAsync(location.Id, "Front desk", "manager");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.StaffScheduling, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<TerminalSession> resolved = await service.ResolveByTokenAsync(paired.Data!.RawToken);
+        Result<TerminalSession> active = await service.GetActiveSessionAsync(paired.Data.Terminal.Id);
+
+        Assert.AreEqual(ClockInTerminalService.FeatureOffError, resolved.Error);
+        Assert.AreEqual(ClockInTerminalService.FeatureOffError, active.Error);
+
+        // Other features being off doesn't matter to a terminal.
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            CompanyFeatureSetting setting = await ctx.CompanyFeatureSettings.SingleAsync();
+            setting.Feature = CompanyFeature.Training;
+            await ctx.SaveChangesAsync();
+        }
+
+        Assert.IsTrue((await service.ResolveByTokenAsync(paired.Data.RawToken)).IsSuccess);
     }
 
     [TestMethod]

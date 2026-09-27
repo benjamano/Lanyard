@@ -1,5 +1,6 @@
 @page "/manage/chat/reports"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Chat)]
 
 @using Lanyard.App.Components.Chat
 @using Lanyard.App.Components.Rota

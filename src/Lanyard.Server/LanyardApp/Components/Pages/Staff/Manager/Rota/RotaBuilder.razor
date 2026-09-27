@@ -1,5 +1,6 @@
 @page "/manage/rota"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 @implements IAsyncDisposable
 
 @using Lanyard.App.Components.Dialogs
