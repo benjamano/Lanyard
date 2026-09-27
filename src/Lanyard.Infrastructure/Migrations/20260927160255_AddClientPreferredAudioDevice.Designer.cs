@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927160255_AddClientPreferredAudioDevice")]
+    partial class AddClientPreferredAudioDevice
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -937,37 +940,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("LogoFileId");
 
                     b.ToTable("Companies");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyFeatureSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Feature")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedByUserId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "Feature")
-                        .IsUnique();
-
-                    b.ToTable("CompanyFeatureSettings");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>
@@ -3538,17 +3510,6 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("BackgroundImageFile");
 
                     b.Navigation("LogoFile");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyFeatureSetting", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.CompanyOnboardingSettings", b =>

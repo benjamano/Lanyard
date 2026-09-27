@@ -32,6 +32,9 @@ public interface IClientService
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);
     Task<Result<bool>> SetClientAvailableVideoDevicesAsync(Guid clientId, IEnumerable<ClientAvailableVideoDeviceDTO> devices);
     Task<Result<IEnumerable<ClientAvailableVideoDevice>>> GetClientAvailableVideoDevicesAsync(Guid clientId);
+    Task<Result<bool>> SetClientAvailableAudioDevicesAsync(Guid clientId, IEnumerable<ClientAvailableAudioDeviceDTO> devices);
+    Task<Result<IEnumerable<ClientAvailableAudioDevice>>> GetClientAvailableAudioDevicesAsync(Guid clientId);
+    Task<Result<bool>> SetClientPreferredAudioDeviceAsync(Guid clientId, string? deviceId, string? deviceName);
     Task<Result<IEnumerable<string>>> GetAllActiveVideoDeviceNamesAsync();
     Task<Result<IEnumerable<ActiveVideoDeviceInfoDTO>>> GetAllActiveVideoDevicesWithClientNamesAsync();
     Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);

@@ -27,6 +27,12 @@ public class Client
     public RestartIntervalUnit AutoRestartIntervalUnit { get; set; } = RestartIntervalUnit.Day;
     public int AutoRestartIntervalCount { get; set; } = 1;
     public TimeOnly AutoRestartTimeOfDay { get; set; } = new TimeOnly(4, 0);
+
+    // Windows endpoint ID of the output device the client keeps as its default. The name is
+    // kept alongside it so the setting still reads sensibly while the device is unplugged, and
+    // so the client can fall back to a name match if the endpoint comes back under a new ID.
+    public string? PreferredAudioDeviceId { get; set; }
+    public string? PreferredAudioDeviceName { get; set; }
 }
 
 public class ClientProjectionSettings
@@ -83,6 +89,19 @@ public class ClientAvailableVideoDevice
     public Client? Client { get; set; }
 
     public Guid DeviceId { get; set; }
+    public string DeviceName { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; }
+}
+
+public class ClientAvailableAudioDevice
+{
+    public Guid Id { get; set; }
+
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    public string DeviceId { get; set; } = string.Empty;
     public string DeviceName { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
