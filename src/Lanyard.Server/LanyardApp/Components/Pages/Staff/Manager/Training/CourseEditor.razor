@@ -1,5 +1,6 @@
 ﻿@page "/manage/training/courses/{CourseId:guid}"
 @attribute [Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Training)]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Training

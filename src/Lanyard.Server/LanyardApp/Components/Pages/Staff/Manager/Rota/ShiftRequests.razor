@@ -1,5 +1,6 @@
 @page "/manage/rota/requests"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 
 @using Lanyard.App.Components.Rota
 @using Lanyard.App.Components.Rota.Claims

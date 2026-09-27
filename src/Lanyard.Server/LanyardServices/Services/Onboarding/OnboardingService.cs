@@ -1,3 +1,5 @@
+using Lanyard.Infrastructure.Enum;
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
@@ -207,6 +209,14 @@ public class OnboardingService(
     private static async Task<CompanyOnboardingSettings?> ResolveEffectiveSettingsAsync(
         ApplicationDbContext ctx, int companyId, int? locationId, CancellationToken cancellationToken)
     {
+        // A company without the Onboarding feature has no onboarding configuration as far as
+        // anyone is concerned: no welcome email is sent, and the register-user dialog doesn't offer
+        // one. Its settings rows are kept, so switching the feature back on restores them.
+        if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, companyId, CompanyFeature.Onboarding, cancellationToken))
+        {
+            return null;
+        }
+
         // A location-specific override, if one exists and is enabled, replaces the company-wide
         // configuration entirely rather than merging field-by-field - simpler to reason about,
         // and matches how the admin edits one scope at a time in the UI.

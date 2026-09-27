@@ -7,6 +7,7 @@
 @using Lanyard.Application.Services.Authentication
 
 @inject INotificationService ToastService
+@inject ICompanyFeatureService _companyFeatureService
 
 <PageTitle>Account Management</PageTitle>
 
@@ -60,12 +61,15 @@
             </div>
         </FluentCard>
 
-        <FluentCard Width="100%">
-            <div class="account-manage-section">
-                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Clock-in PIN</FluentText>
-                <ClockInPinCard />
-            </div>
-        </FluentCard>
+        @if (_showClockInPin)
+        {
+            <FluentCard Width="100%">
+                <div class="account-manage-section">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Clock-in PIN</FluentText>
+                    <ClockInPinCard />
+                </div>
+            </FluentCard>
+        }
 
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
             <FluentButton Appearance="ButtonAppearance.Primary"
@@ -79,6 +83,15 @@
 
 @code{
     private YourDetailsCard? yourDetailsCard;
+
+    // Clock-in PINs only mean anything to a company with shift management.
+    private bool _showClockInPin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _showClockInPin = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.StaffScheduling);
+    }
+
     private ContactDetailsCard? contactDetailsCard;
     private HomeScreenCard? homeScreenCard;
 

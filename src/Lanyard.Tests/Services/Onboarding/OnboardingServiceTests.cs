@@ -4,6 +4,7 @@ using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Training;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -272,6 +273,48 @@ public class OnboardingServiceTests
         emailServiceMock.Verify(e => e.SendOnboardingWelcomeEmailAsync(
             It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()),
             Times.Never);
+    }
+
+    [TestMethod]
+    public async Task TriggerOnboardingAsync_OnboardingFeatureOff_SendsNothingAndHidesTheSettings()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Company company = await SeedCompanyAsync(options);
+        string userId;
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            UserProfile user = new() { UserName = "jdoe", Email = "jane@example.com" };
+            ctx.Users.Add(user);
+            ctx.CompanyOnboardingSettings.Add(new CompanyOnboardingSettings
+            {
+                CompanyId = company.Id,
+                SendWelcomeEmail = true,
+                WelcomeEmailSubject = "Welcome",
+                WelcomeEmailBodyHtml = "<p>Hi</p>"
+            });
+            ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = company.Id, Feature = CompanyFeature.Onboarding, IsEnabled = false });
+            await ctx.SaveChangesAsync();
+            userId = user.Id;
+        }
+
+        Mock<ITrainingBrandingResolver> brandingResolverMock = new();
+        brandingResolverMock.Setup(b => b.ResolveAsync(userId, It.IsAny<int?>(), null))
+            .ReturnsAsync(new TrainingBranding("#000000", company.Id, null));
+
+        Mock<IEmailService> emailServiceMock = new();
+
+        OnboardingService service = GetService(options, emailServiceMock: emailServiceMock, brandingResolverMock: brandingResolverMock);
+        Result<bool> result = await service.TriggerOnboardingAsync(userId, null, CancellationToken.None);
+        Result<CompanyOnboardingSettings?> effective = await service.GetEffectiveSettingsAsync(company.Id, null);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsFalse(result.Data);
+        emailServiceMock.Verify(e => e.SendOnboardingWelcomeEmailAsync(
+            It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<EmailAttachment>>()),
+            Times.Never);
+        Assert.IsTrue(effective.IsSuccess, effective.Error);
+        Assert.IsNull(effective.Data);
     }
 
     [TestMethod]

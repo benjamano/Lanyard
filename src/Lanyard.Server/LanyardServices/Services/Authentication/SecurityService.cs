@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -304,9 +305,27 @@ public class SecurityService : ISecurityService
                     // A course only auto-assigns if it belongs to one of the new user's locations,
                     // or is shared and belongs to the same company as one of those locations -
                     // mirrors CourseAssignmentService.IsCourseInScope's non-admin rule.
-                    IEnumerable<Course> eligibleCourses = autoAssignCourses.Where(x =>
-                        (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
-                        (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)));
+                    // Companies with Training switched off don't get courses auto-assigned either,
+                    // since their staff can't open My Training to take them.
+                    HashSet<int> trainingOffCompanyIds = [];
+
+                    if (autoAssignCourses.Count > 0)
+                    {
+                        await using ApplicationDbContext featureCtx = await _factory.CreateDbContextAsync();
+
+                        trainingOffCompanyIds = [.. await featureCtx.CompanyFeatureSettings
+                            .AsNoTracking()
+                            .TagWithCallSite()
+                            .Where(x => x.Feature == CompanyFeature.Training && !x.IsEnabled)
+                            .Select(x => x.CompanyId)
+                            .ToListAsync()];
+                    }
+
+                    IEnumerable<Course> eligibleCourses = autoAssignCourses
+                        .Where(x =>
+                            (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
+                            (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)))
+                        .Where(x => x.Location is null || !trainingOffCompanyIds.Contains(x.Location.CompanyId));
 
                     foreach (Course course in eligibleCourses)
                     {

@@ -1,5 +1,6 @@
 @page "/manage/rota/timesheets"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
 
 @using Lanyard.App.Components.Rota
 @using Lanyard.Application.Services.Scheduling

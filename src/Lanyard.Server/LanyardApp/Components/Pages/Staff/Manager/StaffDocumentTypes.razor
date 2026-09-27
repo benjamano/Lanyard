@@ -1,5 +1,6 @@
 @page "/manage/staff-documents/types"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Onboarding)]
 
 @using Lanyard.App.Components.Manager
 @using Lanyard.Infrastructure.Models
