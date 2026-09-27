@@ -6,10 +6,11 @@
 @inject IClientService ClientService
 @inject IProjectionProgramService ProjectionProgramService
 @inject IAutomationRuleService AutomationRuleService
+@inject ICompanyFeatureService CompanyFeatures
 
 <FluentCard Appearance="@CardAppearance.Subtle" Padding="@Padding.Horizontal0">
     <div class="dashboard-grid">
-        @foreach (DashboardWidget widget in Widgets.OrderBy(w => w.GridY).ThenBy(w => w.GridX))
+        @foreach (DashboardWidget widget in VisibleWidgets.OrderBy(w => w.GridY).ThenBy(w => w.GridX))
         {
             @* @key is required because the render order is computed from GridY/GridX, which the
                editor's move buttons change at runtime. Without it Blazor reuses component instances
@@ -322,6 +323,21 @@
     public ButtonAppearance buttonAppearance = ButtonAppearance.Subtle;
 
     public DashboardWidget? SelectedWidget { get; set; } = null;
+
+    // Widgets from a module the viewer's company doesn't have (CompanyFeatureCatalog.ForWidget)
+    // are left out when viewing. The editor still shows them so an admin can see and remove them.
+    // Until the lookup finishes every module counts as hidden, so a widget the company doesn't have
+    // never gets to render (and load its data) in the meantime.
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = System.Enum.GetValues<CompanyFeature>().ToHashSet();
+
+    private IEnumerable<DashboardWidget> VisibleWidgets => PreviewMode
+        ? Widgets.Where(w => CompanyFeatureCatalog.ForWidget(w.Type) is not CompanyFeature feature || !_hiddenFeatures.Contains(feature))
+        : Widgets;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hiddenFeatures = await CompanyFeatures.GetHiddenFeaturesForCurrentUserAsync();
+    }
 
     protected override void OnParametersSet()
     {

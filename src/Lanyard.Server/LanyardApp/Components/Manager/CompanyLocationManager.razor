@@ -88,7 +88,7 @@
             <FluentGridItem Xs="12" Sm="8">
                 @if (selectedCompany is not null)
                 {
-                    <FluentCard Height="100%">
+                    <FluentCard Height="auto">
                         <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                             <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Locations for @selectedCompany.Name</FluentText>
 
@@ -118,6 +118,10 @@
                             }
                         </FluentStack>
                     </FluentCard>
+
+                    <div class="mt-3">
+                        <CompanyFeatureManager CompanyId="@selectedCompany.Id" CompanyName="@selectedCompany.Name" />
+                    </div>
                 }
             </FluentGridItem>
         </FluentGrid>
