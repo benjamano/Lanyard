@@ -1,0 +1,49 @@
+@using Lanyard.Shared.Enum
+
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            <FluentText>
+                Choose how to restart <strong>@ClientName</strong>. Anything it is currently playing or projecting will stop.
+            </FluentText>
+
+            <FluentRadioGroup TValue="ClientRestartType" Orientation="Orientation.Vertical" @bind-Value="_restartType">
+                <FluentRadio Value="ClientRestartType.Application" Label="Restart Lanyard Client" />
+                <FluentRadio Value="ClientRestartType.Computer" Label="Restart the whole PC" />
+            </FluentRadioGroup>
+
+            <FluentText Typo="Typography.Body">
+                @(_restartType == ClientRestartType.Computer
+                    ? "The PC restarts after a 10 second warning and the client reconnects once Windows has signed back in. This can take a few minutes."
+                    : "The client closes and relaunches itself, usually reconnecting within a few seconds.")
+            </FluentText>
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                          OnClick="@ConfirmAsync">Restart</FluentButton>
+            <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [Parameter]
+    public string ClientName { get; set; } = "this client";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private ClientRestartType _restartType = ClientRestartType.Application;
+
+    private async Task ConfirmAsync()
+    {
+        await Dialog.CloseAsync(_restartType);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

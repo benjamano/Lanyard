@@ -83,6 +83,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ZoneScoreboardSettings> ZoneScoreboardSettings { get; set; }
         public DbSet<ClientAvailableNetworkInterface> ClientAvailableNetworkInterfaces { get; set; }
         public DbSet<ClientAvailableVideoDevice> ClientAvailableVideoDevices { get; set; }
+        public DbSet<ClientAvailableAudioDevice> ClientAvailableAudioDevices { get; set; }
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
@@ -782,6 +783,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableDmxDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableAudioDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ZoneScoreboardSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<PlaylistSongMember>().HasQueryFilter(x => TenantFilterDisabled || x.Playlist!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ProjectionProgramStep>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgram!.CompanyId == TenantCompanyId);
