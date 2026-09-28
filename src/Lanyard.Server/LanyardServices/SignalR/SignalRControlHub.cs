@@ -142,9 +142,12 @@ public class SignalRControlHub(
             await SendAudioSettingsToClientAsync(client);
         }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
+        string musicGroup = MusicGroupFor(client.CompanyId);
+        Context.Items[MusicGroupItemKey] = musicGroup;
 
-        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to Music group", client.Name, Context.ConnectionId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, musicGroup);
+
+        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to {MusicGroup}", client.Name, Context.ConnectionId, musicGroup);
 
         _connections.TryAdd(Context.ConnectionId, true);
 
@@ -153,9 +156,12 @@ public class SignalRControlHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
+        if (Context.Items.TryGetValue(MusicGroupItemKey, out object? musicGroup) && musicGroup is string group)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
+        }
 
-        _logger.LogInformation("Client {ConnectionId} disconnected from Music group", Context.ConnectionId);
+        _logger.LogInformation("Client {ConnectionId} disconnected from its Music group", Context.ConnectionId);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (getClientResult.IsSuccess)
@@ -328,32 +334,42 @@ public class SignalRControlHub(
         }
     }
 
+    // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.
+    private const string MusicGroupItemKey = "MusicGroup";
+
+    private static string MusicGroupFor(int companyId) => $"{ClientGroup.Music}:{companyId}";
+
+    private IClientProxy MusicGroupClients() =>
+        Context.Items.TryGetValue(MusicGroupItemKey, out object? group) && group is string name
+            ? Clients.Group(name)
+            : Clients.Clients([]);
+
     public async Task Load(Guid songId)
     {
         _logger.LogInformation("Load command received for song {SongId}", songId);
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Load", songId);
+        await MusicGroupClients().SendAsync("Load", songId);
     }
 
     public async Task Play()
     {
         _logger.LogInformation("Play command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Play");
+        await MusicGroupClients().SendAsync("Play");
     }
 
     public async Task Pause()
     {
         _logger.LogInformation("Pause command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Pause");
+        await MusicGroupClients().SendAsync("Pause");
     }
 
     public async Task Stop()
     {
         _logger.LogInformation("Stop command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
+        await MusicGroupClients().SendAsync("Stop");
     }
 
     private async Task SendMusicSettingsToClientAsync(Client client)

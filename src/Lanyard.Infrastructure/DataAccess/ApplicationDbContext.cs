@@ -761,11 +761,19 @@ namespace Lanyard.Infrastructure.DataAccess
                          .Select(x => x.ClrType)
                          .ToList())
             {
-                modelBuilder.Entity(clrType)
-                    .HasOne(typeof(Company))
-                    .WithMany()
-                    .HasForeignKey(nameof(ICompanyOwned.CompanyId))
-                    .OnDelete(DeleteBehavior.Restrict);
+                // Tables that already had a Company navigation keep their existing relationship.
+                bool hasCompanyForeignKey = modelBuilder.Model.FindEntityType(clrType)!
+                    .GetForeignKeys()
+                    .Any(fk => fk.Properties.Any(p => p.Name == nameof(ICompanyOwned.CompanyId)));
+
+                if (!hasCompanyForeignKey)
+                {
+                    modelBuilder.Entity(clrType)
+                        .HasOne(typeof(Company))
+                        .WithMany()
+                        .HasForeignKey(nameof(ICompanyOwned.CompanyId))
+                        .OnDelete(DeleteBehavior.Restrict);
+                }
 
                 applyRootFilter.MakeGenericMethod(clrType).Invoke(this, [modelBuilder]);
             }
@@ -794,6 +802,21 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<CourseQuizAttempt>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseQuizAttemptAnswer>().HasQueryFilter(x => TenantFilterDisabled || x.Attempt!.Assignment!.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseSectionProgress>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
+
+            // Rota, time off and chat were built company/location-aware from the start and check
+            // access in their services, but those checks let an Admin through to any location.
+            // Filtering here makes "any location" mean any location in their own company. EXISTS
+            // rather than a navigation, so the unfiltered (system) path doesn't join Locations.
+            modelBuilder.Entity<Shift>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<ClockInTerminal>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<TimeEntry>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<TimeOffRequest>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
+            modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }
 
         private void ApplyCompanyFilter<T>(ModelBuilder modelBuilder) where T : class, ICompanyOwned

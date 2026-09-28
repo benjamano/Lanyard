@@ -73,6 +73,7 @@ public class SignalRControlHubGameCaptureTests
         SignalRProjectionControlHubEvents hubEvents = new(Mock.Of<IServiceScopeFactory>());
 
         Mock<HubCallerContext> hubCallerContextMock = new();
+        hubCallerContextMock.Setup(x => x.Items).Returns(new Dictionary<object, object?>());
         hubCallerContextMock.SetupGet(x => x.ConnectionId).Returns(TestConnectionId);
 
         return new SignalRControlHub(

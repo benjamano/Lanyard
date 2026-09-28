@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Lanyard.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927224203_AddChatSuspensionCompanyForeignKey")]
+    partial class AddChatSuspensionCompanyForeignKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -727,44 +730,11 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("PreferredAudioDeviceId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PreferredAudioDeviceName")
-                        .HasColumnType("text");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");
 
                     b.ToTable("Clients");
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableAudioDevice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DeviceId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("DeviceName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("ClientAvailableAudioDevices");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>
@@ -3574,17 +3544,6 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableAudioDevice", b =>
-                {
-                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableScreen", b =>

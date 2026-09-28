@@ -195,4 +195,34 @@ public class CompanyTenancyTests
 
         await Assert.ThrowsExactlyAsync<CrossTenantWriteException>(() => asB.SaveChangesAsync());
     }
+
+    [TestMethod]
+    public async Task RotaAndChatRows_AreLimitedToTheCallersCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Locations.AddRange(
+                new Location { Id = 10, CompanyId = CompanyA, Name = "A town" },
+                new Location { Id = 20, CompanyId = CompanyB, Name = "B town" });
+
+            Shift shiftA = new() { Id = Guid.NewGuid(), LocationId = 10, CreateByUserId = "u" };
+            ctx.Shifts.AddRange(shiftA, new Shift { Id = Guid.NewGuid(), LocationId = 20, CreateByUserId = "u" });
+            ctx.ShiftClaims.Add(new ShiftClaim { Id = Guid.NewGuid(), ShiftId = shiftA.Id, UserId = "u" });
+
+            ChatConversation chatA = new() { Id = Guid.NewGuid(), CompanyId = CompanyA };
+            ctx.ChatConversations.AddRange(chatA, new ChatConversation { Id = Guid.NewGuid(), CompanyId = CompanyB });
+            ctx.ChatMessages.Add(new ChatMessage { Id = Guid.NewGuid(), ConversationId = chatA.Id, AuthorUserId = "u", BodyHtml = "hi", BodyText = "hi" });
+
+            await ctx.SaveChangesAsync();
+        }
+
+        await using ApplicationDbContext asB = new(options, new SignedInTenant(CompanyB));
+
+        Assert.AreEqual(20, (await asB.Shifts.SingleAsync()).LocationId, "An admin's any-location access must stop at their own company.");
+        Assert.AreEqual(0, await asB.ShiftClaims.CountAsync());
+        Assert.AreEqual(CompanyB, (await asB.ChatConversations.SingleAsync()).CompanyId);
+        Assert.AreEqual(0, await asB.ChatMessages.CountAsync());
+    }
 }

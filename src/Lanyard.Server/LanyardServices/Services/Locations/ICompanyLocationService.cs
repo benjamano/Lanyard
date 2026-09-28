@@ -10,6 +10,11 @@ public record CompanyBrandingInfo(int CompanyId, string Name, string? ThemeColor
 public interface ICompanyLocationService
 {
     Task<Result<List<Company>>> GetCompaniesAsync();
+
+    // The company whose data this session works with - just the signed-in company, even for a
+    // platform admin, since company data is filtered to it. Every active company for callers with
+    // no signed-in user.
+    Task<Result<List<Company>>> GetSessionCompaniesAsync();
     Task<Result<Company>> SaveCompanyAsync(Company company);
     Task<Result<bool>> DeactivateCompanyAsync(int companyId);
 

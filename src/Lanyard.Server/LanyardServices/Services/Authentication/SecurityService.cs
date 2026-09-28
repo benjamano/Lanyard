@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
@@ -35,6 +36,7 @@ public class SecurityService : ISecurityService
     private readonly ICompanyLocationService _companyLocationService;
     private readonly IOptions<EmailOptions> _emailOptions;
     private readonly IOnboardingService _onboardingService;
+    private readonly ITenantContext? _tenant;
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -48,8 +50,10 @@ public class SecurityService : ISecurityService
         IEmailService emailService,
         ICompanyLocationService companyLocationService,
         IOptions<EmailOptions> emailOptions,
-        IOnboardingService onboardingService)
+        IOnboardingService onboardingService,
+        ITenantContext? tenant = null)
     {
+        _tenant = tenant;
         _authStateProvider = authStateProvider;
         _currentUserAccessor = currentUserAccessor;
         _factory = factory;
@@ -86,6 +90,64 @@ public class SecurityService : ISecurityService
 
     private async Task<bool> IsCurrentUserAdminOrManagerAsync() =>
         await IsCurrentUserInRoleAsync("Admin") || await IsCurrentUserInRoleAsync("Manager");
+
+    // Users aren't company-owned rows (Identity and login need them all), so a user belongs to a
+    // company through their location memberships and these checks keep one company's managers
+    // away from another company's staff. Null means the caller may reach every user: system
+    // callers, platform admins, and tests built without a tenant.
+    private int? ManageableCompanyId => _tenant?.ManageableCompanyId;
+
+    private async Task<bool> IsUserInManageableCompanyAsync(ApplicationDbContext ctx, string userId)
+    {
+        int? companyId = ManageableCompanyId;
+
+        return companyId is null || await ctx.UserLocationMemberships
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(m => m.UserId == userId && m.Location!.CompanyId == companyId);
+    }
+
+    private async Task<bool> IsUserInManageableCompanyAsync(string userId)
+    {
+        if (ManageableCompanyId is null)
+        {
+            return true;
+        }
+
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await IsUserInManageableCompanyAsync(ctx, userId);
+    }
+
+    private IQueryable<UserProfile> UsersInManageableCompany(ApplicationDbContext ctx)
+    {
+        int? companyId = ManageableCompanyId;
+
+        return companyId is null
+            ? ctx.Users
+            : ctx.Users.Where(u => ctx.UserLocationMemberships.Any(m => m.UserId == u.Id && m.Location!.CompanyId == companyId));
+    }
+
+    // Acting on someone else's account: must be an Admin/Manager of the same company, and only an
+    // Admin may act on an Admin.
+    private async Task<string?> GetManageUserErrorAsync(UserProfile target)
+    {
+        if (!await IsCurrentUserAdminOrManagerAsync())
+        {
+            return "You must be an administrator or manager to perform this action!";
+        }
+
+        if (!await IsUserInManageableCompanyAsync(target.Id))
+        {
+            return "User not found!";
+        }
+
+        if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(target, "Admin"))
+        {
+            return "Only an administrator can perform this action on an administrator account.";
+        }
+
+        return null;
+    }
 
     // This service is scoped (one per circuit / request). The layout, nav menu, greeting card
     // and several pages each ask for the current user's profile during one page load, so the
@@ -147,7 +209,8 @@ public class SecurityService : ISecurityService
             UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite()
                 .FirstOrDefaultAsync(x => x.Id == userId);
 
-            if (user is null)
+            if (user is null
+                || (userId != (await GetCurrentUserIdAsync()).Data && !await IsUserInManageableCompanyAsync(ctx, userId)))
             {
                 return Result<UserProfile>.Fail("User not found.");
             }
@@ -182,7 +245,7 @@ public class SecurityService : ISecurityService
     public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
     {
         await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-        return await ctx.Users.AsNoTracking().TagWithCallSite().ToListAsync();
+        return await UsersInManageableCompany(ctx).AsNoTracking().TagWithCallSite().ToListAsync();
     }
 
     public async Task UpdateUserProfileAsync(UserProfile updatedUserProfile)
@@ -191,6 +254,12 @@ public class SecurityService : ISecurityService
 
         UserProfile? userProfile = await ctx.Users.FirstOrDefaultAsync(x => x.Id == updatedUserProfile.Id);
         if (userProfile is null) return;
+
+        if (userProfile.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(userProfile) is string error)
+        {
+            _logger.LogWarning("Refused to update profile {UserId}: {Error}", userProfile.Id, error);
+            return;
+        }
 
         ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
         await ctx.SaveChangesAsync();
@@ -201,7 +270,7 @@ public class SecurityService : ISecurityService
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
         await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-        return await ctx.Users
+        return await UsersInManageableCompany(ctx)
             .AsNoTracking()
             .TagWithCallSite()
             .Where(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
@@ -257,6 +326,19 @@ public class SecurityService : ISecurityService
             if (locationIds is null || locationIds.Count == 0)
             {
                 return Result<UserCreationResult>.Fail("At least one location is required.");
+            }
+
+            // Checked before the account exists: the memberships below would each be refused for
+            // another company's location, leaving an account nobody in this company can see.
+            if (ManageableCompanyId is not null)
+            {
+                Result<List<Location>> manageableLocations = await _companyLocationService.GetLocationsAsync();
+
+                if (!manageableLocations.IsSuccess
+                    || !locationIds.All(id => manageableLocations.Data!.Any(l => l.Id == id)))
+                {
+                    return Result<UserCreationResult>.Fail("You do not have access to one or more of the selected locations.");
+                }
             }
 
             string initial = user.FirstName.ToLowerInvariant()[..1];
@@ -396,9 +478,9 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
             user.InvitedDate = DateTime.UtcNow;
@@ -544,9 +626,9 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
             // Shift and timesheet history outlive the account (docs/DATA_RETENTION.md), and both
@@ -623,9 +705,9 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
             // Clearing LockoutEnd alone leaves AccessFailedCount non-zero, so the next single
@@ -670,6 +752,12 @@ public class SecurityService : ISecurityService
             if (user is null)
             {
                 return Result<bool>.Fail("User not found!");
+            }
+
+            // Anyone may change their own password; someone else's only as their manager.
+            if (user.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(user) is string manageError)
+            {
+                return Result<bool>.Fail(manageError);
             }
 
             string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
