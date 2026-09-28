@@ -152,8 +152,14 @@ safe_branch="$(printf '%s' "$src_branch" | tr -c 'A-Za-z0-9._-' '-')"
 
 # Remote paths are namespaced by viewport so a desktop and a phone shot that
 # happen to share a filename cannot overwrite each other. Collisions *within* a
-# viewport would still silently drop an image, so reject them outright.
-dupes="$(jq -r '.[] | "\(.viewport)/\(.file | split("/") | last)"' "$manifest" | sort | uniq -d)"
+# viewport would still silently drop an image, so reject them outright. Each
+# video also gets a "<name>.preview.gif" beside it, so those paths count too.
+dupes="$(jq -r --arg v "$VIDEO_EXTS" '
+  ($v | split(" ")) as $vexts
+  | .[] | (.file | split("/") | last) as $n
+  | "\(.viewport)/\($n)",
+    (select(($n | split(".") | last | ascii_downcase) as $e | $vexts | index($e))
+     | "\(.viewport)/\($n).preview.gif")' "$manifest" | sort | uniq -d)"
 [[ -z "$dupes" ]] || die "two entries map to the same remote path (rename one): $dupes"
 
 printf 'Publishing %s media file(s) for branch %s\n' \
@@ -172,12 +178,13 @@ trap 'rm -rf "$tree_entries" "$b64" "$blob_payload" "$preview_dir"' EXIT
 declare -A has_preview=()
 
 # Writes a silent looping GIF of video $1 to $2 for the inline preview. Tries a
-# smaller/slower encoding if the first is too big; returns 1 if neither fits.
+# smaller/slower encoding if the first is too big. Returns 1 if neither fits,
+# 2 if ffmpeg itself failed (its error is left in $preview_dir/ffmpeg.log).
 make_preview() {
   local src="$1" out="$2" width="$3" fps
   for fps in 8 5; do
     ffmpeg -nostdin -v error -y -i "$src" -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
-      -loop 0 "$out" || return 1
+      -loop 0 "$out" 2> "$preview_dir/ffmpeg.log" || return 2
     [[ "$(wc -c < "$out")" -le "$PREVIEW_MAX_BYTES" ]] && return 0
     width=$((width * 3 / 4))
   done
@@ -196,15 +203,18 @@ while IFS=$'\t' read -r file viewport; do
   safe_vp="$(printf '%s' "$viewport" | tr -c 'A-Za-z0-9._-' '-')"
 
   if [[ "$(media_kind "$file")" == "video" ]]; then
-    preview="$preview_dir/${name%.*}.preview.gif"
+    preview="$preview_dir/$name.preview.gif"
     if ! command -v ffmpeg >/dev/null; then
       printf '  warning: ffmpeg not installed, %s gets a plain link instead of a preview\n' "$name" >&2
-    elif make_preview "$file" "$preview" "$([[ "$viewport" == phone ]] && echo 390 || echo 720)"; then
+    elif make_preview "$file" "$preview" "$([[ "$viewport" == phone ]] && echo 390 || echo 720)"; rc=$?; [[ $rc -eq 0 ]]; then
       preview_sha="$(upload_blob "$preview")"
       printf '  uploaded %s (%s, %s)\n' "$(basename "$preview")" "$(du -h "$preview" | cut -f1)" "${preview_sha:0:7}" >&2
       jq -nc --arg p "$safe_branch/$safe_vp/$(basename "$preview")" --arg s "$preview_sha" \
         '{path:$p, mode:"100644", type:"blob", sha:$s}' >> "$tree_entries"
       has_preview["$safe_vp/$name"]=1
+    elif [[ $rc -eq 2 ]]; then
+      printf '  warning: ffmpeg could not make a preview for %s, using a plain link:\n%s\n' \
+        "$name" "$(tail -5 "$preview_dir/ffmpeg.log" | sed 's/^/    /')" >&2
     else
       printf '  warning: preview GIF for %s is over %s MiB even when shrunk, using a plain link\n' \
         "$name" "$((PREVIEW_MAX_BYTES / 1024 / 1024))" >&2
@@ -338,7 +348,7 @@ build_block() {
         if [[ -n "${has_preview["$safe_vp/$fname"]:-}" ]]; then
           printf '<a href="%s"><img%s alt="%s (silent preview)" src="%s"></a>\n\n' \
             "$blob_base/$safe_branch/$safe_vp/$fname" "${width:+ width=\"$width\"}" "$esc_cap" \
-            "$raw_base/$safe_branch/$safe_vp/${fname%.*}.preview.gif?v=$cache_bust"
+            "$raw_base/$safe_branch/$safe_vp/$fname.preview.gif?v=$cache_bust"
           printf '<p>&#9654; <a href="%s">Watch with sound</a> (the preview above is silent)</p>\n' \
             "$blob_base/$safe_branch/$safe_vp/$fname"
         else
