@@ -8,6 +8,7 @@
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject Lanyard.Application.Services.Demo.IDemoGuard DemoGuard
+@inject Lanyard.App.Components.Demo.DemoBrandingState DemoBranding
 
 <FluentProviders />
 
@@ -46,7 +47,7 @@
                                             CustomColor="white" />
                                 @* Names are "Company Location", so they get long - capped and ellipsised
                                    rather than allowed to push the theme toggle off the header. *@
-                                <span class="header-location-name">@_locationDisplayName</span>
+                                <span class="header-location-name">@DemoBranding.RebrandLocationName(_locationDisplayName)</span>
                             </div>
                         </Authorized>
                     </AuthorizeView>
@@ -95,9 +96,12 @@
                 <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
                     You're exploring the Lanyard demo. Other visitors share it, and it resets to fresh sample
                     data every night at 4am UK time.
+                    <a href="#" class="demo-banner-leave" @onclick="OpenDemoBrandingAsync" @onclick:preventDefault>Try your own branding</a>
                     <a href="/api/auth/logout" class="demo-banner-leave">Leave the demo</a>
                 </FluentMessageBar>
             </div>
+
+            <Lanyard.App.Components.Demo.DemoBrandingPrompt />
         }
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
@@ -180,7 +184,12 @@
         base.OnInitialized();
 
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        DemoBranding.Changed += OnDemoBrandingChanged;
     }
+
+    private void OnDemoBrandingChanged() => _ = InvokeAsync(ApplyBrandingAsync);
+
+    private Task OpenDemoBrandingAsync() => Lanyard.App.Components.Demo.DemoBrandingDialog.OpenAsync(_dialogService);
 
     private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
     {
@@ -238,6 +247,22 @@
         }
         catch { }
 
+        // A demo visitor trying out their own branding: their colour and logo, in this browser only.
+        if (_isDemoSession)
+        {
+            try
+            {
+                await DemoBranding.LoadAsync();
+
+                if (DemoBranding.Current is { } preview)
+                {
+                    accentColor = preview.ColorHex ?? accentColor;
+                    _companyLogoUrl = preview.LogoUrl ?? _companyLogoUrl;
+                }
+            }
+            catch { }
+        }
+
         try
         {
             string? storedMode = await JSRuntime.InvokeAsync<string?>("lanyardGetStoredThemeMode");
@@ -267,5 +292,6 @@
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        DemoBranding.Changed -= OnDemoBrandingChanged;
     }
 }

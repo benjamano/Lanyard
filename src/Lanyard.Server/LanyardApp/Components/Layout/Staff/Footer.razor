@@ -4,6 +4,7 @@
 
 @inject AppInfo AppInfo
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Lanyard.App.Components.Demo.DemoBrandingState DemoBranding
 
 <FluentGrid AdaptiveRendering="true" Spacing="0">
     <FluentGridItem HiddenWhen="GridItemHidden.SmAndDown" Xs="12">
@@ -16,7 +17,7 @@
 
                     @if (!string.IsNullOrWhiteSpace(_locationName))
                     {
-                        <span class="mb-0">@_locationName</span>
+                        <span class="mb-0">@DemoBranding.RebrandLocationName(_locationName)</span>
                     }
 
                     <FluentStack Width="auto" HorizontalGap="12" VerticalAlignment="VerticalAlignment.Center">
@@ -46,6 +47,7 @@
         base.OnInitialized();
 
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        DemoBranding.Changed += OnDemoBrandingChanged;
     }
 
     // The event fires off the renderer's synchronisation context, so the reload has to be
@@ -104,8 +106,11 @@
         StateHasChanged();
     }
 
+    private void OnDemoBrandingChanged() => _ = InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        DemoBranding.Changed -= OnDemoBrandingChanged;
     }
 }

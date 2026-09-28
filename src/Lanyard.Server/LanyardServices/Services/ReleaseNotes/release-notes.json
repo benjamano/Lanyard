@@ -539,7 +539,9 @@
       "Lanyard now has a public homepage: visitors who aren't signed in see what Lanyard does, with a Log in button at the top right, instead of being sent straight to the login page.",
       "There's now a live demo anyone can try from the homepage: one click signs you in as an admin, manager or staff member of a made-up venue full of sample rotas, training, chat and dashboards. It resets to fresh data every night, and never sends emails or notifications.",
       "Pressing Log out now takes you to the Lanyard homepage instead of the login page. If you're signed out automatically after being idle, you still go to the login page so you can pick up where you left off.",
-      "The Lanyard homepage can now be found through search engines, and shows a proper title, description and image when its link is shared. Everything behind the login stays hidden from search results."
+      "The Lanyard homepage can now be found through search engines, and shows a proper title, description and image when its link is shared. Everything behind the login stays hidden from search results.",
+      "In the demo you can now see Lanyard in your own company's branding: add your company name, theme colour and logo, and the whole demo switches to them - the menu, colours, browser tab icon and home-screen app icon - with a live preview first. Only you see it, and your logo never leaves your browser.",
+      "In the demo's branding preview you can now just paste your company's website address: Lanyard picks up your name, theme colour and logo from it (or works out a colour from your logo), and you can adjust anything before applying it."
     ]
   }
 ]

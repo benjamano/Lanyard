@@ -1,0 +1,329 @@
+@* "See Lanyard in your own branding" for demo visitors: their company name, theme colour and logo,
+   with a live preview of what staff would see. Saved only in this browser (DemoBrandingState). *@
+
+@implements IAsyncDisposable
+@inject DemoBrandingState DemoBranding
+@inject IJSRuntime JS
+
+<FluentDialogBody>
+    <ChildContent>
+        <div class="dbd">
+            <div class="dbd-form">
+                <FluentText>
+                    See what Lanyard would look like for your company. Only you can see this - it's kept in
+                    this browser and your logo is never uploaded.
+                </FluentText>
+
+                <div class="dbd-website">
+                    <FluentText Weight="TextWeight.Semibold">Get it from your website</FluentText>
+                    <FluentText Class="dbd-hint">Paste your website's address and we'll pick up your name, colours and logo.</FluentText>
+                    <div class="dbd-website-row">
+                        <FluentTextInput @bind-Value="_website" Immediate="true" Placeholder="yourcompany.co.uk" Class="dbd-website-input"
+                                         aria-label="Your website" @onkeyup="WebsiteKeyUpAsync" />
+                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ImportFromWebsiteAsync" Loading="_importing"
+                                      Disabled="@string.IsNullOrWhiteSpace(_website)">Fetch</FluentButton>
+                    </div>
+                    @if (_importMessage is not null)
+                    {
+                        <FluentText Class="@(_importFailed ? "dbd-error" : "dbd-success")">@_importMessage</FluentText>
+                    }
+                </div>
+
+                <div class="dbd-divider"><span>or set it yourself</span></div>
+
+                <FluentTextInput @bind-Value="_name" Label="Company name" Placeholder="Acme Leisure" Class="dbd-full" />
+
+                <FluentColorPickerInput @bind-Value="_color" Label="Theme colour" Class="dbd-full"
+                                        View="@ColorPickerView.SwatchPalette" />
+
+                <div class="dbd-logo">
+                    <FluentText Weight="TextWeight.Semibold">Logo</FluentText>
+                    <FluentText Class="dbd-hint">Shown in the menu, the browser tab and the home-screen app icon.</FluentText>
+                    <div class="dbd-logo-row">
+                        <label class="dbd-logo-button">
+                            <input type="file" accept="image/*" @ref="_logoInput" />
+                            @(_logoUrl is null ? "Choose a logo" : "Change logo")
+                        </label>
+                        @if (_logoUrl is not null)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="RemoveLogoAsync">Remove</FluentButton>
+                        }
+                    </div>
+                    @if (_logoError is not null)
+                    {
+                        <FluentText Class="dbd-error">@_logoError</FluentText>
+                    }
+                </div>
+            </div>
+
+            <div class="dbd-preview" aria-label="Preview">
+                <FluentText Weight="TextWeight.Semibold">Preview</FluentText>
+
+                @* The app, as a staff member would see it. *@
+                <div class="dbd-app">
+                    <div class="dbd-app-header" style="background:@Color; color:@TextOnColor">
+                        <span class="dbd-app-brand">Lanλard</span>
+                        <span class="dbd-app-location">@DisplayName Riverside</span>
+                    </div>
+                    <div class="dbd-app-body">
+                        <div class="dbd-app-nav">
+                            @if (_logoUrl is not null)
+                            {
+                                <img src="@_logoUrl" alt="Your logo" class="dbd-app-logo" />
+                            }
+                            else
+                            {
+                                <div class="dbd-app-wordmark">@DisplayName</div>
+                            }
+                            <div class="dbd-app-nav-item dbd-app-nav-active" style="border-left-color:@Color; color:@Color">Home</div>
+                            <div class="dbd-app-nav-item">My Shifts</div>
+                            <div class="dbd-app-nav-item">Chat <span class="dbd-app-badge" style="background:@Color; color:@TextOnColor">3</span></div>
+                        </div>
+                        <div class="dbd-app-content">
+                            <div class="dbd-app-card">
+                                <div class="dbd-app-card-title">Good morning Jordan!</div>
+                                <div class="dbd-app-card-text">You're on 10:00-18:00 today.</div>
+                                <div class="dbd-app-buttons">
+                                    <span class="dbd-app-button" style="background:@Color; color:@TextOnColor">Publish rota</span>
+                                    <span class="dbd-app-button dbd-app-button-outline" style="border-color:@Color; color:@Color">Swap shift</span>
+                                </div>
+                                <span class="dbd-app-link" style="color:@Color">View all announcements</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <FluentText Weight="TextWeight.Semibold">Your colours</FluentText>
+                <div class="dbd-swatches">
+                    @foreach (string shade in ColorPalette.Ramp(Color))
+                    {
+                        <div class="dbd-swatch" style="background:@shade; color:@ColorPalette.TextOn(shade)" title="@shade">@shade</div>
+                    }
+                </div>
+
+                <div class="dbd-devices">
+                    <div class="dbd-device">
+                        <FluentText Weight="TextWeight.Semibold">Browser tab</FluentText>
+                        <div class="dbd-tab">
+                            @if (_faviconUrl is not null)
+                            {
+                                <img src="@_faviconUrl" alt="" class="dbd-tab-icon" />
+                            }
+                            <span class="dbd-tab-title">@DisplayName - Lanyard</span>
+                        </div>
+                    </div>
+
+                    <div class="dbd-device">
+                        <FluentText Weight="TextWeight.Semibold">Phone home screen</FluentText>
+                        <div class="dbd-phone">
+                            <div class="dbd-phone-status" style="background:@Color"></div>
+                            <div class="dbd-phone-apps">
+                                <div class="dbd-phone-app">
+                                    @if (_appIconUrl is not null)
+                                    {
+                                        <img src="@_appIconUrl" alt="" class="dbd-phone-icon" />
+                                    }
+                                    <span>@DisplayName</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End" Wrap="true">
+            @if (DemoBranding.Current is not null)
+            {
+                <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="ResetAsync">Reset to the demo's branding</FluentButton>
+            }
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ApplyAsync">Apply to my demo</FluentButton>
+            <FluentButton OnClick="CancelAsync">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    // The demo company's own colour, used until the visitor picks one.
+    private const string DemoColor = "#6D28D9";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private ElementReference _logoInput;
+    private DotNetObjectReference<DemoBrandingDialog>? _selfRef;
+
+    private string? _name;
+    private string? _color;
+    private string? _logoUrl;
+    private string? _logoError;
+    private string? _faviconUrl;
+    private string? _website;
+    private bool _importing;
+    private bool _importFailed;
+    private string? _importMessage;
+    private string? _appIconUrl;
+
+    private string Color => DemoBrandingState.IsValidColor(_color) ? _color! : DemoColor;
+
+    private string TextOnColor => ColorPalette.TextOn(Color);
+
+    private string DisplayName => string.IsNullOrWhiteSpace(_name) ? "Your company" : _name.Trim();
+
+    public static async Task OpenAsync(IDialogService dialogService)
+    {
+        await dialogService.ShowDialogAsync<DemoBrandingDialog>(options =>
+        {
+            options.Header.Title = "See Lanyard in your own branding";
+            options.Width = "min(920px, 96vw)";
+            options.Modal = true;
+        });
+    }
+
+    protected override void OnInitialized()
+    {
+        _name = DemoBranding.Current?.Name;
+        _color = DemoBranding.Current?.ColorHex;
+        _logoUrl = DemoBranding.Current?.LogoUrl;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _selfRef = DotNetObjectReference.Create(this);
+
+        // The working logo starts as the saved one, whatever an earlier cancelled dialog left behind.
+        _logoUrl = await JS.InvokeAsync<string?>("lanyardDemoBranding.revertLogo");
+        await JS.InvokeVoidAsync("lanyardDemoBranding.watchLogoInput", _logoInput, _selfRef);
+        await RefreshIconsAsync();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnLogoPicked(string? logoUrl, string? error)
+    {
+        _logoError = error;
+
+        if (logoUrl is not null)
+        {
+            _logoUrl = logoUrl;
+            await RefreshIconsAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RemoveLogoAsync()
+    {
+        await JS.InvokeVoidAsync("lanyardDemoBranding.removeLogo");
+        _logoUrl = null;
+        _logoError = null;
+        await RefreshIconsAsync();
+    }
+
+    private async Task RefreshIconsAsync()
+    {
+        IconUrls icons = await JS.InvokeAsync<IconUrls>("lanyardDemoBranding.icons");
+        _faviconUrl = icons.Favicon;
+        _appIconUrl = icons.AppIcon;
+    }
+
+    private sealed record IconUrls(string? Favicon, string? AppIcon);
+
+    private sealed record WebsiteImport(string? Name, string? Color, string? LogoUrl, string? Site, string? Error);
+
+    private async Task WebsiteKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_importing && !string.IsNullOrWhiteSpace(_website))
+        {
+            await ImportFromWebsiteAsync();
+        }
+    }
+
+    // Fills in whatever the site gave us; anything it didn't have is left as it was, and the
+    // visitor can still change all of it by hand.
+    private async Task ImportFromWebsiteAsync()
+    {
+        _importing = true;
+        _importMessage = null;
+
+        WebsiteImport result = await JS.InvokeAsync<WebsiteImport>("lanyardDemoBranding.importFromWebsite", _website?.Trim());
+
+        _importing = false;
+
+        if (result.Error is not null)
+        {
+            _importFailed = true;
+            _importMessage = result.Error;
+            return;
+        }
+
+        List<string> found = [];
+
+        if (!string.IsNullOrWhiteSpace(result.Name))
+        {
+            _name = result.Name;
+            found.Add("name");
+        }
+
+        if (DemoBrandingState.IsValidColor(result.Color))
+        {
+            _color = result.Color;
+            found.Add("colour");
+        }
+
+        if (result.LogoUrl is not null)
+        {
+            _logoUrl = result.LogoUrl;
+            _logoError = null;
+            found.Add("logo");
+            await RefreshIconsAsync();
+        }
+
+        string site = result.Site is null ? "your website" : new Uri(result.Site).Host;
+        _importFailed = found.Count == 0;
+        _importMessage = found.Count == 0
+            ? $"We couldn't find any branding on {site} - you can set it below."
+            : $"Got your {JoinFound(found)} from {site}. Change anything below if it's not quite right.";
+    }
+
+    private static string JoinFound(List<string> found) => found.Count switch
+    {
+        1 => found[0],
+        2 => $"{found[0]} and {found[1]}",
+        _ => $"{string.Join(", ", found.Take(found.Count - 1))} and {found[^1]}",
+    };
+
+    private async Task ApplyAsync()
+    {
+        await DemoBranding.SaveAsync(new DemoBrandingState.Branding(_name, _color, _logoUrl));
+        _toastService.ShowSuccess(DemoBranding.Current is null
+            ? "Back to the demo's own branding."
+            : "Your branding is on - have a look around.");
+        await Dialog.CloseAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        await DemoBranding.ClearAsync();
+        _toastService.ShowSuccess("Back to the demo's own branding.");
+        await Dialog.CloseAsync();
+    }
+
+    private async Task CancelAsync()
+    {
+        await JS.InvokeAsync<string?>("lanyardDemoBranding.revertLogo");
+        await Dialog.CancelAsync();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
