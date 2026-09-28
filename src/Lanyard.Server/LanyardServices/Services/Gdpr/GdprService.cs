@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using Lanyard.Application.Services.Demo;
+using System.Security.Cryptography;
 using System.Text;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
@@ -41,7 +42,7 @@ public class GdprService : IGdprService
                 return Result<bool>.Fail("You must be an administrator to perform this action!");
             }
 
-            if (userId == ApplicationDbContext.SystemDeletedUserPlaceholderId)
+            if (userId == ApplicationDbContext.SystemDeletedUserPlaceholderId || DemoAccounts.LoginUserIds.Contains(userId))
             {
                 return Result<bool>.Fail("This account cannot be erased.");
             }

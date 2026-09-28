@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Demo;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -16,12 +17,14 @@ public class EmailService : IEmailService
     private readonly HttpClient _httpClient;
     private readonly IOptions<EmailOptions> _options;
     private readonly ILogger<EmailService> _logger;
+    private readonly IDemoDirectory? _demoDirectory;
 
-    public EmailService(HttpClient httpClient, IOptions<EmailOptions> options, ILogger<EmailService> logger)
+    public EmailService(HttpClient httpClient, IOptions<EmailOptions> options, ILogger<EmailService> logger, IDemoDirectory? demoDirectory = null)
     {
         _httpClient = httpClient;
         _options = options;
         _logger = logger;
+        _demoDirectory = demoDirectory;
     }
 
     public async Task<Result<bool>> SendSetPasswordEmailAsync(UserProfile user, string setPasswordUrl, string? logoUrl, string accentColorHex, string? locationName)
@@ -215,6 +218,15 @@ public class EmailService : IEmailService
     {
         try
         {
+            // The public demo is full of made-up people, and visitors can type anyone's address
+            // into it - so nothing addressed to a demo account ever leaves. Reported as sent so
+            // the demo's flows (inviting a user, approving time off) behave as they would for real.
+            if (_demoDirectory is not null && await _demoDirectory.IsDemoUserAsync(userId))
+            {
+                _logger.LogInformation("Not emailing {UserId}: demo account", userId);
+                return Result<bool>.Ok(true);
+            }
+
             EmailOptions config = _options.Value;
 
             if (string.IsNullOrWhiteSpace(config.ResendApiKey) || string.IsNullOrWhiteSpace(config.FromAddress))

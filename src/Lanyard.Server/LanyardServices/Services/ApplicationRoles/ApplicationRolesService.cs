@@ -1,4 +1,5 @@
-﻿using Lanyard.Application.Services.Authentication;
+﻿using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -295,6 +296,13 @@ public class ApplicationRolesService
                 return Result<string>.Fail("User not found.");
             }
 
+            // The demo's shared login accounts keep their roles, or the next visitor's "Explore as
+            // admin" wouldn't be an admin.
+            if (DemoAccounts.LoginUserIds.Contains(user.Id))
+            {
+                return Result<string>.Fail("The demo accounts' roles can't be changed.");
+            }
+
             if (role is null)
             {
                 return Result<string>.Fail("Role not found.");
@@ -355,6 +363,13 @@ public class ApplicationRolesService
             if (user is null || !(await _sApi.GetUserByIdAsync(user.Id)).IsSuccess)
             {
                 return Result<string>.Fail("User not found.");
+            }
+
+            // The demo's shared login accounts keep their roles, or the next visitor's "Explore as
+            // admin" wouldn't be an admin.
+            if (DemoAccounts.LoginUserIds.Contains(user.Id))
+            {
+                return Result<string>.Fail("The demo accounts' roles can't be changed.");
             }
 
             if (role is null)

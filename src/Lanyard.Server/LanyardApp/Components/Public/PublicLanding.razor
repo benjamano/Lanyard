@@ -92,10 +92,13 @@
                         </div>
                         <h3 class="landing-card-title">@role.Title</h3>
                         <p class="landing-card-text">@role.Description</p>
-                        <FluentAnchorButton Href="@($"/api/auth/demo-login?role={role.Key}")" Appearance="ButtonAppearance.Primary"
-                                            Class="landing-role-button">
+                        @* A forced full-page load, not an Href: /api/auth/demo-login is a controller
+                           endpoint, and Blazor's router would otherwise intercept the click and look
+                           for a page there (same reason NavMenu's logout does this). *@
+                        <FluentButton Appearance="ButtonAppearance.Primary" Class="landing-role-button"
+                                      OnClick="@(() => OpenDemo(role.Key))" data-demo-login="@($"/api/auth/demo-login?role={role.Key}")">
                             Explore as @role.Title.ToLowerInvariant()
-                        </FluentAnchorButton>
+                        </FluentButton>
                     </div>
                 }
             </div>
@@ -116,6 +119,8 @@
     private sealed record DemoRole(string Key, Icon Icon, string Title, string Description);
 
     private bool DemoEnabled => Configuration.GetValue<bool>("Demo:Enabled");
+
+    private void OpenDemo(string role) => _navigationManager.NavigateTo($"/api/auth/demo-login?role={role}", forceLoad: true);
 
     private static readonly Feature[] Features =
     [
