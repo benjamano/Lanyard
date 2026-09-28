@@ -3,8 +3,27 @@
    users never see this. Deliberately static: no data, no services beyond configuration. *@
 
 @inject IConfiguration Configuration
+@inject Microsoft.Extensions.Options.IOptions<PublicSiteOptions> PublicSite
 
-<PageTitle>Lanyard - run your whole venue from one app</PageTitle>
+<PageTitle>@Title</PageTitle>
+
+@* What search engines and link previews show for the homepage - the only page they may index (see
+   PublicSiteOptions). URLs are absolute: share previews ignore relative ones. *@
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <link rel="canonical" href="@PublicSite.Value.Url("/")" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Lanyard" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:url" content="@PublicSite.Value.Url("/")" />
+    <meta property="og:image" content="@PublicSite.Value.Url("/logo.png")" />
+    <meta property="og:locale" content="en_GB" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Description" />
+    <meta name="twitter:image" content="@PublicSite.Value.Url("/logo.png")" />
+</HeadContent>
 
 <div class="landing">
     <section class="landing-hero">
@@ -117,6 +136,12 @@
     private sealed record Feature(Icon Icon, string Title, string Description);
 
     private sealed record DemoRole(string Key, Icon Icon, string Title, string Description);
+
+    private const string Title = "Lanyard - run your whole venue from one app";
+
+    private const string Description =
+        "Venue operations for entertainment centres: staff rotas and clock-in, training, onboarding "
+        + "and team chat, plus live control of music, DMX lighting, projection and laser tag scoring.";
 
     private bool DemoEnabled => Configuration.GetValue<bool>("Demo:Enabled");
 

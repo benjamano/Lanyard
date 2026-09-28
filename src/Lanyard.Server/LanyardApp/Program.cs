@@ -1,6 +1,7 @@
 ﻿using Amazon.S3;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
@@ -260,6 +261,7 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 builder.Services.AddCompanyTenancy();
 
 // The public demo company (off unless Demo__Enabled is set; see DemoOptions).
+builder.Services.Configure<PublicSiteOptions>(builder.Configuration.GetSection(PublicSiteOptions.SectionName));
 builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
 builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
 builder.Services.AddScoped<IDemoGuard, DemoGuard>();
@@ -440,6 +442,8 @@ RequestLocalizationOptions localizationOptions = new RequestLocalizationOptions(
 localizationOptions.RequestCultureProviders = [new CookieRequestCultureProvider()];
 app.UseRequestLocalization(localizationOptions);
 
+PublicSiteOptions publicSite = app.Services.GetRequiredService<IOptions<PublicSiteOptions>>().Value;
+
 string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
 
 app.Use(async (context, next) =>
@@ -448,7 +452,11 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
-    context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    // Everything is kept out of search results except the public homepage on the public host.
+    if (!publicSite.IsIndexable(context.Request))
+    {
+        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    }
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
