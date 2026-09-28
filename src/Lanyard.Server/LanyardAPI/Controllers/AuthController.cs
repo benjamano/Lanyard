@@ -257,7 +257,7 @@ namespace Lanyard.API.Controllers
 
             await _signInManager.SignOutAsync();
 
-            return RedirectToLoginAfterSignOut(returnUrl);
+            return RedirectAfterSignOut(returnUrl);
         }
 
         // Deliberately does NOT sign anyone out. It renders a form that posts back to the action
@@ -399,14 +399,17 @@ namespace Lanyard.API.Controllers
             return Redirect("/");
         }
 
-        private IActionResult RedirectToLoginAfterSignOut(string? returnUrl)
+        // With a returnUrl (the idle auto-logout passes the page it was on) the login page offers to
+        // take them straight back. Otherwise - someone pressing Log out, demo or not - they land on the
+        // public homepage, which has its own Log in button.
+        private IActionResult RedirectAfterSignOut(string? returnUrl)
         {
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             {
                 return Redirect($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
             }
 
-            return Redirect("/login");
+            return Redirect("/");
         }
 
         private enum SignInOutcomeKind
