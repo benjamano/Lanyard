@@ -109,7 +109,7 @@ If a change is user-noticeable UI, its PR must carry the screenshots — phone (
 
 Inline-only screenshots are not enough. An image attached in chat lives solely in the transcript, and the transcript loses images — they disappear permanently, which is exactly the problem this script exists to solve.
 
-For a flow a still image can't show, a short video is optional — see the `verify` skill for recording and publishing it.
+If the PR adds or changes UI, it also needs a **narrated walkthrough video**: a recording with a voice-over and subtitles that explains the feature and goes through the steps to use it. Make it with the `walkthrough-video` skill and publish it through the same manifest as the screenshots.
 
 ### Merge authority -- dev yes, main never
 The installed Claude GitHub App (triggered by an `@claude` mention on a PR/issue comment) is allowed to merge a pull request into `dev` on its own, but ONLY once the required CI checks (`build-and-test`, `docker-build`) are passing -- that's enforced by a separate ruleset ("Dev Requires CI To Pass") the App has no bypass on, so it cannot merge a red PR regardless of what it believes about the change.
