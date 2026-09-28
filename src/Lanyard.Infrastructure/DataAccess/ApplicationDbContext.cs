@@ -83,6 +83,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ZoneScoreboardSettings> ZoneScoreboardSettings { get; set; }
         public DbSet<ClientAvailableNetworkInterface> ClientAvailableNetworkInterfaces { get; set; }
         public DbSet<ClientAvailableVideoDevice> ClientAvailableVideoDevices { get; set; }
+        public DbSet<ClientAvailableAudioDevice> ClientAvailableAudioDevices { get; set; }
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }

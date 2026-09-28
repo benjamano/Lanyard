@@ -49,17 +49,7 @@ Always inject the factory, never `ApplicationDbContext` directly — singleton s
 
 Every service has a matching `I*Service` interface; `Program.cs` registers the interface against the concrete class; components/controllers inject the interface, never the concrete type. This is what makes the Moq-based test suite possible — Moq can't substitute a concrete type.
 
-**Pre-injected via `_Imports.razor`** (`src/Lanyard.Server/LanyardApp/Components/_Imports.razor`) — don't re-inject these:
-
-| Field name | Interface |
-|---|---|
-| `_securityService` | `ISecurityService` |
-| `_dialogService` | `IDialogService` |
-| `_timeService` | `ITimeService` |
-| `_companyLocationService` | `ICompanyLocationService` |
-| `_currentLocationContext` | `ICurrentLocationContext` |
-| `_toastService` | `INotificationService` |
-| `_navigationManager` | `NavigationManager` |
+**Pre-injected via `src/Lanyard.Server/LanyardApp/Components/_Imports.razor`** — check its `@inject` lines before injecting a service yourself.
 
 ---
 
@@ -98,7 +88,7 @@ Plain `ILogger<T>` — no Serilog, no correlation-ID/trace-ID propagation anywhe
 
 ### Before acting
 - Read `AGENTS.md` before making structural or architectural decisions.
-- For Blazor/FluentUI tasks, query the `blazor_knowledge` MCP server first (see above).
+- For Blazor/FluentUI tasks, query the `fluent-ui-blazor` MCP server first (see AGENTS.md).
 
 ### Ask for confirmation before
 - Force-pushing any branch.
@@ -119,7 +109,7 @@ If a change is user-noticeable UI, its PR must carry the screenshots — phone (
 
 Inline-only screenshots are not enough. An image attached in chat lives solely in the transcript, and the transcript loses images — they disappear permanently, which is exactly the problem this script exists to solve.
 
-For a multi-step flow that's hard to convey in a still image (e.g. a drag-and-drop scene edit, a live SignalR update), a short video is optional but encouraged. `publish-screenshots.sh` accepts `.mp4`/`.webm`/`.mov` files in the same manifest alongside screenshots. Keep clips short and compressed (a few seconds to ~1 minute, under ~10 MiB). Note it renders as a "Watch video" link to GitHub's file viewer, not a truly inline player — `raw.githubusercontent.com` serves video as `application/octet-stream` with `nosniff`, which browsers refuse to play regardless of extension, so the link points at `github.com`'s own blob viewer instead, which plays it properly. Screenshots remain the default requirement; only add video when a screenshot genuinely can't show the change. The Playwright MCP config here has no recording tool, so capturing a clip uses `.claude/scripts/record-video/record-video.mjs` instead (a standalone script outside the MCP): write a small scenario file default-exporting `async function(page)` that drives the flow with normal Playwright calls, then `node record-video.mjs --scenario <file.mjs> --out <file.webm> --viewport 1440x900` (or `390x844` for phone). Run `npm install` once in that directory first if `node_modules` isn't there yet.
+For a flow a still image can't show, a short video is optional — see the `verify` skill for recording and publishing it.
 
 ### Merge authority -- dev yes, main never
 The installed Claude GitHub App (triggered by an `@claude` mention on a PR/issue comment) is allowed to merge a pull request into `dev` on its own, but ONLY once the required CI checks (`build-and-test`, `docker-build`) are passing -- that's enforced by a separate ruleset ("Dev Requires CI To Pass") the App has no bypass on, so it cannot merge a red PR regardless of what it believes about the change.
@@ -135,22 +125,4 @@ Every `@page` needs `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@a
 
 ## Deep-Dive Skills
 
-The topics below used to live in this file as long-form sections. They moved to skills so they load only when relevant instead of bloating every session's context. They trigger automatically when applicable, or can be invoked by name:
-
-| Skill | Covers |
-|---|---|
-| `fluentui-v5-blazor` | Fluent UI v5 component-naming changes, the FOUC boot cloak, `::deep` scoped-CSS traps, `FluentDataGrid` row sizing, theme-mode desync history |
-| `charting` | Fluent UI Charts is the only charting library (Radzen was fully migrated away from) — real components in use, data-color sourcing, and why the MCP server has nothing indexed for the Charts package |
-| `route-authorization` | Full history/edge cases behind the default-deny route gate |
-| `email-invite-system` | Resend-based invite emails, username-or-email login |
-| `client-build-troubleshooting` | Client "No frameworks were found" — stray host DLLs in `build\`, not a missing runtime |
-| `client-release-pipeline` | `release.yml` auto-publishes whatever `<Version>` is in `Lanyard.Client.csproj` on every client-touching push to `main`, with no increment check; how kiosks auto-update on next restart |
-| `kiosk-client-dev-stack` | Launching the full server+client exe stack for SignalR/DMX end-to-end testing |
-| `verify` | Lighter Playwright-driven UI verification loop (server only, no kiosk client) |
-| `dashboard-widgets` | 6-touchpoint checklist for adding a new dashboard widget type; failure modes when a step is missed |
-| `location-scoping` | What `ICurrentLocationContext`/`LocationScope` actually cover (Training/Course only, not app-wide) and a known cross-location gap in `CourseService` |
-| `dmx-scene-engine` | Why DMX services are singletons with locks, server-side vs. client-side stepping vs. projection programs, BPM timing, momentary-scene semantics |
-| `automation-engine` | 3-touchpoint checklist for new automation action types (fails silently if missed), the lazy-init cache pattern |
-| `service-testing-patterns` | The EF InMemory + Moq test-setup convention used across all service tests, and the different approach needed for Identity-backed tests |
-| `integration-testing` | The `CustomWebApplicationFactory` fixture for real-pipeline tests (auth, routing, controllers) — an EF dual-provider conflict already solved, logging in as the seeded admin, keeping the test host hermetic |
-| `api-controller-conventions` | Known inconsistencies across API controllers (a namespace bug, three coexisting auth mechanisms, no `Result<T>`→HTTP helper) |
+Topic deep-dives (DMX, automation, dashboards, routes, charts, Fluent UI, testing, client release) live in `.claude/skills/` and load on demand — check the skill list before touching those areas.
