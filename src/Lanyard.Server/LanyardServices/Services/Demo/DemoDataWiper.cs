@@ -81,6 +81,7 @@ internal static class DemoDataWiper
         await ctx.ClientAvailableVideoDevices.ExecuteDeleteAsync(ct);
         await ctx.ClientAvailableDmxDevices.ExecuteDeleteAsync(ct);
         await ctx.ClientAvailableNetworkInterfaces.ExecuteDeleteAsync(ct);
+        await ctx.ClientAvailableAudioDevices.ExecuteDeleteAsync(ct);
         await ctx.ZoneScoreboardSettings.ExecuteDeleteAsync(ct);
         await ctx.Clients.ExecuteDeleteAsync(ct);
 
