@@ -8,12 +8,18 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lanyard CRM and SM</title>
-    <meta name="description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
-    <meta property="og:title" content="Lanyard" />
-    <meta property="og:description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="/logo.png" />
+    @* The homepage writes its own title, description and share-preview tags (PublicLanding's
+       HeadContent); these generic ones would otherwise sit alongside them and crawlers could pick
+       either. *@
+    @if (HttpContext.Request.Path != "/")
+    {
+        <title>Lanyard CRM and SM</title>
+        <meta name="description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
+        <meta property="og:title" content="Lanyard" />
+        <meta property="og:description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="/logo.png" />
+    }
     <base href="/" />
     <ResourcePreloader />
     <ImportMap />

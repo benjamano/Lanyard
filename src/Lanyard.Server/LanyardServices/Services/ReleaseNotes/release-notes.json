@@ -538,7 +538,8 @@
       "Managers and admins can only see and manage staff, rotas, time off and chat in their own company. Only a user themselves, or a manager at their company, can change their password.",
       "Lanyard now has a public homepage: visitors who aren't signed in see what Lanyard does, with a Log in button at the top right, instead of being sent straight to the login page.",
       "There's now a live demo anyone can try from the homepage: one click signs you in as an admin, manager or staff member of a made-up venue full of sample rotas, training, chat and dashboards. It resets to fresh data every night, and never sends emails or notifications.",
-      "Pressing Log out now takes you to the Lanyard homepage instead of the login page. If you're signed out automatically after being idle, you still go to the login page so you can pick up where you left off."
+      "Pressing Log out now takes you to the Lanyard homepage instead of the login page. If you're signed out automatically after being idle, you still go to the login page so you can pick up where you left off.",
+      "The Lanyard homepage can now be found through search engines, and shows a proper title, description and image when its link is shared. Everything behind the login stays hidden from search results."
     ]
   }
 ]
