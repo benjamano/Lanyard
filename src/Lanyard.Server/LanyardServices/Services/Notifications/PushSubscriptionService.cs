@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -9,7 +10,8 @@ namespace Lanyard.Application.Services.Notifications;
 public class PushSubscriptionService(
     IDbContextFactory<ApplicationDbContext> factory,
     TimeProvider timeProvider,
-    ILogger<PushSubscriptionService> logger) : IPushSubscriptionService
+    ILogger<PushSubscriptionService> logger,
+    IDemoDirectory? demoDirectory = null) : IPushSubscriptionService
 {
     // Push service URLs are a few hundred characters; anything far longer isn't one.
     private const int MaxEndpointLength = 2000;
@@ -29,6 +31,13 @@ public class PushSubscriptionService(
             if (string.IsNullOrWhiteSpace(input.Endpoint) || string.IsNullOrWhiteSpace(input.P256dh) || string.IsNullOrWhiteSpace(input.Auth))
             {
                 return Result<bool>.Fail("The browser didn't give a complete subscription.");
+            }
+
+            // Every visitor shares the demo accounts, so a subscription would push one stranger's
+            // chat messages to another's phone.
+            if (demoDirectory is not null && await demoDirectory.IsDemoUserAsync(userId))
+            {
+                return Result<bool>.Fail("Notifications aren't available in the demo.");
             }
 
             if (input.Endpoint.Length > MaxEndpointLength

@@ -1,0 +1,63 @@
+@* Platform admins' manual "wipe and reseed the public demo now" - the same thing the nightly
+   reset does. Only rendered when the demo is enabled on this server. *@
+
+@using Lanyard.Application.Services.Demo
+@using Microsoft.Extensions.Options
+
+@inject IDemoResetService DemoResetService
+@inject IOptions<DemoOptions> DemoOptions
+
+@if (DemoOptions.Value.Enabled)
+{
+    <div class="demo-reset-card">
+        <FluentCard Height="auto">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Public demo</FluentText>
+                <FluentText>
+                    The demo company is wiped and filled with fresh sample data every day at
+                    @DemoOptions.Value.ResetTimeUk.ToString("HH:mm") UK time.
+                    @if (_lastResetUtc is DateTime lastReset)
+                    {
+                        <span>It was last reset @RotaTime.ToVenueLocal(lastReset).ToString("d MMM yyyy 'at' HH:mm").</span>
+                    }
+                </FluentText>
+                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="ResetAsync" Loading="_resetting"
+                              IconStart="@(new Icons.Regular.Size20.ArrowClockwise())">
+                    Reset demo now
+                </FluentButton>
+            </FluentStack>
+        </FluentCard>
+    </div>
+}
+
+@code {
+    private DateTime? _lastResetUtc;
+    private bool _resetting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (DemoOptions.Value.Enabled)
+        {
+            _lastResetUtc = await DemoResetService.GetLastResetUtcAsync();
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        _resetting = true;
+
+        Result<bool> result = await DemoResetService.ResetAsync();
+
+        _resetting = false;
+
+        if (result.IsSuccess)
+        {
+            _lastResetUtc = await DemoResetService.GetLastResetUtcAsync();
+            _toastService.ShowSuccess("The demo has been reset.");
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Resetting the demo failed.");
+        }
+    }
+}

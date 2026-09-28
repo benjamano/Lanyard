@@ -2,6 +2,7 @@
 @using Lanyard.App.Components.Files
 
 @inject INotificationService ToastService
+@inject Lanyard.Application.Services.Tenancy.ITenantContext Tenant
 
 <div class="company-location-manager">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16" Width="100%" Margin="@Margin.Bottom2">
@@ -11,7 +12,8 @@
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                         <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" HorizontalGap="6">
                             <FluentText As="@TextTag.H4">Companies</FluentText>
-                            @if (selectedCompany is null)
+                            @* Only platform admins can create companies (CompanyLocationService enforces it). *@
+                            @if (selectedCompany is null && Tenant.ManageableCompanyId is null)
                             {
                                 <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany"
                                               IconStart="@(new Icons.Regular.Size20.AddCircle())">Add Company
@@ -49,9 +51,12 @@
                             {
                                 <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveCompany">Save Changes
                                 </FluentButton>
-                                <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New
-                                    Company
-                                </FluentButton>
+                                @if (Tenant.ManageableCompanyId is null)
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="StartNewCompany">New
+                                        Company
+                                    </FluentButton>
+                                }
                             }
 
                             @if (companyLogoFileId is not null)

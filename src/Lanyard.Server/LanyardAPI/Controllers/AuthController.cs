@@ -1,3 +1,5 @@
+using Lanyard.Application.Services.Demo;
+using Microsoft.Extensions.Options;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
@@ -25,6 +27,8 @@ namespace Lanyard.API.Controllers
         private readonly IEmailService _emailService;
         private readonly ILogger<AuthController> _logger;
         private readonly IAntiforgery _antiforgery;
+        private readonly IOptions<DemoOptions> _demoOptions;
+        private readonly IDemoDirectory _demoDirectory;
         private readonly IPushSubscriptionService _pushSubscriptionService;
 
         public AuthController(
@@ -34,8 +38,12 @@ namespace Lanyard.API.Controllers
             IEmailService emailService,
             ILogger<AuthController> logger,
             IAntiforgery antiforgery,
-            IPushSubscriptionService pushSubscriptionService)
+            IPushSubscriptionService pushSubscriptionService,
+            IOptions<DemoOptions> demoOptions,
+            IDemoDirectory demoDirectory)
         {
+            _demoOptions = demoOptions;
+            _demoDirectory = demoDirectory;
             _userManager = userManager;
             _signInManager = signInManager;
             _companyLocationService = companyLocationService;
@@ -298,6 +306,97 @@ namespace Lanyard.API.Controllers
                 """;
 
             return Content(html, "text/html; charset=utf-8");
+        }
+
+        // The homepage's "Explore as admin / manager / staff" buttons land here. Like the sign-out
+        // GET above, this only renders a self-submitting form: signing in is a state change, so it
+        // happens on the POST, behind an antiforgery token - otherwise any site could quietly sign a
+        // visitor in to the demo (login CSRF).
+        [EnableRateLimiting("ip-fixed")]
+        [HttpGet("demo-login")]
+        public IActionResult DemoLoginGet([FromQuery] string? role)
+        {
+            if (!_demoOptions.Value.Enabled || DemoAccounts.UserIdForRole(role) is null)
+            {
+                return NotFound();
+            }
+
+            AntiforgeryTokenSet tokens = _antiforgery.GetAndStoreTokens(HttpContext);
+            HtmlEncoder encoder = HtmlEncoder.Default;
+
+            string html = $"""
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="utf-8" />
+                    <title>Opening the demo&hellip;</title>
+                    <meta name="robots" content="noindex" />
+                </head>
+                <body>
+                    <form id="demoLoginForm" method="post" action="/api/auth/demo-login">
+                        <input type="hidden" name="{encoder.Encode(tokens.FormFieldName)}" value="{encoder.Encode(tokens.RequestToken ?? string.Empty)}" />
+                        <input type="hidden" name="role" value="{encoder.Encode(role!)}" />
+                        <noscript>
+                            <p>Opening the Lanyard demo.</p>
+                            <button type="submit">Continue</button>
+                        </noscript>
+                    </form>
+                    {PushSignOut.PlainSubmitScript("demoLoginForm")}
+                </body>
+                </html>
+                """;
+
+            return Content(html, "text/html; charset=utf-8");
+        }
+
+        [EnableRateLimiting("ip-fixed")]
+        [HttpPost("demo-login")]
+        [Consumes("application/x-www-form-urlencoded")]
+        public async Task<IActionResult> DemoLogin([FromForm] string? role)
+        {
+            if (!_demoOptions.Value.Enabled)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                await _antiforgery.ValidateRequestAsync(HttpContext);
+            }
+            catch (AntiforgeryValidationException ex)
+            {
+                _logger.LogWarning("Rejected a demo login with an invalid antiforgery token: {Error}", ex.Message);
+
+                return BadRequest("Invalid or missing antiforgery token.");
+            }
+
+            string? userId = DemoAccounts.UserIdForRole(role);
+            UserProfile? user = userId is null ? null : await _userManager.FindByIdAsync(userId);
+            (int LocationId, int CompanyId)? location = user is null ? null : await _demoDirectory.GetLoginLocationAsync(user.Id);
+
+            if (user is null || location is null)
+            {
+                _logger.LogWarning("Demo login for role {Role} failed: the demo company hasn't been seeded", role);
+
+                return Redirect(BuildLoginErrorRedirect("The demo isn't available right now. Please try again later.", null));
+            }
+
+            // Whoever was signed in before (a real account, or another demo role) is signed out first.
+            await _signInManager.SignOutAsync();
+
+            List<Claim> claims =
+            [
+                new Claim(LocationClaimTypes.LocationId, location.Value.LocationId.ToString()),
+                new Claim(LocationClaimTypes.CompanyId, location.Value.CompanyId.ToString()),
+            ];
+
+            // Never persistent: the demo session ends with the browser.
+            await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, claims);
+            UserCultureCookie.Append(Response, user.PreferredCulture);
+
+            _logger.LogInformation("Demo login as {Role} ({UserId})", role, user.Id);
+
+            return Redirect("/");
         }
 
         private IActionResult RedirectToLoginAfterSignOut(string? returnUrl)

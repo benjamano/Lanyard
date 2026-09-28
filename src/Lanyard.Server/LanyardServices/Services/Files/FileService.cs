@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Demo;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.DTO;
 using Amazon.S3;
@@ -22,6 +23,7 @@ namespace Lanyard.Application.Services;
 public class FileService : IFileService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
+    private readonly IDemoGuard? _demoGuard;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ISongAnalysisQueue _analysisQueue;
     private readonly string _storageRoot;
@@ -40,9 +42,11 @@ public class FileService : IFileService
         ICurrentUserAccessor currentUserAccessor,
         ISongAnalysisQueue analysisQueue,
         IWebHostEnvironment environment,
-        IAmazonS3? s3Client = null)
+        IAmazonS3? s3Client = null,
+        IDemoGuard? demoGuard = null)
     {
         _dbFactory = dbFactory;
+        _demoGuard = demoGuard;
         _storageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lanyard", "UploadedFiles");
         _currentUserAccessor = currentUserAccessor;
         _analysisQueue = analysisQueue;
@@ -126,6 +130,10 @@ public class FileService : IFileService
             ArgumentNullException.ThrowIfNull(file);
             if (string.IsNullOrWhiteSpace(uploadedBy))
                 return Result<FileMetadata>.Fail("UploadedBy is required.");
+
+            // The demo is public: uploads would put strangers' files in the real storage bucket.
+            if (_demoGuard is not null && await _demoGuard.IsDemoSessionAsync())
+                return Result<FileMetadata>.Fail("Uploading files isn't available in the demo.");
 
             string fileName = Path.GetFileName(file.FileName);
             Guid fileId = Guid.NewGuid();

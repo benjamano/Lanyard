@@ -535,7 +535,9 @@
       "Admins can now choose which features each company gets, under Manage > Companies & Locations > Features. Shift management, training, chat, onboarding and announcements can each be switched on or off per company. When one is off, staff at that company don't see it in the menu, on the home screen or on dashboards, and its pages show a \"not turned on for your company\" message instead. Clock-in tablets at that company stop working until shift management is switched back on, then come back by themselves within a minute. With onboarding off, new staff aren't sent the welcome email; with training off, courses aren't auto-assigned to new staff. Nothing is deleted, so switching a feature back on brings everything back. Every company has every feature until an admin changes it.",
       "Each company now only sees its own music, kiosks, DMX, projection programs, dashboards, files, automation rules, announcements, courses and staff documents.",
       "Company admins can only sign in to, and manage, their own company's locations. Creating companies, switching company features and creating or deleting roles is now limited to Lanyard platform admins.",
-      "Managers and admins can only see and manage staff, rotas, time off and chat in their own company. Only a user themselves, or a manager at their company, can change their password."
+      "Managers and admins can only see and manage staff, rotas, time off and chat in their own company. Only a user themselves, or a manager at their company, can change their password.",
+      "Lanyard now has a public homepage: visitors who aren't signed in see what Lanyard does, with a Log in button at the top right, instead of being sent straight to the login page.",
+      "There's now a live demo anyone can try from the homepage: one click signs you in as an admin, manager or staff member of a made-up venue full of sample rotas, training, chat and dashboards. It resets to fresh data every night, and never sends emails or notifications."
     ]
   }
 ]
