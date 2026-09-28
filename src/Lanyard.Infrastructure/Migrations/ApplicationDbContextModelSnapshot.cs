@@ -3566,7 +3566,8 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                }
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableAudioDevice", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
