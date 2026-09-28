@@ -60,6 +60,48 @@
     pointer-events: none;
 }
 
+.dbd-website {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground2);
+}
+
+.dbd-website-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.dbd-website-row ::deep .dbd-website-input,
+.dbd-website-row ::deep .dbd-website-input fluent-text-input {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+}
+
+.dbd-success {
+    color: var(--colorPaletteGreenForeground1);
+}
+
+.dbd-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.dbd-divider::before,
+.dbd-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
 .dbd-error {
     color: var(--colorPaletteRedForeground1);
 }

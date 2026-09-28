@@ -264,6 +264,14 @@ builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOpt
 builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
 builder.Services.AddScoped<IDemoGuard, DemoGuard>();
 builder.Services.AddScoped<Lanyard.App.Components.Demo.DemoBrandingState>();
+builder.Services.AddScoped<IWebsiteBrandingService, WebsiteBrandingService>();
+// Fetches websites demo visitors paste in: public internet only (PublicAddressGuard), briefly.
+builder.Services.AddHttpClient(WebsiteBrandingService.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; LanyardBrandingPreview/1.0; +https://lanyard.benjaminmercer.co.uk)");
+    })
+    .ConfigurePrimaryHttpMessageHandler(PublicAddressGuard.CreateHandler);
 builder.Services.AddSingleton<IDemoResetService, DemoResetService>();
 builder.Services.AddHostedService<DemoResetHostedService>();
 
@@ -382,6 +390,20 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 25,
             Window = TimeSpan.FromMinutes(1),
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+
+    // Each lookup makes the server fetch a site (and up to a few of its files), so it's tighter than
+    // the general limit.
+    options.AddPolicy(Lanyard.API.Controllers.DemoBrandingController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
     });

@@ -70,7 +70,11 @@ window.lanyardDemoBranding = (() => {
             throw new Error('That image is over 5 MB - please choose a smaller one.');
         }
 
-        const img = await loadImage(await readFile(file));
+        return downscaleDataUrl(await readFile(file));
+    };
+
+    const downscaleDataUrl = async dataUrl => {
+        const img = await loadImage(dataUrl);
         const width = img.naturalWidth || maxLogoSide;
         const height = img.naturalHeight || maxLogoSide;
         const scale = Math.min(1, maxLogoSide / Math.max(width, height));
@@ -80,6 +84,47 @@ window.lanyardDemoBranding = (() => {
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
 
         return canvas.toDataURL('image/png');
+    };
+
+    // The logo's most common strong colour, for sites that don't declare a theme colour. Near-white,
+    // near-black, grey and transparent pixels are ignored; similar colours are bucketed together.
+    const dominantColor = async dataUrl => {
+        const img = await loadImage(dataUrl);
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+        ctx.drawImage(img, 0, 0, img.naturalWidth * scale, img.naturalHeight * scale);
+
+        let data;
+        try {
+            data = ctx.getImageData(0, 0, size, size).data;
+        } catch {
+            return null;
+        }
+
+        const buckets = new Map();
+        for (let i = 0; i < data.length; i += 4) {
+            const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            if (a < 200 || max < 30 || min > 225 || max - min < 40) {
+                continue;
+            }
+            const key = (r >> 4) << 8 | (g >> 4) << 4 | (b >> 4);
+            const bucket = buckets.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+            bucket.n++; bucket.r += r; bucket.g += g; bucket.b += b;
+            buckets.set(key, bucket);
+        }
+
+        let best = null;
+        buckets.forEach(bucket => { if (!best || bucket.n > best.n) best = bucket; });
+        if (!best || best.n < 8) {
+            return null;
+        }
+
+        const hex = v => Math.round(v / best.n).toString(16).padStart(2, '0');
+        return `#${hex(best.r)}${hex(best.g)}${hex(best.b)}`.toUpperCase();
     };
 
     // An app/favicon icon the way Lanyard makes them for real companies: the logo centred on a
@@ -218,6 +263,50 @@ window.lanyardDemoBranding = (() => {
                 await toBlobUrl(await makeIcon(working.dataUrl, 192, true)),
             ];
             return { favicon: previewIconUrls[0], appIcon: previewIconUrls[1] };
+        },
+
+        // Asks the server to read a company's website (see DemoBrandingController) and makes
+        // whatever logo it found the working logo. Returns { name, color, logoUrl, site } for
+        // .NET - small, since the logo stays here - or { error }.
+        importFromWebsite: async url => {
+            let response;
+            try {
+                response = await fetch('/api/demo/branding/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                    credentials: 'same-origin',
+                });
+            } catch {
+                return { error: "We couldn't reach Lanyard to look that up. Please try again." };
+            }
+
+            if (response.status === 429) {
+                return { error: "That's a lot of lookups - please wait a minute and try again." };
+            }
+
+            const body = await response.json().catch(() => null);
+            if (!response.ok || !body) {
+                return { error: (body && body.message) || "We couldn't read that website." };
+            }
+
+            let logoUrl = null;
+            let color = body.color || null;
+
+            if (body.logo) {
+                try {
+                    const dataUrl = await downscaleDataUrl(body.logo);
+                    releaseWorking();
+                    working.dataUrl = dataUrl;
+                    working.blobUrl = await toBlobUrl(dataUrl);
+                    logoUrl = working.blobUrl;
+                    color = color || await dominantColor(dataUrl);
+                } catch {
+                    // An icon the browser can't draw; the name and colour are still useful.
+                }
+            }
+
+            return { name: body.name || null, color, logoUrl, site: body.site || null };
         },
 
         promptDismissed: () => tryStorage(() => localStorage.getItem(promptKey) === '1') === true,

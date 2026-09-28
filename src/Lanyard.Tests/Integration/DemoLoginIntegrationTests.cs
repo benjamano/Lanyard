@@ -1,3 +1,5 @@
+using Lanyard.Infrastructure.DTO;
+using System.Net.Http.Json;
 using System.Net;
 using System.Text.RegularExpressions;
 using Lanyard.Application.Services.Demo;
@@ -121,5 +123,23 @@ public class DemoLoginIntegrationTests
             .GetAsync("/api/auth/demo-login?role=staff");
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // The website lookup makes the server fetch a URL, so only demo sessions may use it.
+    [TestMethod]
+    public async Task WebsiteLookup_IsNotAvailableOutsideTheDemo()
+    {
+        HttpClient client = NoRedirects();
+        HttpResponseMessage login = await client.PostAsync("/api/auth/login", JsonContent.Create(new LoginDto
+        {
+            Username = "admin",
+            Password = CustomWebApplicationFactory.SeedAdminPassword,
+            LocationId = ApplicationDbContext.SeedIpswichLocationId
+        }));
+        Assert.IsTrue(login.IsSuccessStatusCode);
+
+        HttpResponseMessage lookup = await client.PostAsync("/api/demo/branding/lookup", JsonContent.Create(new { url = "example.com" }));
+
+        Assert.AreEqual(HttpStatusCode.NotFound, lookup.StatusCode);
     }
 }
