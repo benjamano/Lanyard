@@ -139,6 +139,7 @@ public class SignalRControlHub(
             await SendDmxSettingsToClientAsync(client);
             await SendZoneScoreboardSettingsToClientAsync(client);
             await SendRestartScheduleToClientAsync(client);
+            await SendAudioSettingsToClientAsync(client);
         }
 
         string musicGroup = MusicGroupFor(client.CompanyId);
@@ -393,6 +394,18 @@ public class SignalRControlHub(
         _logger.LogInformation("Sent restart schedule to client {ClientId}: enabled {Enabled}, every {IntervalCount} {IntervalUnit} at {TimeOfDay}", client.Id, client.AutoRestartEnabled, client.AutoRestartIntervalCount, client.AutoRestartIntervalUnit, client.AutoRestartTimeOfDay);
     }
 
+    private async Task SendAudioSettingsToClientAsync(Client client)
+    {
+        ClientAudioSettingsDTO settings = new ClientAudioSettingsDTO
+        {
+            PreferredDeviceId = client.PreferredAudioDeviceId,
+            PreferredDeviceName = client.PreferredAudioDeviceName
+        };
+
+        await Clients.Caller.SendAsync("ReceiveAudioSettings", settings);
+        _logger.LogInformation("Sent audio settings to client {ClientId}: preferred device {DeviceName} ({DeviceId})", client.Id, client.PreferredAudioDeviceName, client.PreferredAudioDeviceId);
+    }
+
     private async Task SendZoneScoreboardSettingsToClientAsync(Client client)
     {
         Result<ZoneScoreboardSettings?> getResult = await _clientZoneScoreboardService.GetZoneScoreboardSettingsAsync(client.Id);
@@ -627,6 +640,28 @@ public class SignalRControlHub(
         if (!setResult.IsSuccess)
         {
             _logger.LogWarning("Failed to update available video devices for client {ClientId}: {Error}", clientId, setResult.Error);
+        }
+    }
+
+    public async Task UpdateAvailableAudioDevices(IEnumerable<ClientAvailableAudioDeviceDTO> devices)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available audio devices: {Devices}", Context.ConnectionId, devices.Select(d => d.Name));
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        Result<bool> setResult = await _clientService.SetClientAvailableAudioDevicesAsync(clientId, devices);
+
+        if (!setResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to update available audio devices for client {ClientId}: {Error}", clientId, setResult.Error);
         }
     }
 

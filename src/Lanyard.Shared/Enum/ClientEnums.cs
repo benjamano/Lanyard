@@ -26,3 +26,9 @@ public enum RestartIntervalUnit
     Week = 2,
     Month = 3
 }
+
+public enum ClientRestartType
+{
+    Application = 1,
+    Computer = 2
+}
