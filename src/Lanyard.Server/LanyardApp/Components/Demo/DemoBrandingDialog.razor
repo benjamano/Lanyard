@@ -14,6 +14,23 @@
                     this browser and your logo is never uploaded.
                 </FluentText>
 
+                <div class="dbd-website">
+                    <FluentText Weight="TextWeight.Semibold">Get it from your website</FluentText>
+                    <FluentText Class="dbd-hint">Paste your website's address and we'll pick up your name, colours and logo.</FluentText>
+                    <div class="dbd-website-row">
+                        <FluentTextInput @bind-Value="_website" Immediate="true" Placeholder="yourcompany.co.uk" Class="dbd-website-input"
+                                         aria-label="Your website" @onkeyup="WebsiteKeyUpAsync" />
+                        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="ImportFromWebsiteAsync" Loading="_importing"
+                                      Disabled="@string.IsNullOrWhiteSpace(_website)">Fetch</FluentButton>
+                    </div>
+                    @if (_importMessage is not null)
+                    {
+                        <FluentText Class="@(_importFailed ? "dbd-error" : "dbd-success")">@_importMessage</FluentText>
+                    }
+                </div>
+
+                <div class="dbd-divider"><span>or set it yourself</span></div>
+
                 <FluentTextInput @bind-Value="_name" Label="Company name" Placeholder="Acme Leisure" Class="dbd-full" />
 
                 <FluentColorPickerInput @bind-Value="_color" Label="Theme colour" Class="dbd-full"
@@ -142,6 +159,10 @@
     private string? _logoUrl;
     private string? _logoError;
     private string? _faviconUrl;
+    private string? _website;
+    private bool _importing;
+    private bool _importFailed;
+    private string? _importMessage;
     private string? _appIconUrl;
 
     private string Color => DemoBrandingState.IsValidColor(_color) ? _color! : DemoColor;
@@ -213,6 +234,70 @@
     }
 
     private sealed record IconUrls(string? Favicon, string? AppIcon);
+
+    private sealed record WebsiteImport(string? Name, string? Color, string? LogoUrl, string? Site, string? Error);
+
+    private async Task WebsiteKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_importing && !string.IsNullOrWhiteSpace(_website))
+        {
+            await ImportFromWebsiteAsync();
+        }
+    }
+
+    // Fills in whatever the site gave us; anything it didn't have is left as it was, and the
+    // visitor can still change all of it by hand.
+    private async Task ImportFromWebsiteAsync()
+    {
+        _importing = true;
+        _importMessage = null;
+
+        WebsiteImport result = await JS.InvokeAsync<WebsiteImport>("lanyardDemoBranding.importFromWebsite", _website?.Trim());
+
+        _importing = false;
+
+        if (result.Error is not null)
+        {
+            _importFailed = true;
+            _importMessage = result.Error;
+            return;
+        }
+
+        List<string> found = [];
+
+        if (!string.IsNullOrWhiteSpace(result.Name))
+        {
+            _name = result.Name;
+            found.Add("name");
+        }
+
+        if (DemoBrandingState.IsValidColor(result.Color))
+        {
+            _color = result.Color;
+            found.Add("colour");
+        }
+
+        if (result.LogoUrl is not null)
+        {
+            _logoUrl = result.LogoUrl;
+            _logoError = null;
+            found.Add("logo");
+            await RefreshIconsAsync();
+        }
+
+        string site = result.Site is null ? "your website" : new Uri(result.Site).Host;
+        _importFailed = found.Count == 0;
+        _importMessage = found.Count == 0
+            ? $"We couldn't find any branding on {site} - you can set it below."
+            : $"Got your {JoinFound(found)} from {site}. Change anything below if it's not quite right.";
+    }
+
+    private static string JoinFound(List<string> found) => found.Count switch
+    {
+        1 => found[0],
+        2 => $"{found[0]} and {found[1]}",
+        _ => $"{string.Join(", ", found.Take(found.Count - 1))} and {found[^1]}",
+    };
 
     private async Task ApplyAsync()
     {
