@@ -1,0 +1,36 @@
+.dbp {
+    margin-bottom: 12px;
+}
+
+.dbp-body {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.dbp-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground1);
+    flex: 0 0 auto;
+}
+
+.dbp-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.dbp-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}

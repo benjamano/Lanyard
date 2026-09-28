@@ -1,0 +1,287 @@
+.dbd {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 24px;
+}
+
+.dbd-form,
+.dbd-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.dbd ::deep .dbd-full,
+.dbd ::deep .dbd-full fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+.dbd-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.dbd-logo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dbd-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* A native file input in a label, so the picker opens straight from the click. */
+.dbd-logo-button {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 4px;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dbd-logo-button:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.dbd-logo-button input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.dbd-error {
+    color: var(--colorPaletteRedForeground1);
+}
+
+/* The mock app: fixed light "screenshot" colours whatever the visitor's own light/dark mode, so the
+   theme colour is judged against what most staff will actually see. */
+.dbd-app {
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f5f5f5;
+    color: #242424;
+    font-size: 0.8rem;
+}
+
+.dbd-app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.dbd-app-brand {
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.dbd-app-location {
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dbd-app-body {
+    display: grid;
+    grid-template-columns: 34% 1fr;
+    min-height: 150px;
+}
+
+.dbd-app-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 8px;
+    background: #ececec;
+}
+
+.dbd-app-logo {
+    max-width: 100%;
+    max-height: 44px;
+    object-fit: contain;
+    align-self: center;
+    margin-bottom: 6px;
+}
+
+.dbd-app-wordmark {
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+    overflow-wrap: anywhere;
+}
+
+.dbd-app-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 6px;
+    border-left: 3px solid transparent;
+}
+
+.dbd-app-nav-active {
+    font-weight: 700;
+    background: #fff;
+}
+
+.dbd-app-badge {
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.dbd-app-content {
+    padding: 10px;
+}
+
+.dbd-app-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+}
+
+.dbd-app-card-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.dbd-app-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.dbd-app-button {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.dbd-app-button-outline {
+    background: transparent;
+}
+
+.dbd-app-link {
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.dbd-swatches {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.dbd-swatch {
+    height: 44px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 4px;
+    font-size: 0.6rem;
+    font-family: monospace;
+}
+
+.dbd-devices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+}
+
+.dbd-device {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dbd-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px 8px 0 0;
+    background: #ffffff;
+    border: 1px solid #d6d6d6;
+    border-bottom: none;
+    color: #242424;
+    font-size: 0.8rem;
+    max-width: 240px;
+}
+
+.dbd-tab-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.dbd-tab-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dbd-phone {
+    width: 140px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 3px solid #1f1f1f;
+    background: linear-gradient(160deg, #3b4a6b, #1d2536);
+}
+
+.dbd-phone-status {
+    height: 14px;
+}
+
+.dbd-phone-apps {
+    display: flex;
+    justify-content: center;
+    padding: 18px 8px 22px;
+}
+
+.dbd-phone-app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: #fff;
+    font-size: 0.7rem;
+    max-width: 90px;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.dbd-phone-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 720px) {
+    .dbd {
+        grid-template-columns: 1fr;
+    }
+
+    .dbd-swatch {
+        font-size: 0;
+    }
+}

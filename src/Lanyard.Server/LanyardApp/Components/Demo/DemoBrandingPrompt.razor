@@ -1,0 +1,56 @@
+@* Shown to demo visitors under the demo banner until they try their own branding or say no. *@
+
+@implements IDisposable
+@inject DemoBrandingState DemoBranding
+@inject IJSRuntime JS
+
+@if (_show && DemoBranding.Current is null)
+{
+    <div class="dbp">
+        <FluentCard Height="auto">
+            <div class="dbp-body">
+                <div class="dbp-icon">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.PaintBrush())" Color="Color.Custom" CustomColor="currentColor" />
+                </div>
+                <div class="dbp-text">
+                    <FluentText Weight="TextWeight.Semibold">Part of a company?</FluentText>
+                    <FluentText>See what Lanyard would look like with your own name, colours and logo.</FluentText>
+                </div>
+                <div class="dbp-actions">
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="OpenAsync">Set up my branding</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="DismissAsync">No thanks</FluentButton>
+                </div>
+            </div>
+        </FluentCard>
+    </div>
+}
+
+@code {
+    private bool _show;
+
+    protected override void OnInitialized()
+    {
+        DemoBranding.Changed += OnChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _show = !await JS.InvokeAsync<bool>("lanyardDemoBranding.promptDismissed");
+            StateHasChanged();
+        }
+    }
+
+    private Task OpenAsync() => DemoBrandingDialog.OpenAsync(_dialogService);
+
+    private async Task DismissAsync()
+    {
+        _show = false;
+        await JS.InvokeVoidAsync("lanyardDemoBranding.dismissPrompt");
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => DemoBranding.Changed -= OnChanged;
+}

@@ -263,6 +263,7 @@ builder.Services.AddCompanyTenancy();
 builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
 builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
 builder.Services.AddScoped<IDemoGuard, DemoGuard>();
+builder.Services.AddScoped<Lanyard.App.Components.Demo.DemoBrandingState>();
 builder.Services.AddSingleton<IDemoResetService, DemoResetService>();
 builder.Services.AddHostedService<DemoResetHostedService>();
 
@@ -432,7 +433,8 @@ app.Use(async (context, next) =>
         "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "font-src 'self' data:; " +
-        "img-src 'self' data:; " +
+        // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
+        "img-src 'self' data: blob:; " +
         $"connect-src {connectSrc}; " +
         "frame-ancestors 'self';";
 
