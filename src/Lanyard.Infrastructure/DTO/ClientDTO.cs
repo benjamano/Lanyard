@@ -33,3 +33,9 @@ public class ClientRestartScheduleDTO
     public int IntervalCount { get; set; }
     public TimeOnly TimeOfDay { get; set; }
 }
+
+public class ClientAudioSettingsDTO
+{
+    public string? PreferredDeviceId { get; set; }
+    public string? PreferredDeviceName { get; set; }
+}

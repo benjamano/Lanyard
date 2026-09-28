@@ -5,6 +5,10 @@ const int RestartDelayMs = 3000;
 const int MaxConsecutiveCrashed = 5;
 const int CrashWindowSeconds = 30;
 
+// Must match RestartRequestedExitCode in Lanyard.Client's RemoteRestartService: an admin asked
+// for this restart from the server, so it isn't a crash even if the client had only just started.
+const int RestartRequestedExitCode = 75;
+
 // Hide the console window as we dont care about it
 nint handle = GetConsoleWindow();
 ShowWindow(handle, 0);
@@ -37,6 +41,16 @@ while (true)
     }
 
     await clientProcess.WaitForExitAsync();
+
+    if (clientProcess.ExitCode == RestartRequestedExitCode)
+    {
+        Console.WriteLine("Lanyard Client exited for a requested restart, relaunching.");
+
+        consecutiveCrashes = 0;
+
+        await Task.Delay(RestartDelayMs);
+        continue;
+    }
 
     // If it ran for a while we will reset the crash counter as it's stable enough
     if ((DateTime.UtcNow - startTime).TotalSeconds > CrashWindowSeconds)
