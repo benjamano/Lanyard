@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -70,6 +71,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 options.UseInMemoryDatabase(_databaseName);
                 options.UseInternalServiceProvider(_inMemoryServiceProvider);
             });
+
+            // Re-applied because the AddDbContextFactory above put back EF's own (untenanted)
+            // factory - without this the test host wouldn't exercise company filtering at all.
+            services.AddCompanyTenancy();
         });
     }
 }

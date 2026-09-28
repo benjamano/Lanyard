@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.EntityFrameworkCore;
@@ -7,12 +8,12 @@ using Microsoft.Extensions.Logging;
 namespace Lanyard.Application.Services;
 
 public class DmxSceneRunnerService(
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     IDmxService dmxService,
     IBeatClockService beatClock,
     ILogger<DmxSceneRunnerService> logger) : IDmxSceneRunnerService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly IDmxService _dmxService = dmxService;
     private readonly IBeatClockService _beatClock = beatClock;
     private readonly ILogger<DmxSceneRunnerService> _logger = logger;

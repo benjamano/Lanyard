@@ -1,5 +1,6 @@
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.SignalR;
@@ -17,7 +18,7 @@ namespace Lanyard.Application.Services;
 public class MusicPlayerService
 {
     private readonly IHubContext<SignalRControlHub> _hubContext;
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+    private readonly ISystemDbContextFactory _contextFactory;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MusicPlayerService> _logger;
     private readonly object _lock = new();
@@ -26,7 +27,7 @@ public class MusicPlayerService
 
     public MusicPlayerService(
         IHubContext<SignalRControlHub> hubContext,
-        IDbContextFactory<ApplicationDbContext> contextFactory,
+        ISystemDbContextFactory contextFactory,
         IServiceScopeFactory scopeFactory,
         ILogger<MusicPlayerService> logger)
     {

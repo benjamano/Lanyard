@@ -1,8 +1,9 @@
 namespace Lanyard.Infrastructure.Models.Dmx;
 
-public class DmxScene : CreateAndUpdateBase
+public class DmxScene : CreateAndUpdateBase, ICompanyOwned
 {    
     public Guid Id { get; set; }
+    public int CompanyId { get; set; }
 
     public Guid ClientId { get; set; }
     public Client? Client { get; set; }

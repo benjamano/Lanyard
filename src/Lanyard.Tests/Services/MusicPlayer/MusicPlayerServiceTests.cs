@@ -1,6 +1,7 @@
 using Lanyard.Application.Services;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ public class MusicPlayerServiceTests
         Guid clientId = Guid.NewGuid();
         string connectionId = "connection-1";
 
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
@@ -77,7 +78,7 @@ public class MusicPlayerServiceTests
     {
         Guid clientId = Guid.NewGuid();
 
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));

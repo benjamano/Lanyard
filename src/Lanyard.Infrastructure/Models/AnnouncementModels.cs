@@ -5,9 +5,10 @@ namespace Lanyard.Infrastructure.Models;
 // Internal staff announcements - the "internal messaging" the README has always claimed the
 // server handles. Posted by a manager holding CanPostAnnouncements, read by staff through the
 // Announcements dashboard widget.
-public class Announcement
+public class Announcement : ICompanyOwned
 {
     public Guid Id { get; set; }
+    public int CompanyId { get; set; }
 
     [Required]
     [StringLength(120, ErrorMessage = "The Title field can not be longer than 120 characters.")]

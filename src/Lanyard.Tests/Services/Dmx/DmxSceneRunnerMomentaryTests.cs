@@ -1,5 +1,6 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.EntityFrameworkCore;
@@ -19,9 +20,9 @@ public class DmxSceneRunnerMomentaryTests
             .Options;
     }
 
-    private static Mock<IDbContextFactory<ApplicationDbContext>> GetFactoryMock(DbContextOptions<ApplicationDbContext> options)
+    private static Mock<ISystemDbContextFactory> GetFactoryMock(DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 

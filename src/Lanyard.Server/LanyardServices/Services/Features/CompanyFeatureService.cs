@@ -1,4 +1,5 @@
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
@@ -16,8 +17,10 @@ public class CompanyFeatureService(
     AuthenticationStateProvider authStateProvider,
     IMemoryCache cache,
     TimeProvider timeProvider,
-    ILogger<CompanyFeatureService> logger) : ICompanyFeatureService
+    ILogger<CompanyFeatureService> logger,
+    ITenantContext? tenant = null) : ICompanyFeatureService
 {
+    private readonly ITenantContext? _tenant = tenant;
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ICurrentLocationContext _locationContext = locationContext;
     private readonly AuthenticationStateProvider _authStateProvider = authStateProvider;
@@ -57,6 +60,13 @@ public class CompanyFeatureService(
             if (!scope.IsAdmin)
             {
                 return Result<bool>.Fail("Only admins can change which features a company has.");
+            }
+
+            // Feature switches are what Lanyard grants a company, so a company's own Admin mustn't
+            // be able to switch its features on (or anyone else's).
+            if (_tenant is not null && !_tenant.IsSystem && !_tenant.IsPlatformAdmin)
+            {
+                return Result<bool>.Fail("Only platform admins can change which features a company has.");
             }
 
             if (!System.Enum.IsDefined(feature))

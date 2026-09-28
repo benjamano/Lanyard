@@ -5,9 +5,10 @@ using Microsoft.FluentUI.AspNetCore.Components;
 
 namespace Lanyard.Infrastructure.Models;
 
-public class Dashboard
+public class Dashboard : ICompanyOwned
 {
     public Guid Id { get; set; }
+    public int CompanyId { get; set; }
 
     [Required]
     [StringLength(100, ErrorMessage = "The Name field can not be longer than 100 characters.")]

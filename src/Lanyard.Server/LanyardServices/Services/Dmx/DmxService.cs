@@ -1,5 +1,6 @@
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
@@ -10,12 +11,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services;
 
-public class DmxService(IDbContextFactory<ApplicationDbContext> factory,
+public class DmxService(ISystemDbContextFactory factory,
     IHubContext<SignalRControlHub> hubContext,
     ILogger<DmxService> logger,
     IServiceScopeFactory scopeFactory) : IDmxService, IDmxClientService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly IHubContext<SignalRControlHub> _hubContext = hubContext;
     private readonly ILogger<DmxService> _logger = logger;
 

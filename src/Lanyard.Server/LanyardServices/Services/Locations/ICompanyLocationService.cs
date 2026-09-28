@@ -23,6 +23,11 @@ public interface ICompanyLocationService
     Task<Result<bool>> RemoveUserFromLocationAsync(string userId, int locationId);
 
     Task<Result<bool>> IsUserMemberOfLocationAsync(string userId, int locationId);
+
+    // The companies a user has any active location in. Deliberately ignores the caller's tenant:
+    // login uses it after the password check, when the request already carries the new principal
+    // but not yet its company claim.
+    Task<Result<List<int>>> GetCompanyIdsForUserAsync(string userId);
     Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync(int? companyId = null);
     Task<Result<List<LoginCompanyOption>>> GetLoginCompanyOptionsAsync();
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId);

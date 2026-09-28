@@ -32,9 +32,10 @@ namespace Lanyard.Infrastructure.Models
         public bool IsActive { get; set; }
     }
 
-    public class ProjectionProgram
+    public class ProjectionProgram : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         public required string Name { get; set; }
         public string Description { get; set; } = string.Empty;

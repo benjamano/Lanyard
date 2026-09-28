@@ -3,6 +3,7 @@ using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DTO.Notifications;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -23,9 +24,9 @@ internal static class SchedulingTestHelpers
             .Options;
     }
 
-    public static IDbContextFactory<ApplicationDbContext> GetFactory(DbContextOptions<ApplicationDbContext> options)
+    public static ISystemDbContextFactory GetFactory(DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 

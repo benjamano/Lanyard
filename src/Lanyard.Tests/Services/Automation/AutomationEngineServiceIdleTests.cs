@@ -1,5 +1,6 @@
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
@@ -25,9 +26,9 @@ public class AutomationEngineServiceIdleTests
             .Options;
     }
 
-    private static IDbContextFactory<ApplicationDbContext> GetFactory(DbContextOptions<ApplicationDbContext> options)
+    private static ISystemDbContextFactory GetFactory(DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
@@ -435,7 +436,7 @@ public class AutomationEngineServiceIdleTests
 
         // First context creation fails (Postgres not ready yet during a redeploy), later ones work.
         int calls = 0;
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .Returns(() => Interlocked.Increment(ref calls) == 1
                 ? Task.FromException<ApplicationDbContext>(new InvalidOperationException("database unavailable"))

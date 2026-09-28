@@ -1,4 +1,4 @@
-using Amazon.S3;
+﻿using Amazon.S3;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Lanyard.App.Components;
@@ -16,6 +16,7 @@ using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Features;
@@ -252,6 +253,10 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
         // queries load each collection with its own statement instead.
         b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
     }));
+
+// Company tenancy: every context a component or scoped service gets is filtered to the caller's
+// company. See AddCompanyTenancy for how singletons are handled.
+builder.Services.AddCompanyTenancy();
 
 if (builder.Environment.IsDevelopment())
 {

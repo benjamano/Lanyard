@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -17,14 +18,14 @@ namespace Lanyard.Application.Services;
 /// </summary>
 public class SongAnalysisHostedService(
     ISongAnalysisQueue queue,
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     IServiceScopeFactory scopeFactory,
     ILogger<SongAnalysisHostedService> logger) : BackgroundService
 {
     private static readonly TimeSpan _sweepInterval = TimeSpan.FromMinutes(5);
 
     private readonly ISongAnalysisQueue _queue = queue;
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ILogger<SongAnalysisHostedService> _logger = logger;
 

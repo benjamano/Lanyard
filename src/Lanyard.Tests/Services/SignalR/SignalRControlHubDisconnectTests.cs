@@ -4,6 +4,7 @@ using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
@@ -37,9 +38,9 @@ public class SignalRControlHubDisconnectTests
             .Options;
     }
 
-    private static IDbContextFactory<ApplicationDbContext> GetFactory(DbContextOptions<ApplicationDbContext> options)
+    private static ISystemDbContextFactory GetFactory(DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
@@ -53,7 +54,7 @@ public class SignalRControlHubDisconnectTests
         out ILaserGameStatusStore statusStore)
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        IDbContextFactory<ApplicationDbContext> factory = GetFactory(options);
+        ISystemDbContextFactory factory = GetFactory(options);
 
         Client client = new()
         {

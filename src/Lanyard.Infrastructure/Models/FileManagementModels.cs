@@ -2,9 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Lanyard.Infrastructure.Models
 {
-    public class FileMetadata
+    public class FileMetadata : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         [Required]
         [MaxLength(255)]
@@ -32,9 +33,10 @@ namespace Lanyard.Infrastructure.Models
         public bool IsActive { get; set; } = true;
     }
 
-    public class Folder
+    public class Folder : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         [Required]
         [MaxLength(255)]

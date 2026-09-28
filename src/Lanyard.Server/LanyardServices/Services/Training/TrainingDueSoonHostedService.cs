@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.Branding;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -60,7 +61,7 @@ public class TrainingDueSoonHostedService(
         using IServiceScope scope = _scopeFactory.CreateScope();
         ICourseAssignmentService assignmentService = scope.ServiceProvider.GetRequiredService<ICourseAssignmentService>();
         IEmailService emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-        IDbContextFactory<ApplicationDbContext> factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+        ISystemDbContextFactory factory = scope.ServiceProvider.GetRequiredService<ISystemDbContextFactory>();
         EmailOptions emailOptions = scope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
         ITrainingBrandingResolver brandingResolver = scope.ServiceProvider.GetRequiredService<ITrainingBrandingResolver>();
 

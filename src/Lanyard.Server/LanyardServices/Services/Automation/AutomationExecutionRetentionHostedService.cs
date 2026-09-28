@@ -1,6 +1,7 @@
 #nullable enable
 
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -23,13 +24,13 @@ public class AutomationExecutionLogOptions
 /// against it, grew without limit.
 /// </summary>
 public class AutomationExecutionRetentionHostedService(
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     IOptions<AutomationExecutionLogOptions> options,
     ILogger<AutomationExecutionRetentionHostedService> logger) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromHours(12);
 
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly IOptions<AutomationExecutionLogOptions> _options = options;
     private readonly ILogger<AutomationExecutionRetentionHostedService> _logger = logger;
 

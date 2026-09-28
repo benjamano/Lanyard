@@ -2,9 +2,10 @@ using Lanyard.Infrastructure.Enum;
 
 namespace Lanyard.Infrastructure.Models
 {
-    public class Course
+    public class Course : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         public required string Name { get; set; }
         public string? Description { get; set; }

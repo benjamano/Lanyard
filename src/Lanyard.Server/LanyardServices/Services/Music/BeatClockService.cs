@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -9,12 +10,12 @@ namespace Lanyard.Application.Services;
 
 public class BeatClockService(
     MusicPlayerService musicPlayerService,
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     IMemoryCache cache,
     ILogger<BeatClockService> logger) : IBeatClockService
 {
     private readonly MusicPlayerService _musicPlayerService = musicPlayerService;
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly IMemoryCache _cache = cache;
     private readonly ILogger<BeatClockService> _logger = logger;
 

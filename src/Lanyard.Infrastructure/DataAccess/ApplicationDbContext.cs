@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
+using System.Reflection;
 
 namespace Lanyard.Infrastructure.DataAccess
 {
@@ -20,6 +22,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
+        public const string SeedPlatformAdminRoleId = "dev-role-platform-admin";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
         public const int SeedIpswichLocationId = 1;
@@ -28,10 +31,29 @@ namespace Lanyard.Infrastructure.DataAccess
 
         public ApplicationDbContext() : base() { }
 
+        // A context built without a tenant provider is a "system" context: no company filter, and
+        // new company-owned rows default to Play2Day. Only tests, design-time tooling and the
+        // system factory used by singletons/hosted services should end up here.
+        [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-            : base(options)
+            : this(options, null)
         {
         }
+
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ITenantProvider? tenant)
+            : base(options)
+        {
+            _tenant = tenant;
+        }
+
+        private readonly ITenantProvider? _tenant;
+
+        // Read by the global query filters below. EF re-evaluates these per query against the
+        // context instance, so one compiled model serves every tenant.
+        public bool TenantFilterDisabled => _tenant is null || _tenant.IsSystem;
+
+        // -1 matches nothing: a signed-in caller we couldn't tie to a company sees no rows.
+        public int TenantCompanyId => _tenant?.CompanyId ?? -1;
 
         public DbSet<Song> Songs { get; set; }
         public DbSet<Playlist> Playlists { get; set; }
@@ -722,6 +744,120 @@ namespace Lanyard.Infrastructure.DataAccess
             // SongAnalysisHostedService sweeps for NotAnalyzed songs every five minutes.
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
+
+            ConfigureCompanyTenancy(modelBuilder);
+        }
+
+        // Every ICompanyOwned root gets a FK to Company and a filter so a signed-in user only ever
+        // sees their own company's rows. Children are filtered through their parent navigation
+        // so querying e.g. DmxSceneSteps directly can't reach another company's scene either.
+        private void ConfigureCompanyTenancy(ModelBuilder modelBuilder)
+        {
+            MethodInfo applyRootFilter = typeof(ApplicationDbContext)
+                .GetMethod(nameof(ApplyCompanyFilter), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+            foreach (Type clrType in modelBuilder.Model.GetEntityTypes()
+                         .Where(x => x.BaseType is null && typeof(ICompanyOwned).IsAssignableFrom(x.ClrType))
+                         .Select(x => x.ClrType)
+                         .ToList())
+            {
+                modelBuilder.Entity(clrType)
+                    .HasOne(typeof(Company))
+                    .WithMany()
+                    .HasForeignKey(nameof(ICompanyOwned.CompanyId))
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                applyRootFilter.MakeGenericMethod(clrType).Invoke(this, [modelBuilder]);
+            }
+
+            modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableDmxDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientAvailableAudioDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ZoneScoreboardSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<PlaylistSongMember>().HasQueryFilter(x => TenantFilterDisabled || x.Playlist!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ProjectionProgramStep>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgram!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ProjectionProgramParameterValue>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgramStep!.ProjectionProgram!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DashboardWidget>().HasQueryFilter(x => TenantFilterDisabled || x.Dashboard!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleAction>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<GameResultPlayerScore>().HasQueryFilter(x => TenantFilterDisabled || x.GameResult!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseSection>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseQuestion>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseQuestionOption>().HasQueryFilter(x => TenantFilterDisabled || x.Question!.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseAssignment>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseQuizAttempt>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseQuizAttemptAnswer>().HasQueryFilter(x => TenantFilterDisabled || x.Attempt!.Assignment!.Course!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<CourseSectionProgress>().HasQueryFilter(x => TenantFilterDisabled || x.Assignment!.Course!.CompanyId == TenantCompanyId);
+        }
+
+        private void ApplyCompanyFilter<T>(ModelBuilder modelBuilder) where T : class, ICompanyOwned
+        {
+            modelBuilder.Entity<T>().HasQueryFilter(x => TenantFilterDisabled || x.CompanyId == TenantCompanyId);
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            ApplyTenantToChanges();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            ApplyTenantToChanges();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        // Stamps CompanyId on new company-owned rows so no service has to remember to, and refuses
+        // any write that would put a row in (or move a row out of) another company.
+        private void ApplyTenantToChanges()
+        {
+            bool isSystem = TenantFilterDisabled;
+            int? tenantCompanyId = _tenant?.CompanyId;
+
+            foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ICompanyOwned> entry in ChangeTracker.Entries<ICompanyOwned>())
+            {
+                switch (entry.State)
+                {
+                    case EntityState.Added:
+                        if (entry.Entity.CompanyId == 0)
+                        {
+                            if (!isSystem && tenantCompanyId is null)
+                            {
+                                throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name}: the current user isn't linked to a company.");
+                            }
+
+                            // System callers (kiosk auto-registration, background work) predate
+                            // tenancy and only ever served Play2Day, so that's the safe default.
+                            entry.Entity.CompanyId = tenantCompanyId ?? SeedPlay2DayCompanyId;
+                        }
+                        else if (!isSystem && entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name} in another company.");
+                        }
+                        break;
+
+                    case EntityState.Modified:
+                    case EntityState.Deleted:
+                        if (isSystem)
+                        {
+                            break;
+                        }
+
+                        int originalCompanyId = entry.Property(x => x.CompanyId).OriginalValue;
+
+                        if (originalCompanyId != tenantCompanyId || entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot change {entry.Metadata.ClrType.Name} belonging to another company.");
+                        }
+                        break;
+                }
+            }
         }
     }
 }
