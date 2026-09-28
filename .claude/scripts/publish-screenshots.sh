@@ -28,6 +28,7 @@ IMAGE_EXTS="png jpg jpeg gif webp"
 VIDEO_EXTS="mp4 webm mov"
 VIDEO_WARN_BYTES=$((10 * 1024 * 1024))   # 10 MiB — fine, but a nudge to trim/compress
 VIDEO_MAX_BYTES=$((60 * 1024 * 1024))    # 60 MiB — stay comfortably under GitHub's blob limits
+PREVIEW_MAX_BYTES=$((9 * 1024 * 1024))   # silent GIF preview of each video; skipped if it can't get under this
 
 # Prints "image" or "video" for a filename based on its extension, or dies for
 # anything unrecognized so a typo'd manifest entry fails loudly instead of
@@ -69,11 +70,11 @@ Options:
 Manifest format — "file", "viewport" and "caption" are required, "size"
 is optional and overrides the default viewport label. Images (png, jpg,
 jpeg, gif, webp) render as an inline <img>. Videos (mp4, webm, mov) render
-as a "Watch video" link to the github.com blob viewer, NOT an inline
-<video> player — raw.githubusercontent.com serves every file as
-application/octet-stream with nosniff, which browsers won't play as video
-regardless of extension; github.com's own file viewer has no such
-restriction and plays it properly, one click away:
+as a silent, looping GIF preview (made with ffmpeg) that links to the
+github.com blob viewer, where the full video plays with sound. An inline
+<video> player isn't possible: GitHub strips <video> tags whose source isn't
+one of its own uploads, and the PR page's CSP blocks media from
+raw.githubusercontent.com:
 
   [
     { "file": ".playwright-mcp/desktop-home.png", "viewport": "desktop",
@@ -164,20 +165,57 @@ printf 'Publishing %s media file(s) for branch %s\n' \
 tree_entries="$(mktemp)"
 b64="$(mktemp)"
 blob_payload="$(mktemp)"
-trap 'rm -f "$tree_entries" "$b64" "$blob_payload"' EXIT
+preview_dir="$(mktemp -d)"
+trap 'rm -rf "$tree_entries" "$b64" "$blob_payload" "$preview_dir"' EXIT
+
+# Remote paths ("<viewport>/<name>") of videos that got a GIF preview.
+declare -A has_preview=()
+
+# Writes a silent looping GIF of video $1 to $2 for the inline preview. Tries a
+# smaller/slower encoding if the first is too big; returns 1 if neither fits.
+make_preview() {
+  local src="$1" out="$2" width="$3" fps
+  for fps in 8 5; do
+    ffmpeg -nostdin -v error -y -i "$src" -vf "fps=$fps,scale='min($width,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+      -loop 0 "$out" || return 1
+    [[ "$(wc -c < "$out")" -le "$PREVIEW_MAX_BYTES" ]] && return 0
+    width=$((width * 3 / 4))
+  done
+  return 1
+}
+
+upload_blob() {
+  base64 -w0 "$1" > "$b64"
+  jq -n --rawfile c "$b64" \
+    '{content: ($c | rtrimstr("\n")), encoding: "base64"}' > "$blob_payload"
+  gh api -X POST "/repos/$REPO/git/blobs" --input "$blob_payload" --jq '.sha'
+}
 
 while IFS=$'\t' read -r file viewport; do
   name="$(basename "$file")"
   safe_vp="$(printf '%s' "$viewport" | tr -c 'A-Za-z0-9._-' '-')"
 
+  if [[ "$(media_kind "$file")" == "video" ]]; then
+    preview="$preview_dir/${name%.*}.preview.gif"
+    if ! command -v ffmpeg >/dev/null; then
+      printf '  warning: ffmpeg not installed, %s gets a plain link instead of a preview\n' "$name" >&2
+    elif make_preview "$file" "$preview" "$([[ "$viewport" == phone ]] && echo 390 || echo 720)"; then
+      preview_sha="$(upload_blob "$preview")"
+      printf '  uploaded %s (%s, %s)\n' "$(basename "$preview")" "$(du -h "$preview" | cut -f1)" "${preview_sha:0:7}" >&2
+      jq -nc --arg p "$safe_branch/$safe_vp/$(basename "$preview")" --arg s "$preview_sha" \
+        '{path:$p, mode:"100644", type:"blob", sha:$s}' >> "$tree_entries"
+      has_preview["$safe_vp/$name"]=1
+    else
+      printf '  warning: preview GIF for %s is over %s MiB even when shrunk, using a plain link\n' \
+        "$name" "$((PREVIEW_MAX_BYTES / 1024 / 1024))" >&2
+    fi
+  fi
+
   # The payload must reach jq via a file. Passing base64 through --arg puts it in
   # argv, which Linux caps at 128 KiB per argument (MAX_ARG_STRLEN) — any
   # screenshot over ~96 KiB would abort with "Argument list too long", i.e.
   # essentially every real screenshot.
-  base64 -w0 "$file" > "$b64"
-  jq -n --rawfile c "$b64" \
-    '{content: ($c | rtrimstr("\n")), encoding: "base64"}' > "$blob_payload"
-  blob_sha="$(gh api -X POST "/repos/$REPO/git/blobs" --input "$blob_payload" --jq '.sha')"
+  blob_sha="$(upload_blob "$file")"
 
   printf '  uploaded %s (%s, %s)\n' "$name" "$(du -h "$file" | cut -f1)" "${blob_sha:0:7}" >&2
   jq -nc --arg p "$safe_branch/$safe_vp/$name" --arg s "$blob_sha" \
@@ -238,13 +276,11 @@ printf '  committed %s to %s\n' "${commit_sha:0:7}" "$SHOT_BRANCH" >&2
 # ?v=<sha> busts GitHub's cache for images. Without it, re-running on the same
 # branch overwrites the file but the PR keeps rendering the previous one.
 #
-# Videos link to the github.com *blob viewer* instead of embedding a <video
-# src=raw...>. raw.githubusercontent.com serves every file as
-# application/octet-stream with X-Content-Type-Options: nosniff, which stops a
-# browser from playing it as video regardless of the file extension — verified
-# empirically, not a guess. github.com's own blob page has no such restriction
-# and renders a real inline player; it just takes a click to get there instead
-# of appearing directly in the PR body.
+# Videos show their silent GIF preview inline, linked to the github.com *blob
+# viewer*, which plays the real file with sound. A <video src=raw...> can't be
+# used: GitHub's markdown sanitizer drops <video> unless the source is one of
+# its own uploads (checked with the /markdown API: it renders as an empty <p>),
+# and the PR page's CSP media-src doesn't include raw.githubusercontent.com.
 raw_base="https://raw.githubusercontent.com/$REPO/$SHOT_BRANCH"
 blob_base="https://github.com/$REPO/blob/$SHOT_BRANCH"
 cache_bust="${commit_sha:0:7}"
@@ -299,8 +335,16 @@ build_block() {
       # like * _ [ ] " & cannot break the rendering.
       printf '\n<p><strong>%s</strong></p>\n\n' "$esc_cap"
       if [[ "$(media_kind "$fname")" == "video" ]]; then
-        printf '<p>&#9654; <a href="%s">Watch video</a></p>\n' \
-          "$blob_base/$safe_branch/$safe_vp/$fname"
+        if [[ -n "${has_preview["$safe_vp/$fname"]:-}" ]]; then
+          printf '<a href="%s"><img%s alt="%s (silent preview)" src="%s"></a>\n\n' \
+            "$blob_base/$safe_branch/$safe_vp/$fname" "${width:+ width=\"$width\"}" "$esc_cap" \
+            "$raw_base/$safe_branch/$safe_vp/${fname%.*}.preview.gif?v=$cache_bust"
+          printf '<p>&#9654; <a href="%s">Watch with sound</a> (the preview above is silent)</p>\n' \
+            "$blob_base/$safe_branch/$safe_vp/$fname"
+        else
+          printf '<p>&#9654; <a href="%s">Watch video</a></p>\n' \
+            "$blob_base/$safe_branch/$safe_vp/$fname"
+        fi
       else
         printf '<img%s alt="%s" src="%s">\n' \
           "${width:+ width=\"$width\"}" "$esc_cap" \

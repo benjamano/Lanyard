@@ -96,7 +96,7 @@ Add it to the same manifest as the screenshots and run `publish-screenshots.sh` 
 { "file": ".playwright-mcp/desktop-walkthrough-rota.mp4", "viewport": "desktop", "caption": "Walkthrough: publishing the rota (with narration)" }
 ```
 
-It renders as a "Watch video" link to GitHub's file viewer, which plays the sound. Mention the walkthrough in the final chat message too. Clean up afterwards with `rm -f .playwright-mcp/*.mp4 .playwright-mcp/frame-*.png`.
+The publish script also makes a silent, looping GIF preview of it, which plays inline in the PR description (subtitles are drawn into the picture, so it makes sense without sound). The preview links to GitHub's file viewer, where the full video plays with sound. A real inline `<video>` player isn't possible, because GitHub strips the tag for anything it didn't host itself. Mention the walkthrough in the final chat message too. Clean up afterwards with `rm -f .playwright-mcp/*.mp4 .playwright-mcp/frame-*.png`.
 
 ## Gotchas
 

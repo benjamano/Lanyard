@@ -61,9 +61,9 @@ Scenario example (record-video-scenario.example.mjs):
   }
 
 Keep scenarios short -- a few seconds to under a minute. Videos published via
-publish-screenshots.sh render as a "Watch video" link (GitHub's own file
-viewer), not an inline player -- raw.githubusercontent.com won't serve video
-as a playable type. See CLAUDE.md's "UI screenshots go on the PR" section.
+publish-screenshots.sh render as a silent GIF preview inline, linking to
+GitHub's own file viewer for the real video -- an inline <video> player isn't
+possible on GitHub. See CLAUDE.md's "UI screenshots go on the PR" section.
 `;
 
 const args = parseArgs(process.argv.slice(2));
