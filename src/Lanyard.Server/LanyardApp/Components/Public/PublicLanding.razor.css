@@ -79,6 +79,11 @@
     box-sizing: border-box;
 }
 
+/* A short section (like the venue-type strip) that shouldn't take a full section's height. */
+.landing-section-compact {
+    padding-bottom: 8px;
+}
+
 .landing-section-alt {
     background: var(--colorNeutralBackground1);
     border-top: 1px solid var(--colorNeutralStroke2);
