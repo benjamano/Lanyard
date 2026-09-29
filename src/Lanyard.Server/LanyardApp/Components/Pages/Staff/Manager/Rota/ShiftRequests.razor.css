@@ -1,0 +1,124 @@
+.requests-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 8px;
+}
+
+.requests-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px 24px;
+    flex-wrap: wrap;
+}
+
+.requests-setting {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 520px;
+}
+
+.requests-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.requests-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.request-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 12px;
+}
+
+.request-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.request-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.request-name {
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.request-shift {
+    font-weight: 600;
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.request-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.request-note {
+    overflow-wrap: anywhere;
+    color: var(--colorNeutralForeground2);
+}
+
+.request-people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.request-people li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0;
+}
+
+.request-people li + li {
+    border-top: 1px solid var(--colorNeutralStroke3);
+}
+
+.request-person {
+    display: flex;
+    flex-direction: column;
+}
+
+.request-person-name {
+    font-weight: 600;
+}
+
+.swap-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.swap-who {
+    color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 600px) {
+    .request-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Status badges keep their words on one line; the text beside them wraps instead. */
+.request-card-top ::deep fluent-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
+}

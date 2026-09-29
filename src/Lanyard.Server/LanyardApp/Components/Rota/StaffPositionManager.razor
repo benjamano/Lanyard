@@ -1,0 +1,160 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.App.Components.Rota.TimeOff
+
+@inject IStaffPositionService _staffPositionService
+
+<div class="position-manager">
+    <FluentCard Height="auto" Class="mt-2">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Positions</FluentText>
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                The jobs staff work on shift, such as Customer Service Advisor or Supervisor. Each position can carry its own
+                contract requirements and time-off allowances, which apply to everyone whose primary position it is.
+            </FluentText>
+
+            @if (positions is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (positions.Count == 0)
+            {
+                <FluentText Style="text-align: center; color: var(--colorNeutralForeground3);">
+                    No positions exist yet for this company.
+                </FluentText>
+            }
+            else
+            {
+                <div class="position-list">
+                    @foreach (StaffPosition position in positions)
+                    {
+                        <div class="position-list-item">
+                            <div class="position-list-row">
+                                <span class="position-swatch theme-colour-swatch" style="@PositionColours.CssVariables(position.ColorIndex)" aria-hidden="true"></span>
+                                <div class="position-list-info">
+                                    <div class="position-list-name">@position.Name</div>
+                                    @if (!string.IsNullOrWhiteSpace(position.Description))
+                                    {
+                                        <div class="position-list-description">@position.Description</div>
+                                    }
+                                </div>
+                                <div class="position-list-actions">
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.DocumentBulletList())"
+                                                  Title="@(expandedPositionId == position.Id ? "Hide contract and allowances" : "Contract and time-off allowances")"
+                                                  Appearance="@(expandedPositionId == position.Id ? ButtonAppearance.Primary : ButtonAppearance.Default)"
+                                                  OnClick="@(() => ToggleContract(position.Id))" />
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit"
+                                                  OnClick="@(() => OpenEditDialogAsync(position))" />
+                                    <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Deactivate"
+                                                  OnClick="@(() => DeactivateAsync(position))" />
+                                </div>
+                            </div>
+
+                            @if (expandedPositionId == position.Id)
+                            {
+                                <div class="position-contract">
+                                    <ContractRequirementEditor CompanyId="@CompanyId" PositionId="@position.Id"
+                                                               Title="@($"Contract requirements for {position.Name}")" />
+                                    <FluentDivider Style="width: 100%;" />
+                                    <TimeOffAllowanceEditor CompanyId="@CompanyId" PositionId="@position.Id"
+                                                            Title="@($"Time-off allowances for {position.Name}")" />
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
+                          OnClick="OpenCreateDialogAsync">
+                New Position
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    private List<StaffPosition>? positions;
+    private Guid? expandedPositionId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<List<StaffPosition>> result = await _staffPositionService.GetPositionsAsync(CompanyId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load positions: {result.Error}");
+        }
+
+        positions = result.IsSuccess ? result.Data : [];
+    }
+
+    private void ToggleContract(Guid positionId)
+    {
+        expandedPositionId = expandedPositionId == positionId ? null : positionId;
+    }
+
+    private async Task OpenCreateDialogAsync()
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditStaffPositionDialog>(options =>
+        {
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditStaffPositionDialog.CompanyId), CompanyId);
+            options.Parameters.Add(nameof(AddEditStaffPositionDialog.NextSortOrder), positions?.Count ?? 0);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task OpenEditDialogAsync(StaffPosition position)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditStaffPositionDialog>(options =>
+        {
+            options.Width = "500px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditStaffPositionDialog.CompanyId), CompanyId);
+            options.Parameters.Add(nameof(AddEditStaffPositionDialog.Position), position);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeactivateAsync(StaffPosition position)
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        Result<bool> result = await _staffPositionService.DeactivatePositionAsync(scopeResult.Data, position.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to deactivate position: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"{position.Name} deactivated.");
+        await LoadAsync();
+    }
+}

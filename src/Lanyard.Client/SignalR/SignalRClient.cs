@@ -34,7 +34,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             ? string.Empty
             : $"&secret={Uri.EscapeDataString(sharedSecret)}";
 
-        string url = serverUrl + $"?clientId={clientId}{secretQuery}";
+        // dmxBatch=1 tells the server this client handles "ReceiveDmxChannelValues". Clients
+        // older than 1.0.40 don't send it, and the server falls back to one message per channel.
+        string url = serverUrl + $"?clientId={clientId}{secretQuery}&dmxBatch=1";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
@@ -201,7 +203,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         _logger.LogInformation("Sending status to server...");
 
         await SendAvailableScreensToServer();
-        // await SendAvailableAudioDevicesToServer();
+        await SendAvailableAudioDevicesToServer();
         await SendAvailableDmxDevicesToServer();
         await SendMusicPlayerStatusToServer();
         await SendAvailableNetworkInterfacesToServer();
@@ -310,19 +312,33 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
     private async Task SendAvailableAudioDevicesToServer()
     {
-        _logger.LogInformation("Sending available audio devices to server...");
+        try
+        {
+            _logger.LogInformation("Sending available audio devices to server...");
 
-        MMDeviceEnumerator enumerator = new();
+            using MMDeviceEnumerator enumerator = new();
 
-        IEnumerable<ClientAvailableAudioDeviceDTO> devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-            .Select(x => new ClientAvailableAudioDeviceDTO()
+            List<ClientAvailableAudioDeviceDTO> devices = [];
+
+            foreach (MMDevice device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
-                ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
-                Name = x.FriendlyName,
-                Id = x.ID,
-            });
+                using (device)
+                {
+                    devices.Add(new ClientAvailableAudioDeviceDTO()
+                    {
+                        ClientId = Guid.Parse(Environment.GetEnvironmentVariable("LANYARD_CLIENT_ID")!),
+                        Name = device.FriendlyName,
+                        Id = device.ID,
+                    });
+                }
+            }
 
-        await _connection!.InvokeAsync("UpdateAvailableAudioDevices", devices);
+            await _connection!.InvokeAsync("UpdateAvailableAudioDevices", devices);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending available audio devices to server: {Message}", ex.Message);
+        }
     }
 
     private async Task SendAvailableVideoDevicesToServer()
@@ -350,11 +366,6 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     public async Task SendLaserGameStatusAsync(LaserGameStatusDTO status)
     {
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
-    }
-
-    public async Task SendDmxChannelValueAsync(int channel, byte value)
-    {
-        await _connection!.InvokeAsync("UpdateDmxChannelValue", channel, value);
     }
 
     public async Task<string> IssueKioskTokenAsync()

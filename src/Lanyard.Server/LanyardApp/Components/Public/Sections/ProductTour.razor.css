@@ -1,0 +1,93 @@
+.tour {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.tour-shot {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.tour-shot figcaption {
+    color: var(--colorNeutralForeground2);
+    line-height: 1.5;
+}
+
+.tour-shot figcaption strong {
+    color: var(--colorNeutralForeground1);
+}
+
+/* The screenshot in a plain window: always the light app, whatever the page's own theme. */
+.tour-frame {
+    display: block;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--colorNeutralStroke1);
+    background: #ffffff;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    transition: transform 0.15s ease;
+}
+
+.tour-frame:hover {
+    transform: translateY(-2px);
+}
+
+.tour-frame:focus-visible {
+    outline: 2px solid var(--colorBrandStroke1, var(--colorBrandBackground));
+    outline-offset: 3px;
+}
+
+.tour-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.tour-frame-phone {
+    border-radius: 22px;
+    border: 6px solid #1f1f1f;
+}
+
+/* Two desktop shots on the left, the phone beside them. */
+.tour-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-areas:
+        "chat phone"
+        "music phone";
+    gap: 32px;
+    align-items: start;
+}
+
+.tour-chat {
+    grid-area: chat;
+}
+
+.tour-music {
+    grid-area: music;
+}
+
+.tour-phone {
+    grid-area: phone;
+    align-self: center;
+    max-width: 320px;
+    justify-self: center;
+}
+
+@media (max-width: 760px) {
+    .tour-grid {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "chat"
+            "music"
+            "phone";
+    }
+
+    .tour-phone {
+        max-width: 260px;
+    }
+}

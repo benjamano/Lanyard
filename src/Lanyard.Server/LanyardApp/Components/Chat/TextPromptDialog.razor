@@ -1,0 +1,33 @@
+@* Asks for one line of text, e.g. a new group name. Closes with the trimmed value. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentText As="@TextTag.H3">@Title</FluentText>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentTextInput @bind-Value="Value" Label="@Label" Width="100%" Maxlength="@MaxLength" />
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@string.IsNullOrWhiteSpace(Value)" OnClick="@(() => Dialog.CloseAsync(Value!.Trim()))">@ConfirmText</FluentButton>
+        <FluentButton OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string Title { get; set; }
+
+    [Parameter]
+    public string? Label { get; set; }
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public string ConfirmText { get; set; } = "Save";
+
+    [Parameter]
+    public int MaxLength { get; set; } = 80;
+}

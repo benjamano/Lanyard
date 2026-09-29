@@ -140,14 +140,28 @@
     // Per-channel debounce so dragging a fader writes to the DB once it settles.
     private readonly Dictionary<int, CancellationTokenSource> _saveDebounce = new();
 
+    // Live channel events arrive per scene step (a batch of many channels) and, while a
+    // fader is dragged, up to 50 times a second. Re-rendering 512 sliders for each one is
+    // what made the desk crawl during playback, so applies are coalesced: the values are
+    // written immediately and a single render is scheduled for ~50 ms later, absorbing
+    // everything that lands in between.
+    private const int LiveRenderCoalesceMs = 50;
+    private readonly System.Threading.Timer _liveRenderTimer;
+    private int _liveRenderPending;
+
+    public VirtualDmxDesk()
+    {
+        _liveRenderTimer = new System.Threading.Timer(_ => FlushLiveRender(), null, Timeout.Infinite, Timeout.Infinite);
+    }
+
     protected override Task OnInitializedAsync()
     {
-        _dmxService.OnChannelValueChanged += HandleChannelValueChanged;
+        _dmxService.OnChannelValuesChanged += HandleChannelValuesChanged;
 
         return Task.CompletedTask;
     }
 
-    private void HandleChannelValueChanged(Guid clientId, int channel, byte value)
+    private void HandleChannelValuesChanged(Guid clientId, IReadOnlyList<DmxChannel> channels)
     {
         // Blind or edit mode: the desk shows the operator's own buffer, so ignore
         // ingested live events (physical faders / a running scene) that would
@@ -157,13 +171,28 @@
             return;
         }
 
-        if (ClientId != null && clientId == ClientId)
+        if (ClientId == null || clientId != ClientId)
         {
-            channelValues[channel] = value;
-            channelValuesAsBytes[channel] = value;
-
-            InvokeAsync(StateHasChanged);
+            return;
         }
+
+        foreach (DmxChannel channel in channels)
+        {
+            channelValues[channel.Address] = channel.Value;
+            channelValuesAsBytes[channel.Address] = channel.Value;
+        }
+
+        if (Interlocked.Exchange(ref _liveRenderPending, 1) == 0)
+        {
+            _liveRenderTimer.Change(LiveRenderCoalesceMs, Timeout.Infinite);
+        }
+    }
+
+    private void FlushLiveRender()
+    {
+        Interlocked.Exchange(ref _liveRenderPending, 0);
+
+        _ = InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -399,10 +428,13 @@
 
     private async Task PushBufferLive()
     {
-        foreach (KeyValuePair<int, int> channel in channelValues)
-        {
-            await _dmxService.UpdateChannelValue(ClientId!.Value, channel.Key, (byte)channel.Value);
-        }
+        // The whole 512-channel buffer as one batch: one hub message to the kiosk rather
+        // than 512 sequential ones.
+        List<DmxChannel> batch = channelValues
+            .Select(channel => new DmxChannel { Address = channel.Key, Value = (byte)channel.Value })
+            .ToList();
+
+        await _dmxService.UpdateChannelValuesAsync(ClientId!.Value, batch);
     }
 
     public void CreateChannels()
@@ -499,7 +531,8 @@
 
     public void Dispose()
     {
-        _dmxService.OnChannelValueChanged -= HandleChannelValueChanged;
+        _dmxService.OnChannelValuesChanged -= HandleChannelValuesChanged;
+        _liveRenderTimer.Dispose();
 
         foreach (CancellationTokenSource cts in _saveDebounce.Values)
         {

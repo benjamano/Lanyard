@@ -1,0 +1,23 @@
+.decide-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.decide-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+}
+
+.decide-name {
+    font-weight: 600;
+}
+
+.decide-muted {
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}

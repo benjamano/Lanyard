@@ -1,6 +1,8 @@
+using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.RemoteRestart;
 using Lanyard.Client.RestartScheduler;
 using Lanyard.Client.SignalR;
 using Lanyard.Client.VideoPublisher;
@@ -64,6 +66,10 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<VideoPublisherSignalRController>();
         services.AddSingleton<IRestartSchedulerService, RestartSchedulerService>();
         services.AddSingleton<RestartScheduleController>();
+        services.AddSingleton<IRemoteRestartService, RemoteRestartService>();
+        services.AddSingleton<RemoteRestartController>();
+        services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
+        services.AddSingleton<AudioSettingsController>();
 
         return services.BuildServiceProvider();
     }
@@ -77,7 +83,9 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<DmxSignalRController>().Register,
             provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
             provider.GetRequiredService<VideoPublisherSignalRController>().Register,
-            provider.GetRequiredService<RestartScheduleController>().Register
+            provider.GetRequiredService<RestartScheduleController>().Register,
+            provider.GetRequiredService<RemoteRestartController>().Register,
+            provider.GetRequiredService<AudioSettingsController>().Register
         ];
     }
 }

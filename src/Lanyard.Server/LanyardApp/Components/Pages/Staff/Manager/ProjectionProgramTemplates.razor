@@ -14,7 +14,7 @@
         <FluentMultiSplitterPane Size="25%">
             <FluentStack Orientation="Orientation.Vertical" Height="100%">
                 <FluentStack Orientation="Orientation.Horizontal" Class="w-100">
-                    <FluentText Typo="Typography.PaneHeader">Projection Templates</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Projection Templates</FluentText>
                     <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.FormNew())" OnClick="StartNewTemplate">
                         New Template
                     </FluentButton>
@@ -65,7 +65,7 @@
             {
                 <FluentStack Orientation="Orientation.Vertical" Class="pe-3 h-100 overflow-y-auto" Style="gap: 12px;">
                     <FluentStack Orientation="Orientation.Horizontal" Class="w-75">
-                        <FluentText Typo="Typography.PaneHeader">
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
                             @(selectedTemplate.Id == Guid.Empty ? "New Template" : "Edit Template")
                         </FluentText>
                         <FluentButton
@@ -103,7 +103,7 @@
 
                     <FluentDivider class="my-3"></FluentDivider>
 
-                    <FluentText Typo="Typography.PaneHeader">Parameters</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Parameters</FluentText>
 
                     @if (selectedTemplate.Parameters.Count == 0)
                     {

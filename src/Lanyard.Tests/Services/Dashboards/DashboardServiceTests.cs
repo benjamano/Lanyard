@@ -1637,4 +1637,98 @@ public class DashboardServiceTests
         AnnouncementsWidget dbWidget = await ctx.DashboardWidgets.OfType<AnnouncementsWidget>().SingleAsync(x => x.Id == existingWidget.Id);
         Assert.AreEqual(8, dbWidget.MaxItems);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewSchedulingWidgets()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces CreateWidgetCopy, whose default arm fails the whole save.
+        dashboard.Widgets =
+        [
+            new MyShiftsWidget { Id = Guid.Empty, MaxItems = 8, DaysAhead = 21, ShowTimeOff = false, IsActive = true },
+            new WhoIsOnTodayWidget { Id = Guid.Empty, LocationId = 3, ShowClockStatus = false, IsActive = true },
+            new PendingTimeOffWidget { Id = Guid.Empty, MaxItems = 4, IsActive = true }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        MyShiftsWidget myShifts = await ctx.DashboardWidgets.OfType<MyShiftsWidget>().SingleAsync();
+        WhoIsOnTodayWidget whoIsOn = await ctx.DashboardWidgets.OfType<WhoIsOnTodayWidget>().SingleAsync();
+        PendingTimeOffWidget pending = await ctx.DashboardWidgets.OfType<PendingTimeOffWidget>().SingleAsync();
+
+        Assert.AreEqual(WidgetType.MyShifts, myShifts.Type);
+        Assert.AreEqual(8, myShifts.MaxItems);
+        Assert.AreEqual(21, myShifts.DaysAhead);
+        Assert.IsFalse(myShifts.ShowTimeOff);
+        Assert.AreEqual(WidgetType.WhoIsOnToday, whoIsOn.Type);
+        Assert.AreEqual(3, whoIsOn.LocationId);
+        Assert.IsFalse(whoIsOn.ShowClockStatus);
+        Assert.AreEqual(WidgetType.PendingTimeOff, pending.Type);
+        Assert.AreEqual(4, pending.MaxItems);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingSchedulingWidgets()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MyShiftsWidget myShifts = new() { Id = Guid.Empty, IsActive = true };
+        WhoIsOnTodayWidget whoIsOn = new() { Id = Guid.Empty, IsActive = true };
+        dashboard.Widgets = [myShifts, whoIsOn];
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        await using (ApplicationDbContext read = new(options))
+        {
+            myShifts.Id = (await read.DashboardWidgets.OfType<MyShiftsWidget>().SingleAsync()).Id;
+            whoIsOn.Id = (await read.DashboardWidgets.OfType<WhoIsOnTodayWidget>().SingleAsync()).Id;
+        }
+
+        myShifts.DaysAhead = 7;
+        whoIsOn.LocationId = 9;
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        Assert.AreEqual(7, (await ctx.DashboardWidgets.OfType<MyShiftsWidget>().SingleAsync()).DaysAhead);
+        Assert.AreEqual(9, (await ctx.DashboardWidgets.OfType<WhoIsOnTodayWidget>().SingleAsync()).LocationId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesSchedulingWidgetConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        MyShiftsWidget myShifts = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+        WhoIsOnTodayWidget whoIsOn = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+        PendingTimeOffWidget pending = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.AddRange(myShifts, whoIsOn, pending);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Assert.IsTrue((await service.SaveWidgetAsync(new MyShiftsWidget { Id = myShifts.Id, DashboardId = dashboard.Id, MaxItems = 2, DaysAhead = 3, ShowTimeOff = false, IsActive = true })).Success);
+        Assert.IsTrue((await service.SaveWidgetAsync(new WhoIsOnTodayWidget { Id = whoIsOn.Id, DashboardId = dashboard.Id, LocationId = 5, ShowClockStatus = false, IsActive = true })).Success);
+        Assert.IsTrue((await service.SaveWidgetAsync(new PendingTimeOffWidget { Id = pending.Id, DashboardId = dashboard.Id, MaxItems = 9, IsActive = true })).Success);
+
+        await using ApplicationDbContext ctx = new(options);
+        MyShiftsWidget savedShifts = await ctx.DashboardWidgets.OfType<MyShiftsWidget>().SingleAsync();
+        Assert.AreEqual(2, savedShifts.MaxItems);
+        Assert.AreEqual(3, savedShifts.DaysAhead);
+        Assert.IsFalse(savedShifts.ShowTimeOff);
+        Assert.AreEqual(5, (await ctx.DashboardWidgets.OfType<WhoIsOnTodayWidget>().SingleAsync()).LocationId);
+        Assert.AreEqual(9, (await ctx.DashboardWidgets.OfType<PendingTimeOffWidget>().SingleAsync()).MaxItems);
+    }
 }

@@ -1,0 +1,77 @@
+@using Lanyard.Infrastructure.Models
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.People())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Who's On Today
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@Options" OptionText="@(x => x.Name)" OptionValue="@(x => x.Value)"
+                          @bind-Value="selectedValue" Label="Location" Width="100%" />
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                With "whoever is viewing", each person sees their own location and a signed-out screen shows nothing.
+                Picking a location lets a kiosk screen show it too, using first names only.
+            </FluentText>
+            <FluentCheckbox @bind-Value="Widget.ShowClockStatus" Label="Show who has clocked in" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    private const string ViewerValue = "viewer";
+
+    private record LocationOption(string Value, string Name);
+
+    [Parameter]
+    public required WhoIsOnTodayWidget Widget { get; set; }
+
+    // The locations this editor may pick: every location for an Admin, their own for a Manager.
+    [Parameter]
+    public List<Location> Locations { get; set; } = [];
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string? selectedValue;
+    private int? _originalLocationId;
+    private bool _originalShowClockStatus;
+
+    private List<LocationOption> Options =>
+    [
+        new(ViewerValue, "Whoever is viewing"),
+        .. Locations.Select(x => new LocationOption(x.Id.ToString(), x.GetDisplayName())),
+        // Keep an already-saved location selectable even if this editor couldn't normally pick it.
+        .. Widget.LocationId is int saved && Locations.All(x => x.Id != saved)
+            ? [new LocationOption(saved.ToString(), "The location already set")]
+            : Array.Empty<LocationOption>()
+    ];
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.LocationId;
+        _originalShowClockStatus = Widget.ShowClockStatus;
+        selectedValue = Widget.LocationId?.ToString() ?? ViewerValue;
+    }
+
+    private async Task SaveAsync()
+    {
+        Widget.LocationId = int.TryParse(selectedValue, out int id) ? id : null;
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.LocationId = _originalLocationId;
+        Widget.ShowClockStatus = _originalShowClockStatus;
+        await Dialog.CancelAsync();
+    }
+}

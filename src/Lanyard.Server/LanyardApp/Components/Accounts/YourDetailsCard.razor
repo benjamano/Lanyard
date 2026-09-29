@@ -1,5 +1,6 @@
 ﻿@using Lanyard.Application.Services.Authentication
 @inject INotificationService ToastService
+@inject IJSRuntime JS
 
 <EditForm EditContext="@_editContext">
     <DataAnnotationsValidator />
@@ -73,14 +74,24 @@
 
         if (getResult.IsSuccess && getResult.Data is not null)
         {
+            string previousCulture = UserCultureCookie.Normalise(getResult.Data.PreferredCulture);
+            string newCulture = model.Use24HourFormat ? "en-GB" : "en-US";
+
             getResult.Data.FirstName = model.FirstName;
             getResult.Data.LastName = model.LastName;
-            
-            getResult.Data.PreferredCulture = model.Use24HourFormat ? "en-GB" : "en-US";
+            getResult.Data.PreferredCulture = newCulture;
 
             await _securityService.UpdateUserProfileAsync(getResult.Data);
 
             ToastService.ShowSuccess("Details Saved!");
+
+            if (!string.Equals(previousCulture, newCulture, StringComparison.OrdinalIgnoreCase))
+            {
+                // The format is applied per request from the culture cookie, and a running
+                // circuit keeps the culture it started with - so write the cookie and reload.
+                await JS.InvokeVoidAsync("appCulture.set", UserCultureCookie.BuildDocumentCookie(newCulture));
+                _navigationManager.NavigateTo(_navigationManager.Uri, forceLoad: true);
+            }
         }
     }
 

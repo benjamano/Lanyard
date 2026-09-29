@@ -1,0 +1,254 @@
+/* Colours come from Fluent's design tokens so the page follows the light/dark toggle in the
+   header without its own theme rules. */
+.landing {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground2);
+}
+
+.landing-hero {
+    padding: 72px 24px 80px;
+    background:
+        radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.16), transparent 45%),
+        linear-gradient(135deg, var(--colorBrandBackground), var(--colorBrandBackgroundPressed));
+    color: #fff;
+}
+
+.landing-hero-inner {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.landing-eyebrow {
+    margin: 0 0 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+.landing-title {
+    margin: 0 0 20px;
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1.1;
+    font-weight: 700;
+}
+
+.landing-lede {
+    margin: 0 0 32px;
+    max-width: 680px;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    opacity: 0.95;
+}
+
+.landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* The hero sits on the brand colour, so both buttons are inverted: a white primary and an
+   outline in white. */
+.landing-actions ::deep .landing-cta {
+    min-height: 44px;
+    padding: 0 20px;
+    font-size: 1rem;
+}
+
+.landing-actions ::deep .landing-cta:not(.landing-cta-secondary) {
+    background: #fff;
+    color: var(--colorBrandForeground1);
+    border-color: #fff;
+}
+
+.landing-actions ::deep .landing-cta-secondary {
+    background: transparent;
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+.landing-section {
+    padding: 56px 24px;
+    max-width: 1120px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+/* A short section (like the venue-type strip) that shouldn't take a full section's height. */
+.landing-section-compact {
+    padding-bottom: 8px;
+}
+
+.landing-section-alt {
+    background: var(--colorNeutralBackground1);
+    border-top: 1px solid var(--colorNeutralStroke2);
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.landing-section-title {
+    margin: 0 0 8px;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.landing-section-lede {
+    margin: 0 0 32px;
+    max-width: 640px;
+    color: var(--colorNeutralForeground2);
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+.landing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.landing-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px;
+    border-radius: 12px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.landing-card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground1);
+}
+
+.landing-card-title {
+    margin: 4px 0 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.landing-card-text {
+    margin: 0;
+    color: var(--colorNeutralForeground2);
+    line-height: 1.55;
+}
+
+.landing-split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 32px;
+    margin-top: 24px;
+}
+
+.landing-split-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.landing-role ::deep .landing-role-button {
+    margin-top: auto;
+    align-self: flex-start;
+}
+
+.landing-role .landing-card-text {
+    margin-bottom: 12px;
+}
+
+.landing-note {
+    margin: 24px 0 0;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    border: 1px dashed var(--colorNeutralStroke1);
+    color: var(--colorNeutralForeground2);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.landing-hero-contact {
+    display: inline-block;
+    margin-top: 20px;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.landing-hero-contact:hover {
+    opacity: 0.85;
+}
+
+/* Text on the left, the address card on the right; stacked on narrow screens. */
+.landing-contact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+}
+
+.landing-contact-lede {
+    margin: 0;
+    max-width: 520px;
+    color: var(--colorNeutralForeground2);
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+.landing-contact-card {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    border-radius: 12px;
+    background: var(--colorNeutralBackground2);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.landing-contact-email {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--colorBrandForeground1);
+    overflow-wrap: anywhere;
+}
+
+.landing-contact-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 600px) {
+    .landing-contact {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .landing-hero {
+        padding: 48px 16px 56px;
+    }
+
+    .landing-section {
+        padding: 40px 16px;
+    }
+
+    .landing-actions ::deep .landing-cta {
+        flex: 1 1 100%;
+        justify-content: center;
+    }
+
+    .landing-grid {
+        grid-template-columns: 1fr;
+    }
+}

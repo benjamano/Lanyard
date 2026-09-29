@@ -37,6 +37,36 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         }
     }
 
+    public async Task<Result<IEnumerable<Dashboard>>> GetDashboardSummariesAsync()
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<Dashboard> dashboards = await ctx.Dashboards
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Name)
+                .Select(x => new Dashboard
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    IsActive = x.IsActive,
+                    CreateDate = x.CreateDate,
+                    LastUpdateDate = x.LastUpdateDate
+                })
+                .ToListAsync();
+
+            return Result<IEnumerable<Dashboard>>.Ok(dashboards);
+        }
+        catch (Exception ex)
+        {
+            return Result<IEnumerable<Dashboard>>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<Dashboard>> GetDashboardAsync(Guid dashboardId)
     {
         try
@@ -326,6 +356,18 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
                     break;
                 case AnnouncementsWidget existingAnnouncements when widget is AnnouncementsWidget incomingAnnouncements:
                     existingAnnouncements.MaxItems = incomingAnnouncements.MaxItems;
+                    break;
+                case MyShiftsWidget existingMyShifts when widget is MyShiftsWidget incomingMyShifts:
+                    existingMyShifts.MaxItems = incomingMyShifts.MaxItems;
+                    existingMyShifts.DaysAhead = incomingMyShifts.DaysAhead;
+                    existingMyShifts.ShowTimeOff = incomingMyShifts.ShowTimeOff;
+                    break;
+                case WhoIsOnTodayWidget existingWhoIsOn when widget is WhoIsOnTodayWidget incomingWhoIsOn:
+                    existingWhoIsOn.LocationId = incomingWhoIsOn.LocationId;
+                    existingWhoIsOn.ShowClockStatus = incomingWhoIsOn.ShowClockStatus;
+                    break;
+                case PendingTimeOffWidget existingPending when widget is PendingTimeOffWidget incomingPending:
+                    existingPending.MaxItems = incomingPending.MaxItems;
                     break;
             }
 
@@ -693,6 +735,21 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
             {
                 MaxItems = announcementsWidget.MaxItems
             },
+            MyShiftsWidget myShiftsWidget => new MyShiftsWidget
+            {
+                MaxItems = myShiftsWidget.MaxItems,
+                DaysAhead = myShiftsWidget.DaysAhead,
+                ShowTimeOff = myShiftsWidget.ShowTimeOff
+            },
+            WhoIsOnTodayWidget whoIsOnWidget => new WhoIsOnTodayWidget
+            {
+                LocationId = whoIsOnWidget.LocationId,
+                ShowClockStatus = whoIsOnWidget.ShowClockStatus
+            },
+            PendingTimeOffWidget pendingWidget => new PendingTimeOffWidget
+            {
+                MaxItems = pendingWidget.MaxItems
+            },
             _ => throw new InvalidOperationException("Unsupported widget type.")
         };
 
@@ -795,6 +852,24 @@ public class DashboardService(IDbContextFactory<ApplicationDbContext> factory) :
         if (target is AnnouncementsWidget targetAnnouncements && source is AnnouncementsWidget sourceAnnouncements)
         {
             targetAnnouncements.MaxItems = sourceAnnouncements.MaxItems;
+        }
+
+        if (target is MyShiftsWidget targetMyShifts && source is MyShiftsWidget sourceMyShifts)
+        {
+            targetMyShifts.MaxItems = sourceMyShifts.MaxItems;
+            targetMyShifts.DaysAhead = sourceMyShifts.DaysAhead;
+            targetMyShifts.ShowTimeOff = sourceMyShifts.ShowTimeOff;
+        }
+
+        if (target is WhoIsOnTodayWidget targetWhoIsOn && source is WhoIsOnTodayWidget sourceWhoIsOn)
+        {
+            targetWhoIsOn.LocationId = sourceWhoIsOn.LocationId;
+            targetWhoIsOn.ShowClockStatus = sourceWhoIsOn.ShowClockStatus;
+        }
+
+        if (target is PendingTimeOffWidget targetPending && source is PendingTimeOffWidget sourcePending)
+        {
+            targetPending.MaxItems = sourcePending.MaxItems;
         }
 
         if (target is ProjectionStatusWidget targetProjectionStatus && source is ProjectionStatusWidget sourceProjectionStatus)

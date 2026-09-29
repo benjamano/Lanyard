@@ -7,7 +7,7 @@ namespace Lanyard.Infrastructure.Models
     // where it isn't) rather than a single index, since Postgres treats every NULL as distinct
     // and a plain unique index on (CompanyId, LocationId) would let multiple company-wide rows
     // through. A row is created lazily on first Save for whichever scope is being edited.
-    public class CompanyOnboardingSettings
+    public class CompanyOnboardingSettings : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -37,7 +37,7 @@ namespace Lanyard.Infrastructure.Models
     // company-wide set). A join entity referencing FileMetadata rather than adding columns to it,
     // same reasoning as StaffDocument - FileMetadata is a generic table shared by folders, logos,
     // and video devices.
-    public class CompanyOnboardingStandingAttachment
+    public class CompanyOnboardingStandingAttachment : ICompanyOwned
     {
         public Guid Id { get; set; }
 

@@ -1,0 +1,48 @@
+.my-hours {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 720px;
+}
+
+.my-hours-week {
+    display: flex;
+    flex-direction: column;
+}
+
+.my-hours-week-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 6px;
+}
+
+.my-hours-week-header ::deep .my-hours-total {
+    color: var(--colorNeutralForeground3);
+}
+
+.my-hours-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.my-hours-day {
+    min-width: 96px;
+    font-weight: 600;
+}
+
+.my-hours-times {
+    flex: 1 1 160px;
+    display: flex;
+    flex-direction: column;
+    font-variant-numeric: tabular-nums;
+}
+
+.my-hours-meta {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}

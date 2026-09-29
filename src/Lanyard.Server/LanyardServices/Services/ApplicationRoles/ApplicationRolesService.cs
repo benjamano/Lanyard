@@ -1,4 +1,5 @@
-﻿using Lanyard.Application.Services.Authentication;
+﻿using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -44,6 +45,11 @@ public class ApplicationRolesService
                 .Where(x => x.IsActive)
                 .ToListAsync();
 
+            if (!await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
+            {
+                roles.RemoveAll(x => x.Name == LanyardRoles.PlatformAdmin);
+            }
+
             return Result<List<ApplicationRole>>.Ok(roles);
         }
         catch (Exception ex)
@@ -54,7 +60,9 @@ public class ApplicationRolesService
 
     public async Task<Result<List<ApplicationRole>>> GetInactiveApplicationRolesAsync()
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Roles are shared by every company, so creating, deleting or restoring one changes
+        // every company's role list - that's a platform operation, not a company admin's.
+        if (!await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
         {
             return Result<List<ApplicationRole>>.Fail("You must be an administrator to perform this action!");
         }
@@ -78,7 +86,9 @@ public class ApplicationRolesService
 
     public async Task<Result<bool>> RestoreRoleAsync(string roleId)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Roles are shared by every company, so creating, deleting or restoring one changes
+        // every company's role list - that's a platform operation, not a company admin's.
+        if (!await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
         {
             return Result<bool>.Fail("You must be an administrator to perform this action!");
         }
@@ -139,7 +149,10 @@ public class ApplicationRolesService
 
             IList<UserProfile> usersInRole = await _umApi.GetUsersInRoleAsync(role.Name!);
 
-            return Result<List<UserProfile>>.Ok([.. usersInRole]);
+            // Roles are shared by every company; only this company's holders of the role count.
+            HashSet<string> companyUserIds = (await _sApi.GetActiveUsersAsync()).Select(x => x.Id).ToHashSet();
+
+            return Result<List<UserProfile>>.Ok([.. usersInRole.Where(x => companyUserIds.Contains(x.Id))]);
         }
         catch (Exception ex)
         {
@@ -149,7 +162,9 @@ public class ApplicationRolesService
 
     public async Task<Result<bool>> CreateNewRoleAsync(string roleName)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Roles are shared by every company, so creating, deleting or restoring one changes
+        // every company's role list - that's a platform operation, not a company admin's.
+        if (!await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
         {
             return Result<bool>.Fail("You must be an administrator to perform this action!");
         }
@@ -275,9 +290,17 @@ public class ApplicationRolesService
             UserProfile? user = await _umApi.FindByIdAsync(userId);
             ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
 
-            if (user is null)
+            // GetUserByIdAsync refuses users outside the caller's company.
+            if (user is null || !(await _sApi.GetUserByIdAsync(user.Id)).IsSuccess)
             {
                 return Result<string>.Fail("User not found.");
+            }
+
+            // The demo's shared login accounts keep their roles, or the next visitor's "Explore as
+            // admin" wouldn't be an admin.
+            if (DemoAccounts.LoginUserIds.Contains(user.Id))
+            {
+                return Result<string>.Fail("The demo accounts' roles can't be changed.");
             }
 
             if (role is null)
@@ -295,6 +318,12 @@ public class ApplicationRolesService
                 && !await _sApi.IsCurrentUserInRoleAsync("Admin"))
             {
                 return Result<string>.Fail("Only administrators can assign the Admin role.");
+            }
+
+            if (string.Equals(role.Name, LanyardRoles.PlatformAdmin, StringComparison.OrdinalIgnoreCase)
+                && !await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
+            {
+                return Result<string>.Fail("Only platform administrators can assign the PlatformAdmin role.");
             }
 
             if (await _umApi.IsInRoleAsync(user, role.Name!))
@@ -330,9 +359,17 @@ public class ApplicationRolesService
             UserProfile? user = await _umApi.FindByIdAsync(userId);
             ApplicationRole? role = await _rmApi.FindByIdAsync(roleId);
 
-            if (user is null)
+            // GetUserByIdAsync refuses users outside the caller's company.
+            if (user is null || !(await _sApi.GetUserByIdAsync(user.Id)).IsSuccess)
             {
                 return Result<string>.Fail("User not found.");
+            }
+
+            // The demo's shared login accounts keep their roles, or the next visitor's "Explore as
+            // admin" wouldn't be an admin.
+            if (DemoAccounts.LoginUserIds.Contains(user.Id))
+            {
+                return Result<string>.Fail("The demo accounts' roles can't be changed.");
             }
 
             if (role is null)
@@ -346,6 +383,12 @@ public class ApplicationRolesService
                 && !await _sApi.IsCurrentUserInRoleAsync("Admin"))
             {
                 return Result<string>.Fail("Only administrators can remove the Admin role.");
+            }
+
+            if (string.Equals(role.Name, LanyardRoles.PlatformAdmin, StringComparison.OrdinalIgnoreCase)
+                && !await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
+            {
+                return Result<string>.Fail("Only platform administrators can remove the PlatformAdmin role.");
             }
 
             if (!await _umApi.IsInRoleAsync(user, role.Name!))
@@ -371,7 +414,9 @@ public class ApplicationRolesService
 
     public async Task<Result<List<string>>> DeleteRoleAsync(string roleId)
     {
-        if (!await _sApi.IsCurrentUserInRoleAsync("Admin"))
+        // Roles are shared by every company, so creating, deleting or restoring one changes
+        // every company's role list - that's a platform operation, not a company admin's.
+        if (!await _sApi.IsCurrentUserInRoleAsync(LanyardRoles.PlatformAdmin))
         {
             return Result<List<string>>.Fail("You must be an administrator to perform this action!");
         }
@@ -383,6 +428,11 @@ public class ApplicationRolesService
             if (role is null)
             {
                 return Result<List<string>>.Fail("Role not found.");
+            }
+
+            if (role.Id == ApplicationDbContext.SeedPlatformAdminRoleId)
+            {
+                return Result<List<string>>.Fail("The PlatformAdmin role can't be deleted.");
             }
 
             IList<UserProfile> usersInRole = await _umApi.GetUsersInRoleAsync(role.Name!);

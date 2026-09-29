@@ -86,7 +86,7 @@
 
         _userId = userIdResult.Data;
 
-        Result<IEnumerable<Dashboard>> dashboardsResult = await DashboardService.GetDashboardsAsync();
+        Result<IEnumerable<Dashboard>> dashboardsResult = await DashboardService.GetDashboardSummariesAsync();
 
         if (dashboardsResult.IsSuccess && dashboardsResult.Data is not null)
         {

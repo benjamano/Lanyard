@@ -1,0 +1,33 @@
+.shift-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+
+.shift-dialog-times {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.shift-dialog-hint {
+    margin-top: -4px;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+}
+
+.shift-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* Remove sits on its own at the far left so it's never the button a quick "Save" lands on. */
+.shift-dialog-actions ::deep .shift-dialog-delete {
+    margin-right: auto;
+}

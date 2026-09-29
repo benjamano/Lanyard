@@ -235,7 +235,7 @@
 
     private async Task GetDashboards()
     {
-        Result<IEnumerable<Dashboard>> response = await DashboardService.GetDashboardsAsync();
+        Result<IEnumerable<Dashboard>> response = await DashboardService.GetDashboardSummariesAsync();
 
         if (response.IsSuccess && response.Data != null)
         {

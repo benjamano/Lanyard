@@ -1,5 +1,9 @@
+using Lanyard.Application.Services.Demo;
+using Microsoft.Extensions.Options;
+using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Antiforgery;
@@ -14,6 +18,7 @@ namespace Lanyard.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("ip-fixed")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<UserProfile> _userManager;
@@ -22,6 +27,9 @@ namespace Lanyard.API.Controllers
         private readonly IEmailService _emailService;
         private readonly ILogger<AuthController> _logger;
         private readonly IAntiforgery _antiforgery;
+        private readonly IOptions<DemoOptions> _demoOptions;
+        private readonly IDemoDirectory _demoDirectory;
+        private readonly IPushSubscriptionService _pushSubscriptionService;
 
         public AuthController(
             UserManager<UserProfile> userManager,
@@ -29,14 +37,20 @@ namespace Lanyard.API.Controllers
             ICompanyLocationService companyLocationService,
             IEmailService emailService,
             ILogger<AuthController> logger,
-            IAntiforgery antiforgery)
+            IAntiforgery antiforgery,
+            IPushSubscriptionService pushSubscriptionService,
+            IOptions<DemoOptions> demoOptions,
+            IDemoDirectory demoDirectory)
         {
+            _demoOptions = demoOptions;
+            _demoDirectory = demoDirectory;
             _userManager = userManager;
             _signInManager = signInManager;
             _companyLocationService = companyLocationService;
             _emailService = emailService;
             _logger = logger;
             _antiforgery = antiforgery;
+            _pushSubscriptionService = pushSubscriptionService;
         }
 
         [HttpPost("login")]
@@ -62,6 +76,7 @@ namespace Lanyard.API.Controllers
 
                 case SignInOutcomeKind.Success:
                     await _signInManager.SignInWithClaimsAsync(attempt.User!, dto.RememberMe, attempt.Claims!);
+                    UserCultureCookie.Append(Response, attempt.User!.PreferredCulture);
                     return Ok(new { message = "Login successful", username = attempt.User!.UserName });
 
                 default:
@@ -88,6 +103,7 @@ namespace Lanyard.API.Controllers
 
                 case SignInOutcomeKind.Success:
                     await _signInManager.SignInWithClaimsAsync(attempt.User!, rememberMe, attempt.Claims!);
+                    UserCultureCookie.Append(Response, attempt.User!.PreferredCulture);
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     {
@@ -158,6 +174,7 @@ namespace Lanyard.API.Controllers
             }
 
             await _signInManager.SignInWithClaimsAsync(user, rememberMe, extraClaims);
+            UserCultureCookie.Append(Response, user.PreferredCulture);
             await HttpContext.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
@@ -212,7 +229,7 @@ namespace Lanyard.API.Controllers
         // instead of validating anything.
         [EnableRateLimiting("ip-fixed")]
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromForm] string? returnUrl = null)
+        public async Task<IActionResult> Logout([FromForm] string? returnUrl = null, [FromForm(Name = PushSignOut.EndpointField)] string? pushEndpoint = null)
         {
             try
             {
@@ -225,9 +242,22 @@ namespace Lanyard.API.Controllers
                 return BadRequest("Invalid or missing antiforgery token.");
             }
 
+            // This browser's push subscription goes with the session (see PushSignOut).
+            string? userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (!string.IsNullOrEmpty(pushEndpoint) && !string.IsNullOrEmpty(userId))
+            {
+                Result<bool> removed = await _pushSubscriptionService.RemoveAsync(userId, pushEndpoint);
+
+                if (!removed.IsSuccess)
+                {
+                    _logger.LogWarning("Couldn't remove the push subscription for {UserId} at sign-out: {Error}", userId, removed.Error);
+                }
+            }
+
             await _signInManager.SignOutAsync();
 
-            return RedirectToLoginAfterSignOut(returnUrl);
+            return RedirectAfterSignOut(returnUrl);
         }
 
         // Deliberately does NOT sign anyone out. It renders a form that posts back to the action
@@ -240,7 +270,7 @@ namespace Lanyard.API.Controllers
         // navigation is a GET. The redirect is the same one the POST performs, so from the user's
         // side the extra hop is invisible.
         [HttpGet("logout")]
-        public IActionResult LogoutGet([FromQuery] string? returnUrl = null)
+        public IActionResult LogoutGet([FromQuery] string? returnUrl = null, [FromQuery] bool keepNotifications = false)
         {
             AntiforgeryTokenSet tokens = _antiforgery.GetAndStoreTokens(HttpContext);
 
@@ -264,12 +294,13 @@ namespace Lanyard.API.Controllers
                     <form id="signOutForm" method="post" action="/api/auth/logout">
                         <input type="hidden" name="{encoder.Encode(tokens.FormFieldName)}" value="{encoder.Encode(tokens.RequestToken ?? string.Empty)}" />
                         <input type="hidden" name="returnUrl" value="{encoder.Encode(safeReturnUrl)}" />
+                        {PushSignOut.HiddenField}
                         <noscript>
                             <p>Signing you out.</p>
                             <button type="submit">Continue</button>
                         </noscript>
                     </form>
-                    <script>document.getElementById('signOutForm').submit();</script>
+                    {(keepNotifications ? PushSignOut.PlainSubmitScript("signOutForm") : PushSignOut.SubmitScript("signOutForm"))}
                 </body>
                 </html>
                 """;
@@ -277,14 +308,108 @@ namespace Lanyard.API.Controllers
             return Content(html, "text/html; charset=utf-8");
         }
 
-        private IActionResult RedirectToLoginAfterSignOut(string? returnUrl)
+        // The homepage's "Explore as admin / manager / staff" buttons land here. Like the sign-out
+        // GET above, this only renders a self-submitting form: signing in is a state change, so it
+        // happens on the POST, behind an antiforgery token - otherwise any site could quietly sign a
+        // visitor in to the demo (login CSRF).
+        [EnableRateLimiting("ip-fixed")]
+        [HttpGet("demo-login")]
+        public IActionResult DemoLoginGet([FromQuery] string? role)
+        {
+            if (!_demoOptions.Value.Enabled || DemoAccounts.UserIdForRole(role) is null)
+            {
+                return NotFound();
+            }
+
+            AntiforgeryTokenSet tokens = _antiforgery.GetAndStoreTokens(HttpContext);
+            HtmlEncoder encoder = HtmlEncoder.Default;
+
+            string html = $"""
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="utf-8" />
+                    <title>Opening the demo&hellip;</title>
+                    <meta name="robots" content="noindex" />
+                </head>
+                <body>
+                    <form id="demoLoginForm" method="post" action="/api/auth/demo-login">
+                        <input type="hidden" name="{encoder.Encode(tokens.FormFieldName)}" value="{encoder.Encode(tokens.RequestToken ?? string.Empty)}" />
+                        <input type="hidden" name="role" value="{encoder.Encode(role!)}" />
+                        <noscript>
+                            <p>Opening the Lanyard demo.</p>
+                            <button type="submit">Continue</button>
+                        </noscript>
+                    </form>
+                    {PushSignOut.PlainSubmitScript("demoLoginForm")}
+                </body>
+                </html>
+                """;
+
+            return Content(html, "text/html; charset=utf-8");
+        }
+
+        [EnableRateLimiting("ip-fixed")]
+        [HttpPost("demo-login")]
+        [Consumes("application/x-www-form-urlencoded")]
+        public async Task<IActionResult> DemoLogin([FromForm] string? role)
+        {
+            if (!_demoOptions.Value.Enabled)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                await _antiforgery.ValidateRequestAsync(HttpContext);
+            }
+            catch (AntiforgeryValidationException ex)
+            {
+                _logger.LogWarning("Rejected a demo login with an invalid antiforgery token: {Error}", ex.Message);
+
+                return BadRequest("Invalid or missing antiforgery token.");
+            }
+
+            string? userId = DemoAccounts.UserIdForRole(role);
+            UserProfile? user = userId is null ? null : await _userManager.FindByIdAsync(userId);
+            (int LocationId, int CompanyId)? location = user is null ? null : await _demoDirectory.GetLoginLocationAsync(user.Id);
+
+            if (user is null || location is null)
+            {
+                _logger.LogWarning("Demo login for role {Role} failed: the demo company hasn't been seeded", role);
+
+                return Redirect(BuildLoginErrorRedirect("The demo isn't available right now. Please try again later.", null));
+            }
+
+            // Whoever was signed in before (a real account, or another demo role) is signed out first.
+            await _signInManager.SignOutAsync();
+
+            List<Claim> claims =
+            [
+                new Claim(LocationClaimTypes.LocationId, location.Value.LocationId.ToString()),
+                new Claim(LocationClaimTypes.CompanyId, location.Value.CompanyId.ToString()),
+            ];
+
+            // Never persistent: the demo session ends with the browser.
+            await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, claims);
+            UserCultureCookie.Append(Response, user.PreferredCulture);
+
+            _logger.LogInformation("Demo login as {Role} ({UserId})", role, user.Id);
+
+            return Redirect("/");
+        }
+
+        // With a returnUrl (the idle auto-logout passes the page it was on) the login page offers to
+        // take them straight back. Otherwise - someone pressing Log out, demo or not - they land on the
+        // public homepage, which has its own Log in button.
+        private IActionResult RedirectAfterSignOut(string? returnUrl)
         {
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             {
                 return Redirect($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
             }
 
-            return Redirect("/login");
+            return Redirect("/");
         }
 
         private enum SignInOutcomeKind
@@ -376,35 +501,49 @@ namespace Lanyard.API.Controllers
 
         private async Task<(bool ok, string? error)> ValidateAndBuildLocationClaimsAsync(UserProfile user, int? locationId, List<Claim> claims)
         {
-            bool isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
-
             if (locationId is null)
             {
                 return (false, "Please select your location.");
             }
 
-            if (isAdmin)
+            // Runs before the new cookie exists, so this request is anonymous and the list covers
+            // every company - which is what we need to check the choice against.
+            Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
+            LoginLocationOption? option = optionsResult.IsSuccess
+                ? optionsResult.Data!.FirstOrDefault(x => x.LocationId == locationId.Value)
+                : null;
+
+            if (option is null)
             {
-                Result<List<LoginLocationOption>> optionsResult = await _companyLocationService.GetLoginLocationOptionsAsync();
-
-                if (!optionsResult.IsSuccess || optionsResult.Data!.All(x => x.LocationId != locationId.Value))
-                {
-                    return (false, "The selected location is no longer available.");
-                }
-
-                claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
-
-                return (true, null);
+                return (false, "The selected location is no longer available.");
             }
 
-            Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
+            bool hasAccess;
 
-            if (!membershipResult.IsSuccess || membershipResult.Data != true)
+            if (await _userManager.IsInRoleAsync(user, LanyardRoles.PlatformAdmin))
+            {
+                hasAccess = true;
+            }
+            else if (await _userManager.IsInRoleAsync(user, "Admin"))
+            {
+                // Admin is admin of their own company: any location in a company they already
+                // belong to, but not the locations of companies they have nothing to do with.
+                Result<List<int>> userCompanyIds = await _companyLocationService.GetCompanyIdsForUserAsync(user.Id);
+                hasAccess = userCompanyIds.IsSuccess && userCompanyIds.Data!.Contains(option.CompanyId);
+            }
+            else
+            {
+                Result<bool> membershipResult = await _companyLocationService.IsUserMemberOfLocationAsync(user.Id, locationId.Value);
+                hasAccess = membershipResult.IsSuccess && membershipResult.Data;
+            }
+
+            if (!hasAccess)
             {
                 return (false, "You do not have access to the selected location.");
             }
 
             claims.Add(new Claim(LocationClaimTypes.LocationId, locationId.Value.ToString()));
+            claims.Add(new Claim(LocationClaimTypes.CompanyId, option.CompanyId.ToString()));
 
             return (true, null);
         }

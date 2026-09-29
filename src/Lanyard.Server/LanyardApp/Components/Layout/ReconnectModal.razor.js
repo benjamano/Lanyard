@@ -8,14 +8,39 @@ retryButton.addEventListener("click", retry);
 const resumeButton = document.getElementById("components-resume-button");
 resumeButton.addEventListener("click", resume);
 
-function handleReconnectStateChanged(event) {
-    if (event.detail.state === "show") {
+// Brief blips (a phone waking up, a server restart) usually reconnect within a couple of the
+// 1-second retries configured in blazorStart.js, so hold the modal back until the connection
+// has been down for this long. If it reconnects first, the user never sees anything.
+const ShowModalAfterMilliseconds = 3000;
+let showModalTimer = null;
+
+function showModalNow() {
+    clearTimeout(showModalTimer);
+    showModalTimer = null;
+    if (!reconnectModal.open) {
         reconnectModal.showModal();
-    } else if (event.detail.state === "hide") {
+    }
+}
+
+function handleReconnectStateChanged(event) {
+    const state = event.detail.state;
+
+    // Terminal/attention states shouldn't wait out the delay.
+    if (showModalTimer !== null && (state === "failed" || state === "paused" || state === "resume-failed")) {
+        showModalNow();
+    }
+
+    if (state === "show") {
+        if (!reconnectModal.open && showModalTimer === null) {
+            showModalTimer = setTimeout(showModalNow, ShowModalAfterMilliseconds);
+        }
+    } else if (state === "hide") {
+        clearTimeout(showModalTimer);
+        showModalTimer = null;
         reconnectModal.close();
-    } else if (event.detail.state === "failed") {
+    } else if (state === "failed") {
         document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
-    } else if (event.detail.state === "rejected") {
+    } else if (state === "rejected") {
         location.reload();
     }
 }

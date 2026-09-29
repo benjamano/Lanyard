@@ -1,0 +1,88 @@
+.my-time-off {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.my-time-off-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.my-time-off ::deep .my-time-off-subhead {
+    margin-top: 8px;
+}
+
+.time-off-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.time-off-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.time-off-item:last-child {
+    border-bottom: none;
+}
+
+.time-off-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.time-off-dates {
+    font-weight: 600;
+}
+
+.time-off-meta,
+.time-off-note {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.time-off-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.time-off-side ::deep fluent-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.time-off-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+@media (max-width: 520px) {
+    .time-off-item {
+        flex-direction: column;
+    }
+
+    .time-off-side {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+    }
+}

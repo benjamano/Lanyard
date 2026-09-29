@@ -1,0 +1,21 @@
+<FluentDialogBody>
+    <ChildContent>
+        <FluentTextInput @bind-Value="name" Label="Terminal name" Width="100%" />
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@string.IsNullOrWhiteSpace(name)" OnClick="@(() => Dialog.CloseAsync(name.Trim()))">Save</FluentButton>
+        <FluentButton OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string CurrentName { get; set; }
+
+    private string name = string.Empty;
+
+    protected override void OnInitialized() => name = CurrentName;
+}

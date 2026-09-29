@@ -1,0 +1,96 @@
+@inject IShiftClaimService _shiftClaimService
+
+@* "I can't make it" or "Can anyone swap?" on one of the person's own shifts. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(IsDrop ? (Icon)new Icons.Regular.Size24.CalendarCancel() : new Icons.Regular.Size24.ArrowSwap())" />
+            <FluentText As="@TextTag.H3">@(IsDrop ? "Can't make this shift" : "Ask to swap this shift")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="decide-dialog">
+            <div class="decide-summary">
+                <div class="decide-name">@Shift.Describe()</div>
+                <div class="decide-muted">@Shift.Location?.Name</div>
+            </div>
+
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                @if (IsDrop)
+                {
+                    <text>Your manager decides. Until they do, you're still on this shift - if it's urgent, call them too.</text>
+                }
+                else
+                {
+                    <text>Colleagues who could work it are told. When someone offers one of their shifts in return, you choose which to take@(NeedsApproval ? ", and a manager approves the swap" : string.Empty).</text>
+                }
+            </FluentText>
+
+            <FluentTextArea @bind-Value="note" Rows="3" Maxlength="500" Style="width: 100%;"
+                            Label="@(IsDrop ? "Why can't you make it?" : "Note for colleagues (optional)")"
+                            Placeholder="@(IsDrop ? "e.g. Family emergency" : "e.g. Happy to take any weekday late instead")" />
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SendAsync">
+            @(isBusy ? "Sending..." : IsDrop ? "Tell my manager" : "Ask for swaps")
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required Shift Shift { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter]
+    public ShiftClaimKind Kind { get; set; } = ShiftClaimKind.Drop;
+
+    [Parameter]
+    public bool NeedsApproval { get; set; } = true;
+
+    private bool IsDrop => Kind == ShiftClaimKind.Drop;
+
+    private string? note;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private async Task SendAsync()
+    {
+        errorMessage = null;
+
+        if (IsDrop && string.IsNullOrWhiteSpace(note))
+        {
+            errorMessage = "Say why you can't make it, so your manager can find cover.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<ShiftClaim> result = IsDrop
+            ? await _shiftClaimService.RequestDropAsync(UserId, Shift.Id, note!)
+            : await _shiftClaimService.RequestSwapAsync(UserId, Shift.Id, note);
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(IsDrop ? "Sent to your manager." : "Your colleagues have been asked.");
+        await Dialog.CloseAsync(true);
+    }
+}

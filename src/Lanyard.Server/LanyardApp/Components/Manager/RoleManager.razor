@@ -12,7 +12,7 @@
 <FluentCard Height="auto" Class="mt-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center">
-            <FluentText Typo="Typography.H4">Role Manager</FluentText>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Role Manager</FluentText>
 
             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArchiveArrowBack())"
                           OnClick="OpenDisabledRolesDialogAsync">
@@ -63,7 +63,7 @@
                 <FluentGridItem Xs="12" Sm="3">
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
                         <FluentCard Appearance="CardAppearance.Subtle">
-                            <FluentText Typo="Typography.H6" Class="mb-2">Create a New Role</FluentText>
+                            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400" Class="mb-2">Create a New Role</FluentText>
 
                             <EditForm EditContext="@_editContext" OnValidSubmit="HandleCreateNewRole">
                                 <DataAnnotationsValidator />

@@ -1,0 +1,41 @@
+@* Approve / turn down buttons for one request, or why it can't be decided here. *@
+@if (Item.Problem is string problem)
+{
+    <div class="claim-problem">
+        <FluentIcon Value="@(new Icons.Regular.Size16.Info())" Color="Color.Custom" CustomColor="currentColor" />
+        <span>@problem</span>
+    </div>
+    @if (!IsOwn)
+    {
+        <div class="claim-actions">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@OnReject">@RejectLabel</FluentButton>
+        </div>
+    }
+}
+else
+{
+    <div class="claim-actions">
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Checkmark())" OnClick="@OnApprove">@ApproveLabel</FluentButton>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())" OnClick="@OnReject">@RejectLabel</FluentButton>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required ClaimReviewItem Item { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string ApproveLabel { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string RejectLabel { get; set; }
+
+    [Parameter]
+    public EventCallback OnApprove { get; set; }
+
+    [Parameter]
+    public EventCallback OnReject { get; set; }
+
+    // A request involving the manager's own shift can't be decided by them either way.
+    private bool IsOwn => Item.Problem?.StartsWith("This involves your own shift", StringComparison.Ordinal) == true;
+}

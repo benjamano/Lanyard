@@ -122,11 +122,13 @@
         }
         catch { }
 
-        // Capture the page the user was on so re-login can return them here.
+        // Capture the page the user was on so re-login can return them here. KeepNotifications:
+        // a timed-out session isn't the person leaving the device, so its push notifications stay
+        // on (see PushSignOut) - otherwise a phone would silently lose them every two hours.
         string returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri).TrimStart('/');
         string target = Nav.GetUriWithQueryParameters(
             "/HandleLogout",
-            new Dictionary<string, object?> { ["ReturnUrl"] = returnUrl });
+            new Dictionary<string, object?> { ["ReturnUrl"] = returnUrl, ["KeepNotifications"] = true });
         Nav.NavigateTo(target, forceLoad: true);
     }
 

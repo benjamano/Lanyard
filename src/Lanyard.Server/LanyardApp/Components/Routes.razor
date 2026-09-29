@@ -18,7 +18,12 @@
 @code {
     private Type GetLayout()
     {
-        return Navigation.Uri.Contains("/kiosk") || Navigation.Uri.Contains("/video-publisher")
+        // The clock-in terminal is a full-screen device page with no staff chrome, like a kiosk.
+        // Matched on the exact path - a substring match would also catch the managers' own
+        // /manage/rota/terminals page and strip its layout (and with it the dialog host).
+        bool isClockInTerminal = string.Equals(new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/'), "/rota/terminal", StringComparison.OrdinalIgnoreCase);
+
+        return Navigation.Uri.Contains("/kiosk") || Navigation.Uri.Contains("/video-publisher") || isClockInTerminal
             ? typeof(EmptyLayout)
             : typeof(MainLayout);
     }

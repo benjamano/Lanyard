@@ -38,10 +38,13 @@ public class DmxSceneService(
 
             List<Guid> runningSceneIds = (await GetRunningSceneIdsForClientAsync(clientId)).Data ?? [];
 
+            // List callers (scene selector, automation rule dialog) only read StepCount, so
+            // the steps themselves are counted in SQL rather than loaded (and tracked) per scene.
             IEnumerable<DmxSceneDTO> scenes = await context.DmxScenes
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Where(s => s.ClientId == clientId)
                 .Where(x=> x.IsActive == true)
-                .Include(x=> x.Steps)
                 .Select(s => new DmxSceneDTO
                 {
                     Id = s.Id,
@@ -51,7 +54,6 @@ public class DmxSceneService(
                     IsMomentary = s.IsMomentary,
                     BpmSyncEnabled = s.BpmSyncEnabled,
                     KeyBindings = s.KeyBindings,
-                    Steps = s.Steps,
                     IsActive = s.IsActive,
                     CreateByUserId = s.CreateByUserId,
                     CreateDate = s.CreateDate,
@@ -127,9 +129,9 @@ public class DmxSceneService(
             List<Guid> runningSceneIds = (await GetRunningSceneIdsForClientAsync(clientId ?? Guid.Empty)).Data ?? [];
 
             DmxSceneDTO? scene = await context.DmxScenes
+                .AsNoTracking()
                 .TagWithCallSite()
                 .Where(s => s.Id == sceneId && s.IsActive)
-                .Include(x=> x.Steps)
                 .Select(s => new DmxSceneDTO
                 {
                     Id = s.Id,

@@ -14,11 +14,16 @@ public class SignalRProjectionControlHubEvents(IServiceScopeFactory serviceScope
         await using AsyncServiceScope scope = _serviceScopeFactory.CreateAsyncScope();
         IMusicService musicService = scope.ServiceProvider.GetRequiredService<IMusicService>();
 
-        foreach (CachedSongDTO cachedSong in result.Data ?? Enumerable.Empty<CachedSongDTO>())
-        {
-            Result<Song> songResult = await musicService.GetSongAsync(cachedSong.Id);
+        // A kiosk can report hundreds of cached songs; resolve every name with one query
+        // instead of one tracked Song load per entry.
+        List<CachedSongDTO> cachedSongs = (result.Data ?? Enumerable.Empty<CachedSongDTO>()).ToList();
 
-            cachedSong.Name = songResult.Data?.Name ?? string.Empty;
+        Result<IReadOnlyDictionary<Guid, string>> namesResult = await musicService.GetSongNamesAsync(cachedSongs.Select(x => x.Id).Distinct().ToList());
+        IReadOnlyDictionary<Guid, string> names = namesResult.Data ?? new Dictionary<Guid, string>();
+
+        foreach (CachedSongDTO cachedSong in cachedSongs)
+        {
+            cachedSong.Name = names.TryGetValue(cachedSong.Id, out string? name) ? name : string.Empty;
         }
 
         OnReceiveCachedSongs?.Invoke(result);

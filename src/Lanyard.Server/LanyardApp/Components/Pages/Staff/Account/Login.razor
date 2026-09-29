@@ -1,8 +1,10 @@
 @page "/login"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 
 @inject NavigationManager Navigation
 @inject IThemeService ThemeService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Login</PageTitle>
 
@@ -19,13 +21,13 @@
 
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="10"
                          HorizontalAlignment="HorizontalAlignment.Stretch" Class="company-picker">
-                @if (!companyOptions.Any())
+                @if (!CompanyOptions.Any())
                 {
                     <FluentText>Loading companies...</FluentText>
                 }
                 else
                 {
-                    @foreach (LoginCompanyOption company in companyOptions)
+                    @foreach (LoginCompanyOption company in CompanyOptions)
                     {
                         <FluentButton Appearance="ButtonAppearance.Outline" Class="company-picker-button"
                                       OnClick="@(() => SelectCompany(company.CompanyId))">
@@ -89,18 +91,24 @@ else
                             <FluentIcon Value="@(new Icons.Regular.Size16.Key())" Slot="start" />
                         </FluentTextInput>
 
-                        @if (locationOptions.Any())
+                        @if (LocationOptions.Any())
                         {
                             <FluentSelect Id="locationId" Name="locationId" Label="Location" Required="true"
                                           Placeholder="Select your location" TValue="int" TOption="LoginLocationOption"
                                           ValueChanged="@(item => OnLocationChanged(item))" Class="login-full-width"
-                                          Items="@locationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
+                                          Items="@LocationOptions.AsQueryable()" OptionText="@(option => option.DisplayName)"
                                           OptionValue="@(option => option.LocationId)" />
                         }
                         else
                         {
                             <FluentText>Loading Companies...</FluentText>
                         }
+
+                        @* The checkbox has no Name, so it isn't posted itself - the hidden input carries its
+                           state. It's ticked from the first render, so a submit before the circuit connects
+                           still keeps the user signed in. *@
+                        <FluentCheckbox @bind-Value="_rememberMe" Label="Keep me signed in" />
+                        <input type="hidden" name="rememberMe" value="@(_rememberMe ? "true" : "false")" />
 
                         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center"
                                      Class="login-submit-row">
@@ -132,16 +140,55 @@ else
     [SupplyParameterFromQuery(Name = "company")]
     public int? CompanyId { get; set; }
 
-    private IEnumerable<LoginLocationOption> locationOptions = [];
-    private IEnumerable<LoginCompanyOption> companyOptions = [];
+    // This page prerenders, then initialises again on the interactive circuit. The company picker
+    // list, or the chosen company's branding and locations, are carried across from the prerender
+    // pass so the interactive pass renders the same data without re-querying it (and without the
+    // picker briefly collapsing back to "Loading companies..."). It is all public, pre-login data.
+    // LoadedForCompanyId is the guard: the skip only applies while the company in the query string
+    // still matches what the state was loaded for, so switching company in-circuit reloads as normal.
+    // StateLoaded is only set once a load fully succeeded, so a failed prerender-time lookup is
+    // retried on the interactive pass instead of being persisted as "done".
+    // SkipLastSnapshot: after a circuit pause/resume the page reloads fresh rather than reusing the
+    // last snapshot - only the prerender -> interactive hand-off is worth bridging.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool StateLoaded { get; set; }
 
-    private string? SelectedAccentColor;
-    private string? SelectedLogoUrl;
-    private string? BackgroundImageUrl;
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public int? LoadedForCompanyId { get; set; }
+
+    // Set when the company in the query string was rejected (stale/deactivated id) and the page
+    // fell back to the picker. CompanyId is re-bound from the URL on every parameter set, so the
+    // skip path needs this to reproduce the fallback without re-querying.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public bool RequestedCompanyRejected { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public List<LoginLocationOption> LocationOptions { get; set; } = [];
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public List<LoginCompanyOption> CompanyOptions { get; set; } = [];
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public string? SelectedAccentColor { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public string? SelectedLogoUrl { get; set; }
+
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public string? BackgroundImageUrl { get; set; }
+
+    // Which name and logo the installed app should use - see OnAfterRenderAsync.
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public CompanyBrandingInfo? SelectedBranding { get; set; }
+
+    // On by default: staff mostly log in from their own phone, where the installed app should
+    // stay signed in. Untick on a shared computer so closing the browser signs you out.
+    private bool _rememberMe = true;
 
     // Chosen in OnParametersSetAsync, applied in OnAfterRenderAsync - see the comment there.
     private string? _pendingThemeColor;
     private string? _appliedThemeColor;
+    private int? _appliedAppCompanyId;
 
     private string AccentBarStyle => $"background-color:{SelectedAccentColor};";
 
@@ -152,9 +199,42 @@ else
     // reuses this instance and re-invokes parameter binding rather than recreating it.
     protected override async Task OnParametersSetAsync()
     {
+        // The [PersistentState] binder supplies null on the first parameter set when there is
+        // nothing to restore (the prerender pass), overriding the field initialisers.
+        CompanyOptions ??= [];
+        LocationOptions ??= [];
+
+        if (StateLoaded && LoadedForCompanyId == CompanyId)
+        {
+            // Data already in hand for this company (restored from the prerender pass, or loaded
+            // earlier in this circuit). Only the theme still needs applying - see OnAfterRenderAsync.
+            if (RequestedCompanyRejected)
+            {
+                CompanyId = null;
+            }
+
+            _pendingThemeColor = CompanyId is null
+                ? BrandConstants.PrimaryColorHex
+                : BrandConstants.ResolveAccentColor(SelectedAccentColor);
+            return;
+        }
+
+        int? requestedCompanyId = CompanyId;
+
+        // Reset per-company state before the first await so a switch never shows (or submits) the
+        // previous company's locations or branding while the new company's are still loading.
+        StateLoaded = false;
+        RequestedCompanyRejected = false;
+        LocationOptions = [];
+        SelectedAccentColor = null;
+        SelectedLogoUrl = null;
+        SelectedBranding = null;
+        BackgroundImageUrl = null;
+
         if (CompanyId is null)
         {
-            await LoadCompanyOptionsAsync();
+            StateLoaded = await LoadCompanyOptionsAsync();
+            LoadedForCompanyId = null;
             _pendingThemeColor = BrandConstants.PrimaryColorHex;
             return;
         }
@@ -165,13 +245,16 @@ else
         {
             // Stale/invalid company id in the URL - fall back to the company picker.
             CompanyId = null;
-            await LoadCompanyOptionsAsync();
+            RequestedCompanyRejected = true;
+            StateLoaded = await LoadCompanyOptionsAsync();
+            LoadedForCompanyId = requestedCompanyId;
             _pendingThemeColor = BrandConstants.PrimaryColorHex;
             return;
         }
 
         SelectedAccentColor = branding.Data!.ThemeColorHex;
         SelectedLogoUrl = branding.Data!.LogoFileId is Guid ? $"/api/companies/{CompanyId}/logo" : null;
+        SelectedBranding = branding.Data;
         BackgroundImageUrl = branding.Data!.BackgroundImageFileId is Guid ? $"/api/companies/{CompanyId}/background" : null;
 
         // Reflects the chosen company's brand color in the page's overall Fluent theme (not
@@ -182,7 +265,9 @@ else
 
         if (result.IsSuccess)
         {
-            locationOptions = result.Data!;
+            LocationOptions = result.Data!;
+            LoadedForCompanyId = requestedCompanyId;
+            StateLoaded = true;
         }
     }
 
@@ -197,6 +282,17 @@ else
     // So the colour is chosen during parameter binding and applied here, where interop is legal.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Picking a company only changes the query string in-circuit, so App.razor's <head> still
+        // links whatever manifest the page first loaded with. Swap it to this company's name and icons,
+        // so "Install app"/"Add to Home Screen" from here uses them.
+        if (CompanyId is int appCompanyId && StateLoaded && SelectedBranding is CompanyBrandingInfo selectedBranding
+            && appCompanyId != _appliedAppCompanyId)
+        {
+            _appliedAppCompanyId = appCompanyId;
+            AppInstallLinks installLinks = AppInstallLinks.For(selectedBranding);
+            await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, installLinks.ManifestHref, installLinks.AppleTouchIconHref, installLinks.AppName);
+        }
+
         if (_pendingThemeColor is null || _pendingThemeColor == _appliedThemeColor)
         {
             return;
@@ -205,16 +301,20 @@ else
         _appliedThemeColor = _pendingThemeColor;
 
         await ThemeService.SetThemeAsync(_pendingThemeColor);
+        await JSRuntime.InvokeVoidAsync("lanyardSetStatusBarColor", _pendingThemeColor);
     }
 
-    private async Task LoadCompanyOptionsAsync()
+    private async Task<bool> LoadCompanyOptionsAsync()
     {
         Result<List<LoginCompanyOption>> result = await _companyLocationService.GetLoginCompanyOptionsAsync();
 
-        if (result.IsSuccess)
+        if (!result.IsSuccess)
         {
-            companyOptions = result.Data!;
+            return false;
         }
+
+        CompanyOptions = result.Data!;
+        return true;
     }
 
     private void SelectCompany(int companyId)
@@ -224,7 +324,7 @@ else
 
     private void OnLocationChanged(int locationId)
     {
-        LoginLocationOption? option = locationOptions.FirstOrDefault(x => x.LocationId == locationId);
+        LoginLocationOption? option = LocationOptions.FirstOrDefault(x => x.LocationId == locationId);
 
         SelectedAccentColor = option?.ThemeColorHex;
         SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;

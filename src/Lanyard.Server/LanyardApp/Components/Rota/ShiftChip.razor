@@ -1,0 +1,62 @@
+@using Lanyard.Infrastructure.Enum
+
+<button type="button" class="shift-chip theme-colour @StateClass @(Shift.UserId is null ? "shift-chip-open" : string.Empty) @(Compact ? "shift-chip-compact" : string.Empty)"
+        style="@PositionColours.CssVariables(Shift.StaffPosition?.ColorIndex)"
+        title="@Tooltip" aria-label="@Tooltip" disabled="@(!IsEditable)" @onclick="HandleClickAsync">
+    <span class="shift-chip-time">@(Compact ? Shift.CompactTimeRange() : Shift.TimeRange())</span>
+    @if (!Compact)
+    {
+        <span class="shift-chip-position">@(Shift.StaffPosition?.Name ?? "No position")</span>
+    }
+    @if (State == ShiftState.Changed)
+    {
+        <span class="shift-chip-dot" aria-hidden="true"></span>
+    }
+</button>
+
+@code {
+    [Parameter, EditorRequired]
+    public required Shift Shift { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    [Parameter]
+    public EventCallback<Shift> OnClick { get; set; }
+
+    private ShiftState State => Shift.GetState();
+
+    // A removed shift is shown only so the manager can see what the next publish will tell people;
+    // there's nothing left on it to edit.
+    private bool IsEditable => Shift.IsActive;
+
+    private string StateClass => State switch
+    {
+        ShiftState.Draft => "shift-chip-draft",
+        ShiftState.Changed => "shift-chip-changed",
+        ShiftState.RemovedPendingNotice => "shift-chip-removed",
+        _ => string.Empty
+    };
+
+    private string Tooltip
+    {
+        get
+        {
+            string position = Shift.StaffPosition?.Name ?? "No position";
+            string breakText = Shift.BreakMinutes > 0 ? $", {Shift.BreakMinutes} min break" : string.Empty;
+            string notes = string.IsNullOrWhiteSpace(Shift.Notes) ? string.Empty : $". {Shift.Notes}";
+
+            string open = Shift.UserId is null ? " Open shift, nobody on it yet." : string.Empty;
+
+            return $"{Shift.TimeRange()} {position}{breakText}.{open} {State.StateLabel()}{notes}";
+        }
+    }
+
+    private async Task HandleClickAsync()
+    {
+        if (IsEditable)
+        {
+            await OnClick.InvokeAsync(Shift);
+        }
+    }
+}

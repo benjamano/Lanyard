@@ -1,0 +1,85 @@
+.people-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.people-selected {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.people-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--colorBrandBackground) 16%, transparent);
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.people-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.people-list li + li {
+    border-top: 1px solid var(--colorNeutralStroke3);
+}
+
+.people-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.people-row.is-selected {
+    background: color-mix(in srgb, var(--colorBrandBackground) 8%, transparent);
+}
+
+.people-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--colorBrandBackground);
+}
+
+.people-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.people-name {
+    flex: 1;
+}
+
+.people-note,
+.people-empty {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.people-empty {
+    padding: 12px;
+}

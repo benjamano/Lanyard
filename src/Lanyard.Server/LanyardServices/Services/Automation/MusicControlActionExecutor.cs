@@ -2,6 +2,7 @@
 
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -11,11 +12,11 @@ namespace Lanyard.Application.Services;
 
 public class MusicControlActionExecutor(
     MusicPlayerService musicPlayerService,
-    IDbContextFactory<ApplicationDbContext> contextFactory,
+    ISystemDbContextFactory contextFactory,
     ILogger<MusicControlActionExecutor> logger) : IActionExecutor
 {
     private readonly MusicPlayerService _musicPlayerService = musicPlayerService;
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory = contextFactory;
+    private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly ILogger<MusicControlActionExecutor> _logger = logger;
 
     private sealed record MusicControlParameters

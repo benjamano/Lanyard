@@ -1,0 +1,56 @@
+.terminals-page {
+    padding: 8px;
+    max-width: 900px;
+}
+
+.terminals-page ::deep .terminals-intro {
+    color: var(--colorNeutralForeground3);
+}
+
+.terminal-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.terminal-list-item:last-child {
+    border-bottom: none;
+}
+
+.terminal-list-item.is-revoked {
+    opacity: 0.6;
+}
+
+.terminal-list-info {
+    min-width: 0;
+    flex: 1 1 240px;
+}
+
+.terminal-list-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.terminal-list-meta {
+    margin-top: 2px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.terminal-list-actions {
+    display: flex;
+    gap: 6px;
+}

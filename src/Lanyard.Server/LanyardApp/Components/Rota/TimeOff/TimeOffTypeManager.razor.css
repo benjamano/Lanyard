@@ -1,0 +1,62 @@
+.type-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.type-manager ::deep .type-manager-intro {
+    color: var(--colorNeutralForeground3);
+}
+
+.type-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+}
+
+.type-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.type-row:last-child {
+    border-bottom: none;
+}
+
+.type-row.is-archived .type-name {
+    color: var(--colorNeutralForeground3);
+}
+
+.type-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.type-name {
+    font-weight: 600;
+}
+
+.type-description {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.type-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.type-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}

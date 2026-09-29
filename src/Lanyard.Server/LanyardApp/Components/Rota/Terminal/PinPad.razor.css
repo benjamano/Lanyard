@@ -1,0 +1,119 @@
+.pin-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.pin-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: min(400px, 100%);
+    padding: 24px;
+    border-radius: 16px;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    outline: none;
+}
+
+.pin-name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.pin-prompt {
+    color: var(--colorNeutralForeground3);
+}
+
+.pin-dots {
+    display: flex;
+    gap: 14px;
+    margin: 4px 0 6px;
+}
+
+.pin-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--colorNeutralStroke1);
+}
+
+.pin-dot.is-filled {
+    background: var(--colorBrandBackground);
+    border-color: var(--colorBrandBackground);
+}
+
+/* Digits 5 and 6 are optional - drawn fainter so a 4-digit PIN doesn't look unfinished. */
+.pin-dot.is-optional {
+    opacity: 0.4;
+}
+
+.pin-keys {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+}
+
+.pin-key {
+    min-height: 68px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 12px;
+    background: var(--colorNeutralBackground2);
+    color: inherit;
+    font-size: 1.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.pin-key:active:not(:disabled) {
+    background: var(--colorNeutralBackground3);
+}
+
+.pin-key-muted {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--colorNeutralForeground3);
+}
+
+.pin-actions {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 10px;
+    width: 100%;
+}
+
+.pin-action {
+    min-height: 56px;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.pin-cancel {
+    border: 1px solid var(--colorNeutralStroke1);
+    background: transparent;
+    color: inherit;
+}
+
+.pin-go {
+    border: none;
+    background: var(--colorBrandBackground);
+    color: #fff;
+}
+
+.pin-go:disabled {
+    opacity: 0.45;
+    cursor: default;
+}

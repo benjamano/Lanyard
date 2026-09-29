@@ -1,6 +1,11 @@
+using Lanyard.Application.Services.Demo;
+using Lanyard.Application.Services.Tenancy;
+using Lanyard.Infrastructure.Enum;
+using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
@@ -33,6 +38,11 @@ public class SecurityService : ISecurityService
     private readonly ICompanyLocationService _companyLocationService;
     private readonly IOptions<EmailOptions> _emailOptions;
     private readonly IOnboardingService _onboardingService;
+    private readonly ITenantContext? _tenant;
+    private readonly IDemoGuard? _demoGuard;
+    private readonly ITwoFactorPolicyService? _twoFactorPolicy;
+
+    private async Task<bool> IsDemoSessionAsync() => _demoGuard is not null && await _demoGuard.IsDemoSessionAsync();
 
     public SecurityService(
         AuthenticationStateProvider authStateProvider,
@@ -46,8 +56,14 @@ public class SecurityService : ISecurityService
         IEmailService emailService,
         ICompanyLocationService companyLocationService,
         IOptions<EmailOptions> emailOptions,
-        IOnboardingService onboardingService)
+        IOnboardingService onboardingService,
+        ITenantContext? tenant = null,
+        IDemoGuard? demoGuard = null,
+        ITwoFactorPolicyService? twoFactorPolicy = null)
     {
+        _tenant = tenant;
+        _demoGuard = demoGuard;
+        _twoFactorPolicy = twoFactorPolicy;
         _authStateProvider = authStateProvider;
         _currentUserAccessor = currentUserAccessor;
         _factory = factory;
@@ -85,6 +101,85 @@ public class SecurityService : ISecurityService
     private async Task<bool> IsCurrentUserAdminOrManagerAsync() =>
         await IsCurrentUserInRoleAsync("Admin") || await IsCurrentUserInRoleAsync("Manager");
 
+    // Users aren't company-owned rows (Identity and login need them all), so a user belongs to a
+    // company through their location memberships and these checks keep one company's managers
+    // away from another company's staff. Null means the caller may reach every user: system
+    // callers, platform admins, and tests built without a tenant.
+    private int? ManageableCompanyId => _tenant?.ManageableCompanyId;
+
+    private async Task<bool> IsUserInManageableCompanyAsync(ApplicationDbContext ctx, string userId)
+    {
+        int? companyId = ManageableCompanyId;
+
+        return companyId is null || await ctx.UserLocationMemberships
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(m => m.UserId == userId && m.Location!.CompanyId == companyId);
+    }
+
+    private async Task<bool> IsUserInManageableCompanyAsync(string userId)
+    {
+        if (ManageableCompanyId is null)
+        {
+            return true;
+        }
+
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await IsUserInManageableCompanyAsync(ctx, userId);
+    }
+
+    private IQueryable<UserProfile> UsersInManageableCompany(ApplicationDbContext ctx)
+    {
+        int? companyId = ManageableCompanyId;
+
+        return companyId is null
+            ? ctx.Users
+            : ctx.Users.Where(u => ctx.UserLocationMemberships.Any(m => m.UserId == u.Id && m.Location!.CompanyId == companyId));
+    }
+
+    // Acting on someone else's account: must be an Admin/Manager of the same company, and only an
+    // Admin may act on an Admin.
+    private async Task<string?> GetManageUserErrorAsync(UserProfile target)
+    {
+        if (!await IsCurrentUserAdminOrManagerAsync())
+        {
+            return "You must be an administrator or manager to perform this action!";
+        }
+
+        if (!await IsUserInManageableCompanyAsync(target.Id))
+        {
+            return "User not found!";
+        }
+
+        if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(target, "Admin"))
+        {
+            return "Only an administrator can perform this action on an administrator account.";
+        }
+
+        return null;
+    }
+
+    // This service is scoped (one per circuit / request). The layout, nav menu, greeting card
+    // and several pages each ask for the current user's profile during one page load, so the
+    // row is remembered briefly per instance instead of being fetched again for each of them.
+    // UpdateUserProfileAsync, password changes and 2FA changes clear it; the TTL covers changes
+    // made from another session.
+    private static readonly TimeSpan CurrentProfileCacheTtl = TimeSpan.FromMinutes(1);
+
+    private static readonly string[] UserManagerOwnedProperties =
+    [
+        nameof(UserProfile.PasswordHash),
+        nameof(UserProfile.SecurityStamp),
+        nameof(UserProfile.ConcurrencyStamp),
+        nameof(UserProfile.TwoFactorEnabled),
+        nameof(UserProfile.LockoutEnd),
+        nameof(UserProfile.LockoutEnabled),
+        nameof(UserProfile.AccessFailedCount),
+    ];
+    private UserProfile? _cachedCurrentProfile;
+    private string? _cachedCurrentProfileUserId;
+    private DateTime _cachedCurrentProfileAtUtc;
+
     public async Task<Result<UserProfile>> GetCurrentUserProfileAsync()
     {
         try
@@ -96,13 +191,28 @@ public class SecurityService : ISecurityService
                 return Result<UserProfile>.Fail("User ID is not available");
             }
 
-            using ApplicationDbContext ctx = _factory.CreateDbContext();
-            UserProfile? user = await ctx.Users.FindAsync(getResult.Data);
+            if (_cachedCurrentProfile is not null
+                && _cachedCurrentProfileUserId == getResult.Data
+                && DateTime.UtcNow - _cachedCurrentProfileAtUtc < CurrentProfileCacheTtl)
+            {
+                return Result<UserProfile>.Ok(_cachedCurrentProfile);
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            UserProfile? user = await ctx.Users
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == getResult.Data);
 
             if (user is null)
             {
                 return Result<UserProfile>.Fail("User not found");
             }
+
+            _cachedCurrentProfile = user;
+            _cachedCurrentProfileUserId = user.Id;
+            _cachedCurrentProfileAtUtc = DateTime.UtcNow;
 
             return Result<UserProfile>.Ok(user);
         }
@@ -121,7 +231,8 @@ public class SecurityService : ISecurityService
             UserProfile? user = await ctx.Users.AsNoTracking().TagWithCallSite()
                 .FirstOrDefaultAsync(x => x.Id == userId);
 
-            if (user is null)
+            if (user is null
+                || (userId != (await GetCurrentUserIdAsync()).Data && !await IsUserInManageableCompanyAsync(ctx, userId)))
             {
                 return Result<UserProfile>.Fail("User not found.");
             }
@@ -155,8 +266,8 @@ public class SecurityService : ISecurityService
 
     public async Task<IEnumerable<UserProfile>> GetAllUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
-        return await ctx.Users.ToListAsync();
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await UsersInManageableCompany(ctx).AsNoTracking().TagWithCallSite().ToListAsync();
     }
 
     public async Task UpdateUserProfileAsync(UserProfile updatedUserProfile)
@@ -166,16 +277,53 @@ public class SecurityService : ISecurityService
         UserProfile? userProfile = await ctx.Users.FirstOrDefaultAsync(x => x.Id == updatedUserProfile.Id);
         if (userProfile is null) return;
 
-        ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
+        // The demo's shared login accounts keep their seeded details for every visitor.
+        if (DemoAccounts.LoginUserIds.Contains(userProfile.Id))
+        {
+            _logger.LogInformation("Not updating demo login account {UserId}", userProfile.Id);
+            return;
+        }
+
+        if (userProfile.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(userProfile) is string error)
+        {
+            _logger.LogWarning("Refused to update profile {UserId}: {Error}", userProfile.Id, error);
+            return;
+        }
+
+        EntityEntry<UserProfile> entry = ctx.Entry(userProfile);
+        entry.CurrentValues.SetValues(updatedUserProfile);
+
+        // Callers pass back a profile they loaded earlier (the cached current profile, or the one
+        // UserEditor loaded when the page opened). Password and 2FA changes go through UserManager
+        // in the meantime, so copying these columns from that snapshot would restore an old
+        // password hash or switch 2FA back off. Only UserManager writes them.
+        foreach (string property in UserManagerOwnedProperties)
+        {
+            entry.Property(property).CurrentValue = entry.Property(property).OriginalValue;
+            entry.Property(property).IsModified = false;
+        }
+
         await ctx.SaveChangesAsync();
+
+        _cachedCurrentProfile = null;
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersAsync()
     {
-        using ApplicationDbContext ctx = _factory.CreateDbContext();
-        return await ctx.Users
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await UsersInManageableCompany(ctx)
+            .AsNoTracking()
+            .TagWithCallSite()
             .Where(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId)
             .ToListAsync();
+    }
+
+    private async Task<bool> AnyActiveUsersAsync()
+    {
+        await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+        return await ctx.Users
+            .TagWithCallSite()
+            .AnyAsync(u => u.Id != ApplicationDbContext.SystemDeletedUserPlaceholderId);
     }
 
     public async Task<IEnumerable<UserProfile>> GetActiveUsersInLocationAsync(int locationId)
@@ -194,7 +342,8 @@ public class SecurityService : ISecurityService
     {
         try
         {
-            if ((await GetActiveUsersAsync()).Any())
+            // An existence check, not a load of every user row (password hashes included).
+            if (await AnyActiveUsersAsync())
             {
                 // Once at least one account exists, only an Admin or Manager may create further
                 // accounts - being merely logged in is not enough (any Staff-level account could
@@ -218,6 +367,19 @@ public class SecurityService : ISecurityService
             if (locationIds is null || locationIds.Count == 0)
             {
                 return Result<UserCreationResult>.Fail("At least one location is required.");
+            }
+
+            // Checked before the account exists: the memberships below would each be refused for
+            // another company's location, leaving an account nobody in this company can see.
+            if (ManageableCompanyId is not null)
+            {
+                Result<List<Location>> manageableLocations = await _companyLocationService.GetLocationsAsync();
+
+                if (!manageableLocations.IsSuccess
+                    || !locationIds.All(id => manageableLocations.Data!.Any(l => l.Id == id)))
+                {
+                    return Result<UserCreationResult>.Fail("You do not have access to one or more of the selected locations.");
+                }
             }
 
             string initial = user.FirstName.ToLowerInvariant()[..1];
@@ -266,9 +428,27 @@ public class SecurityService : ISecurityService
                     // A course only auto-assigns if it belongs to one of the new user's locations,
                     // or is shared and belongs to the same company as one of those locations -
                     // mirrors CourseAssignmentService.IsCourseInScope's non-admin rule.
-                    IEnumerable<Course> eligibleCourses = autoAssignCourses.Where(x =>
-                        (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
-                        (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)));
+                    // Companies with Training switched off don't get courses auto-assigned either,
+                    // since their staff can't open My Training to take them.
+                    HashSet<int> trainingOffCompanyIds = [];
+
+                    if (autoAssignCourses.Count > 0)
+                    {
+                        await using ApplicationDbContext featureCtx = await _factory.CreateDbContextAsync();
+
+                        trainingOffCompanyIds = [.. await featureCtx.CompanyFeatureSettings
+                            .AsNoTracking()
+                            .TagWithCallSite()
+                            .Where(x => x.Feature == CompanyFeature.Training && !x.IsEnabled)
+                            .Select(x => x.CompanyId)
+                            .ToListAsync()];
+                    }
+
+                    IEnumerable<Course> eligibleCourses = autoAssignCourses
+                        .Where(x =>
+                            (x.LocationId is not null && locationIds.Contains(x.LocationId.Value)) ||
+                            (x.IsShared && x.Location is not null && userCompanyIds.Contains(x.Location.CompanyId)))
+                        .Where(x => x.Location is null || !trainingOffCompanyIds.Contains(x.Location.CompanyId));
 
                     foreach (Course course in eligibleCourses)
                     {
@@ -326,6 +506,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> SendSetPasswordLinkAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -339,9 +525,9 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
             user.InvitedDate = DateTime.UtcNow;
@@ -362,6 +548,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> SetPasswordFromTokenAsync(string userId, string token, string newPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await _userManager.FindByIdAsync(userId);
@@ -456,8 +648,29 @@ public class SecurityService : ISecurityService
         return await _emailService.SendSetPasswordEmailAsync(user, setPasswordUrl, logoUrl, accentColorHex, locationName);
     }
 
+    private async Task RestoreShiftsAsync(string userId, ScheduleRetention.Snapshot snapshot)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+            await ScheduleRetention.RestoreAsync(ctx, snapshot);
+            await ctx.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // Nothing more can be done automatically; make it loud so it can be put right by hand.
+            _logger.LogError(ex, "Deleting user {UserId} failed and their {RowCount} rota/timesheet rows could not be restored", userId, snapshot.Count);
+        }
+    }
+
     public async Task<Result<bool>> DeleteUserAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -472,15 +685,40 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
-            IdentityResult result = await _userManager.DeleteAsync(user);
+            // Shift and timesheet history outlive the account (docs/DATA_RETENTION.md), and both
+            // UserId FKs are Restrict so the delete below would fail rather than cascade them away. Re-point it
+            // to the placeholder account first and cancel anything still in the future. Identity
+            // deletes the user on its own context, so this can't share a transaction with it -
+            // instead a snapshot is kept and put back if the delete doesn't go through.
+            ScheduleRetention.Snapshot shiftSnapshot;
+
+            await using (ApplicationDbContext shiftCtx = await _factory.CreateDbContextAsync())
+            {
+                shiftSnapshot = await ScheduleRetention.DetachUserAsync(shiftCtx, userId, DateTime.UtcNow);
+                await shiftCtx.SaveChangesAsync();
+            }
+
+            IdentityResult result;
+
+            try
+            {
+                result = await _userManager.DeleteAsync(user);
+            }
+            catch
+            {
+                await RestoreShiftsAsync(userId, shiftSnapshot);
+                throw;
+            }
 
             if (!result.Succeeded)
             {
+                await RestoreShiftsAsync(userId, shiftSnapshot);
+
                 string errors = string.Join(", ", result.Errors.Select(e => e.Description));
                 return Result<bool>.Fail($"Failed to delete user: {errors}");
             }
@@ -512,6 +750,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> UnlockUserAsync(string userId)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (DemoAccounts.LoginUserIds.Contains(userId))
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsCurrentUserAdminOrManagerAsync())
@@ -526,9 +770,9 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
-            if (!await IsCurrentUserInRoleAsync("Admin") && await _userManager.IsInRoleAsync(user, "Admin"))
+            if (await GetManageUserErrorAsync(user) is string manageError)
             {
-                return Result<bool>.Fail("Only an administrator can perform this action on an administrator account.");
+                return Result<bool>.Fail(manageError);
             }
 
             // Clearing LockoutEnd alone leaves AccessFailedCount non-zero, so the next single
@@ -561,6 +805,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> ChangePasswordAsync(string userId, string newPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             if (!await IsUserLoggedIn())
@@ -575,8 +825,15 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found!");
             }
 
+            // Anyone may change their own password; someone else's only as their manager.
+            if (user.Id != (await GetCurrentUserIdAsync()).Data && await GetManageUserErrorAsync(user) is string manageError)
+            {
+                return Result<bool>.Fail(manageError);
+            }
+
             string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+            _cachedCurrentProfile = null;
 
             if (!result.Succeeded)
             {
@@ -611,7 +868,8 @@ public class SecurityService : ISecurityService
             {
                 IsEnabled = isEnabled,
                 HasAuthenticator = isEnabled && hasAuthenticator,
-                RecoveryCodesRemaining = recoveryCodesRemaining
+                RecoveryCodesRemaining = recoveryCodesRemaining,
+                IsRequiredByCompany = await IsTwoFactorRequiredForCurrentUserAsync()
             });
         }
         catch (Exception ex)
@@ -622,6 +880,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<AuthenticatorEnrollmentDto>> BeginAuthenticatorEnrollmentAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<AuthenticatorEnrollmentDto>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -657,6 +921,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> ConfirmAuthenticatorEnrollmentAsync(string code)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -688,6 +958,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> EnableEmailTwoFactorAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -725,6 +1001,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<bool>> DisableTwoFactorAsync(string currentPassword)
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<bool>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -732,6 +1014,11 @@ public class SecurityService : ISecurityService
             if (user is null)
             {
                 return Result<bool>.Fail("User not found");
+            }
+
+            if (await IsTwoFactorRequiredForCurrentUserAsync())
+            {
+                return Result<bool>.Fail("Your company requires two-factor authentication, so it can't be turned off.");
             }
 
             if (!await _userManager.CheckPasswordAsync(user, currentPassword))
@@ -753,6 +1040,12 @@ public class SecurityService : ISecurityService
 
     public async Task<Result<List<string>>> RegenerateRecoveryCodesAsync()
     {
+        // Everyone shares the demo accounts, so nothing that could lock the next visitor out.
+        if (await IsDemoSessionAsync())
+        {
+            return Result<List<string>>.Fail(DemoGuard.NotInDemoMessage);
+        }
+
         try
         {
             UserProfile? user = await GetCurrentUserForTwoFactorAsync();
@@ -777,6 +1070,17 @@ public class SecurityService : ISecurityService
         }
     }
 
+    private async Task<bool> IsTwoFactorRequiredForCurrentUserAsync()
+    {
+        if (_twoFactorPolicy is null)
+        {
+            return false;
+        }
+
+        Result<bool> required = await _twoFactorPolicy.IsRequiredForCurrentUserAsync();
+        return required.IsSuccess && required.Data;
+    }
+
     // UserManager.SetTwoFactorEnabledAsync/GenerateNewTwoFactorRecoveryCodesAsync/etc. attach the
     // passed-in entity to UserManager's own tracked DbContext. GetCurrentUserProfileAsync resolves
     // the user through a separate context (via IDbContextFactory), so passing that entity into the
@@ -784,6 +1088,10 @@ public class SecurityService : ISecurityService
     // instead so the entity belongs to the same context UserManager will mutate it through.
     private async Task<UserProfile?> GetCurrentUserForTwoFactorAsync()
     {
+        // Every 2FA change comes through here; drop the cached profile so nothing reuses the
+        // pre-change TwoFactorEnabled/SecurityStamp.
+        _cachedCurrentProfile = null;
+
         Result<string> idResult = await GetCurrentUserIdAsync();
 
         if (!idResult.IsSuccess || idResult.Data is null)
@@ -806,15 +1114,8 @@ public class SecurityService : ISecurityService
             unformattedKey);
     }
 
-    private static string BuildQrCodeDataUri(string authenticatorUri)
-    {
-        using QRCodeGenerator qrGenerator = new();
-        using QRCodeData qrData = qrGenerator.CreateQrCode(authenticatorUri, QRCodeGenerator.ECCLevel.Q);
-        PngByteQRCode qrCode = new(qrData);
-        byte[] bytes = qrCode.GetGraphic(10);
-
-        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
-    }
+    private static string BuildQrCodeDataUri(string authenticatorUri) =>
+        Lanyard.Application.Services.Common.QrCodeDataUri.Create(authenticatorUri);
 
     private static string FormatKeyForDisplay(string key)
     {

@@ -1,0 +1,24 @@
+.rota-profile {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+    padding-top: 12px;
+}
+
+.rota-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 640px;
+    min-width: 0;
+}
+
+.rota-profile-positions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 6px 16px;
+    width: 100%;
+}

@@ -1,0 +1,258 @@
+@inject ITimeOffService _timeOffService
+
+@* Used two ways: a staff member asking for their own time off (Staff null), and a manager
+   recording it for someone (Staff set) - which is saved as approved and may be in the past. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarPerson())" />
+            <FluentText As="@TextTag.H3">@(IsManagerMode ? "Record time off" : "Request time off")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="request-dialog">
+            @if (IsManagerMode)
+            {
+                <FluentText Class="request-hint">Saved as approved straight away, for example when someone calls in sick.</FluentText>
+
+                <FluentSelect TOption="EntryStaffOption" TValue="string" Items="@Staff" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
+                              @bind-Value="userId" @bind-Value:after="RefreshAsync" Label="Staff member" Width="100%" />
+            }
+
+            <FluentSelect TOption="TimeOffType" TValue="string" Items="@Types" OptionText="@(x => x.Name)" OptionValue="@(x => x.Id.ToString())"
+                          @bind-Value="typeId" @bind-Value:after="RefreshAsync" Label="Type" Width="100%" />
+
+            @if (SelectedType?.Description is string description)
+            {
+                <FluentText Class="request-hint">@description</FluentText>
+            }
+
+            <div class="request-dates">
+                <FluentDatePicker TValue="DateTime?" @bind-Value="startDate" @bind-Value:after="OnStartChangedAsync" Label="First day" Culture="@RotaFormat.Uk" Style="width: 100%;" />
+                <FluentDatePicker TValue="DateTime?" @bind-Value="endDate" @bind-Value:after="OnDatesChangedAsync" Label="Last day" Culture="@RotaFormat.Uk" Style="width: 100%;" />
+            </div>
+
+            <div class="request-hours">
+                <FluentNumberInput TValue="double?" @bind-Value="hours" @bind-Value:after="OnHoursChangedAsync" Label="Hours" Width="140px" />
+                <FluentText Class="request-hint">@HoursHint</FluentText>
+            </div>
+
+            <FluentTextArea @bind-Value="notes" Label="Notes (optional)" Rows="2" Maxlength="500" Style="width: 100%;"
+                            Placeholder="@(IsManagerMode ? "e.g. Called in sick" : "Anything your manager should know")" />
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+            else if (preview is not null)
+            {
+                @if (preview.Balance is TimeOffBalance balance)
+                {
+                    <div class="request-balance">
+                        <span class="request-balance-label">@balance.Type.Name, @preview.Year.Label</span>
+                        <span>@BalanceAfterText(balance)</span>
+                    </div>
+                }
+
+                @foreach (string warning in preview.Warnings)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@warning</FluentMessageBar>
+                }
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(isBusy || errorMessage is not null)" OnClick="@SaveAsync">
+            @(isBusy ? "Saving..." : IsManagerMode ? "Record" : "Send request")
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<TimeOffType> Types { get; set; }
+
+    [Parameter, EditorRequired]
+    public required decimal HoursPerDay { get; set; }
+
+    // Staff mode: the signed-in person. Manager mode: ignored in favour of the staff picker.
+    [Parameter]
+    public string? CurrentUserId { get; set; }
+
+    // Set for manager mode.
+    [Parameter]
+    public List<EntryStaffOption>? Staff { get; set; }
+
+    [Parameter]
+    public string? ManagerUserId { get; set; }
+
+    [Parameter]
+    public DateOnly? DefaultDate { get; set; }
+
+    [Parameter]
+    public string? DefaultUserId { get; set; }
+
+    private bool IsManagerMode => Staff is not null;
+
+    private string? userId;
+    private string? typeId;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private double? hours;
+    private bool hoursEdited;
+    private string? notes;
+    private TimeOffPreview? preview;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private TimeOffType? SelectedType => Types.FirstOrDefault(x => x.Id.ToString() == typeId);
+
+    private int DayCount => startDate is DateTime s && endDate is DateTime e && e >= s ? (e.Date - s.Date).Days + 1 : 0;
+
+    private string HoursHint => DayCount switch
+    {
+        0 => string.Empty,
+        1 => $"1 day. A full day is {RotaFormat.Hours(HoursPerDay)}.",
+        _ => $"{DayCount} days. A full day is {RotaFormat.Hours(HoursPerDay)}."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        userId = IsManagerMode ? DefaultUserId ?? Staff!.FirstOrDefault()?.UserId : CurrentUserId;
+        typeId = Types.FirstOrDefault()?.Id.ToString();
+
+        DateOnly first = DefaultDate ?? RotaTime.Today(DateTime.UtcNow).AddDays(IsManagerMode ? 0 : 1);
+        startDate = first.ToDateTime(TimeOnly.MinValue);
+        endDate = startDate;
+        hours = (double)HoursPerDay;
+
+        await RefreshAsync();
+    }
+
+    private async Task OnStartChangedAsync()
+    {
+        // Moving the first day past the last day drags the last day with it - the common case is
+        // picking a single day, and it saves a second tap.
+        if (startDate is DateTime s && (endDate is null || endDate < s))
+        {
+            endDate = s;
+        }
+
+        await OnDatesChangedAsync();
+    }
+
+    private async Task OnDatesChangedAsync()
+    {
+        if (!hoursEdited && DayCount > 0)
+        {
+            hours = (double)(DayCount * HoursPerDay);
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task OnHoursChangedAsync()
+    {
+        hoursEdited = true;
+        await RefreshAsync();
+    }
+
+    private TimeOffRequestDraft? BuildDraft()
+    {
+        if (!Guid.TryParse(typeId, out Guid type) || startDate is null || endDate is null || hours is null)
+        {
+            return null;
+        }
+
+        return new TimeOffRequestDraft(type, DateOnly.FromDateTime(startDate.Value), DateOnly.FromDateTime(endDate.Value), (decimal)hours.Value, notes);
+    }
+
+    private async Task RefreshAsync()
+    {
+        TimeOffRequestDraft? draft = BuildDraft();
+
+        if (draft is null || string.IsNullOrEmpty(userId))
+        {
+            preview = null;
+            errorMessage = "Choose a type, the dates and the hours.";
+            return;
+        }
+
+        Result<TimeOffPreview> result = await _timeOffService.PreviewAsync(userId, CompanyId, draft, forManager: IsManagerMode);
+
+        preview = result.IsSuccess ? result.Data : null;
+        errorMessage = result.IsSuccess ? null : result.Error;
+    }
+
+    private string BalanceAfterText(TimeOffBalance balance)
+    {
+        if (balance.Allowance.IsUnlimited)
+        {
+            return "Unlimited";
+        }
+
+        if (!balance.Allowance.IsConfigured)
+        {
+            return "No allowance set";
+        }
+
+        decimal after = (balance.RemainingAfterPendingHours ?? 0) - (decimal)(hours ?? 0);
+
+        return $"{TimeOffFormat.Days(Math.Max(after, 0), HoursPerDay)} left after this"
+            + (after < 0 ? $" ({TimeOffFormat.Days(-after, HoursPerDay)} over)" : string.Empty);
+    }
+
+    private async Task SaveAsync()
+    {
+        TimeOffRequestDraft? draft = BuildDraft();
+
+        if (draft is null || string.IsNullOrEmpty(userId))
+        {
+            errorMessage = "Choose a type, the dates and the hours.";
+            return;
+        }
+
+        isBusy = true;
+
+        Result<TimeOffSubmitResult> result;
+
+        if (IsManagerMode)
+        {
+            Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+            if (!scope.IsSuccess || scope.Data is null || string.IsNullOrEmpty(ManagerUserId))
+            {
+                isBusy = false;
+                errorMessage = "Couldn't confirm who you are. Refresh the page and try again.";
+                return;
+            }
+
+            result = await _timeOffService.RecordForUserAsync(scope.Data, userId, LocationId, draft, ManagerUserId);
+        }
+        else
+        {
+            result = await _timeOffService.SubmitAsync(userId, LocationId, draft);
+        }
+
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(IsManagerMode ? "Time off recorded." : "Request sent to your manager.");
+        await Dialog.CloseAsync(true);
+    }
+}

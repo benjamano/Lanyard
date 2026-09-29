@@ -6,6 +6,10 @@
 <PageTitle>Companies & Locations</PageTitle>
 
 <div class="p-2">
+    <AuthorizeView Roles="@LanyardRoles.PlatformAdmin">
+        <DemoResetCard />
+    </AuthorizeView>
+
     <CompanyLocationManager @ref="_companyLocationManager" OnLocationsChanged="HandleLocationsChanged" />
 
     <UserLocationsManager @ref="_userLocationsManager" />

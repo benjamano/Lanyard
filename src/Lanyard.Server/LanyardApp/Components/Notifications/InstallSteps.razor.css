@@ -1,0 +1,50 @@
+.install-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    counter-reset: step;
+}
+
+.install-steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    counter-increment: step;
+    line-height: 1.35;
+}
+
+.install-steps li::before {
+    content: counter(step);
+    flex: 0 0 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.install-step-icon {
+    flex: 0 0 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorBrandForeground1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.install-step-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}

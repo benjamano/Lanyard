@@ -1,5 +1,6 @@
 @page "/video-publisher/{ClientId:guid}"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 
 @using Lanyard.Application.Services.VideoStreaming
 @using Microsoft.Extensions.Options

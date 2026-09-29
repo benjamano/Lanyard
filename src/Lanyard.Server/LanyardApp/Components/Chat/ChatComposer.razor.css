@@ -1,0 +1,132 @@
+.composer {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+    background: var(--colorNeutralBackground1);
+}
+
+.composer-context {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+    min-width: 0;
+}
+
+.composer-context-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-context-cancel {
+    display: flex;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.composer-disabled {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground3);
+    color: var(--colorNeutralForeground2);
+    font-size: 0.9rem;
+}
+
+.composer-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.composer-row.is-hidden {
+    display: none;
+}
+
+.composer-box {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: 10px;
+    background: var(--colorNeutralBackground1);
+    overflow: hidden;
+}
+
+.composer-box:focus-within {
+    border-color: var(--colorBrandStroke1);
+}
+
+/* Quill's snow theme draws its own borders and light colours; these bring it in line with the
+   app (and with dark mode). Quill's elements aren't Blazor-rendered, so ::deep reaches them. */
+.composer-box ::deep .ql-toolbar.ql-snow {
+    border: none;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    padding: 4px 6px;
+}
+
+.composer-box ::deep .ql-container.ql-snow {
+    border: none;
+    font: inherit;
+    font-size: 0.95rem;
+}
+
+.composer-box ::deep .ql-editor {
+    min-height: 40px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    color: var(--colorNeutralForeground1);
+}
+
+.composer-box ::deep .ql-editor.ql-blank::before {
+    color: var(--colorNeutralForeground4);
+    font-style: normal;
+    left: 10px;
+}
+
+.composer-box ::deep .ql-snow .ql-stroke {
+    stroke: var(--colorNeutralForeground2);
+}
+
+.composer-box ::deep .ql-snow .ql-fill {
+    fill: var(--colorNeutralForeground2);
+}
+
+.composer-box ::deep .ql-snow button:hover .ql-stroke,
+.composer-box ::deep .ql-snow button.ql-active .ql-stroke {
+    stroke: var(--colorBrandForeground1);
+}
+
+.composer-box ::deep .ql-snow .ql-tooltip {
+    z-index: 10;
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    border-color: var(--colorNeutralStroke1);
+    left: 8px !important;
+}
+
+.composer-send {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: var(--colorBrandBackground);
+    color: var(--colorNeutralForegroundOnBrand);
+    cursor: pointer;
+}
+
+.composer-send:hover {
+    background: var(--colorBrandBackgroundHover);
+}

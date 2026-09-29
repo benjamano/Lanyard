@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -6,9 +7,22 @@ using System.Text.RegularExpressions;
 
 namespace Lanyard.Application.Services.Locations;
 
-public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory) : ICompanyLocationService
+// Companies and locations aren't tenant-filtered rows (login has to list every company), so the
+// company boundary is enforced here instead: a signed-in user may only see and manage their own
+// company's locations and memberships, and only platform admins can create, deactivate or reach
+// other companies. A null tenant (tests, system callers) is unrestricted.
+public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> factory, ITenantContext? tenant = null) : ICompanyLocationService
 {
+    private const string NoAccessToCompany = "You do not have access to that company.";
+
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ITenantContext? _tenant = tenant;
+
+    private int? ManageableCompanyId => _tenant?.ManageableCompanyId;
+
+    private bool CanManageCompany(int companyId) => _tenant is null || _tenant.CanManageCompany(companyId);
+
+    private bool CanManageAllCompanies => ManageableCompanyId is null;
 
     public async Task<Result<List<Company>>> GetCompaniesAsync()
     {
@@ -16,10 +30,17 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<Company> companies = await ctx.Companies
+            IQueryable<Company> query = ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive)
+                .Where(x => x.IsActive);
+
+            if (ManageableCompanyId is int onlyCompanyId)
+            {
+                query = query.Where(x => x.Id == onlyCompanyId);
+            }
+
+            List<Company> companies = await query
                 .OrderBy(x => x.Name)
                 .ToListAsync();
 
@@ -29,6 +50,18 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         {
             return Result<List<Company>>.Fail($"Failed to retrieve companies: {ex.Message}");
         }
+    }
+
+    public async Task<Result<List<Company>>> GetSessionCompaniesAsync()
+    {
+        Result<List<Company>> companies = await GetCompaniesAsync();
+
+        if (!companies.IsSuccess || _tenant is null || _tenant.IsSystem)
+        {
+            return companies;
+        }
+
+        return Result<List<Company>>.Ok(companies.Data!.Where(x => x.Id == _tenant.CompanyId).ToList());
     }
 
     public async Task<Result<Company>> SaveCompanyAsync(Company company)
@@ -45,6 +78,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             if (normalizedColor is not null && !Regex.IsMatch(normalizedColor, "^#[0-9A-Fa-f]{6}$"))
             {
                 return Result<Company>.Fail("Theme color must be a hex value like #C8102E.");
+            }
+
+            if (company.Id == 0 ? !CanManageAllCompanies : !CanManageCompany(company.Id))
+            {
+                return Result<Company>.Fail(NoAccessToCompany);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -94,6 +132,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
     {
         try
         {
+            if (!CanManageAllCompanies)
+            {
+                return Result<bool>.Fail(NoAccessToCompany);
+            }
+
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             Company? company = await ctx.Companies.FirstOrDefaultAsync(x => x.Id == companyId);
@@ -133,6 +176,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 query = query.Where(x => x.CompanyId == companyId.Value);
             }
 
+            if (ManageableCompanyId is int onlyCompanyId)
+            {
+                query = query.Where(x => x.CompanyId == onlyCompanyId);
+            }
+
             List<Location> locations = await query.OrderBy(x => x.Name).ToListAsync();
 
             return Result<List<Location>>.Ok(locations);
@@ -150,6 +198,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             if (string.IsNullOrWhiteSpace(location.Name))
             {
                 return Result<Location>.Fail("Location name is required.");
+            }
+
+            if (!CanManageCompany(location.CompanyId))
+            {
+                return Result<Location>.Fail(NoAccessToCompany);
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -170,6 +223,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             }
 
             Location? existing = location.Id == 0 ? null : await ctx.Locations.FirstOrDefaultAsync(x => x.Id == location.Id);
+
+            if (existing is not null && existing.CompanyId != location.CompanyId)
+            {
+                return Result<Location>.Fail("A location can't be moved to another company.");
+            }
 
             Location target;
 
@@ -215,6 +273,11 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<bool>.Fail("Location not found.");
             }
 
+            if (!CanManageCompany(location.CompanyId))
+            {
+                return Result<bool>.Fail(NoAccessToCompany);
+            }
+
             location.IsActive = false;
             location.UpdateDate = DateTime.UtcNow;
 
@@ -240,6 +303,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 .Include(x => x.Location!)
                     .ThenInclude(x => x.Company)
                 .Where(x => x.UserId == userId && x.Location!.IsActive)
+                .Where(x => ManageableCompanyId == null || x.Location!.CompanyId == ManageableCompanyId)
                 .Select(x => x.Location!)
                 .OrderBy(x => x.Name)
                 .ToListAsync();
@@ -262,6 +326,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => x.LocationId == locationId)
+                .Where(x => ManageableCompanyId == null || x.Location!.CompanyId == ManageableCompanyId)
                 .Select(x => x.User!)
                 .OrderBy(x => x.LastName)
                 .ToListAsync();
@@ -287,11 +352,27 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<bool>.Fail("User not found.");
             }
 
-            bool locationExists = await ctx.Locations.AnyAsync(x => x.Id == locationId);
+            int? locationCompanyId = await ctx.Locations
+                .Where(x => x.Id == locationId)
+                .Select(x => (int?)x.CompanyId)
+                .FirstOrDefaultAsync();
 
-            if (!locationExists)
+            if (locationCompanyId is null)
             {
                 return Result<bool>.Fail("Location not found.");
+            }
+
+            if (!CanManageCompany(locationCompanyId.Value))
+            {
+                return Result<bool>.Fail(NoAccessToCompany);
+            }
+
+            // Otherwise a company admin could pull another company's user (say, its admin) into
+            // one of their own locations and then manage that account.
+            if (ManageableCompanyId is int onlyCompanyId
+                && await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == userId && x.Location!.CompanyId != onlyCompanyId))
+            {
+                return Result<bool>.Fail("This user belongs to another company.");
             }
 
             bool alreadyMember = await ctx.UserLocationMemberships.AnyAsync(x => x.UserId == userId && x.LocationId == locationId);
@@ -325,11 +406,17 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             UserLocationMembership? membership = await ctx.UserLocationMemberships
+                .Include(x => x.Location)
                 .FirstOrDefaultAsync(x => x.UserId == userId && x.LocationId == locationId);
 
             if (membership is null)
             {
                 return Result<bool>.Fail("This user is not a member of that location.");
+            }
+
+            if (!CanManageCompany(membership.Location!.CompanyId))
+            {
+                return Result<bool>.Fail(NoAccessToCompany);
             }
 
             ctx.UserLocationMemberships.Remove(membership);
@@ -340,6 +427,28 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
         catch (Exception ex)
         {
             return Result<bool>.Fail($"Failed to remove user from location: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<List<int>>> GetCompanyIdsForUserAsync(string userId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            List<int> companyIds = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.UserId == userId && x.Location!.IsActive)
+                .Select(x => x.Location!.CompanyId)
+                .Distinct()
+                .ToListAsync();
+
+            return Result<List<int>>.Ok(companyIds);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<int>>.Fail($"Failed to retrieve companies for user: {ex.Message}");
         }
     }
 
@@ -378,7 +487,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -415,7 +524,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             Company company = companies[0];
 
             return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(
-                company.Id, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
+                company.Id, company.Name, company.ThemeColorHex, company.LogoFileId, company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -440,7 +549,7 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
                 return Result<CompanyBrandingInfo>.Fail("Location or company not found.");
             }
 
-            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
+            return Result<CompanyBrandingInfo>.Ok(new CompanyBrandingInfo(location.Company.Id, location.Company.Name, location.Company.ThemeColorHex, location.Company.LogoFileId, location.Company.BackgroundImageFileId));
         }
         catch (Exception ex)
         {
@@ -489,7 +598,9 @@ public class CompanyLocationService(IDbContextFactory<ApplicationDbContext> fact
             List<Company> companies = await ctx.Companies
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.IsActive && x.Locations.Any(l => l.IsActive))
+                // The demo company is reached from the homepage's one-click demo buttons, not by
+                // picking it and typing a password.
+                .Where(x => x.IsActive && !x.IsDemo && x.Locations.Any(l => l.IsActive))
                 .OrderBy(x => x.Name)
                 .ToListAsync();
 

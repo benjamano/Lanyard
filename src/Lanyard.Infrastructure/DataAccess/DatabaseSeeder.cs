@@ -18,10 +18,10 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedManagerRoleId, "Manager", "SEED-ROLE-MANAGER-CS"),
         (ApplicationDbContext.SeedStaffRoleId, "Staff", "SEED-ROLE-STAFF-CS"),
         (ApplicationDbContext.SeedCanControlMusicRoleId, "CanControlMusic", "SEED-ROLE-CAN-CONTROL-MUSIC-CS"),
-        (ApplicationDbContext.SeedCanClockInRoleId, "CanClockIn", "SEED-ROLE-CAN-CLOCK-IN-CS"),
         (ApplicationDbContext.SeedCanManageDmxSystemsRoleId, "CanManageDmxSystems", "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS"),
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
         (ApplicationDbContext.SeedCanPostAnnouncementsRoleId, "CanPostAnnouncements", "SEED-ROLE-CAN-POST-ANNOUNCEMENTS-CS"),
+        (ApplicationDbContext.SeedPlatformAdminRoleId, LanyardRoles.PlatformAdmin, "SEED-ROLE-PLATFORM-ADMIN-CS"),
     ];
 
     public static async Task SeedAsync(IServiceProvider services)
@@ -118,7 +118,10 @@ public static class DatabaseSeeder
         // Unconditional, like ResetIdentitySequencesAsync below - a role added to StandardRoles
         // after go-live must still backfill even if the fixed-ID seed admin account has since
         // been deleted (a normal thing to do once real admins exist).
+        bool platformAdminRoleIsNew = !await context.Roles.AnyAsync(r => r.Id == ApplicationDbContext.SeedPlatformAdminRoleId);
+
         await EnsureStandardRolesExistAsync(context);
+
 
         // Guarded rather than folded into the `!adminExists` branch above: once the admin exists,
         // this must still run and be idempotent, since a pre-existing admin (recreated after
@@ -130,11 +133,17 @@ public static class DatabaseSeeder
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedAdminRoleId },
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedManagerRoleId },
                 new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedStaffRoleId },
-                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId },
-                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanClockInRoleId }
+                new IdentityUserRole<string> { UserId = ApplicationDbContext.SeedAdminUserId, RoleId = ApplicationDbContext.SeedCanControlMusicRoleId }
             );
 
             await context.SaveChangesAsync();
+        }
+
+        // After the admin's own role assignment above, so a brand-new database's seed admin is
+        // already an Admin by the time this looks for them.
+        if (platformAdminRoleIsNew)
+        {
+            await GrantInitialPlatformAdminsAsync(context);
         }
 
         if (transaction is not null)
@@ -179,6 +188,35 @@ public static class DatabaseSeeder
 
             throw new InvalidOperationException($"Failed to seed GDPR placeholder user: {errors}");
         }
+    }
+
+    // Before tenancy every Admin could see every company, and the only people who were Admin were
+    // Play2Day's own. So the first time the PlatformAdmin role appears, carry that power over to
+    // the seed admin and to existing Admins with a Play2Day membership - nobody else, so an Admin
+    // created later for another company (or the demo company) stays a company admin.
+    private static async Task GrantInitialPlatformAdminsAsync(ApplicationDbContext context)
+    {
+        List<string> play2DayAdminIds = await context.UserRoles
+            .Where(ur => ur.RoleId == ApplicationDbContext.SeedAdminRoleId)
+            .Where(ur => ur.UserId == ApplicationDbContext.SeedAdminUserId
+                || context.UserLocationMemberships.Any(m => m.UserId == ur.UserId
+                    && m.Location!.CompanyId == ApplicationDbContext.SeedPlay2DayCompanyId))
+            .Select(ur => ur.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        if (play2DayAdminIds.Count == 0)
+        {
+            return;
+        }
+
+        await context.UserRoles.AddRangeAsync(play2DayAdminIds.Select(userId => new IdentityUserRole<string>
+        {
+            UserId = userId,
+            RoleId = ApplicationDbContext.SeedPlatformAdminRoleId,
+        }));
+
+        await context.SaveChangesAsync();
     }
 
     private static async Task EnsureStandardRolesExistAsync(ApplicationDbContext context)

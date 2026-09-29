@@ -1,5 +1,6 @@
 ﻿@page "/kiosk/{clientId}/{projectionProgramId}"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 
 @using Lanyard.Application.Services
 @using Lanyard.App.Components.Kiosk
@@ -124,7 +125,12 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
             return;
         }
 
-        Result<ProjectionProgram> getResult = await _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
+        // The program and the client's settings are independent reads; overlap them.
+        Task<Result<ProjectionProgram>> programTask = _projectionProgramService.GetProjectionProgramAsync(projectionProgramGuid);
+        Task<Result<IEnumerable<ClientProjectionSettings>>> settingsTask = _clientService.GetClientProjectionSettingsAsync(clientGuid);
+        await Task.WhenAll(programTask, settingsTask);
+
+        Result<ProjectionProgram> getResult = programTask.Result;
 
         if (!getResult.IsSuccess || getResult.Data is null)
         {
@@ -135,7 +141,7 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
         projectionProgram = getResult.Data;
 
-        Result<IEnumerable<ClientProjectionSettings>> settingsResult = await _clientService.GetClientProjectionSettingsAsync(clientGuid);
+        Result<IEnumerable<ClientProjectionSettings>> settingsResult = settingsTask.Result;
 
         if (settingsResult.IsSuccess && settingsResult.Data is not null)
         {
@@ -176,9 +182,10 @@ else if (projectionProgram is not null && clientProjectionSettings is not null)
 
     private void HandleCurrentStepChanged(ProjectionProgramStep? step)
     {
+        // No explicit StateHasChanged: an EventCallback invoked on a component already
+        // re-renders it once the handler returns, so calling it here rendered the whole
+        // kiosk page (and every widget under it) twice per step.
         CurrentStep = step;
-
-        StateHasChanged();
     }
 
     private void HandlePauseChanged(bool paused)

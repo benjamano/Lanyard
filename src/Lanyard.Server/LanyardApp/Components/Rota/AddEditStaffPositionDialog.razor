@@ -1,0 +1,142 @@
+@using Lanyard.Application.Services.Scheduling
+
+@inject IStaffPositionService _staffPositionService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Briefcase())" />
+            <FluentText As="@TextTag.H3">@(Position is null ? "New Position" : "Edit Position")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="position-dialog">
+            <EditForm EditContext="@_editContext" OnValidSubmit="HandleSaveAsync">
+                <DataAnnotationsValidator />
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+                    <FluentTextInput @bind-Value="model.Name" Label="Name" Required="true" Width="100%"
+                                     Message="@_editContext.GetValidationMessage(() => model.Name)"
+                                     MessageCondition="@(f => !string.IsNullOrEmpty(f.Message))" MessageState="MessageState.Error" />
+                    <FluentTextInput @bind-Value="model.Description" Label="Description" Width="100%" />
+
+                    <div class="colour-picker">
+                        <FluentText Weight="TextWeight.Semibold">Colour on the rota</FluentText>
+                        <div class="colour-options" role="radiogroup" aria-label="Position colour">
+                            @for (int i = 0; i < PositionColours.Count; i++)
+                            {
+                                int index = i;
+                                <button type="button" role="radio" aria-checked="@(model.ColorIndex == index ? "true" : "false")"
+                                        class="colour-option theme-colour-swatch @(model.ColorIndex == index ? "colour-option-selected" : "")"
+                                        style="@PositionColours.CssVariables(index)"
+                                        title="@($"Colour {index + 1}")"
+                                        @onclick="@(() => model.ColorIndex = index)"></button>
+                            }
+                        </div>
+                    </div>
+
+                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                        <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" Disabled="@isSaving">
+                            @(isSaving ? "Saving..." : (Position is null ? "Create" : "Save"))
+                        </FluentButton>
+                        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isSaving">
+                            Cancel
+                        </FluentButton>
+                    </FluentStack>
+                </FluentStack>
+            </EditForm>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    // Null = create. When editing, the existing row is copied into the form model so cancelling
+    // never mutates the list's instance.
+    [Parameter]
+    public StaffPosition? Position { get; set; }
+
+    [Parameter]
+    public int NextSortOrder { get; set; }
+
+    private FormModel model = new();
+    private EditContext _editContext = default!;
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        if (Position is not null)
+        {
+            model = new FormModel
+            {
+                Name = Position.Name,
+                Description = Position.Description,
+                ColorIndex = Position.ColorIndex
+            };
+        }
+        else
+        {
+            // Cycle through the palette so consecutive new positions don't all default to blue.
+            model.ColorIndex = NextSortOrder % PositionColours.Count;
+        }
+
+        _editContext = new EditContext(model);
+    }
+
+    private async Task HandleSaveAsync()
+    {
+        isSaving = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSaving = false;
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        StaffPosition toSave = new()
+        {
+            Id = Position?.Id ?? Guid.Empty,
+            CompanyId = CompanyId,
+            Name = model.Name,
+            Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
+            ColorIndex = model.ColorIndex,
+            SortOrder = Position?.SortOrder ?? NextSortOrder,
+            IsActive = Position?.IsActive ?? true
+        };
+
+        Result<StaffPosition> result = await _staffPositionService.SavePositionAsync(scopeResult.Data, toSave);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save position: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess(Position is null ? "Position created." : "Position saved.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private class FormModel
+    {
+        [Required(ErrorMessage = "Name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public int ColorIndex { get; set; }
+    }
+}

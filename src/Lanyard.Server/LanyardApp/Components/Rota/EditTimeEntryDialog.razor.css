@@ -1,0 +1,29 @@
+.entry-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.entry-dialog ::deep .entry-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.entry-times {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.entry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.entry-actions ::deep .entry-remove {
+    margin-right: auto;
+}

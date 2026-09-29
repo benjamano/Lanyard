@@ -1,0 +1,104 @@
+.whats-new {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 32px 20px 56px;
+    box-sizing: border-box;
+    color: var(--colorNeutralForeground1);
+}
+
+.whats-new-back {
+    display: inline-block;
+    margin-bottom: 16px;
+    color: var(--colorBrandForeground1);
+    text-decoration: none;
+}
+
+.whats-new-back:hover,
+.whats-new-back:focus-visible {
+    text-decoration: underline;
+}
+
+.whats-new-title {
+    margin: 0 0 8px;
+    font-size: 2rem;
+}
+
+.whats-new-lede,
+.whats-new-empty {
+    margin: 0 0 28px;
+    color: var(--colorNeutralForeground2);
+}
+
+.whats-new-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.whats-new-release {
+    padding: 20px;
+    border-radius: 10px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.whats-new-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin-bottom: 8px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.whats-new-version {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--colorNeutralForeground1);
+}
+
+.whats-new-summary {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.whats-new-more {
+    margin-top: 12px;
+}
+
+.whats-new-more summary {
+    cursor: pointer;
+    width: fit-content;
+    font-weight: 600;
+    color: var(--colorNeutralForeground2);
+}
+
+.whats-new-more summary:hover {
+    color: var(--colorNeutralForeground1);
+}
+
+.whats-new-details {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    color: var(--colorNeutralForeground2);
+    line-height: 1.6;
+}
+
+.whats-new-details li + li {
+    margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+    .whats-new {
+        padding: 16px 4px 40px;
+    }
+
+    .whats-new-release {
+        padding: 16px;
+    }
+}

@@ -1,4 +1,4 @@
-using Lanyard.Client.SignalR;
+using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +30,10 @@ public class DmxController
         _logger.LogInformation("DMX device opened successfully on USB index {DmxUsbDeviceIndex}", dmxUsbDeviceIndex);
     }
 
+    // Values only ever arrive here from the server (there is no local fader input on the
+    // kiosk), so nothing is echoed back: the server already holds the value and raises its
+    // own change event. The old echo turned every write into a second hub call, a hub
+    // activation and a duplicate event server-side.
     public void SetChannel(int channel, byte value)
     {
         try
@@ -43,23 +47,34 @@ public class DmxController
             _device.SetChannel(channel, value);
 
             SendFrame();
-
-            // ISignalRClient is a singleton, so the scope can be disposed immediately after
-            // resolving it - it doesn't need to outlive the fire-and-forget send below.
-            using IServiceScope scope = _serviceScopeFactory.CreateScope();
-            ISignalRClient signalRClient = scope.ServiceProvider.GetRequiredService<ISignalRClient>();
-
-            _ = signalRClient.SendDmxChannelValueAsync(channel, value).ContinueWith(t =>
-            {
-                if (t.IsFaulted)
-                {
-                    _logger.LogWarning(t.Exception, "Failed to send DMX channel value to server. Channel: {Channel}, Value: {Value}", channel, value);
-                }
-            }, TaskScheduler.Default);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error setting DMX channel value. Channel: {Channel}, Value: {Value}", channel, value);
+        }
+    }
+
+    /// <summary>Applies a whole batch to the frame and sends it once.</summary>
+    public void SetChannels(IReadOnlyList<DmxChannel> channels)
+    {
+        try
+        {
+            if (!_isDeviceOpen)
+            {
+                _logger.LogWarning("Attempted to set {Count} DMX channel values while device is not open.", channels.Count);
+                return;
+            }
+
+            foreach (DmxChannel channel in channels)
+            {
+                _device.SetChannel(channel.Address, channel.Value);
+            }
+
+            SendFrame();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting {Count} DMX channel values.", channels.Count);
         }
     }
 

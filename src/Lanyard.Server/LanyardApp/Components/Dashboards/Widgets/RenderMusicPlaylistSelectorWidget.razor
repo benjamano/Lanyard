@@ -77,7 +77,7 @@
 
         RefreshCurrentlyPlayingPlaylist();
 
-        Result<IEnumerable<Playlist>> playlistsResult = await PlaylistService.GetActivePlaylistsAsync();
+        Result<IEnumerable<Playlist>> playlistsResult = await PlaylistService.GetActivePlaylistSummariesAsync();
 
         if (!playlistsResult.IsSuccess || playlistsResult.Data == null)
         {

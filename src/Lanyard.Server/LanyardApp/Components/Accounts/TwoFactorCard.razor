@@ -11,7 +11,7 @@
     else if (!status.IsEnabled)
     {
         <FluentText>Two-factor authentication is currently <strong>off</strong>.</FluentText>
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Wrap="true">
             <FluentButton Appearance="ButtonAppearance.Outline"
                           IconStart="@(new Icons.Regular.Size20.QrCode())"
                           OnClick="OpenEnableAuthenticatorDialog">
@@ -32,22 +32,48 @@
         <FluentText Size="TextSize.Size200" Color="Color.Disabled">
             Recovery codes remaining: @status.RecoveryCodesRemaining
         </FluentText>
-        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6">
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Wrap="true">
             <FluentButton Appearance="ButtonAppearance.Outline"
                           IconStart="@(new Icons.Regular.Size20.ArrowSync())"
                           OnClick="RegenerateRecoveryCodes">
                 Regenerate Recovery Codes
             </FluentButton>
-            <FluentButton Appearance="ButtonAppearance.Outline"
-                          IconStart="@(new Icons.Regular.Size20.LockOpen())"
-                          OnClick="OpenDisableDialog">
-                Disable 2FA
-            </FluentButton>
+            @if (status.IsRequiredByCompany)
+            {
+                @* Switching to an app doesn't need 2FA off first, so email users can still move
+                   over while the company requires it. *@
+                @if (status.HasEmail)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="@(new Icons.Regular.Size20.QrCode())"
+                                  OnClick="OpenEnableAuthenticatorDialog">
+                        Switch to Authenticator App
+                    </FluentButton>
+                }
+            }
+            else
+            {
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              IconStart="@(new Icons.Regular.Size20.LockOpen())"
+                              OnClick="OpenDisableDialog">
+                    Disable 2FA
+                </FluentButton>
+            }
         </FluentStack>
+        @if (status.IsRequiredByCompany)
+        {
+            <FluentText Size="TextSize.Size200" Color="Color.Disabled">
+                Your company requires two-factor authentication, so it can't be turned off.
+            </FluentText>
+        }
     }
 </FluentStack>
 
 @code {
+    // Raised after 2FA is switched on or off, so a host (e.g. the required-2FA screen) can react.
+    [Parameter]
+    public EventCallback<TwoFactorStatusDto> OnStatusChanged { get; set; }
+
     private TwoFactorStatusDto? status;
 
     protected override async Task OnInitializedAsync()
@@ -61,6 +87,13 @@
         status = result.IsSuccess ? result.Data : new TwoFactorStatusDto();
     }
 
+    private async Task ReloadAndNotify()
+    {
+        await LoadStatus();
+        StateHasChanged();
+        await OnStatusChanged.InvokeAsync(status);
+    }
+
     private async Task OpenEnableAuthenticatorDialog()
     {
         DialogResult result = await _dialogService.ShowDialogAsync<EnableAuthenticatorDialog>(options =>
@@ -72,13 +105,12 @@
 
         if (result.Value is List<string> codes)
         {
-            await LoadStatus();
-            StateHasChanged();
-
             if (codes.Count > 0)
             {
                 await ShowRecoveryCodes(codes);
             }
+
+            await ReloadAndNotify();
         }
     }
 
@@ -93,13 +125,13 @@
         }
 
         ToastService.ShowSuccess("Email codes enabled.");
-        await LoadStatus();
-        StateHasChanged();
 
         if (result.Data is { Count: > 0 })
         {
             await ShowRecoveryCodes(result.Data);
         }
+
+        await ReloadAndNotify();
     }
 
     private async Task RegenerateRecoveryCodes()
@@ -140,8 +172,7 @@
         if (result.Value is true)
         {
             ToastService.ShowSuccess("Two-factor authentication disabled.");
-            await LoadStatus();
-            StateHasChanged();
+            await ReloadAndNotify();
         }
     }
 }

@@ -38,8 +38,17 @@
 
     protected override void OnParametersSet()
     {
+        // Only restart the timer when the format actually changed; every parent re-render
+        // used to reset it.
+        int previousInterval = _timerIntervalMs;
+        string previousFormat = _timeFormat;
+
         ConfigureClockFormat();
-        _timer?.Change(0, _timerIntervalMs);
+
+        if (previousInterval != _timerIntervalMs || previousFormat != _timeFormat)
+        {
+            _timer?.Change(0, _timerIntervalMs);
+        }
     }
 
     private void ConfigureClockFormat()
@@ -56,7 +65,9 @@
             _timeFormat = includeMilliseconds ? "hh:mm:ss.fff tt" : "hh:mm:ss tt";
         }
 
-        _timerIntervalMs = includeMilliseconds ? 50 : 1000;
+        // Millisecond mode shows tenths-of-a-second motion at 100 ms. It used to tick every
+        // 50 ms: 20 render batches a second per clock per circuit, around the clock on kiosks.
+        _timerIntervalMs = includeMilliseconds ? 100 : 1000;
     }
 
     private void UpdateClock(object? state)

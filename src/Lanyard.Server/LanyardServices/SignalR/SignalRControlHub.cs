@@ -84,6 +84,14 @@ public class SignalRControlHub(
 
         string clientIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
+        bool supportsDmxBatch = httpContext?.Request.Query["dmxBatch"].ToString() == "1";
+        _dmxClientService.SetConnectionSupportsBatch(Context.ConnectionId, supportsDmxBatch);
+
+        if (!supportsDmxBatch)
+        {
+            _logger.LogInformation("Client {ClientId} ({ConnectionId}) predates batched DMX; sending it one message per channel", clientId, Context.ConnectionId);
+        }
+
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId);
 
         Client client = new();
@@ -139,11 +147,15 @@ public class SignalRControlHub(
             await SendDmxSettingsToClientAsync(client);
             await SendZoneScoreboardSettingsToClientAsync(client);
             await SendRestartScheduleToClientAsync(client);
+            await SendAudioSettingsToClientAsync(client);
         }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
+        string musicGroup = MusicGroupFor(client.CompanyId);
+        Context.Items[MusicGroupItemKey] = musicGroup;
 
-        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to Music group", client.Name, Context.ConnectionId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, musicGroup);
+
+        _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to {MusicGroup}", client.Name, Context.ConnectionId, musicGroup);
 
         _connections.TryAdd(Context.ConnectionId, true);
 
@@ -152,9 +164,12 @@ public class SignalRControlHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, ClientGroup.Music.ToString());
+        if (Context.Items.TryGetValue(MusicGroupItemKey, out object? musicGroup) && musicGroup is string group)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
+        }
 
-        _logger.LogInformation("Client {ConnectionId} disconnected from Music group", Context.ConnectionId);
+        _logger.LogInformation("Client {ConnectionId} disconnected from its Music group", Context.ConnectionId);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (getClientResult.IsSuccess)
@@ -172,6 +187,7 @@ public class SignalRControlHub(
         }
 
         _connections.TryRemove(Context.ConnectionId, out _);
+        _dmxClientService.ForgetConnection(Context.ConnectionId);
 
         await base.OnDisconnectedAsync(exception);
     }
@@ -327,32 +343,42 @@ public class SignalRControlHub(
         }
     }
 
+    // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.
+    private const string MusicGroupItemKey = "MusicGroup";
+
+    private static string MusicGroupFor(int companyId) => $"{ClientGroup.Music}:{companyId}";
+
+    private IClientProxy MusicGroupClients() =>
+        Context.Items.TryGetValue(MusicGroupItemKey, out object? group) && group is string name
+            ? Clients.Group(name)
+            : Clients.Clients([]);
+
     public async Task Load(Guid songId)
     {
         _logger.LogInformation("Load command received for song {SongId}", songId);
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Load", songId);
+        await MusicGroupClients().SendAsync("Load", songId);
     }
 
     public async Task Play()
     {
         _logger.LogInformation("Play command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Play");
+        await MusicGroupClients().SendAsync("Play");
     }
 
     public async Task Pause()
     {
         _logger.LogInformation("Pause command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Pause");
+        await MusicGroupClients().SendAsync("Pause");
     }
 
     public async Task Stop()
     {
         _logger.LogInformation("Stop command received");
 
-        await Clients.Group(ClientGroup.Music.ToString()).SendAsync("Stop");
+        await MusicGroupClients().SendAsync("Stop");
     }
 
     private async Task SendMusicSettingsToClientAsync(Client client)
@@ -375,6 +401,18 @@ public class SignalRControlHub(
 
         await Clients.Caller.SendAsync("ReceiveRestartSchedule", schedule);
         _logger.LogInformation("Sent restart schedule to client {ClientId}: enabled {Enabled}, every {IntervalCount} {IntervalUnit} at {TimeOfDay}", client.Id, client.AutoRestartEnabled, client.AutoRestartIntervalCount, client.AutoRestartIntervalUnit, client.AutoRestartTimeOfDay);
+    }
+
+    private async Task SendAudioSettingsToClientAsync(Client client)
+    {
+        ClientAudioSettingsDTO settings = new ClientAudioSettingsDTO
+        {
+            PreferredDeviceId = client.PreferredAudioDeviceId,
+            PreferredDeviceName = client.PreferredAudioDeviceName
+        };
+
+        await Clients.Caller.SendAsync("ReceiveAudioSettings", settings);
+        _logger.LogInformation("Sent audio settings to client {ClientId}: preferred device {DeviceName} ({DeviceId})", client.Id, client.PreferredAudioDeviceName, client.PreferredAudioDeviceId);
     }
 
     private async Task SendZoneScoreboardSettingsToClientAsync(Client client)
@@ -521,7 +559,7 @@ public class SignalRControlHub(
 
     public async Task QueueChanged(List<Guid> queue)
     {
-        _logger.LogInformation("Client {ConnectionId} reported queue change: {Queue}", Context.ConnectionId, queue);
+        _logger.LogDebug("Client {ConnectionId} reported queue change: {Queue}", Context.ConnectionId, queue);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)
@@ -537,7 +575,7 @@ public class SignalRControlHub(
 
     public async Task UpdateDmxChannelValue(int channelAddress, byte value)
     {
-        _logger.LogInformation("Client {ConnectionId} reported DMX channel update: Address {ChannelAddress}, Value {Value}", Context.ConnectionId, channelAddress, value);
+        _logger.LogDebug("Client {ConnectionId} reported DMX channel update: Address {ChannelAddress}, Value {Value}", Context.ConnectionId, channelAddress, value);
 
         Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
         if (!getClientResult.IsSuccess)
@@ -611,6 +649,28 @@ public class SignalRControlHub(
         if (!setResult.IsSuccess)
         {
             _logger.LogWarning("Failed to update available video devices for client {ClientId}: {Error}", clientId, setResult.Error);
+        }
+    }
+
+    public async Task UpdateAvailableAudioDevices(IEnumerable<ClientAvailableAudioDeviceDTO> devices)
+    {
+        _logger.LogInformation("Client {ConnectionId} reported available audio devices: {Devices}", Context.ConnectionId, devices.Select(d => d.Name));
+
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Guid clientId = getClientResult.Data;
+
+        Result<bool> setResult = await _clientService.SetClientAvailableAudioDevicesAsync(clientId, devices);
+
+        if (!setResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to update available audio devices for client {ClientId}: {Error}", clientId, setResult.Error);
         }
     }
 

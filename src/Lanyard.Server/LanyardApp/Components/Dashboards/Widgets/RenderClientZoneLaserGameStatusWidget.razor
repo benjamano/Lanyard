@@ -1,4 +1,5 @@
 @using Lanyard.Application.Services.Clients
+@using Lanyard.App.Components
 @using Lanyard.Shared.DTO
 @using Lanyard.Shared.Enum
 @using Humanizer;
@@ -52,14 +53,14 @@
                         <FluentStack Margin="@Margin.TopAuto" Orientation="@Orientation.Vertical" HorizontalAlignment="@HorizontalAlignment.Center" VerticalAlignment="@VerticalAlignment.Center" Width="100%" VerticalGap="3">
                             <FluentStack Orientation="@Orientation.Horizontal" HorizontalAlignment="@HorizontalAlignment.SpaceBetween" VerticalAlignment="@VerticalAlignment.Center" Width="100%">
                                 <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
-                                    Time Remaining: @(TimeSpan.FromSeconds(_gameStatus.TimeRemainingSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
+                                    Time Remaining: @(TimeSpan.FromSeconds(_displayedTimeRemainingSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
                                 </FluentText>
 
                                 <FluentText Size="@TextSize.Size400" Color="@Color.Info" Weight="@TextWeight.Semibold">
                                     Total Time: @(TimeSpan.FromSeconds(_gameStatus.TotalTimeSeconds).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Second))
                                 </FluentText>
                             </FluentStack>
-                            <FluentProgressBar Thickness="@ProgressThickness.Large" Value="@_gameStatus.TimeRemainingSeconds" Max="@_gameStatus.TotalTimeSeconds" Min="0"  />
+                            <FluentProgressBar Thickness="@ProgressThickness.Large" Value="@_displayedTimeRemainingSeconds" Max="@_gameStatus.TotalTimeSeconds" Min="0"  />
                         </FluentStack>
                     }
                 </FluentStack>
@@ -74,10 +75,23 @@
 
     private LaserGameStatusDTO? _gameStatus = null;
 
+    // The status object comes from the shared LaserGameStatusStore and is the same instance
+    // every widget in every circuit sees. This widget used to count it down in place
+    // (TimeRemainingSeconds--), so with N dashboards showing it the shared countdown dropped
+    // N seconds per second. The remaining time is now derived per widget from the kiosk's
+    // last report and never written back.
+    private int _displayedTimeRemainingSeconds;
+
     private readonly System.Timers.Timer _progressBarTimer = new(1000);
+
+    // The kiosk sends a status message for every hit and score change; painting each one is
+    // what made busy games sluggish. Updates are applied immediately, renders at most ~10/s.
+    private RenderCoalescer? _renderCoalescer;
 
     protected override async Task OnInitializedAsync()
     {
+        _renderCoalescer = new RenderCoalescer(() => InvokeAsync(StateHasChanged));
+
         LaserGameStatusStore.OnStatusUpdated += OnLaserGameStatusChanged;
 
         if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
@@ -89,11 +103,9 @@
         {
             if (_gameStatus != null && _gameStatus.Status == GameStatus.InGame)
             {
-                if (_gameStatus.TimeRemainingSeconds > 0)
-                {
-                    _gameStatus.TimeRemainingSeconds--;
-                }
-                else
+                RefreshDisplayedTimeRemaining();
+
+                if (_displayedTimeRemainingSeconds <= 0)
                 {
                     _progressBarTimer.Stop();
                 }
@@ -101,6 +113,19 @@
                 await InvokeAsync(StateHasChanged);
             }
         };
+    }
+
+    private void RefreshDisplayedTimeRemaining()
+    {
+        if (_gameStatus is null)
+        {
+            _displayedTimeRemainingSeconds = 0;
+            return;
+        }
+
+        double elapsedSinceReport = Math.Max(0, (DateTime.UtcNow - _gameStatus.LastUpdateUtc).TotalSeconds);
+
+        _displayedTimeRemainingSeconds = Math.Max(0, _gameStatus.TimeRemainingSeconds - (int)Math.Floor(elapsedSinceReport));
     }
 
     protected override async Task OnParametersSetAsync()
@@ -127,10 +152,11 @@
         if (status.ClientId == Widget.ClientId)
         {
             _gameStatus = status;
+            RefreshDisplayedTimeRemaining();
 
             CheckToStartProgressBarTimer();
 
-            InvokeAsync(StateHasChanged);
+            _renderCoalescer?.Request();
         }
     }
     public void CheckToStartProgressBarTimer()
@@ -171,5 +197,6 @@
     {
         LaserGameStatusStore.OnStatusUpdated -= OnLaserGameStatusChanged;
         _progressBarTimer.Dispose();
+        _renderCoalescer?.Dispose();
     }
 }

@@ -13,10 +13,20 @@
     public ProjectionProgramStep Step { get; set; } = default!;
 
     private Dashboard? _dashboard;
+    private string? _loadedDashboardId;
 
     protected override async Task OnParametersSetAsync()
     {
         string? dashboardId = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Dashboard);
+
+        // The kiosk host re-renders this template several times per step (and on every
+        // pause/resume), so only go back to the database when the step actually points at a
+        // different dashboard - otherwise each re-render was a fresh dashboard+widgets query
+        // and every widget got brand-new objects to re-initialise from.
+        if (string.Equals(dashboardId, _loadedDashboardId, StringComparison.Ordinal))
+        {
+            return;
+        }
 
         if (!string.IsNullOrEmpty(dashboardId))
         {
@@ -25,6 +35,7 @@
             if (result.IsSuccess && result.Data != null)
             {
                 _dashboard = result.Data;
+                _loadedDashboardId = dashboardId;
             }
             else
             {
@@ -34,6 +45,7 @@
         else
         {
             _dashboard = null;
+            _loadedDashboardId = null;
         }
     }
 

@@ -2,6 +2,7 @@
 
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -21,12 +22,12 @@ namespace Lanyard.Application.Services;
 /// </summary>
 public class ProjectionProgramControlActionExecutor(
     IServiceScopeFactory scopeFactory,
-    IDbContextFactory<ApplicationDbContext> contextFactory,
+    ISystemDbContextFactory contextFactory,
     IProjectionProgramRunnerService runnerService,
     ILogger<ProjectionProgramControlActionExecutor> logger) : IActionExecutor
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly IDbContextFactory<ApplicationDbContext> _contextFactory = contextFactory;
+    private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IProjectionProgramRunnerService _runnerService = runnerService;
     private readonly ILogger<ProjectionProgramControlActionExecutor> _logger = logger;
 

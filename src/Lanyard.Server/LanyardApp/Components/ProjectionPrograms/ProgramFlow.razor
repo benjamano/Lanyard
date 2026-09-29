@@ -135,7 +135,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Result<IEnumerable<Dashboard>> result = await _dashboardService.GetDashboardsAsync();
+        Result<IEnumerable<Dashboard>> result = await _dashboardService.GetDashboardSummariesAsync();
 
         if (result.IsSuccess && result.Data is not null)
         {

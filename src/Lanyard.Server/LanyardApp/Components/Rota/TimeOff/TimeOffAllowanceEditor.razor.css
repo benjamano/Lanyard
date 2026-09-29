@@ -1,0 +1,46 @@
+.allowance-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.allowance-editor ::deep .allowance-intro {
+    color: var(--colorNeutralForeground3);
+}
+
+.allowance-units {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.allowance-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.allowance-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.allowance-type {
+    flex: 0 0 150px;
+    font-weight: 600;
+}
+
+.allowance-unit,
+.allowance-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+@media (max-width: 520px) {
+    .allowance-type {
+        flex-basis: 100%;
+    }
+}

@@ -1,5 +1,4 @@
 ﻿@using Lanyard.Application.Services.Authentication
-@using System.Globalization
 
 @inject NavigationManager NavigationManager
 
@@ -9,12 +8,18 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lanyard CRM and SM</title>
-    <meta name="description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
-    <meta property="og:title" content="Lanyard" />
-    <meta property="og:description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="/logo.png" />
+    @* The homepage writes its own title, description and share-preview tags (PublicLanding's
+       HeadContent); these generic ones would otherwise sit alongside them and crawlers could pick
+       either. *@
+    @if (HttpContext.Request.Path != "/")
+    {
+        <title>Lanyard CRM and SM</title>
+        <meta name="description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
+        <meta property="og:title" content="Lanyard" />
+        <meta property="og:description" content="Lanyard is an internal staff platform for training, scheduling, and venue control." />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="/logo.png" />
+    }
     <base href="/" />
     <ResourcePreloader />
     <ImportMap />
@@ -29,6 +34,9 @@
     <script src="@Assets["js/autoLogout.js"]"></script>
     <script src="@Assets["js/dmxKeybinds.js"]"></script>
     <script src="@Assets["js/viewportWatcher.js"]"></script>
+    <script src="@Assets["js/navDrawerScroll.js"]"></script>
+    <script src="@Assets["js/lanyardPush.js"]"></script>
+    <script src="@Assets["js/lanyardInstall.js"]"></script>
     <script src="@Assets["js/trainingScrollGate.js"]"></script>
     <script src="@Assets["js/courseImageEditor.js"]"></script>
     <script src="@Assets["js/kioskWidgetEditor.js"]"></script>
@@ -65,7 +73,7 @@
         width: 2.5rem;
         height: 2.5rem;
         border: 3px solid rgba(127, 127, 127, .25);
-        border-top-color: #0d6efd;
+        border-top-color: @BrandConstants.PrimaryColorHex;
         border-radius: 50%;
         animation: app-splash-spin .8s linear infinite;
         }
@@ -100,10 +108,112 @@
         }
     </style>
 
+    <style>
+        /* Nothing may make the whole page scroll sideways on a phone. The Content layout item
+        is the scroll box, so any one element wider than it drags every page element along -
+        the header, titles and all - rather than just itself. Global because these are all
+        Fluent-rendered elements that scoped CSS can't reach.
+
+        FluentDataGrid renders as a CSS grid whose fr columns never shrink below their
+        content, so a grid with a few columns is wider than a phone. It scrolls inside its
+        own box instead of moving the page. */
+        table.fluent-data-grid {
+        max-width: 100%;
+        overflow-x: auto;
+        }
+
+        @@media (max-width: 767.98px) {
+        /* FluentTabs' strip neither wraps nor scrolls, so later tabs overflow the edge
+        (My Shifts' four tabs are ~480px). Wrap onto a second row so every tab stays
+        visible without a sideways swipe. */
+        fluent-tablist {
+        flex-wrap: wrap;
+        }
+
+        /* The projection program/template editors are three side-by-side splitter panes;
+        at phone width each pane is a few characters wide. Stack them instead - the drag
+        handles mean nothing in a column, so they go. */
+        .fluent-multi-splitter[orientation] {
+        flex-direction: column;
+        height: auto !important;
+        }
+
+        .fluent-multi-splitter > .fluent-multi-splitter-pane {
+        flex: 0 0 auto !important;
+        width: 100%;
+        }
+
+        .fluent-multi-splitter > .fluent-multi-splitter-bar {
+        display: none;
+        }
+        }
+    </style>
+
+    <style>
+        /* Theme-aware colour swatch. The app's light/dark toggle is the data-theme attribute
+        on the body element (set by Fluent's IThemeService), which scoped .razor.css can never
+        reach - CSS isolation stamps its scope attribute onto every selector in a chain, the
+        body included, so a body-anchored dark rule in a .razor.css silently never matches. An element sets both
+        `--swatch-light` and `--swatch-dark` inline (the palette values are per-item data,
+        not styling) and this global rule picks whichever the current theme calls for. */
+        .theme-colour,
+        .theme-colour-swatch {
+        --theme-colour: var(--swatch-light);
+        }
+
+        [data-theme="dark"] .theme-colour,
+        [data-theme="dark"] .theme-colour-swatch {
+        --theme-colour: var(--swatch-dark);
+        }
+
+        /* .theme-colour only resolves --theme-colour (for a scoped stylesheet to use as a border,
+        tint, etc.); .theme-colour-swatch also paints it as the background. */
+        .theme-colour-swatch {
+        background: var(--theme-colour);
+        }
+
+        /* Nav category badges. FluentNavCategory only takes a plain-text Title, so a count on a
+        category header (e.g. Rota's time-off requests waiting for approval) is set as a
+        data-pending-count attribute, which lands on the category's button, and drawn here to
+        match FluentCounterBadge. Global because the button is rendered by Fluent, so NavMenu's
+        scoped CSS can't reach it. The badge sits just before the expand chevron. */
+        button.fluent-navcategoryitem[data-pending-count]::after {
+        content: attr(data-pending-count);
+        order: 1;
+        margin-inline-start: auto;
+        box-sizing: border-box;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10000px;
+        background: var(--colorBrandBackground);
+        color: var(--colorNeutralForegroundOnBrand, #fff);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+        }
+
+        button.fluent-navcategoryitem[data-pending-count] .expand-icon {
+        order: 2;
+        margin-inline-start: 0;
+        }
+    </style>
+
     <script src="@Assets["js/bootCloak.js"]"></script>
 
-    <link rel="manifest" href="manifest.webmanifest" />
-    <meta name="theme-color" content="#0d6efd" />
+    @* These, and the home-screen title below, follow the company when it's known - see ResolveInstallLinksAsync. *@
+    <link rel="manifest" href="@_installLinks.ManifestHref" />
+    @* iPhone/iPad home-screen install: its own icon (iOS ignores manifest icons) and name, and
+       standalone mode, which is what lets a home-screen Lanyard receive push notifications. *@
+    <link rel="apple-touch-icon" href="@_installLinks.AppleTouchIconHref" />
+    <meta name="apple-mobile-web-app-title" content="@_installLinks.AppName" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="@BrandConstants.PrimaryColorHex" />
+    <script src="@Assets["js/statusBarColor.js"]"></script>
+    <script src="@Assets["js/appInstallLinks.js"]"></script>
+    <script src="@Assets["js/demoBranding.js"]"></script>
 </head>
 
 <body>
@@ -112,18 +222,21 @@
     </div>
 
     <Routes @rendermode="PageRenderMode" />
-    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+    <script src="@Assets["js/blazorStart.js"]"></script>
+    @* Not unused: FluentNumberInput and Fluent's masked date/time inputs need window.IMask. Without
+       it they fetch it from unpkg.com, which the CSP blocks, and the page fails to render. *@
     <script src="https://cdn.jsdelivr.net/npm/imask@7.6.1/dist/imask.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
     <script src="_content/Blazored.TextEditor/quill-blot-formatter.min.js"></script>
     <script src="_content/Blazored.TextEditor/Blazored-BlazorQuill.js"></script>
+    <script src="@Assets["js/lanyardChat.js"]"></script>
 
     @if (NavigationManager.Uri.Contains("localhost", StringComparison.OrdinalIgnoreCase))
     {
         <script src="/_framework/aspnetcore-browser-refresh.js"></script>
     }
 
-    <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <ReconnectModal />
     <script src="@Assets["js/registerServiceWorker.js"]"></script>
 
@@ -136,7 +249,6 @@
 
 </html>
 
-@inject ISecurityService SecurityService
 
 @code {
     [CascadingParameter]
@@ -145,15 +257,51 @@
     private IComponentRenderMode? PageRenderMode =>
         HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
 
+    private AppInstallLinks _installLinks = AppInstallLinks.Default;
+
     protected override async Task OnInitializedAsync()
     {
-        Result<UserProfile> result = await SecurityService.GetCurrentUserProfileAsync();
-
-        if (result.IsSuccess && !string.IsNullOrEmpty(result.Data?.PreferredCulture))
+        try
         {
-            CultureInfo culture = new CultureInfo(result.Data.PreferredCulture);
-            CultureInfo.DefaultThreadCurrentCulture = culture;
-            CultureInfo.DefaultThreadCurrentUICulture = culture;
+            _installLinks = await ResolveInstallLinksAsync();
+        }
+        catch
+        {
+            // Branding is cosmetic - never fail the whole page over it.
+            _installLinks = AppInstallLinks.Default;
         }
     }
+
+    // Which company's name and logo an install from this page should use: the one picked on the login page
+    // (?company=), else the signed-in user's company, else the last company this device saw (the
+    // cookie lanyardSetAppCompany sets). Nothing known -> Lanyard's own name and λ icons.
+    private async Task<AppInstallLinks> ResolveInstallLinksAsync()
+    {
+        Result<CompanyBrandingInfo>? branding = null;
+
+        if (int.TryParse(HttpContext.Request.Query["company"], out int queryCompanyId))
+        {
+            branding = await _companyLocationService.GetCompanyBrandingAsync(queryCompanyId);
+        }
+
+        if (branding is not { IsSuccess: true } && HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) is string userId)
+        {
+            branding = await _companyLocationService.GetCompanyBrandingForUserAsync(userId);
+        }
+
+        if (branding is not { IsSuccess: true }
+            && int.TryParse(HttpContext.Request.Cookies[AppInstallLinks.CompanyCookieName], out int cookieCompanyId))
+        {
+            branding = await _companyLocationService.GetCompanyBrandingAsync(cookieCompanyId);
+        }
+
+        return branding is { IsSuccess: true, Data: CompanyBrandingInfo info }
+            ? AppInstallLinks.For(info)
+            : AppInstallLinks.Default;
+    }
+
+    // The per-user culture is applied by the request-localization middleware from the culture
+    // cookie (see UserCultureCookie) - nothing to look up here. The previous implementation
+    // queried the user's profile on every request and set CultureInfo.DefaultThreadCurrentCulture,
+    // a process-wide static, so whoever loaded a page last set the date format for everyone.
 }

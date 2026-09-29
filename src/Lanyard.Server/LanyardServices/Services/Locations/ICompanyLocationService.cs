@@ -5,11 +5,16 @@ namespace Lanyard.Application.Services.Locations;
 
 public record LoginLocationOption(int LocationId, string DisplayName, int CompanyId, string? ThemeColorHex, Guid? LogoFileId);
 public record LoginCompanyOption(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
-public record CompanyBrandingInfo(int CompanyId, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
+public record CompanyBrandingInfo(int CompanyId, string Name, string? ThemeColorHex, Guid? LogoFileId, Guid? BackgroundImageFileId);
 
 public interface ICompanyLocationService
 {
     Task<Result<List<Company>>> GetCompaniesAsync();
+
+    // The company whose data this session works with - just the signed-in company, even for a
+    // platform admin, since company data is filtered to it. Every active company for callers with
+    // no signed-in user.
+    Task<Result<List<Company>>> GetSessionCompaniesAsync();
     Task<Result<Company>> SaveCompanyAsync(Company company);
     Task<Result<bool>> DeactivateCompanyAsync(int companyId);
 
@@ -23,6 +28,11 @@ public interface ICompanyLocationService
     Task<Result<bool>> RemoveUserFromLocationAsync(string userId, int locationId);
 
     Task<Result<bool>> IsUserMemberOfLocationAsync(string userId, int locationId);
+
+    // The companies a user has any active location in. Deliberately ignores the caller's tenant:
+    // login uses it after the password check, when the request already carries the new principal
+    // but not yet its company claim.
+    Task<Result<List<int>>> GetCompanyIdsForUserAsync(string userId);
     Task<Result<List<LoginLocationOption>>> GetLoginLocationOptionsAsync(int? companyId = null);
     Task<Result<List<LoginCompanyOption>>> GetLoginCompanyOptionsAsync();
     Task<Result<CompanyBrandingInfo>> GetCompanyBrandingAsync(int companyId);

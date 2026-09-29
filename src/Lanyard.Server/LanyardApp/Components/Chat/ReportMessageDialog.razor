@@ -1,0 +1,97 @@
+@inject IChatModerationService Moderation
+
+@* Reporting one message to the reporter's managers. Says plainly what is shared: that message only. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Flag())" />
+            <FluentText As="@TextTag.H3">Report message</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="report-dialog">
+            <div class="report-quote">
+                <div class="report-author">@Message.AuthorName</div>
+                <div>@ChatHtml.Preview(Message.Message.BodyText, 300)</div>
+            </div>
+
+            <FluentText Style="color: var(--colorNeutralForeground3);">
+                Your managers will see this message only, not the rest of the conversation. @Message.AuthorName isn't told who reported it.
+            </FluentText>
+
+            <fieldset class="report-reasons">
+                <legend>What's wrong with it?</legend>
+                @foreach ((ChatReportReason value, string label) in Reasons)
+                {
+                    <label class="report-reason">
+                        <input type="radio" name="report-reason" checked="@(reason == value)" @onchange="() => reason = value" />
+                        @label
+                    </label>
+                }
+            </fieldset>
+
+            <FluentTextArea @bind-Value="details" Rows="3" Maxlength="1000" Style="width: 100%;" Label="Anything else your manager should know? (optional)" />
+
+            @if (IsDirect)
+            {
+                <label class="report-block">
+                    <input type="checkbox" checked="@alsoBlock" @onchange="() => alsoBlock = !alsoBlock" />
+                    Also block @Message.AuthorName from messaging me
+                </label>
+            }
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="SendAsync">@(isBusy ? "Sending..." : "Report")</FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required ChatMessageView Message { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter]
+    public bool IsDirect { get; set; }
+
+    private static readonly (ChatReportReason, string)[] Reasons =
+    [
+        (ChatReportReason.Harassment, "Harassment or bullying"),
+        (ChatReportReason.Inappropriate, "Offensive or inappropriate"),
+        (ChatReportReason.Spam, "Spam"),
+        (ChatReportReason.Other, "Something else")
+    ];
+
+    private ChatReportReason reason = ChatReportReason.Harassment;
+    private string? details;
+    private bool alsoBlock;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private async Task SendAsync()
+    {
+        isBusy = true;
+        Result<ChatReport> result = await Moderation.ReportAsync(UserId, Message.Message.Id, reason, details, IsDirect && alsoBlock);
+        isBusy = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess("Reported. A manager will look at it.");
+        await Dialog.CloseAsync(true);
+    }
+}

@@ -1,0 +1,10 @@
+.type-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.type-dialog ::deep .type-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}

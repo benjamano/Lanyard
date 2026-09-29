@@ -7,11 +7,13 @@
 @using Lanyard.Application.Services.StaffDocuments
 @using Lanyard.Application.Services.Locations
 @using Lanyard.App.Components.Manager
+@using Lanyard.App.Components.Rota
 
 @inject IGdprService _gdprService
 @inject INotificationService ToastService
 @inject IStaffDocumentService _staffDocumentService
 @inject IStaffDocumentTypeService _staffDocumentTypeService
+@inject ICompanyFeatureService _companyFeatureService
 
 <PageTitle>@(user?.GetName() ?? "User")</PageTitle>
 
@@ -123,66 +125,85 @@ else
                 </FluentStack>
             </FluentTab>
 
-            <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
-                <div class="documents-tab-content">
-                    @if (isLoadingDocuments)
-                    {
-                        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
-                            <FluentSpinner />
-                            <FluentText>Loading...</FluentText>
-                        </FluentStack>
-                    }
-                    else if (documentTypes is null || documentTypes.Count == 0)
-                    {
-                        <FluentText Style="color: var(--neutral-foreground-hint);">
-                            No document types have been configured yet. An admin or manager can add some under
-                            Manage &gt; Staff Document Types.
-                        </FluentText>
-                    }
-                    else
-                    {
-                        @if (staffDocuments is null || staffDocuments.Count == 0)
+            @if (!_hiddenFeatures.Contains(CompanyFeature.Onboarding))
+            {
+                <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
+                    <div class="documents-tab-content">
+                        @if (isLoadingDocuments)
                         {
-                            <FluentText Style="color: var(--neutral-foreground-hint);">No documents uploaded yet.</FluentText>
+                            <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                                <FluentSpinner />
+                                <FluentText>Loading...</FluentText>
+                            </FluentStack>
+                        }
+                        else if (documentTypes is null || documentTypes.Count == 0)
+                        {
+                            <FluentText Style="color: var(--neutral-foreground-hint);">
+                                No document types have been configured yet. An admin or manager can add some under
+                                Manage &gt; Staff Document Types.
+                            </FluentText>
                         }
                         else
                         {
-                            <div class="documents-list">
-                                @foreach (StaffDocument doc in staffDocuments)
-                                {
-                                    <div class="documents-list-item">
-                                        <div class="documents-list-info">
-                                            <div class="documents-list-name">@doc.StaffDocumentType!.Name</div>
-                                            <div class="documents-list-meta">
-                                                Uploaded @doc.UploadedDate.ToString("d MMM yyyy")
-                                                @if (doc.ExpiryDate is not null)
-                                                {
-                                                    <span> &middot; Expires @doc.ExpiryDate.Value.Date.ToString("d MMM yyyy")</span>
-                                                }
-                                                @if (doc.ReminderDate is not null)
-                                                {
-                                                    <span> &middot; Reminder @doc.ReminderDate.Value.Date.ToString("d MMM yyyy")</span>
-                                                }
+                            @if (staffDocuments is null || staffDocuments.Count == 0)
+                            {
+                                <FluentText Style="color: var(--neutral-foreground-hint);">No documents uploaded yet.</FluentText>
+                            }
+                            else
+                            {
+                                <div class="documents-list">
+                                    @foreach (StaffDocument doc in staffDocuments)
+                                    {
+                                        <div class="documents-list-item">
+                                            <div class="documents-list-info">
+                                                <div class="documents-list-name">@doc.StaffDocumentType!.Name</div>
+                                                <div class="documents-list-meta">
+                                                    Uploaded @doc.UploadedDate.ToString("d MMM yyyy")
+                                                    @if (doc.ExpiryDate is not null)
+                                                    {
+                                                        <span> &middot; Expires @doc.ExpiryDate.Value.Date.ToString("d MMM yyyy")</span>
+                                                    }
+                                                    @if (doc.ReminderDate is not null)
+                                                    {
+                                                        <span> &middot; Reminder @doc.ReminderDate.Value.Date.ToString("d MMM yyyy")</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="documents-list-actions">
+                                                <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
+                                                              OnClick="@(() => DownloadDocument(doc.FileMetadataId))" />
+                                                <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
+                                                              OnClick="@(() => DeleteDocumentAsync(doc.Id))" />
                                             </div>
                                         </div>
-                                        <div class="documents-list-actions">
-                                            <FluentButton IconStart="@(new Icons.Regular.Size16.ArrowDownload())" Title="Download"
-                                                          OnClick="@(() => DownloadDocument(doc.FileMetadataId))" />
-                                            <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Title="Delete"
-                                                          OnClick="@(() => DeleteDocumentAsync(doc.Id))" />
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        }
+                                    }
+                                </div>
+                            }
 
-                        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowUpload())"
-                                      OnClick="OpenUploadDialog">
-                            Upload Document
-                        </FluentButton>
-                    }
-                </div>
-            </FluentTab>
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowUpload())"
+                                          OnClick="OpenUploadDialog">
+                                Upload Document
+                            </FluentButton>
+                        }
+                    </div>
+                </FluentTab>
+            }
+
+            @if (!_hiddenFeatures.Contains(CompanyFeature.StaffScheduling))
+            {
+                <FluentTab Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
+                    <div class="rota-tab-content">
+                        @if (isLoadingDocuments)
+                        {
+                            <FluentSpinner />
+                        }
+                        else
+                        {
+                            <UserRotaProfileTab UserId="@user.Id" CompanyId="@userCompanyId" />
+                        }
+                    </div>
+                </FluentTab>
+            }
 
             <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
@@ -228,6 +249,7 @@ else
     private bool isDeleting;
 
     private bool isLoadingDocuments = true;
+    private int? userCompanyId;
     private List<StaffDocumentType>? documentTypes;
     private List<StaffDocument>? staffDocuments;
 
@@ -240,8 +262,13 @@ else
     private string StatusText =>
         IsLockedOut ? "Locked" : user?.PasswordSetDate is null ? "Invite Pending" : "Active";
 
+    // Tabs for modules this company doesn't have (see CompanyFeatureService). Admins get none hidden.
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
+
     protected override async Task OnInitializedAsync()
     {
+        _hiddenFeatures = await _companyFeatureService.GetHiddenFeaturesForCurrentUserAsync();
+
         await LoadUserAsync();
 
         if (user is not null)
@@ -286,6 +313,10 @@ else
         isLoadingDocuments = true;
 
         Result<CompanyBrandingInfo> brandingResult = await _companyLocationService.GetCompanyBrandingForUserAsync(user.Id);
+
+        // Also feeds the Rota tab - a user in no company (or two) has no single company to
+        // resolve positions, contracts and allowances against.
+        userCompanyId = brandingResult.IsSuccess ? brandingResult.Data?.CompanyId : null;
 
         if (!brandingResult.IsSuccess || brandingResult.Data is null)
         {

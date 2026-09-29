@@ -1,0 +1,332 @@
+@implements IDisposable
+
+@inject IShiftClaimService _shiftClaimService
+@inject IShiftClaimEventBus _shiftClaimEventBus
+
+@* My Shifts > Up for grabs: open shifts the person could work, colleagues' swap requests they
+   could answer, and their own requests still in progress. Refreshes live as requests change. *@
+@if (market is null)
+{
+    <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentSpinner />
+        <FluentText>Loading...</FluentText>
+    </FluentStack>
+}
+else
+{
+    <div class="grabs">
+        @if (market.MyClaims.Count > 0)
+        {
+            <section class="grabs-section">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Your requests</FluentText>
+                @foreach (MyClaimView mine in market.MyClaims)
+                {
+                    <div class="grab-card">
+                        <div class="grab-card-top">
+                            <div>
+                                <div class="grab-kind">@KindLabel(mine.Claim)</div>
+                                <div class="grab-shift">@mine.Shift.Describe()</div>
+                                @if (mine.Claim.Kind == ShiftClaimKind.SwapOffer && mine.OfferedShift is Shift given)
+                                {
+                                    <div class="grab-meta">You'd give them your @given.Describe()</div>
+                                }
+                            </div>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@StatusColor(mine)">@StatusLabel(mine)</FluentBadge>
+                        </div>
+
+                        @if (mine.Claim.Kind == ShiftClaimKind.Swap && mine.Claim.Status == ShiftClaimStatus.Accepted
+                             && mine.Offers.FirstOrDefault(o => o.Offer.Status == ShiftClaimStatus.Accepted) is SwapOfferView chosen)
+                        {
+                            <div class="grab-meta">You agreed to swap with @chosen.OffererName: you'd work their @chosen.OfferedShift.Describe()</div>
+                        }
+                        else if (mine.Claim.Kind == ShiftClaimKind.Swap && mine.Claim.Status == ShiftClaimStatus.Pending)
+                        {
+                            @if (mine.Offers.Count == 0)
+                            {
+                                <div class="grab-meta">No offers yet. Colleagues who could work it have been told.</div>
+                            }
+                            else
+                            {
+                                <ul class="grab-offers">
+                                    @foreach (SwapOfferView offer in mine.Offers)
+                                    {
+                                        <li>
+                                            <div>
+                                                <div class="grab-offer-name">@offer.OffererName</div>
+                                                <div class="grab-meta">You'd work their @offer.OfferedShift.Describe()</div>
+                                            </div>
+                                            <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => AcceptAsync(offer))">Swap</FluentButton>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        }
+
+                        <div class="grab-actions">
+                            <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => WithdrawAsync(mine.Claim))">
+                                @(mine.Claim.Kind == ShiftClaimKind.SwapOffer ? "Take back my offer" : "Withdraw")
+                            </FluentButton>
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="grabs-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Open shifts</FluentText>
+            @if (market.OpenShifts.Count == 0)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">No open shifts right now. You'll get a notification when one comes up.</FluentText>
+            }
+            @foreach (OpenShiftView open in market.OpenShifts)
+            {
+                <div class="grab-card @(open.NotEligibleReason is not null ? "is-unavailable" : string.Empty)">
+                    <div class="grab-card-top">
+                        <div>
+                            <div class="grab-shift">@open.Shift.Describe()</div>
+                            <div class="grab-meta">
+                                @open.Shift.Location?.Name
+                                @if (open.Shift.BreakMinutes > 0)
+                                {
+                                    <span> · @open.Shift.BreakMinutes min break</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(open.Shift.Notes))
+                            {
+                                <div class="grab-meta grab-notes">@open.Shift.Notes</div>
+                            }
+                        </div>
+                        @if (open.MyClaim is not null)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Asked for</FluentBadge>
+                        }
+                    </div>
+
+                    @if (open.MyClaim is not null)
+                    {
+                        <div class="grab-meta">Waiting for a manager to decide who gets it.</div>
+                    }
+                    else if (open.NotEligibleReason is string reason)
+                    {
+                        <div class="grab-meta">@reason</div>
+                    }
+                    else
+                    {
+                        <div class="grab-actions">
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.HandRight())"
+                                          Disabled="@isBusy" OnClick="@(() => PickUpAsync(open))">
+                                @(open.NeedsApproval ? "Ask for this shift" : "Pick up this shift")
+                            </FluentButton>
+                            <span class="grab-meta">@(open.NeedsApproval ? "A manager confirms who gets it." : "First to pick it up gets it.")</span>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="grabs-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Swaps you could help with</FluentText>
+            @if (market.SwapRequests.Count == 0)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">Nobody is looking for a swap you could take.</FluentText>
+            }
+            @foreach (SwapRequestView swap in market.SwapRequests)
+            {
+                <div class="grab-card">
+                    <div class="grab-card-top">
+                        <div>
+                            <div class="grab-kind">@swap.RequesterName wants to swap</div>
+                            <div class="grab-shift">@swap.Shift.Describe()</div>
+                            @if (swap.Swap.Note is string note)
+                            {
+                                <div class="grab-meta grab-notes">“@note”</div>
+                            }
+                        </div>
+                        @if (swap.MyOffer is not null)
+                        {
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Offered</FluentBadge>
+                        }
+                    </div>
+
+                    @if (swap.MyOffer is not null)
+                    {
+                        <div class="grab-meta">You've offered a swap. @swap.RequesterName chooses.</div>
+                    }
+                    else if (swap.ShiftsICanOffer.Count == 0)
+                    {
+                        <div class="grab-meta">You don't have a shift here you could swap for this one.</div>
+                    }
+                    else
+                    {
+                        <div class="grab-offer-form">
+                            <FluentSelect TOption="Shift" TValue="string" Items="@swap.ShiftsICanOffer" OptionText="@(x => x.Describe())"
+                                          OptionValue="@(x => x.Id.ToString())" Value="@SelectedOffer(swap)"
+                                          ValueChanged="@(v => offerChoice[swap.Swap.Id] = v)" Label="Your shift to give in return" Width="100%" />
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowSwap())"
+                                          Disabled="@isBusy" OnClick="@(() => OfferAsync(swap))">Offer this swap</FluentButton>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private ShiftMarketplace? market;
+    private string? userId;
+    private bool isBusy;
+    private readonly Dictionary<Guid, string?> offerChoice = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            _toastService.ShowError($"Couldn't load open shifts: {user.Error}");
+            market = new ShiftMarketplace([], [], []);
+            return;
+        }
+
+        userId = user.Data;
+        _shiftClaimEventBus.OnChanged += OnClaimsChanged;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        Result<ShiftMarketplace> result = await _shiftClaimService.GetMarketplaceAsync(userId);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError($"Couldn't load open shifts: {result.Error}");
+            market ??= new ShiftMarketplace([], [], []);
+            return;
+        }
+
+        market = result.Data;
+    }
+
+    // Only changes at the viewer's own locations matter; everything else would just be a wasted reload.
+    private void OnClaimsChanged(int locationId)
+    {
+        if (market is not null && !market.LocationIds.Contains(locationId))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => _shiftClaimEventBus.OnChanged -= OnClaimsChanged;
+
+    private string? SelectedOffer(SwapRequestView swap) =>
+        offerChoice.TryGetValue(swap.Swap.Id, out string? chosen) && chosen is not null ? chosen : swap.ShiftsICanOffer.FirstOrDefault()?.Id.ToString();
+
+    private static string KindLabel(ShiftClaim claim) => claim.Kind switch
+    {
+        ShiftClaimKind.Pickup => "You asked for",
+        ShiftClaimKind.Drop => "You can't make",
+        ShiftClaimKind.Swap => "You're looking to swap",
+        _ => "You offered to take"
+    };
+
+    private static string StatusLabel(MyClaimView mine) => (mine.Claim.Kind, mine.Claim.Status) switch
+    {
+        (ShiftClaimKind.Swap, ShiftClaimStatus.Pending) => mine.Offers.Count switch { 0 => "Waiting for offers", 1 => "1 offer", int n => $"{n} offers" },
+        (ShiftClaimKind.Swap or ShiftClaimKind.SwapOffer, ShiftClaimStatus.Accepted) => "Waiting for a manager",
+        (ShiftClaimKind.SwapOffer, _) => "Waiting for them to choose",
+        _ => "Waiting for a manager"
+    };
+
+    private static BadgeColor StatusColor(MyClaimView mine) =>
+        mine.Claim.Kind == ShiftClaimKind.Swap && mine.Offers.Count > 0 && mine.Claim.Status == ShiftClaimStatus.Pending
+            ? BadgeColor.Success
+            : BadgeColor.Informative;
+
+    private async Task RunAsync(Func<Task<string?>> action)
+    {
+        isBusy = true;
+        string? error = await action();
+        isBusy = false;
+
+        if (error is not null)
+        {
+            _toastService.ShowError(error);
+        }
+
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private Task PickUpAsync(OpenShiftView open) => RunAsync(async () =>
+    {
+        Result<ShiftClaim> result = await _shiftClaimService.PickUpAsync(userId!, open.Shift.Id, null);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(result.Data?.Status == ShiftClaimStatus.Approved
+                ? $"It's yours: {open.Shift.Describe()} is on your shifts."
+                : "Asked. Your manager will let you know.");
+        }
+
+        return result.IsSuccess ? null : result.Error;
+    });
+
+    private Task OfferAsync(SwapRequestView swap) => RunAsync(async () =>
+    {
+        if (!Guid.TryParse(SelectedOffer(swap), out Guid myShiftId))
+        {
+            return "Choose one of your shifts to offer.";
+        }
+
+        Result<ShiftClaim> result = await _shiftClaimService.OfferSwapAsync(userId!, swap.Swap.Id, myShiftId);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess($"Offered. {swap.RequesterName} will choose.");
+        }
+
+        return result.IsSuccess ? null : result.Error;
+    });
+
+    private Task AcceptAsync(SwapOfferView offer) => RunAsync(async () =>
+    {
+        Result<ShiftClaim> result = await _shiftClaimService.AcceptOfferAsync(userId!, offer.Offer.Id);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess(result.Data?.Status == ShiftClaimStatus.Approved
+                ? $"Swapped. You now work {offer.OfferedShift.Describe()}."
+                : "Agreed. A manager will approve the swap.");
+        }
+
+        return result.IsSuccess ? null : result.Error;
+    });
+
+    private Task WithdrawAsync(ShiftClaim claim) => RunAsync(async () =>
+    {
+        Result<bool> result = await _shiftClaimService.WithdrawAsync(userId!, claim.Id);
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowInfo("Withdrawn.");
+        }
+
+        return result.IsSuccess ? null : result.Error;
+    });
+}

@@ -1,0 +1,88 @@
+/* --theme-colour comes from the global .theme-colour rule in App.razor (light/dark palette). */
+.shift-chip {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    width: 100%;
+    min-width: 0;
+    padding: 4px 8px 4px 8px;
+    border: none;
+    border-left: 4px solid var(--theme-colour);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--theme-colour) 16%, transparent);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.shift-chip:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--theme-colour) 28%, transparent);
+}
+
+.shift-chip:focus-visible {
+    outline: 2px solid var(--theme-colour);
+    outline-offset: 1px;
+}
+
+.shift-chip-time {
+    font-weight: 600;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.shift-chip-position {
+    font-size: 0.75rem;
+    color: var(--colorNeutralForeground3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.shift-chip-compact {
+    align-items: center;
+    padding: 2px 3px;
+    border-left-width: 3px;
+}
+
+.shift-chip-compact .shift-chip-time {
+    font-size: 0.72rem;
+}
+
+/* Draft: dashed outline, so "not visible to staff yet" reads at a glance. */
+.shift-chip-draft {
+    background: transparent;
+    outline: 1px dashed var(--theme-colour);
+    outline-offset: -1px;
+}
+
+.shift-chip-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d13438;
+}
+
+.shift-chip-removed {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.shift-chip-removed .shift-chip-time,
+.shift-chip-removed .shift-chip-position {
+    text-decoration: line-through;
+}
+
+/* Open shift: striped, so "nobody on this yet" reads at a glance next to the solid chips. */
+.shift-chip-open {
+    background: repeating-linear-gradient(135deg,
+        color-mix(in srgb, var(--theme-colour) 20%, transparent) 0 6px,
+        transparent 6px 12px);
+}

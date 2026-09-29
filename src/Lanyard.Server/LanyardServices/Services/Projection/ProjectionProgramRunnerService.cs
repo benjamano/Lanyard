@@ -1,4 +1,5 @@
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
@@ -7,10 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace Lanyard.Application.Services;
 
 public class ProjectionProgramRunnerService(
-    IDbContextFactory<ApplicationDbContext> factory,
+    ISystemDbContextFactory factory,
     ILogger<ProjectionProgramRunnerService> logger) : IProjectionProgramRunnerService
 {
-    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly ISystemDbContextFactory _factory = factory;
     private readonly ILogger<ProjectionProgramRunnerService> _logger = logger;
 
     // How often a held step re-checks for pause/skip/stop. Paused time doesn't count
@@ -43,6 +44,10 @@ public class ProjectionProgramRunnerService(
 
         public int CurrentStepIndex;
         public volatile bool IsPaused;
+
+        // Runs only while the program is unpaused (stopped/started in SetPaused under _lock), so
+        // a step's hold is measured in exact played time however a pause lines up with a tick.
+        public readonly System.Diagnostics.Stopwatch PlayClock = System.Diagnostics.Stopwatch.StartNew();
 
         // Set by a skip request, consumed by the run loop when its current hold breaks out.
         public int? PendingStepIndex;
@@ -216,9 +221,15 @@ public class ProjectionProgramRunnerService(
     private async Task HoldStepAsync(RunningProgram run, ProjectionProgramStep step, CancellationToken token)
     {
         int holdMilliseconds = step.HoldForMilliseconds == 0 ? DefaultHoldMilliseconds : step.HoldForMilliseconds;
-        int elapsed = 0;
+        TimeSpan hold = TimeSpan.FromMilliseconds(holdMilliseconds);
 
-        while (elapsed < holdMilliseconds)
+        // Played time comes from the run's PlayClock, which stops while paused. Paused time
+        // therefore never counts toward the hold (resuming continues the step where it left
+        // off), and no played time is lost or double-counted when a pause or resume lands
+        // part-way through a tick.
+        TimeSpan startedAt = GetPlayedTime(run);
+
+        while (true)
         {
             token.ThrowIfCancellationRequested();
 
@@ -227,14 +238,39 @@ public class ProjectionProgramRunnerService(
                 return;
             }
 
-            await Task.Delay(TickMilliseconds, token);
+            TimeSpan played = GetPlayedTime(run) - startedAt;
 
-            // Paused time doesn't count toward the hold, so resuming continues the step
-            // from where it left off rather than restarting it or advancing immediately.
-            if (!run.IsPaused)
+            if (played >= hold)
             {
-                elapsed += TickMilliseconds;
+                return;
             }
+
+            await Task.Delay(ComputeHoldDelayMilliseconds(hold, played, run.IsPaused), token);
+        }
+    }
+
+    /// <summary>
+    /// How long the hold loop sleeps before re-checking. The last delay of a hold is trimmed to
+    /// what remains so the step ends on time, but only while playing: paused, the remaining time
+    /// doesn't shrink, so trimming would spin every millisecond for as long as the pause lasts.
+    /// </summary>
+    public static int ComputeHoldDelayMilliseconds(TimeSpan hold, TimeSpan played, bool isPaused)
+    {
+        if (isPaused)
+        {
+            return TickMilliseconds;
+        }
+
+        TimeSpan remaining = hold - played;
+
+        return (int)Math.Clamp(Math.Ceiling(remaining.TotalMilliseconds), 1, TickMilliseconds);
+    }
+
+    private TimeSpan GetPlayedTime(RunningProgram run)
+    {
+        lock (_lock)
+        {
+            return run.PlayClock.Elapsed;
         }
     }
 
@@ -278,6 +314,15 @@ public class ProjectionProgramRunnerService(
                 }
 
                 running.IsPaused = isPaused;
+
+                if (isPaused)
+                {
+                    running.PlayClock.Stop();
+                }
+                else
+                {
+                    running.PlayClock.Start();
+                }
             }
 
             _logger.LogInformation("Projection program on client {ClientId} display {DisplayIndex} was {PauseState}", clientId, displayIndex, isPaused ? "paused" : "resumed");

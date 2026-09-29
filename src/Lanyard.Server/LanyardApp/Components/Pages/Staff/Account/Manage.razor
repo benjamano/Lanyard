@@ -3,9 +3,11 @@
 
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Layout.Staff
+@using Lanyard.App.Components.Notifications
 @using Lanyard.Application.Services.Authentication
 
 @inject INotificationService ToastService
+@inject ICompanyFeatureService _companyFeatureService
 
 <PageTitle>Account Management</PageTitle>
 
@@ -35,6 +37,13 @@
         </FluentCard>
 
         <FluentCard Width="100%">
+            <div class="account-manage-section" id="notifications">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Notifications</FluentText>
+                <NotificationsCard />
+            </div>
+        </FluentCard>
+
+        <FluentCard Width="100%">
             <div class="account-manage-section">
                 <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Security</FluentText>
                 <FluentButton Appearance="ButtonAppearance.Outline"
@@ -52,6 +61,16 @@
             </div>
         </FluentCard>
 
+        @if (_showClockInPin)
+        {
+            <FluentCard Width="100%">
+                <div class="account-manage-section">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Clock-in PIN</FluentText>
+                    <ClockInPinCard />
+                </div>
+            </FluentCard>
+        }
+
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
             <FluentButton Appearance="ButtonAppearance.Primary"
                         IconStart="@(new Icons.Regular.Size20.Save())"
@@ -64,6 +83,15 @@
 
 @code{
     private YourDetailsCard? yourDetailsCard;
+
+    // Clock-in PINs only mean anything to a company with shift management.
+    private bool _showClockInPin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _showClockInPin = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.StaffScheduling);
+    }
+
     private ContactDetailsCard? contactDetailsCard;
     private HomeScreenCard? homeScreenCard;
 

@@ -1,0 +1,84 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject ITimeEntryService _timeEntryService
+
+@if (entries is null)
+{
+    <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentSpinner />
+        <FluentText>Loading...</FluentText>
+    </FluentStack>
+}
+else if (entries.Count == 0)
+{
+    <FluentCard Height="auto">
+        <FluentText>You haven't clocked any time in the last @Weeks weeks.</FluentText>
+    </FluentCard>
+}
+else
+{
+    <div class="my-hours">
+        @foreach (IGrouping<DateOnly, TimeEntry> week in entries.GroupBy(e => RotaTime.GetWeekStart(RotaTime.LocalDate(e.ClockInUtc))))
+        {
+            <section class="my-hours-week">
+                <div class="my-hours-week-header">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Week of @week.Key.ToString("d MMMM", RotaFormat.Uk)</FluentText>
+                    <FluentText Class="my-hours-total">@RotaFormat.Hours(Math.Round(week.Sum(e => e.ClockedHours ?? 0), 2))</FluentText>
+                </div>
+                @foreach (TimeEntry entry in week)
+                {
+                    <div class="my-hours-entry">
+                        <div class="my-hours-day">@RotaTime.LocalDate(entry.ClockInUtc).DayLabel()</div>
+                        <div class="my-hours-times">
+                            @(entry.ClockOutUtc is DateTime outUtc ? RotaFormat.TimeRange(entry.ClockInUtc, outUtc) : $"{RotaFormat.LocalTime(entry.ClockInUtc)} – now")
+                            <span class="my-hours-meta">@entry.Location?.Name</span>
+                        </div>
+                        <FluentBadge Appearance="BadgeAppearance.Filled" Color="@StatusColor(entry)">@StatusText(entry)</FluentBadge>
+                    </div>
+                }
+            </section>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Weeks { get; set; } = 3;
+
+    private List<TimeEntry>? entries;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<string> user = await _securityService.GetCurrentUserIdAsync();
+
+        if (!user.IsSuccess || string.IsNullOrEmpty(user.Data))
+        {
+            entries = [];
+            return;
+        }
+
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        DateOnly from = RotaTime.GetWeekStart(today).AddDays(-7 * (Weeks - 1));
+
+        Result<List<TimeEntry>> result = await _timeEntryService.GetEntriesForUserAsync(user.Data, from, today);
+        entries = result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    private static string StatusText(TimeEntry entry) => entry switch
+    {
+        { IsOpen: true } => "On the clock",
+        { IsApproved: true } => "Approved",
+        { NeedsReview: true } => "Being checked",
+        _ => "Awaiting approval"
+    };
+
+    private static BadgeColor StatusColor(TimeEntry entry) => entry switch
+    {
+        { IsOpen: true } => BadgeColor.Informative,
+        { IsApproved: true } => BadgeColor.Success,
+        { NeedsReview: true } => BadgeColor.Warning,
+        _ => BadgeColor.Brand
+    };
+}

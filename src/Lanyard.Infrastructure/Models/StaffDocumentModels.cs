@@ -6,7 +6,7 @@ namespace Lanyard.Infrastructure.Models
     // First Aid certificate, etc). Company-scoped rather than Location-scoped because this is
     // HR/company policy, mirroring how branding (Company.ThemeColorHex/LogoFileId) already lives
     // on Company, not Location - see CompanyLocationModels.cs.
-    public class StaffDocumentType
+    public class StaffDocumentType : ICompanyOwned
     {
         public Guid Id { get; set; }
 
@@ -27,9 +27,10 @@ namespace Lanyard.Infrastructure.Models
     // rather than adding columns to it - FileMetadata is a generic table shared by folders, company
     // logos, and video devices, and already has its own IsActive soft-delete semantics that a
     // per-staff-document lifecycle would otherwise collide with.
-    public class StaffDocument
+    public class StaffDocument : ICompanyOwned
     {
         public Guid Id { get; set; }
+        public int CompanyId { get; set; }
 
         public required string UserId { get; set; }
         public UserProfile? User { get; set; }

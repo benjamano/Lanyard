@@ -10,7 +10,7 @@
     <TitleTemplate>
         <FluentStack VerticalAlignment="VerticalAlignment.Center">
             <FluentIcon Value="@(new Icons.Regular.Size24.ProjectionScreenText())" />
-            <FluentText Typo="Typography.PaneHeader">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
                 @(steps.Count() <= currentStepIndex ? "Finish" : steps[currentStepIndex])
             </FluentText>
         </FluentStack>
@@ -95,7 +95,7 @@
         {
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
                 <FluentCard Appearance="CardAppearance.Subtle">
-                    <FluentText Typo="Typography.H6">Screen Selection</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Screen Selection</FluentText>
                     @if (selectedScreen is not null)
                     {
                         <FluentStack>
@@ -111,7 +111,7 @@
                 </FluentCard>
 
                 <FluentCard Appearance="CardAppearance.Subtle">
-                    <FluentText Typo="Typography.H6">Screen Settings</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Screen Settings</FluentText>
                     <FluentStack>
                         <FluentText>Full Screen: @(newClientProjectionSettings.IsFullScreen ? "Yes" : "No")</FluentText>
                         <FluentText>Borderless: @(newClientProjectionSettings.IsBorderless ? "Yes" : "No")</FluentText>
@@ -121,7 +121,7 @@
                 </FluentCard>
 
                 <FluentCard Appearance="CardAppearance.Subtle">
-                    <FluentText Typo="Typography.H6">Projection Program</FluentText>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Projection Program</FluentText>
                     @if (newClientProjectionSettings.ProjectionProgram is not null)
                     {
                         <FluentText>Name: @newClientProjectionSettings.ProjectionProgram.Name</FluentText>

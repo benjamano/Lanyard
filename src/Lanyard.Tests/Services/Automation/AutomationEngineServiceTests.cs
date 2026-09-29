@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using Lanyard.Application.Services;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
@@ -24,10 +25,10 @@ public class AutomationEngineServiceTests
             .Options;
     }
 
-    private static IDbContextFactory<ApplicationDbContext> GetFactory(
+    private static ISystemDbContextFactory GetFactory(
         DbContextOptions<ApplicationDbContext> options)
     {
-        Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
+        Mock<ISystemDbContextFactory> factoryMock = new();
 
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))

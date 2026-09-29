@@ -18,22 +18,24 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<CourseAssignment> assignments = await ctx.CourseAssignments
+            // Ranking, latest-attempt selection and the top-N cut all happen in SQL; this used to
+            // load every assignment and every attempt for the course to keep ten rows.
+            var ranked = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Include(x => x.Attempts)
                 .Where(x => x.CourseId == courseId && x.IsActive && x.Attempts.Count > 0 && (scope.IsAdmin || x.LocationId == scope.LocationId))
+                .Select(x => new
+                {
+                    x.UserId,
+                    Latest = x.Attempts.OrderByDescending(a => a.AttemptNumber).First()
+                })
+                .OrderByDescending(x => x.Latest.ScorePercent)
+                .ThenBy(x => x.Latest.SubmittedDate)
+                .Take(topN)
                 .ToListAsync();
 
-            List<TraineeScoreRankingRow> rows = [.. assignments
-                .Select(x =>
-                {
-                    CourseQuizAttempt latest = x.Attempts.OrderByDescending(a => a.AttemptNumber).First();
-                    return new TraineeScoreRankingRow(x.UserId, latest.ScorePercent, latest.AttemptNumber, latest.SubmittedDate);
-                })
-                .OrderByDescending(x => x.ScorePercent)
-                .ThenBy(x => x.SubmittedDate)
-                .Take(topN)];
+            List<TraineeScoreRankingRow> rows = [.. ranked
+                .Select(x => new TraineeScoreRankingRow(x.UserId, x.Latest.ScorePercent, x.Latest.AttemptNumber, x.Latest.SubmittedDate))];
 
             return Result<List<TraineeScoreRankingRow>>.Ok(rows);
         }
@@ -52,16 +54,17 @@ public class TrainingAnalyticsService(IDbContextFactory<ApplicationDbContext> fa
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<CourseAssignment> completed = await ctx.CourseAssignments
+            var fastest = await ctx.CourseAssignments
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(x => x.CourseId == courseId && x.IsActive && x.StartedDate != null && x.CompletedDate != null && (scope.IsAdmin || x.LocationId == scope.LocationId))
+                .OrderBy(x => x.CompletedDate!.Value - x.StartedDate!.Value)
+                .Take(topN)
+                .Select(x => new { x.UserId, x.StartedDate, x.CompletedDate })
                 .ToListAsync();
 
-            List<TraineeTimingRankingRow> rows = [.. completed
-                .Select(x => new TraineeTimingRankingRow(x.UserId, (x.CompletedDate!.Value - x.StartedDate!.Value).TotalMinutes, x.CompletedDate.Value))
-                .OrderBy(x => x.DurationMinutes)
-                .Take(topN)];
+            List<TraineeTimingRankingRow> rows = [.. fastest
+                .Select(x => new TraineeTimingRankingRow(x.UserId, (x.CompletedDate!.Value - x.StartedDate!.Value).TotalMinutes, x.CompletedDate.Value))];
 
             return Result<List<TraineeTimingRankingRow>>.Ok(rows);
         }

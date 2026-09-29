@@ -15,7 +15,7 @@
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="4">
                         <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween"
                                      VerticalAlignment="VerticalAlignment.Center">
-                            <FluentText Typo="Typography.H6">v@(release.Version)</FluentText>
+                            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">v@(release.Version)</FluentText>
                             <FluentText Color="Color.Disabled">@release.ReleaseDate.ToString("d MMM yyyy")</FluentText>
                         </FluentStack>
                         <FluentText>@release.Summary</FluentText>

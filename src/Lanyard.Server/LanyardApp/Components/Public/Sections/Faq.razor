@@ -1,0 +1,63 @@
+@* Answers to what a venue asks before getting in touch. Every answer is something Lanyard really does
+   today - no pricing or compatibility promises: those are "get in touch" questions. Also published as
+   FAQPage structured data so search engines can show the answers - in the body rather than HeadContent,
+   which would replace the page's own (only the last HeadContent rendered is kept). *@
+
+@using System.Text.Json
+@inject IConfiguration Configuration
+
+<div class="faq">
+    @((MarkupString)$"<script type=\"application/ld+json\">{StructuredData}</script>")
+
+    @foreach (Question item in Questions)
+    {
+        <details class="faq-item">
+            <summary class="faq-question">@item.Ask</summary>
+            <p class="faq-answer">@item.Answer</p>
+        </details>
+    }
+</div>
+
+@code {
+    private sealed record Question(string Ask, string Answer);
+
+    private bool DemoEnabled => Configuration.GetValue<bool>("Demo:Enabled");
+
+    private IEnumerable<Question> Questions => DemoEnabled ? [.. AllQuestions, TryItFirst] : AllQuestions;
+
+    private static readonly Question[] AllQuestions =
+    [
+        new("What do we need at the venue?",
+            "For the staff side - the rota, training, onboarding and chat - nothing: it runs in a web browser on a phone or computer. "
+            + "For the music, lighting, screens and laser tag scoring you'll need a Windows PC running the Lanyard venue app, which keeps itself up to date. "
+            + "Lighting control uses an ENTTEC Open DMX USB interface."),
+        new("Does it work on phones?",
+            "Yes. Staff can use it in their phone's browser or install it like an app, and get notifications for rota changes, shift reminders and messages."),
+        new("Do we have to use every part of it?",
+            "No. Shift management, training, chat, onboarding and announcements can each be switched on or off for your company."),
+        new("Where is our data kept?",
+            "Lanyard is hosted in West Europe, so your data stays in the UK and EU. Each company only ever sees its own data."),
+        new("How is it kept secure?",
+            "Sign-in can be protected with two-factor authentication using an authenticator app or an email code, accounts lock after repeated wrong passwords, "
+            + "and an admin can erase a person's data when they ask (GDPR)."),
+        new("Which laser tag systems does it work with?",
+            "The venue app reads the scores and game status your laser tag system sends over the venue's network. Get in touch and we'll check it works with yours."),
+        new("How much does it cost?",
+            "It depends on your venue - get in touch and we'll talk it through."),
+    ];
+
+    private static readonly Question TryItFirst = new("Can we try it first?",
+        "Yes - the live demo on this page lets you sign in as an admin, a manager or a member of staff at a made-up venue, no sign-up needed.");
+
+    private string StructuredData => JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["@context"] = "https://schema.org",
+        ["@type"] = "FAQPage",
+        ["mainEntity"] = Questions.Select(q => new Dictionary<string, object>
+        {
+            ["@type"] = "Question",
+            ["name"] = q.Ask,
+            ["acceptedAnswer"] = new Dictionary<string, object> { ["@type"] = "Answer", ["text"] = q.Answer },
+        }).ToList(),
+    }).Replace("</", "<\\/", StringComparison.Ordinal);
+}

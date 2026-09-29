@@ -8,7 +8,7 @@
 
 <FluentCard Height="auto" Class="mt-2">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
-        <FluentText Typo="Typography.H4">Onboarding</FluentText>
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Onboarding</FluentText>
 
         @if (_locations is not null && _locations.Count > 0)
         {
@@ -39,7 +39,7 @@
                 <FluentTextInput @bind-Value="settings.WelcomeEmailSubject" Label="Email subject" Width="100%"
                                   Placeholder="Welcome to Lanyard" />
 
-                <FluentText Typo="Typography.Body">Email body</FluentText>
+                <FluentText>Email body</FluentText>
                 <div class="onboarding-editor-host" @ref="_editorHostRef">
                     <BlazoredTextEditor @ref="_editor" Placeholder="Write a welcome message...">
                         <ToolbarContent>
@@ -61,7 +61,7 @@
 
                 @if (settings.AutoAttachStandingDocuments)
                 {
-                    <FluentText Typo="Typography.Body">Standing attachments</FluentText>
+                    <FluentText>Standing attachments</FluentText>
 
                     @if (attachments is null)
                     {

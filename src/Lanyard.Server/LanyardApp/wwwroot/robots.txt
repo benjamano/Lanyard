@@ -1,2 +1,8 @@
+# Only the public homepage is for search engines; everything else is the staff app.
+# Other hosts (staging) also get an X-Robots-Tag: noindex header on every page.
 User-agent: *
+Allow: /$
+Allow: /sitemap.xml
 Disallow: /
+
+Sitemap: https://lanyard.benjaminmercer.co.uk/sitemap.xml

@@ -1,0 +1,36 @@
+/* Phone: all three columns fit the screen rather than the grid sliding sideways with Status - the
+   column that matters most - parked off the right edge. The course name wraps instead: Fluent's
+   cells are fixed-height, nowrap and ellipsised, which squashed a long name (plus the row-details
+   toggle beside it) down to a bare "…". Every rule hangs off .my-training-grid-scroll, a plain
+   <div>, because the grid's own elements don't carry this file's scope attribute; !important
+   beats the inline column template and cell heights FluentDataGrid writes. */
+@media (max-width: 767.98px) {
+    .my-training-grid-scroll ::deep table.fluent-data-grid {
+        grid-template-columns: minmax(0, 1fr) auto auto !important;
+    }
+
+    .my-training-grid-scroll ::deep th,
+    .my-training-grid-scroll ::deep td {
+        padding-inline: 6px !important;
+    }
+
+    .my-training-grid-scroll ::deep tbody td {
+        display: flex;
+        align-items: center;
+        align-self: stretch;
+        height: auto !important;
+        min-height: 44px;
+    }
+
+    .my-training-grid-scroll ::deep tbody td:first-child {
+        white-space: normal;
+    }
+
+    .my-training-grid-scroll ::deep tbody td:first-child fluent-button {
+        justify-content: flex-start;
+        height: auto;
+        min-width: 0;
+        padding-inline: 4px;
+        text-align: start;
+    }
+}

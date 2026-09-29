@@ -218,7 +218,11 @@ namespace Lanyard.Tests.DataAccess
 
             Assert.IsTrue(adminExists);
             Assert.AreEqual(DatabaseSeederStandardRoleCount, roleCount);
+            // Admin, Manager, Staff, CanControlMusic - plus PlatformAdmin, granted to the seed
+            // admin the first time that role is created.
             Assert.AreEqual(5, adminRoleAssignmentCount);
+            Assert.IsTrue(await context.UserRoles.AnyAsync(ur =>
+                ur.UserId == ApplicationDbContext.SeedAdminUserId && ur.RoleId == ApplicationDbContext.SeedPlatformAdminRoleId));
         }
 
         [TestMethod]

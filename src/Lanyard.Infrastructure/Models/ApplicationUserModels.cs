@@ -21,6 +21,10 @@ namespace Lanyard.Infrastructure.Models
         // it, an organisation-wide default dashboard would be inescapable.
         public bool UseStandardHomePage { get; set; }
 
+        // Off: chat push notifications say "New message from Tom" without the text, for anyone
+        // whose lock screen others can see.
+        public bool ShowMessagePreviews { get; set; } = true;
+
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 

@@ -1,0 +1,136 @@
+@* The PIN entry overlay on the clock-in terminal. Big targets for a wall tablet; the digits are
+   never shown, only dots. A hardware keyboard works too (digits, Backspace, Enter, Escape). *@
+<div class="pin-overlay" @onclick="CancelAsync">
+    <div class="pin-card" role="dialog" aria-modal="true" aria-label="@($"Enter the PIN for {PersonName}")"
+         tabindex="0" @ref="_cardRef" @onclick:stopPropagation="true" @onkeydown="OnKeyDownAsync">
+        <div class="pin-name">@PersonName</div>
+        <div class="pin-prompt">Enter your PIN</div>
+
+        <div class="pin-dots" aria-live="polite" aria-label="@($"{_digits.Length} digits entered")">
+            @for (int i = 0; i < MaxDigits; i++)
+            {
+                <span class="pin-dot @(i < _digits.Length ? "is-filled" : string.Empty) @(i >= MinDigits && i >= _digits.Length ? "is-optional" : string.Empty)"></span>
+            }
+        </div>
+
+        <div class="pin-keys">
+            @foreach (string key in new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9" })
+            {
+                string digit = key;
+                <button type="button" class="pin-key" disabled="@Busy" @onclick="@(() => Append(digit))">@digit</button>
+            }
+            <button type="button" class="pin-key pin-key-muted" disabled="@Busy" @onclick="Clear" aria-label="Clear">Clear</button>
+            <button type="button" class="pin-key" disabled="@Busy" @onclick="@(() => Append("0"))">0</button>
+            <button type="button" class="pin-key pin-key-muted" disabled="@Busy" @onclick="Backspace" aria-label="Delete last digit">&#9003;</button>
+        </div>
+
+        <div class="pin-actions">
+            <button type="button" class="pin-action pin-cancel" disabled="@Busy" @onclick="CancelAsync">Cancel</button>
+            <button type="button" class="pin-action pin-go" disabled="@(Busy || _digits.Length < MinDigits)" @onclick="SubmitAsync">
+                @(Busy ? "Checking..." : "Go")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const int MinDigits = 4;
+    private const int MaxDigits = 6;
+
+    [Parameter, EditorRequired]
+    public required string PersonName { get; set; }
+
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback OnActivity { get; set; }
+
+    private string _digits = string.Empty;
+    private ElementReference _cardRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // So a USB/Bluetooth keypad works without tapping the card first.
+            await _cardRef.FocusAsync();
+        }
+    }
+
+    // The parent clears the pad after a wrong PIN by calling this.
+    public void Reset()
+    {
+        _digits = string.Empty;
+        StateHasChanged();
+    }
+
+    private void Append(string digit)
+    {
+        if (_digits.Length < MaxDigits)
+        {
+            _digits += digit;
+        }
+
+        OnActivity.InvokeAsync();
+    }
+
+    private void Backspace()
+    {
+        if (_digits.Length > 0)
+        {
+            _digits = _digits[..^1];
+        }
+
+        OnActivity.InvokeAsync();
+    }
+
+    private void Clear()
+    {
+        _digits = string.Empty;
+        OnActivity.InvokeAsync();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_digits.Length >= MinDigits && !Busy)
+        {
+            await OnSubmit.InvokeAsync(_digits);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        if (!Busy)
+        {
+            _digits = string.Empty;
+            await OnCancel.InvokeAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key.Length == 1 && char.IsDigit(e.Key[0]))
+        {
+            Append(e.Key);
+        }
+        else if (e.Key == "Backspace")
+        {
+            Backspace();
+        }
+        else if (e.Key == "Enter")
+        {
+            await SubmitAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            await CancelAsync();
+        }
+    }
+}

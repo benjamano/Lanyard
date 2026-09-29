@@ -1,10 +1,14 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
+@using Lanyard.App.Components.Notifications
+
 @inject NavigationManager NavigationManager
 @inject IThemeService ThemeService
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Lanyard.Application.Services.Demo.IDemoGuard DemoGuard
+@inject Lanyard.App.Components.Demo.DemoBrandingState DemoBranding
 
 <FluentProviders />
 
@@ -43,9 +47,25 @@
                                             CustomColor="white" />
                                 @* Names are "Company Location", so they get long - capped and ellipsised
                                    rather than allowed to push the theme toggle off the header. *@
-                                <span class="header-location-name">@_locationDisplayName</span>
+                                <span class="header-location-name">@DemoBranding.RebrandLocationName(_locationDisplayName)</span>
                             </div>
                         </Authorized>
+                    </AuthorizeView>
+                }
+
+                @* Signed-out visitors (the public homepage, mostly) get a way in from every page
+                   except the login page itself. *@
+                @if (!IsLoginPage)
+                {
+                    <AuthorizeView>
+                        <NotAuthorized>
+                            <div class="header-login">
+                                <FluentAnchorButton Href="/login" Appearance="ButtonAppearance.Outline"
+                                                    IconStart="@(new Icons.Regular.Size20.ArrowEnter().WithColor("white"))">
+                                    Log in
+                                </FluentAnchorButton>
+                            </div>
+                        </NotAuthorized>
                     </AuthorizeView>
                 }
 
@@ -62,8 +82,27 @@
         </AuthorizeView>
     </FluentLayoutItem>
 
-    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage ? Margin.All0 : Margin.All3)">
+    <FluentLayoutItem Area="LayoutArea.Content" Margin="@(IsLoginPage || _isPublicHome ? Margin.All0 : Margin.All3)">
         <AutoLogoutManager />
+        <AuthorizeView>
+            <Authorized>
+                <DeviceSync />
+                <InstallAppPrompt AppName="@_installLinks.AppName" IconHref="@_installLinks.AppleTouchIconHref" />
+            </Authorized>
+        </AuthorizeView>
+        @if (_isDemoSession)
+        {
+            <div class="demo-banner">
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    You're exploring the Lanyard demo. Other visitors share it, and it resets to fresh sample
+                    data every night at 4am UK time.
+                    <a href="#" class="demo-banner-leave" @onclick="OpenDemoBrandingAsync" @onclick:preventDefault>Try your own branding</a>
+                    <a href="/api/auth/logout" class="demo-banner-leave">Leave the demo</a>
+                </FluentMessageBar>
+            </div>
+
+            <Lanyard.App.Components.Demo.DemoBrandingPrompt />
+        }
         <ErrorBoundary @ref="_errorBoundary">
             <ChildContent>
                 @Body
@@ -113,18 +152,44 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private string? _companyLogoUrl;
+    private AppInstallLinks _installLinks = AppInstallLinks.Default;
     private string? _locationDisplayName;
 
     // The login page's background image should bleed to the viewport edges - the standard
     // 3-unit content margin (used everywhere else) would otherwise leave a visible gap around it.
     private bool IsLoginPage => NavigationManager.Uri.Contains("/login");
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    // "/" for a signed-out visitor is the public homepage (see RouteAuthorizationGate), which has
+    // its own full-bleed hero, so it drops the content margin like the login page does.
+    private bool _isPublicHome;
+
+    // Signed in to the public demo company: shows the banner above every page.
+    private bool _isDemoSession;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        bool isRoot = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Split('?', '#')[0].Length == 0;
+        bool isAuthenticated = AuthenticationStateTask is not null
+            && (await AuthenticationStateTask).User.Identity?.IsAuthenticated == true;
+
+        _isPublicHome = isRoot && !isAuthenticated;
+        _isDemoSession = isAuthenticated && await DemoGuard.IsDemoSessionAsync();
+    }
+
     protected override void OnInitialized()
     {
         base.OnInitialized();
 
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        DemoBranding.Changed += OnDemoBrandingChanged;
     }
+
+    private void OnDemoBrandingChanged() => _ = InvokeAsync(ApplyBrandingAsync);
+
+    private Task OpenDemoBrandingAsync() => Lanyard.App.Components.Demo.DemoBrandingDialog.OpenAsync(_dialogService);
 
     private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
     {
@@ -154,6 +219,8 @@
         string accentColor = BrandConstants.PrimaryColorHex;
         _companyLogoUrl = null;
         _locationDisplayName = null;
+        int? brandedCompanyId = null;
+        _installLinks = AppInstallLinks.Default;
 
         try
         {
@@ -172,10 +239,29 @@
                     _companyLogoUrl = branding.Data.LogoFileId is Guid logoFileId
                         ? $"/api/companies/{companyId}/logo?v={logoFileId:N}"
                         : null;
+
+                    brandedCompanyId = companyId;
+                    _installLinks = AppInstallLinks.For(branding.Data);
                 }
             }
         }
         catch { }
+
+        // A demo visitor trying out their own branding: their colour and logo, in this browser only.
+        if (_isDemoSession)
+        {
+            try
+            {
+                await DemoBranding.LoadAsync();
+
+                if (DemoBranding.Current is { } preview)
+                {
+                    accentColor = preview.ColorHex ?? accentColor;
+                    _companyLogoUrl = preview.LogoUrl ?? _companyLogoUrl;
+                }
+            }
+            catch { }
+        }
 
         try
         {
@@ -189,6 +275,12 @@
             };
 
             await ThemeService.SetThemeAsync(new ThemeSettings(accentColor, 0, 0, mode, true));
+            await JSRuntime.InvokeVoidAsync("lanyardSetStatusBarColor", accentColor);
+
+            if (brandedCompanyId is int appCompanyId)
+            {
+                await JSRuntime.InvokeVoidAsync("lanyardSetAppCompany", appCompanyId, _installLinks.ManifestHref, _installLinks.AppleTouchIconHref, _installLinks.AppName);
+            }
         }
         catch { }
 
@@ -200,5 +292,6 @@
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        DemoBranding.Changed -= OnDemoBrandingChanged;
     }
 }

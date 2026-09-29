@@ -1,3 +1,4 @@
+@using Lanyard.App.Components
 @using Lanyard.Application.Services.Clients
 @using Lanyard.Shared.DTO
 @using Lanyard.Shared.Enum
@@ -23,7 +24,7 @@
                     </FluentBadge>
                 </FluentStack>
                 <div class="h-100">
-                    <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Red).OrderByDescending(x => x.Score).AsQueryable()"                  
+                    <FluentDataGrid Items="@_redScores"                  
                                     TGridItem="PlayerScoreDTO"
                                     StripedRows="true">
                         <ChildContent>
@@ -56,7 +57,7 @@
                     </FluentBadge>
                 </FluentStack>
                 <div class="h-100">
-                    <FluentDataGrid Items="@_gameStatus?.PlayerScores.Where(x=> x.Team == Team.Green).OrderByDescending(x => x.Score).AsQueryable()"                  
+                    <FluentDataGrid Items="@_greenScores"                  
                                     TGridItem="PlayerScoreDTO"
                                     StripedRows="true">
                         <ChildContent>
@@ -82,8 +83,18 @@
 
     private LaserGameStatusDTO? _gameStatus = null;
 
+    // Built once per status update rather than in the markup, where a fresh
+    // Where/OrderBy/AsQueryable per render made the grids refetch on every paint.
+    private IQueryable<PlayerScoreDTO>? _redScores;
+    private IQueryable<PlayerScoreDTO>? _greenScores;
+
+    // One status message arrives per hit; paint at most ~10 times a second.
+    private RenderCoalescer? _renderCoalescer;
+
     protected override async Task OnInitializedAsync()
     {
+        _renderCoalescer = new RenderCoalescer(() => InvokeAsync(StateHasChanged));
+
         LaserGameStatusStore.OnStatusUpdated += OnLaserGameStatusChanged;
 
         if (Widget.ClientId != null && Widget.ClientId != Guid.Empty)
@@ -116,13 +127,16 @@
         if (status.ClientId == Widget.ClientId)
         {
             _gameStatus = status;
+            _redScores = status.PlayerScores.Where(x => x.Team == Team.Red).OrderByDescending(x => x.Score).ToList().AsQueryable();
+            _greenScores = status.PlayerScores.Where(x => x.Team == Team.Green).OrderByDescending(x => x.Score).ToList().AsQueryable();
 
-            InvokeAsync(StateHasChanged);
+            _renderCoalescer?.Request();
         }
     }
 
     public void Dispose()
     {
         LaserGameStatusStore.OnStatusUpdated -= OnLaserGameStatusChanged;
+        _renderCoalescer?.Dispose();
     }
 }

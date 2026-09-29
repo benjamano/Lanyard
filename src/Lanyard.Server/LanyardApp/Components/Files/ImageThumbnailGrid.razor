@@ -35,9 +35,18 @@
 
     private List<FileMetadata> images = [];
     private bool isLoading;
+    private Guid? _loadedFolderId;
+    private bool _hasLoaded;
 
     protected override async Task OnParametersSetAsync()
     {
+        // Only hit the database when the folder actually changes; any re-render of the parent
+        // used to re-list the folder and flash the spinner.
+        if (_hasLoaded && _loadedFolderId == FolderId)
+        {
+            return;
+        }
+
         await LoadImagesAsync();
     }
 
@@ -63,6 +72,8 @@
             images = [];
         }
 
+        _loadedFolderId = FolderId;
+        _hasLoaded = true;
         isLoading = false;
     }
 }

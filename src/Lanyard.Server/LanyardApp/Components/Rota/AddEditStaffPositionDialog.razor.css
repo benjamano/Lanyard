@@ -1,0 +1,28 @@
+.colour-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.colour-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* 36px targets so the swatches are comfortably tappable on a phone. */
+.colour-option {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    /* Colour comes from the global .theme-colour-swatch rule in App.razor (theme-dependent). */
+    box-shadow: 0 0 0 1px var(--colorNeutralStroke2);
+}
+
+.colour-option-selected {
+    border-color: var(--colorNeutralForeground1);
+}

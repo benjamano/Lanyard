@@ -1,0 +1,71 @@
+/* Plain flex list rather than FluentDataGrid so a long position name wraps on phone width and
+   the expandable contract editor can sit inside the row - same reasoning as
+   StaffDocumentTypeManager.razor.css. ".position-manager" is a plain div so ::deep has a
+   scoped root to hang off (Fluent component roots drop the scope attribute). */
+.position-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.position-list-item {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.position-list-item:last-child {
+    border-bottom: none;
+}
+
+.position-list-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.position-swatch {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 4px;
+    border-radius: 50%;
+    /* Colour comes from the global .theme-colour-swatch rule in App.razor (theme-dependent). */
+}
+
+.position-list-info {
+    min-width: 0;
+    flex: 1 1 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.position-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.position-list-description {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.position-list-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.position-contract {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+}

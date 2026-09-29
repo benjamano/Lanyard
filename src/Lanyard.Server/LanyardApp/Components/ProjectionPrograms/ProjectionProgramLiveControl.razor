@@ -8,7 +8,7 @@
     <FluentStack Orientation="@Orientation.Horizontal"
                  VerticalAlignment="@VerticalAlignment.Center"
                  HorizontalAlignment="@HorizontalAlignment.SpaceBetween">
-        <FluentText Typo="Typography.PaneHeader">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
             Live Projection Control
         </FluentText>
         <FluentButton IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
@@ -118,12 +118,12 @@
             _toastService.ShowError($"Failed to load clients: {clientsResult.Error}");
         }
 
-        runs = _programRunner.GetRunningStates();
+        runs = GetOwnRuns();
     }
 
     private Task RefreshAsync()
     {
-        runs = _programRunner.GetRunningStates();
+        runs = GetOwnRuns();
 
         return Task.CompletedTask;
     }
@@ -138,10 +138,15 @@
     // panel can't drift out of sync with playback if an event is raised while it re-renders.
     private void Reload()
     {
-        runs = _programRunner.GetRunningStates();
+        runs = GetOwnRuns();
 
         InvokeAsync(StateHasChanged);
     }
+
+    // The runner is a singleton holding every company's playback; only show this company's
+    // kiosks (clientNames comes from the company-filtered client list).
+    private List<ProjectionRunState> GetOwnRuns() =>
+        _programRunner.GetRunningStates().Where(x => clientNames.ContainsKey(x.ClientId)).ToList();
 
     private void Handle(Result<bool> result)
     {

@@ -1,0 +1,166 @@
+@inject IChatService ChatService
+
+@* Pick people to message. One person opens (or reuses) a direct conversation; several make a
+   group, which needs a name. With AddToConversationId it adds people to an existing group. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.ChatAdd())" />
+            <FluentText As="@TextTag.H3">@(IsAdding ? "Add people" : "New conversation")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="people-dialog">
+            <FluentTextInput @bind-Value="search" @bind-Value:after="StateHasChanged" Immediate="true" Placeholder="Search people" Width="100%"
+                             aria-label="Search people" />
+
+            @if (selected.Count > 0)
+            {
+                <div class="people-selected">
+                    @foreach (ChatPerson person in SelectedPeople)
+                    {
+                        <button type="button" class="people-chip" title="@($"Remove {person.Name}")" @onclick="() => Toggle(person)">
+                            @person.Name
+                            <FluentIcon Value="@(new Icons.Regular.Size12.Dismiss())" Color="Color.Custom" CustomColor="currentColor" />
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (!IsAdding && selected.Count > 1)
+            {
+                <FluentTextInput @bind-Value="groupName" Label="Group name" Placeholder="e.g. Weekend crew" Width="100%" Maxlength="80" />
+            }
+
+            @if (people is null)
+            {
+                <FluentSpinner />
+            }
+            else
+            {
+                <ul class="people-list">
+                    @foreach (ChatPerson person in Visible)
+                    {
+                        bool isSelected = selected.Contains(person.UserId);
+
+                        <li>
+                            <label class="people-row @(isSelected ? "is-selected" : string.Empty)">
+                                <input type="checkbox" checked="@isSelected" @onchange="() => Toggle(person)" />
+                                <span class="people-avatar" aria-hidden="true">@Initials(person.Name)</span>
+                                <span class="people-name">@person.Name</span>
+                                @if (person.BlockedByMe)
+                                {
+                                    <span class="people-note">Blocked</span>
+                                }
+                            </label>
+                        </li>
+                    }
+                    @if (!Visible.Any())
+                    {
+                        <li class="people-empty">Nobody matches "@search".</li>
+                    }
+                </ul>
+            }
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@(isBusy || selected.Count == 0)" OnClick="SaveAsync">
+            @(isBusy ? "..." : IsAdding ? "Add" : selected.Count > 1 ? "Create group" : "Start chat")
+        </FluentButton>
+        <FluentButton Disabled="@isBusy" OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string UserId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter]
+    public Guid? AddToConversationId { get; set; }
+
+    [Parameter]
+    public List<string> ExistingMemberIds { get; set; } = [];
+
+    private bool IsAdding => AddToConversationId is not null;
+
+    private List<ChatPerson>? people;
+    private readonly HashSet<string> selected = [];
+    private string? search;
+    private string? groupName;
+    private string? errorMessage;
+    private bool isBusy;
+
+    private IEnumerable<ChatPerson> Visible => (people ?? [])
+        .Where(p => !ExistingMemberIds.Contains(p.UserId))
+        .Where(p => string.IsNullOrWhiteSpace(search) || p.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<ChatPerson> SelectedPeople => (people ?? []).Where(p => selected.Contains(p.UserId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<ChatPerson>> result = await ChatService.GetPeopleAsync(UserId, CompanyId);
+        people = result.Data ?? [];
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+        }
+    }
+
+    private void Toggle(ChatPerson person)
+    {
+        if (!selected.Remove(person.UserId))
+        {
+            selected.Add(person.UserId);
+        }
+    }
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => char.ToUpperInvariant(x[0])));
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+        isBusy = true;
+
+        if (IsAdding)
+        {
+            Result<bool> added = await ChatService.AddMembersAsync(UserId, AddToConversationId!.Value, selected.ToList());
+            isBusy = false;
+
+            if (!added.IsSuccess)
+            {
+                errorMessage = added.Error;
+                return;
+            }
+
+            await Dialog.CloseAsync(AddToConversationId);
+            return;
+        }
+
+        Result<ChatConversation> result = selected.Count == 1
+            ? await ChatService.GetOrCreateDirectAsync(UserId, CompanyId, selected.First())
+            : await ChatService.CreateGroupAsync(UserId, CompanyId, groupName ?? string.Empty, selected.ToList());
+
+        isBusy = false;
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        await Dialog.CloseAsync(result.Data.Id);
+    }
+}

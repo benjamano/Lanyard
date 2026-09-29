@@ -1,8 +1,5 @@
-﻿@implements IDisposable
-@using Lanyard.App.Components.Kiosk
+﻿@using Lanyard.App.Components.Kiosk
 
-@inject INotificationService _toastService
-@inject IFileService _fileService
 @inject IJSRuntime JS
 
 @if (string.IsNullOrWhiteSpace(_currentVideoSource))
@@ -22,7 +19,6 @@ else
     [Parameter, EditorRequired]
     public ProjectionProgramStep Step { get; set; } = default!;
 
-    private CancellationTokenSource? _loadCts;
     private string? _currentVideoSource;
     private Guid? _currentVideoFileId;
     private bool _currentVideoRepeat;
@@ -34,7 +30,7 @@ else
     private string? _lastRepeatValue;
     private string? _lastVolumeValue;
 
-    protected override async Task OnParametersSetAsync()
+    protected override void OnParametersSet()
     {
         string? videoValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.Video);
         string? repeatValue = GetStepParameterValue(KioskTemplateConstants.ParameterNames.ShouldRepeat);
@@ -58,10 +54,6 @@ else
         _currentVideoRepeat = bool.TryParse(repeatValue, out bool repeat) && repeat;
         _currentVolume = string.IsNullOrWhiteSpace(volumeValue) ? "1" : volumeValue;
 
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-        _loadCts = new CancellationTokenSource();
-
         if (!Guid.TryParse(videoValue, out Guid fileId))
         {
             ClearLoadedVideo();
@@ -74,34 +66,13 @@ else
             return;
         }
 
-        try
-        {
-            Result<Stream> downloadResult = await _fileService.DownloadFileAsync(fileId, _loadCts.Token);
-            if (!downloadResult.Success || downloadResult.Data is null)
-            {
-                _toastService.ShowError($"Unable to load video file: {downloadResult.Error}");
-                ClearLoadedVideo();
-                return;
-            }
-
-            Result<FileMetadata> metadataResult = await _fileService.GetFileMetadataAsync(fileId, _loadCts.Token);
-
-            string contentType = metadataResult.Success && !string.IsNullOrWhiteSpace(metadataResult.Data?.ContentType)
-                ? metadataResult.Data.ContentType
-                : "application/octet-stream";
-
-            await using Stream sourceStream = downloadResult.Data;
-            using MemoryStream buffer = new();
-            await sourceStream.CopyToAsync(buffer, _loadCts.Token);
-
-            _currentVideoSource = $"data:{contentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
-            _currentVideoFileId = fileId;
-            _applyVolumeAfterRender = true;
-        }
-        catch (OperationCanceledException)
-        {
-            // Step switched while loading; ignore canceled load.
-        }
+        // The browser streams the file itself from the kiosk media endpoint (which resolves the
+        // step's video server-side and honours Range requests). This used to download the whole
+        // file into server memory and push it down the Blazor circuit as a base64 data: URL -
+        // several times the file's size in allocations per step, per kiosk.
+        _currentVideoSource = $"/api/kiosk/programs/{Step.ProjectionProgramId:D}/steps/{Step.Id:D}/video?v={fileId:N}";
+        _currentVideoFileId = fileId;
+        _applyVolumeAfterRender = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -112,7 +83,7 @@ else
         }
 
         _applyVolumeAfterRender = false;
-        
+
         await JS.InvokeVoidAsync("setVideoVolume", $"video_{_currentVideoFileId}", double.Parse(_currentVolume) / 100);
     }
 
@@ -129,12 +100,5 @@ else
         _currentVideoSource = null;
         _currentVideoFileId = null;
         _applyVolumeAfterRender = false;
-    }
-
-    public void Dispose()
-    {
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-        ClearLoadedVideo();
     }
 }

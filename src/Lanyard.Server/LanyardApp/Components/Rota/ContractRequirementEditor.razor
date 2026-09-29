@@ -1,0 +1,208 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+
+@inject IContractRequirementService _contractRequirementService
+
+<div class="contract-editor">
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">@Title</FluentText>
+    }
+
+    <FluentText Style="color: var(--colorNeutralForeground3);">
+        @if (Tier == ContractTier.Company)
+        {
+            <text>The default for everyone at this company. Positions and individual staff can override any single value.</text>
+        }
+        else
+        {
+            <text>Leave a field blank to inherit the value from the tier below it.</text>
+        }
+    </FluentText>
+
+    @if (isLoading)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="contract-editor-fields">
+            <div class="contract-editor-field">
+                <FluentNumberInput TValue="int?" Label="Minimum shifts per week" @bind-Value="model.MinShiftsPerWeek" Width="100%" />
+                <div class="contract-editor-hint">@HintFor(model.MinShiftsPerWeek is null, parent.MinShiftsPerWeek.Value, parent.MinShiftsPerWeek.Source, "")</div>
+            </div>
+            <div class="contract-editor-field">
+                <FluentNumberInput TValue="double?" Label="Minimum shift length (hours)" @bind-Value="model.MinShiftLengthHours" Width="100%" />
+                <div class="contract-editor-hint">@HintFor(model.MinShiftLengthHours is null, parent.MinShiftLengthHours.Value, parent.MinShiftLengthHours.Source, " h")</div>
+            </div>
+            <div class="contract-editor-field">
+                <FluentNumberInput TValue="double?" Label="Minimum hours per week" @bind-Value="model.MinHoursPerWeek" Width="100%" />
+                <div class="contract-editor-hint">@HintFor(model.MinHoursPerWeek is null, parent.MinHoursPerWeek.Value, parent.MinHoursPerWeek.Source, " h")</div>
+            </div>
+            <div class="contract-editor-field">
+                <FluentNumberInput TValue="double?" Label="Maximum hours per week" @bind-Value="model.MaxHoursPerWeek" Width="100%" />
+                <div class="contract-editor-hint">@HintFor(model.MaxHoursPerWeek is null, parent.MaxHoursPerWeek.Value, parent.MaxHoursPerWeek.Source, " h")</div>
+            </div>
+        </div>
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                          Disabled="@isSaving" OnClick="@SaveAsync">
+                @(isSaving ? "Saving..." : "Save Requirements")
+            </FluentButton>
+            @if (Tier != ContractTier.Company && hasOverrideRow)
+            {
+                <FluentText Style="color: var(--colorNeutralForeground3);">Overrides in place</FluentText>
+            }
+        </FluentStack>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    // Set exactly one of these for an override tier; neither for the company default.
+    [Parameter]
+    public Guid? PositionId { get; set; }
+
+    [Parameter]
+    public string? UserId { get; set; }
+
+    // For the user tier only: the user's primary position, so the inherited hints reflect the
+    // real chain (user -> primary position -> company) rather than skipping straight to company.
+    [Parameter]
+    public Guid? PrimaryPositionId { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    private ContractTier Tier =>
+        UserId is not null ? ContractTier.User : PositionId is not null ? ContractTier.Position : ContractTier.Company;
+
+    private FormModel model = new();
+    private ResolvedContract parent = ResolvedContract.Empty;
+    private bool hasOverrideRow;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+
+        Result<ContractRequirement?> tierResult = await _contractRequirementService.GetTierAsync(CompanyId, PositionId, UserId);
+
+        if (!tierResult.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load contract requirements: {tierResult.Error}");
+        }
+
+        ContractRequirement? row = tierResult.IsSuccess ? tierResult.Data : null;
+        hasOverrideRow = row is not null;
+
+        model = new FormModel
+        {
+            MinShiftsPerWeek = row?.MinShiftsPerWeek,
+            MinShiftLengthHours = (double?)row?.MinShiftLengthHours,
+            MinHoursPerWeek = (double?)row?.MinHoursPerWeek,
+            MaxHoursPerWeek = (double?)row?.MaxHoursPerWeek
+        };
+
+        // The "inherits from" hints come from the chain *below* this tier.
+        parent = Tier switch
+        {
+            ContractTier.User => await ResolveParentAsync(PrimaryPositionId),
+            ContractTier.Position => await ResolveParentAsync(null),
+            _ => ResolvedContract.Empty
+        };
+
+        isLoading = false;
+    }
+
+    private async Task<ResolvedContract> ResolveParentAsync(Guid? positionId)
+    {
+        Result<ResolvedContract> result = await _contractRequirementService.ResolveAsync(CompanyId, positionId, null);
+
+        return result.IsSuccess && result.Data is not null ? result.Data : ResolvedContract.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userIdResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            isSaving = false;
+            _toastService.ShowError($"Failed to resolve your location: {scopeResult.Error}");
+            return;
+        }
+
+        ContractRequirement row = new()
+        {
+            CompanyId = CompanyId,
+            StaffPositionId = PositionId,
+            UserId = UserId,
+            MinShiftsPerWeek = model.MinShiftsPerWeek,
+            MinShiftLengthHours = (decimal?)model.MinShiftLengthHours,
+            MinHoursPerWeek = (decimal?)model.MinHoursPerWeek,
+            MaxHoursPerWeek = (decimal?)model.MaxHoursPerWeek,
+            UpdatedByUserId = userIdResult.IsSuccess ? userIdResult.Data : null
+        };
+
+        Result<ContractRequirement?> result = await _contractRequirementService.SaveTierAsync(scopeResult.Data, row);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save contract requirements: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess(result.Data is null && Tier != ContractTier.Company
+            ? "Override removed - inheriting from the tier below."
+            : "Contract requirements saved.");
+
+        await LoadAsync();
+    }
+
+    private static string HintFor<T>(bool isBlank, T? inherited, ContractTier source, string unit) where T : struct
+    {
+        if (!isBlank)
+        {
+            return "Set here";
+        }
+
+        return inherited is null
+            ? "No requirement"
+            : $"Inherits {inherited}{unit} from the {TierLabel(source)}";
+    }
+
+    private static string TierLabel(ContractTier tier) => tier switch
+    {
+        ContractTier.User => "user",
+        ContractTier.Position => "position",
+        ContractTier.Company => "company default",
+        _ => "default"
+    };
+
+    private class FormModel
+    {
+        public int? MinShiftsPerWeek { get; set; }
+        public double? MinShiftLengthHours { get; set; }
+        public double? MinHoursPerWeek { get; set; }
+        public double? MaxHoursPerWeek { get; set; }
+    }
+}

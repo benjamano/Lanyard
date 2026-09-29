@@ -1,6 +1,11 @@
-﻿using Lanyard.App.Components;
+﻿using Amazon.S3;
+using Microsoft.AspNetCore.Localization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Lanyard.App;
+using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
+using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Gdpr;
@@ -8,10 +13,16 @@ using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.Services.StaffDocuments;
 using Lanyard.Application.Services.Onboarding;
+using Lanyard.Application.Services.Notifications;
+using Lanyard.Application.Services.Scheduling;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Application.Services.Tenancy;
+using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Features;
+using Lanyard.Application.Services.Branding;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
@@ -20,6 +31,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Reflection;
 using System.Security.Claims;
 using Lanyard.App.Services;
@@ -66,7 +78,10 @@ builder.Services.AddOpenTelemetry()
 
 // Add Razor Components with Interactive Server
 builder.Services.AddRazorComponents(options => options.DetailedErrors = builder.Environment.IsDevelopment())
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    // Circuit hub only (not the kiosk hub). Pinging every 5s lets the browser's 15s server timeout
+    // (wwwroot/js/blazorStart.js) spot a socket that died silently while a phone was backgrounded.
+    .AddHubOptions(options => options.KeepAliveInterval = TimeSpan.FromSeconds(5));
 
 // Add HttpContextAccessor for accessing the current user
 builder.Services.AddHttpContextAccessor();
@@ -76,6 +91,13 @@ builder.Services.AddScoped<IGdprService, GdprService>();
 builder.Services.AddSingleton<IClientSecretValidator, ClientSecretValidator>();
 builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 builder.Services.AddScoped<IFileService, FileService>();
+
+// One bucket client for the whole process. FileService is scoped and used to build its own
+// AmazonS3Client per instance - a new SDK client and HTTP pipeline for every request/circuit.
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IAmazonS3>(_ => S3StorageClientFactory.CreateFromEnvironment());
+}
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
@@ -87,13 +109,55 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
+builder.Services.AddScoped<ICompanyFeatureService, CompanyFeatureService>();
+builder.Services.AddScoped<ITwoFactorPolicyService, TwoFactorPolicyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
+builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
+builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
+builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
+builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
+builder.Services.AddScoped<IRotaService, RotaService>();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
+builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
+builder.Services.AddSingleton<ITimeOffEventBus, TimeOffEventBus>();
+builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
+builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
+builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
+builder.Services.AddSingleton<IChatPresence, ChatPresence>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
+builder.Services.AddHostedService<ChatDigestHostedService>();
+builder.Services.AddHostedService<ChatRetentionHostedService>();
+builder.Services.AddScoped<ChatUnreadTracker>();
+builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
+builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
+builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
+builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
 builder.Services.AddHostedService<TrainingDueSoonHostedService>();
 builder.Services.AddHostedService<StaffDocumentExpiryReminderHostedService>();
+builder.Services.AddSingleton<NotificationDispatcher>();
+builder.Services.AddSingleton<INotificationDispatcher>(sp => sp.GetRequiredService<NotificationDispatcher>());
+builder.Services.AddScoped<INotificationDeliverer, NotificationDeliverer>();
+builder.Services.Configure<PushOptions>(builder.Configuration.GetSection("Push"));
+builder.Services.AddSingleton(sp => VapidKeys.Create(
+    sp.GetRequiredService<IOptions<PushOptions>>().Value,
+    sp.GetRequiredService<IOptions<EmailOptions>>().Value.PublicBaseUrl,
+    builder.Environment.IsDevelopment(),
+    sp.GetRequiredService<ILogger<VapidKeys>>()));
+builder.Services.AddHttpClient(WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<IPushSender, WebPushSender>();
+builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
+builder.Services.AddScoped<INotificationPreferenceService, NotificationPreferenceService>();
+builder.Services.AddScoped<IAppInstallationService, AppInstallationService>();
+builder.Services.AddHostedService<PushDeviceCleanupHostedService>();
+builder.Services.AddHostedService<NotificationDeliveryHostedService>();
+builder.Services.AddHostedService<ShiftReminderHostedService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
@@ -128,6 +192,8 @@ builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExe
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
+builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
 
@@ -135,7 +201,11 @@ builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardSer
 
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 
-builder.Services.AddSignalR();
+// Kiosks report lists (cached songs, screens, devices) in single messages; a few hundred
+// cached songs overflow the 32 KB default and the hub drops the connection. Raised for the
+// kiosk hub only: global HubOptions would also apply to every Blazor circuit.
+builder.Services.AddSignalR()
+    .AddHubOptions<SignalRControlHub>(options => options.MaximumReceiveMessageSize = 256 * 1024);
 
 builder.Services.AddScoped<DragStateService>();
 
@@ -175,7 +245,38 @@ if (builder.Environment.IsDevelopment() == false && string.IsNullOrWhiteSpace(bu
 }
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString, b => b.MigrationsAssembly("Lanyard.Infrastructure")));
+    options.UseNpgsql(connectionString, b =>
+    {
+        b.MigrationsAssembly("Lanyard.Infrastructure");
+
+        // Several read paths Include two or more collections at once (a course with its
+        // sections, questions, options, attempts and answers; a program's steps with template
+        // parameters and parameter values). As one SQL statement those multiply into a row per
+        // combination of child rows, each repeating the parent's large text columns. Split
+        // queries load each collection with its own statement instead.
+        b.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
+
+// Company tenancy: every context a component or scoped service gets is filtered to the caller's
+// company. See AddCompanyTenancy for how singletons are handled.
+builder.Services.AddCompanyTenancy();
+
+// The public demo company (off unless Demo__Enabled is set; see DemoOptions).
+builder.Services.Configure<PublicSiteOptions>(builder.Configuration.GetSection(PublicSiteOptions.SectionName));
+builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
+builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
+builder.Services.AddScoped<IDemoGuard, DemoGuard>();
+builder.Services.AddScoped<Lanyard.App.Components.Demo.DemoBrandingState>();
+builder.Services.AddScoped<IWebsiteBrandingService, WebsiteBrandingService>();
+// Fetches websites demo visitors paste in: public internet only (PublicAddressGuard), briefly.
+builder.Services.AddHttpClient(WebsiteBrandingService.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; LanyardBrandingPreview/1.0; +https://lanyard.benjaminmercer.co.uk)");
+    })
+    .ConfigurePrimaryHttpMessageHandler(PublicAddressGuard.CreateHandler);
+builder.Services.AddSingleton<IDemoResetService, DemoResetService>();
+builder.Services.AddHostedService<DemoResetHostedService>();
 
 if (builder.Environment.IsDevelopment())
 {
@@ -227,10 +328,13 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 
 builder.Services.AddAuthorization();
 
-// Configure cookie to persist login across sessions
+// Configure cookie to persist login across sessions. Only applies when "Keep me signed in" is
+// ticked - otherwise it's a session cookie the browser drops on close (which on a phone is
+// whenever the OS kills the installed app). Sliding, so anyone who opens the app at least once
+// every ~45 days stays signed in; password changes still sign them out via the security stamp.
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.ExpireTimeSpan = TimeSpan.FromDays(90);
     options.SlidingExpiration = true;
     options.LoginPath = "/HandleLogin";
     options.LogoutPath = "/HandleLogout";
@@ -265,14 +369,6 @@ builder.Services.AddCascadingAuthenticationState();
 // Add Controllers for API endpoints
 builder.Services.AddControllers();
 
-// Add HttpClient
-builder.Services.AddHttpClient();
-builder.Services.AddScoped(sp =>
-{
-    NavigationManager navigationManager = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(navigationManager.BaseUri) };
-});
-
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
 {
@@ -301,6 +397,33 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
+    // Each lookup makes the server fetch a site (and up to a few of its files), so it's tighter than
+    // the general limit.
+    options.AddPolicy(Lanyard.API.Controllers.DemoBrandingController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+
+    // The homepage contact form emails a real inbox, so a handful of messages per visitor is plenty.
+    options.AddPolicy(Lanyard.API.Controllers.ContactController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+    });
+
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -323,6 +446,18 @@ if (app.Environment.IsDevelopment() == false)
 
 app.UseRateLimiter();
 
+// Per-user date/time format from the culture cookie (see UserCultureCookie). Cookie only: the
+// browser's Accept-Language must not override an explicit preference, and nothing in the app
+// switches culture via the query string. Defaults to en-GB (the business is UK based).
+RequestLocalizationOptions localizationOptions = new RequestLocalizationOptions()
+    .SetDefaultCulture(UserCultureCookie.DefaultCulture)
+    .AddSupportedCultures(UserCultureCookie.SupportedCultures)
+    .AddSupportedUICultures(UserCultureCookie.SupportedCultures);
+localizationOptions.RequestCultureProviders = [new CookieRequestCultureProvider()];
+app.UseRequestLocalization(localizationOptions);
+
+PublicSiteOptions publicSite = app.Services.GetRequiredService<IOptions<PublicSiteOptions>>().Value;
+
 string connectSrc = app.Environment.IsDevelopment() ? "'self' wss: ws://localhost:*" : "'self' wss:";
 
 app.Use(async (context, next) =>
@@ -331,14 +466,19 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
 
-    context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    // Everything is kept out of search results except the public homepage on the public host.
+    if (!publicSite.IsIndexable(context.Request))
+    {
+        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+    }
 
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
         "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; " +
         "font-src 'self' data:; " +
-        "img-src 'self' data:; " +
+        // blob: for the demo's "try your own branding" logo, which never leaves the visitor's browser.
+        "img-src 'self' data: blob:; " +
         $"connect-src {connectSrc}; " +
         "frame-ancestors 'self';";
 
@@ -385,7 +525,11 @@ app.Use(async (context, next) =>
 // Map SignalR hub for music control
 app.MapHub<SignalRControlHub>("/websocket");
 
-app.MapControllers().RequireRateLimiting("ip-fixed");
+// The "ip-fixed" limiter (25/min per IP) is a brute-force guard for the auth endpoints and is
+// applied on AuthController itself. It must not cover the file/audio/logo/certificate
+// controllers: kiosks and staff behind one venue NAT share an IP, and a thumbnail grid or a
+// kiosk warming its song cache burns through 25 requests in seconds.
+app.MapControllers();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

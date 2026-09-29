@@ -240,7 +240,10 @@
 
     private async Task LoadFirstPlaylistAsync()
     {
-        Result<IEnumerable<Playlist>> playlistsResult = await _playlistService.GetActivePlaylistsAsync();
+        // Playlist names only, then the members of just the first one - not every member and
+        // song of every playlist (the Playlists component next door was loading all of that a
+        // second time for its own list).
+        Result<IEnumerable<Playlist>> playlistsResult = await _playlistService.GetActivePlaylistSummariesAsync();
 
         if (!playlistsResult.IsSuccess || playlistsResult.Data == null)
         {
@@ -252,7 +255,15 @@
 
         if (firstPlaylist != null)
         {
-            currentSongs = firstPlaylist.Members?.Select(x => new PlaylistSongMember
+            Result<IEnumerable<PlaylistSongMember>> membersResult = await _playlistService.GetPlaylistMembersAsync(firstPlaylist.Id);
+
+            if (!membersResult.IsSuccess || membersResult.Data == null)
+            {
+                _toastService.ShowError($"Failed to load playlist songs: {membersResult.Error}");
+                return;
+            }
+
+            currentSongs = membersResult.Data.Select(x => new PlaylistSongMember
             {
                 SongId = x.SongId,
                 Song = x.Song,

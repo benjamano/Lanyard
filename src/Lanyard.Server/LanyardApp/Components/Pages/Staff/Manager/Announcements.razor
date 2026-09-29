@@ -1,5 +1,6 @@
 ﻿@page "/manage/announcements"
 @attribute [Authorize(Roles = "Admin, CanPostAnnouncements")]
+@attribute [RequiresFeature(CompanyFeature.Announcements)]
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.Application.Services.Announcements

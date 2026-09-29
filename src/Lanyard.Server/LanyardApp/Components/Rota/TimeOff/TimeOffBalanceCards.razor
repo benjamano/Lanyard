@@ -1,0 +1,49 @@
+@* One card per allowance-deducting type: what's left this holiday year, with approved and
+   pending shown underneath so "why is it lower than I thought" answers itself. *@
+<div class="balance-cards">
+    @foreach (TimeOffBalance balance in Balances.Balances)
+    {
+        <div class="balance-card @(balance.RemainingHours < 0 ? "is-over" : string.Empty)">
+            <div class="balance-type">@balance.Type.Name</div>
+            <div class="balance-main">
+                @if (balance.Allowance.IsUnlimited)
+                {
+                    <span class="balance-figure">Unlimited</span>
+                }
+                else if (!balance.Allowance.IsConfigured)
+                {
+                    <span class="balance-figure balance-muted">Not set</span>
+                }
+                else
+                {
+                    <span class="balance-figure">@TimeOffFormat.Days(balance.RemainingHours ?? 0, Balances.HoursPerDay)</span>
+                    <span class="balance-of">left of @TimeOffFormat.Days(balance.Allowance.Hours, Balances.HoursPerDay)</span>
+                }
+            </div>
+            <div class="balance-detail">
+                @if (!balance.Allowance.IsConfigured && !balance.Allowance.IsUnlimited)
+                {
+                    <span>No allowance has been set up for you yet.</span>
+                }
+                else
+                {
+                    <span>@TimeOffFormat.DaysAndHours(balance.ApprovedHours, Balances.HoursPerDay) booked</span>
+                    @if (balance.PendingHours > 0)
+                    {
+                        <span> · @TimeOffFormat.Days(balance.PendingHours, Balances.HoursPerDay) waiting</span>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<p class="balance-year">
+    Holiday year @Balances.Year.Label runs @Balances.Year.Start.ToString("d MMM yyyy", RotaFormat.Uk) to @Balances.Year.End.ToString("d MMM yyyy", RotaFormat.Uk).
+    A day counts as @RotaFormat.Hours(Balances.HoursPerDay).
+</p>
+
+@code {
+    [Parameter, EditorRequired]
+    public required TimeOffBalances Balances { get; set; }
+}

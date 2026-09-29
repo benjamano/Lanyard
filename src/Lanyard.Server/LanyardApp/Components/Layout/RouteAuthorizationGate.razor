@@ -1,6 +1,10 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using System.Reflection
+@using Lanyard.App.Components.Layout.Staff
 @inject NavigationManager Navigation
+@inject ICompanyFeatureService CompanyFeatures
+@inject ITwoFactorPolicyService TwoFactorPolicy
 
 @* Default-deny wrapper around AuthorizeRouteView. Blazor's [Authorize] attribute only takes
    effect for pages that carry it; a page with no [Authorize]/[AllowAnonymous] attribute at all
@@ -11,7 +15,22 @@
 @* No DefaultLayout is passed to AuthorizeRouteView here - the caller (Routes.razor) already
    wraps this component in a <LayoutView>, so passing a layout through as well would apply it
    a second time, nesting the whole page chrome inside itself. *@
-@if (_allowAnonymous || _isAuthenticated)
+@* A page marked [RequiresFeature] is also refused when the signed-in user's company doesn't have
+   that feature. Nothing renders while that check is pending, so a blocked page never gets far
+   enough to run its own OnInitializedAsync. *@
+@* When the user's company requires two-factor authentication and they haven't set it up, every
+   page shows them the set-up screen instead - anonymous ones too, since the home page is anonymous
+   so visitors get the public homepage. Pages marked [AllowWithoutTwoFactor] (signing in and out,
+   device displays) are left alone. *@
+@if (_twoFactorSetupRequired)
+{
+    <TwoFactorRequired OnCompleted="@HandleTwoFactorCompleted" />
+}
+else if (_blockedFeature is CompanyFeature blockedFeature)
+{
+    <FeatureUnavailable Feature="@blockedFeature" />
+}
+else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
 {
     <AuthorizeRouteView RouteData="@RouteData">
         <NotAuthorized>
@@ -32,27 +51,80 @@
 
     private bool _allowAnonymous;
     private bool _isAuthenticated;
+    private bool _featureCheckPending;
+    private CompanyFeature? _blockedFeature;
+    private bool _twoFactorSetupRequired;
+
+    // The page type the current allow/block decision was made for.
+    private Type? _checkedPageType;
 
     protected override async Task OnParametersSetAsync()
     {
-        _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
+        // Set before the first await: this component is reused across navigations, so without
+        // it the previous page's "allowed" state would render a newly reached page while the check
+        // runs. Moving within the page already on screen (e.g. /chat to /chat/{id}, or between the
+        // My Shifts tabs) keeps its current state instead - blanking it would dispose the page and
+        // rebuild it from scratch whenever the check had to go to the database.
+        RequiresFeatureAttribute? requiredFeature = RouteData.PageType.GetCustomAttribute<RequiresFeatureAttribute>(inherit: true);
+        bool samePage = RouteData.PageType == _checkedPageType;
 
-        if (_allowAnonymous)
+        if (!samePage)
         {
-            _isAuthenticated = false;
-            return;
+            // Pending until the 2FA check below has run, so a page never starts initialising for
+            // a user who is about to be held on the set-up screen instead.
+            _featureCheckPending = true;
+            _blockedFeature = null;
         }
+
+        _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
+        bool allowWithoutTwoFactor = Attribute.IsDefined(RouteData.PageType, typeof(AllowWithoutTwoFactorAttribute), inherit: true);
 
         AuthenticationState authState = AuthenticationStateTask is null
             ? throw new InvalidOperationException("Authentication state is not available.")
             : await AuthenticationStateTask;
 
-        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+        bool signedIn = authState.User.Identity?.IsAuthenticated == true;
+
+        if (_allowAnonymous)
+        {
+            // Anonymous pages have no user company to check features against. The clock-in
+            // terminal, the one anonymous page inside a paid module, checks its paired location's
+            // company instead.
+            _isAuthenticated = false;
+            _blockedFeature = null;
+            _twoFactorSetupRequired = signedIn && !allowWithoutTwoFactor
+                && await TwoFactorPolicy.IsSetupRequiredForCurrentUserAsync();
+            _featureCheckPending = false;
+            _checkedPageType = null;
+            return;
+        }
+
+        _isAuthenticated = signedIn;
 
         if (!_isAuthenticated)
         {
-            string returnUrl = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+            // Leading slash: the login only returns to a local URL (Url.IsLocalUrl), and
+            // ToBaseRelativePath gives "manage/users", which it rejects and sends home instead.
+            string returnUrl = Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
             Navigation.NavigateTo($"/HandleLogin?ReturnUrl={returnUrl}", forceLoad: true);
+            _checkedPageType = null;
+            return;
         }
+
+        _twoFactorSetupRequired = !allowWithoutTwoFactor && await TwoFactorPolicy.IsSetupRequiredForCurrentUserAsync();
+
+        if (requiredFeature is not null)
+        {
+            bool enabled = await CompanyFeatures.IsEnabledForCurrentUserAsync(requiredFeature.Feature);
+            _blockedFeature = enabled ? null : requiredFeature.Feature;
+        }
+
+        _featureCheckPending = false;
+        _checkedPageType = RouteData.PageType;
+    }
+
+    private void HandleTwoFactorCompleted()
+    {
+        _twoFactorSetupRequired = false;
     }
 }

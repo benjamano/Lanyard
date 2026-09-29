@@ -1,3 +1,4 @@
+using Lanyard.Infrastructure.Enum;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -137,6 +138,7 @@ namespace Lanyard.Tests.Services.Authentication
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
+            factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => new ApplicationDbContext(options));
 
             Mock<ICourseService> resolvedCourseServiceMock = courseServiceMock ?? new Mock<ICourseService>();
             if (courseServiceMock is null)
@@ -689,6 +691,40 @@ namespace Lanyard.Tests.Services.Authentication
         }
 
         [TestMethod]
+        public async Task CreateUserAsync_AutoAssignCourse_CompanyWithTrainingOff_IsNotAssigned()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.CompanyFeatureSettings.Add(new CompanyFeatureSetting { CompanyId = 10, Feature = CompanyFeature.Training, IsEnabled = false });
+                await ctx.SaveChangesAsync();
+            }
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            Location courseLocation = new() { Id = 1, CompanyId = 10, Name = "User Location" };
+            Course course = new() { Id = Guid.NewGuid(), Name = "Induction", AutoAssignOnUserCreation = true, LocationId = 1, Location = courseLocation, IsActive = true };
+            Mock<ICourseService> courseServiceMock = new();
+            courseServiceMock.Setup(c => c.GetCoursesAsync(It.IsAny<LocationScope>(), It.IsAny<bool>())).ReturnsAsync(Result<List<Course>>.Ok([course]));
+
+            Mock<ICourseAssignmentService> courseAssignmentServiceMock = new();
+
+            SecurityService service = BuildService(options, userManager, isAdmin: false, emailServiceMock.Object,
+                courseServiceMock: courseServiceMock, courseAssignmentServiceMock: courseAssignmentServiceMock);
+
+            Result<UserCreationResult> result = await service.CreateUserAsync(
+                new UserProfile { FirstName = "Jane", LastName = "Doe", Email = "jane@example.com" },
+                locationIds: [1]);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            courseAssignmentServiceMock.Verify(c => c.AssignCourseToUsersAsync(It.IsAny<Guid>(), It.IsAny<List<string>>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<LocationScope>(), It.IsAny<bool>()), Times.Never);
+        }
+
+        [TestMethod]
         public async Task CreateUserAsync_AutoAssignCourse_DifferentLocationId_NotShared_IsNotAssigned()
         {
             DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
@@ -867,6 +903,48 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsTrue(deleteResult.IsSuccess, deleteResult.Error);
             Assert.IsNull(await userManager.FindByIdAsync(user.Id));
+        }
+
+        [TestMethod]
+        public async Task DeleteUserAsync_RetainsPastShiftsUnderPlaceholderAndCancelsFutureOnes()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+
+            Mock<IEmailService> emailServiceMock = new();
+            emailServiceMock.Setup(e => e.SendSetPasswordEmailAsync(It.IsAny<UserProfile>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>()))
+                .ReturnsAsync(Result<bool>.Ok(true));
+
+            SecurityService adminService = BuildService(options, userManager, isAdmin: true, emailServiceMock.Object);
+            Result<UserCreationResult> createResult = await adminService.CreateUserAsync(new UserProfile
+            {
+                FirstName = "Jane",
+                LastName = "Doe",
+                Email = "jane@example.com"
+            }, locationIds: [1]);
+
+            string userId = createResult.Data!.User.Id;
+            Guid pastId = Guid.NewGuid();
+            Guid futureId = Guid.NewGuid();
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                ctx.Shifts.Add(new Shift { Id = pastId, LocationId = 1, UserId = userId, CreateByUserId = "manager", StartUtc = DateTime.UtcNow.AddDays(-3), EndUtc = DateTime.UtcNow.AddDays(-3).AddHours(6), PublishedDateUtc = DateTime.UtcNow.AddDays(-5) });
+                ctx.Shifts.Add(new Shift { Id = futureId, LocationId = 1, UserId = userId, CreateByUserId = "manager", StartUtc = DateTime.UtcNow.AddDays(3), EndUtc = DateTime.UtcNow.AddDays(3).AddHours(6), PublishedDateUtc = DateTime.UtcNow.AddDays(-1) });
+                await ctx.SaveChangesAsync();
+            }
+
+            Result<bool> deleteResult = await adminService.DeleteUserAsync(userId);
+
+            Assert.IsTrue(deleteResult.IsSuccess, deleteResult.Error);
+
+            await using ApplicationDbContext verify = new(options);
+            Shift past = await verify.Shifts.SingleAsync(x => x.Id == pastId);
+            Shift future = await verify.Shifts.SingleAsync(x => x.Id == futureId);
+            Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, past.UserId);
+            Assert.IsTrue(past.IsActive);
+            Assert.AreEqual(ApplicationDbContext.SystemDeletedUserPlaceholderId, future.UserId);
+            Assert.IsFalse(future.IsActive);
         }
 
         [TestMethod]

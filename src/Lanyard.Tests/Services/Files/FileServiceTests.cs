@@ -26,6 +26,14 @@ public class FileServiceTests
     private Mock<IWebHostEnvironment> _environmentMock = null!;
     private FileService _fileService = null!;
     private ApplicationDbContext _dbContext = null!;
+    private DbContextOptions<ApplicationDbContext> _options = null!;
+
+    // Reads straight from the store, bypassing whatever the seeding context still tracks.
+    private async Task<FileMetadata?> FindFileFreshAsync(Guid fileId)
+    {
+        await using ApplicationDbContext ctx = new(_options);
+        return await ctx.FileMetadata.AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId);
+    }
 
     [TestInitialize]
     public void Setup()
@@ -35,12 +43,14 @@ public class FileServiceTests
         _analysisQueueMock = new Mock<ISongAnalysisQueue>();
         _environmentMock = new Mock<IWebHostEnvironment>();
         _environmentMock.SetupGet(x => x.EnvironmentName).Returns(Environments.Development);
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        _options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        _dbContext = new ApplicationDbContext(options);
+        _dbContext = new ApplicationDbContext(_options);
+        // The service disposes every context it creates, so hand it a fresh one per call and keep
+        // _dbContext (same named in-memory database) for seeding and assertions.
         _dbFactoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(_dbContext);
+            .ReturnsAsync(() => new ApplicationDbContext(_options));
         _fileService = new FileService(_dbFactoryMock.Object, _currentUserAccessorMock.Object, _analysisQueueMock.Object, _environmentMock.Object);
     }
 
@@ -88,7 +98,7 @@ public class FileServiceTests
 
         Assert.IsTrue(result.Success);
         Assert.IsTrue(result.Data);
-        Assert.IsNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsNull(await FindFileFreshAsync(fileId));
         Assert.IsFalse(File.Exists(fileMeta.FilePath));
     }
 
@@ -130,7 +140,7 @@ public class FileServiceTests
         var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
 
         Assert.IsFalse(result.Success);
-        Assert.IsNotNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsNotNull(await FindFileFreshAsync(fileId));
         Assert.IsTrue(File.Exists(filePath));
 
         File.Delete(filePath);
@@ -173,7 +183,7 @@ public class FileServiceTests
         var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
 
         Assert.IsTrue(result.Success, result.Error);
-        Assert.IsNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsNull(await FindFileFreshAsync(fileId));
         Assert.IsFalse(File.Exists(filePath));
     }
 
@@ -208,7 +218,7 @@ public class FileServiceTests
         var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
 
         Assert.IsTrue(result.Success, result.Error);
-        Assert.IsNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsNull(await FindFileFreshAsync(fileId));
         Assert.IsFalse(File.Exists(filePath));
     }
 
@@ -243,7 +253,7 @@ public class FileServiceTests
         var result = await _fileService.DeleteFileAsync(fileId, CancellationToken.None);
 
         Assert.IsFalse(result.Success);
-        Assert.IsNotNull(await _dbContext.FileMetadata.FindAsync(fileId));
+        Assert.IsNotNull(await FindFileFreshAsync(fileId));
         Assert.IsTrue(File.Exists(filePath));
 
         File.Delete(filePath);
@@ -386,4 +396,96 @@ public class FileServiceTests
 
         Assert.IsFalse(result.Success);
     }
+
+    [TestMethod]
+    public async Task ListFilesAsync_NullFolder_ReturnsOnlyRootFiles()
+    {
+        Guid folderId = Guid.NewGuid();
+        await _dbContext.Folders.AddAsync(new Folder { Id = folderId, Name = "Sub", CreatedAt = DateTime.UtcNow, CreatedBy = "user1", IsActive = true });
+        await _dbContext.FileMetadata.AddAsync(NewFile("root.txt", folderId: null));
+        await _dbContext.FileMetadata.AddAsync(NewFile("nested.txt", folderId: folderId));
+        await _dbContext.SaveChangesAsync();
+
+        Result<IReadOnlyList<FileMetadata>> root = await _fileService.ListFilesAsync(null, CancellationToken.None);
+        Result<IReadOnlyList<FileMetadata>> nested = await _fileService.ListFilesAsync(folderId, CancellationToken.None);
+
+        Assert.IsTrue(root.Success);
+        Assert.AreEqual(1, root.Data!.Count);
+        Assert.AreEqual("root.txt", root.Data[0].FileName);
+        Assert.IsTrue(nested.Success);
+        Assert.AreEqual(1, nested.Data!.Count);
+        Assert.AreEqual("nested.txt", nested.Data[0].FileName);
+    }
+
+    [TestMethod]
+    public async Task ListFoldersAsync_NullParent_ReturnsOnlyTopLevelFolders()
+    {
+        Guid parentId = Guid.NewGuid();
+        await _dbContext.Folders.AddAsync(new Folder { Id = parentId, Name = "Top", CreatedAt = DateTime.UtcNow, CreatedBy = "user1", IsActive = true });
+        await _dbContext.Folders.AddAsync(new Folder { Id = Guid.NewGuid(), Name = "Child", ParentFolderId = parentId, CreatedAt = DateTime.UtcNow, CreatedBy = "user1", IsActive = true });
+        await _dbContext.SaveChangesAsync();
+
+        Result<IReadOnlyList<Folder>> top = await _fileService.ListFoldersAsync(null, CancellationToken.None);
+
+        Assert.IsTrue(top.Success);
+        Assert.AreEqual(1, top.Data!.Count);
+        Assert.AreEqual("Top", top.Data[0].Name);
+    }
+
+    [TestMethod]
+    public async Task OpenFileContentAsync_InDevelopment_ReturnsSeekableStreamWithMetadata()
+    {
+        FileMetadata fileMeta = NewFile("clip.bin", folderId: null);
+        File.WriteAllBytes(fileMeta.FilePath, [1, 2, 3, 4, 5]);
+        await _dbContext.FileMetadata.AddAsync(fileMeta);
+        await _dbContext.SaveChangesAsync();
+
+        Result<FileContent> result = await _fileService.OpenFileContentAsync(fileMeta.Id, new FileByteRange(1, 3), CancellationToken.None);
+
+        Assert.IsTrue(result.Success, result.Error);
+        await using FileContent content = result.Data!;
+        Assert.IsTrue(content.Stream.CanSeek, "Local files must stay seekable so ASP.NET's range processing can slice them.");
+        Assert.AreEqual(5, content.TotalLength);
+        Assert.IsFalse(content.IsPartial);
+        Assert.AreEqual(fileMeta.Id, content.Metadata.Id);
+        Assert.AreEqual("clip.bin", content.Metadata.FileName);
+    }
+
+    [TestMethod]
+    public async Task OpenFileContentAsync_WhenFileDoesNotExist_Fails()
+    {
+        Result<FileContent> result = await _fileService.OpenFileContentAsync(Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.IsFalse(result.Success);
+    }
+
+    [TestMethod]
+    public void ParseContentRange_ReadsPartialAndFullResponses()
+    {
+        (long total, long? start, long? end) partial = FileService.ParseContentRange("bytes 10-19/100", 10, 0);
+        Assert.AreEqual(100, partial.total);
+        Assert.AreEqual(10, partial.start);
+        Assert.AreEqual(19, partial.end);
+
+        (long total, long? start, long? end) full = FileService.ParseContentRange(null, 250, 999);
+        Assert.AreEqual(250, full.total);
+        Assert.IsNull(full.start);
+        Assert.IsNull(full.end);
+
+        (long total, long? start, long? end) fallback = FileService.ParseContentRange(null, null, 999);
+        Assert.AreEqual(999, fallback.total);
+    }
+
+    private static FileMetadata NewFile(string name, Guid? folderId) => new()
+    {
+        Id = Guid.NewGuid(),
+        FileName = name,
+        FilePath = Path.GetTempFileName(),
+        FileSize = 5,
+        ContentType = "application/octet-stream",
+        UploadedAt = DateTime.UtcNow,
+        UploadedBy = "user1",
+        FolderId = folderId,
+        IsActive = true
+    };
 }

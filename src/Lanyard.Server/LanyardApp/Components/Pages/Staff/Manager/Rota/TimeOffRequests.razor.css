@@ -1,0 +1,100 @@
+.time-off-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px;
+}
+
+.time-off-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.time-off-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.time-off-toolbar ::deep .time-off-record {
+    margin-left: auto;
+}
+
+.request-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 12px;
+}
+
+.request-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.request-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.request-name {
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.request-dates {
+    font-weight: 600;
+    /* Mixed with the foreground token: the brand foreground doesn't lighten in this app's dark
+       theme, and plain brand blue on a dark card is hard to read. */
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.request-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.request-note {
+    overflow-wrap: anywhere;
+    color: var(--colorNeutralForeground2);
+}
+
+.request-others {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.request-card ::deep .request-own {
+    color: var(--colorNeutralForeground3);
+    font-style: italic;
+}
+
+.request-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+    .request-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .time-off-toolbar ::deep .time-off-record {
+        margin-left: 0;
+    }
+}

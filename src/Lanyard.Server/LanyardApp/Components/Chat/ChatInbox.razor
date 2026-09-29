@@ -1,0 +1,116 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@* The list of the person's conversations, newest activity first, with unread counts. *@
+<div class="inbox">
+    <div class="inbox-header">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Chat</FluentText>
+        <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ChatAdd())" OnClick="() => OnNew.InvokeAsync()">New</FluentButton>
+    </div>
+
+    @if (Items is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" Style="padding: 24px;">
+            <FluentSpinner />
+        </FluentStack>
+    }
+    else if (Items.Count == 0)
+    {
+        <div class="inbox-empty">
+            <FluentText Weight="TextWeight.Semibold">No conversations yet</FluentText>
+            <FluentText Style="color: var(--colorNeutralForeground3);">Message someone you work with, or start a group for your team.</FluentText>
+        </div>
+    }
+    else
+    {
+        @if (Pinned is { Count: > 0 })
+        {
+            <div class="inbox-pinned" aria-label="Pinned posts">
+                <div class="inbox-pinned-title">
+                    <FluentIcon Value="@(new Icons.Filled.Size16.Pin())" Color="Color.Custom" CustomColor="var(--colorBrandForeground1)" />
+                    Pinned
+                </div>
+                @foreach (ChatPinnedPost post in Pinned.Take(3))
+                {
+                    <a class="inbox-pinned-item" href="@($"/chat/{post.ConversationId}")">
+                        <span class="inbox-pinned-channel">@post.ChannelName</span>
+                        <span class="inbox-pinned-text"><strong>@post.Message.AuthorName:</strong> @ChatHtml.Preview(post.Message.Message.BodyText, 100)</span>
+                    </a>
+                }
+            </div>
+        }
+
+        <ul class="inbox-list">
+            @foreach (ChatInboxItem item in Items)
+            {
+                <li>
+                    <a href="@($"/chat/{item.ConversationId}")" class="inbox-item @(item.ConversationId == SelectedId ? "is-selected" : string.Empty) @(item.UnreadCount > 0 ? "is-unread" : string.Empty)">
+                        <span class="inbox-avatar @(item.Kind != ChatConversationKind.Direct ? "is-group" : string.Empty) @(IsChannel(item) ? "is-channel" : string.Empty)" aria-hidden="true">
+                            @if (IsChannel(item))
+                            {
+                                <FluentIcon Value="@(new Icons.Regular.Size20.PeopleTeam())" Color="Color.Custom" CustomColor="currentColor" />
+                            }
+                            else if (item.Kind == ChatConversationKind.Group)
+                            {
+                                <FluentIcon Value="@(new Icons.Regular.Size20.People())" Color="Color.Custom" CustomColor="currentColor" />
+                            }
+                            else
+                            {
+                                @Initials(item.Title)
+                            }
+                        </span>
+                        <span class="inbox-text">
+                            <span class="inbox-top">
+                                <span class="inbox-title">@item.Title</span>
+                                <span class="inbox-time">@When(item.LastMessageUtc)</span>
+                            </span>
+                            <span class="inbox-bottom">
+                                <span class="inbox-preview">@(item.Preview ?? "No messages yet")</span>
+                                @if (item.IsMuted)
+                                {
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.AlertOff())" Color="Color.Custom" CustomColor="var(--colorNeutralForeground3)" Title="Muted" />
+                                }
+                                @if (item.UnreadCount > 0)
+                                {
+                                    <span class="inbox-count" aria-label="@($"{item.UnreadCount} unread")">@(item.UnreadCount > 99 ? "99+" : item.UnreadCount.ToString())</span>
+                                }
+                            </span>
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<ChatInboxItem>? Items { get; set; }
+
+    [Parameter]
+    public Guid? SelectedId { get; set; }
+
+    [Parameter]
+    public EventCallback OnNew { get; set; }
+
+    // Pinned posts from the person's channels, shown above the list.
+    [Parameter]
+    public List<ChatPinnedPost>? Pinned { get; set; }
+
+    private static bool IsChannel(ChatInboxItem item) =>
+        item.Kind is ChatConversationKind.LocationChannel or ChatConversationKind.CompanyChannel;
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => char.ToUpperInvariant(x[0])));
+
+    // "14:32" today, "Tue" this week, "5 Oct" before that.
+    private static string When(DateTime utc)
+    {
+        DateTime local = RotaTime.ToVenueLocal(utc);
+        DateOnly day = DateOnly.FromDateTime(local);
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+
+        return day == today ? local.ToString("HH:mm", RotaFormat.Uk)
+            : day > today.AddDays(-7) ? local.ToString("ddd", RotaFormat.Uk)
+            : local.ToString("d MMM", RotaFormat.Uk);
+    }
+}
