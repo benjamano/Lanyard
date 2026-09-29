@@ -1,0 +1,48 @@
+.bulk-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bulk-dialog ::deep .bulk-muted,
+.bulk-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.bulk-modes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Segmented-style choice: equal buttons that stay on one line at phone width. */
+.bulk-modes ::deep fluent-button {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 110px;
+}
+
+.bulk-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bulk-field {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.bulk-field-label {
+    flex: 0 0 150px;
+    font-weight: 600;
+}
+
+@media (max-width: 520px) {
+    .bulk-field-label {
+        flex-basis: 100%;
+    }
+}

@@ -118,6 +118,7 @@ builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
+builder.Services.AddScoped<IStaffBulkUpdateService, StaffBulkUpdateService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();

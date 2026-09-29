@@ -1,0 +1,136 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffBulkUpdateService _staffBulkUpdateService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.DocumentBulletList())" />
+            <FluentText As="@TextTag.H3">Change contract requirements</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="bulk-dialog">
+            <BulkSelectionSummary People="@People" />
+
+            <FluentText Class="bulk-muted">
+                Only the requirements you change are touched. "Inherit" removes the personal value so each person
+                goes back to their position's or the company's.
+            </FluentText>
+
+            <div class="bulk-fields">
+                @foreach (FieldRow row in rows)
+                {
+                    <div class="bulk-field">
+                        <div class="bulk-field-label">@row.Label</div>
+                        <FluentSelect TOption="BulkFieldMode" TValue="BulkFieldMode" Items="@Modes" OptionText="@ModeLabel"
+                                      @bind-Value="row.Mode" Width="150px" aria-label="@($"{row.Label}: what to do")" />
+                        @if (row.Mode == BulkFieldMode.Set)
+                        {
+                            <FluentNumberInput TValue="double?" @bind-Value="row.Value" Width="90px" aria-label="@($"{row.Label} value")" />
+                        }
+                    </div>
+                }
+            </div>
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ApplyAsync" Disabled="@(isSaving || rows.All(x => x.Mode == BulkFieldMode.Keep))">
+                    @(isSaving ? "Applying..." : $"Apply to {People.Count}")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@(() => Dialog.CancelAsync())" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<StaffRotaSummary> People { get; set; }
+
+    private static readonly List<BulkFieldMode> Modes = [.. Enum.GetValues<BulkFieldMode>()];
+
+    // Same four fields, labels and order as ContractRequirementEditor.
+    private readonly List<FieldRow> rows =
+    [
+        new("Minimum shifts per week"),
+        new("Minimum shift length (hours)"),
+        new("Minimum hours per week"),
+        new("Maximum hours per week")
+    ];
+
+    private bool isSaving;
+
+    private static string ModeLabel(BulkFieldMode mode) => mode switch
+    {
+        BulkFieldMode.Keep => "Leave as is",
+        BulkFieldMode.Inherit => "Inherit",
+        _ => "Set to"
+    };
+
+    private async Task ApplyAsync()
+    {
+        FieldRow? missing = rows.FirstOrDefault(x => x.Mode == BulkFieldMode.Set && x.Value is null);
+
+        if (missing is not null)
+        {
+            _toastService.ShowError($"Enter a value for {missing.Label.ToLowerInvariant()}, or leave it as is.");
+            return;
+        }
+
+        if (rows[0] is { Mode: BulkFieldMode.Set, Value: double shifts } && shifts % 1 != 0)
+        {
+            _toastService.ShowError("Minimum shifts per week must be a whole number.");
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> me = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scope.Error}");
+            return;
+        }
+
+        isSaving = true;
+
+        BulkContractChange change = new(
+            new BulkFieldChange<int>(rows[0].Mode, rows[0].Value is double s ? (int)s : null),
+            ToDecimal(rows[1]),
+            ToDecimal(rows[2]),
+            ToDecimal(rows[3]));
+
+        Result<int> result = await _staffBulkUpdateService.ApplyContractAsync(
+            scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), change, me.IsSuccess ? me.Data : null);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Failed to update contract requirements.");
+            return;
+        }
+
+        _toastService.ShowSuccess(BulkMessages.Changed(result.Data, People.Count, "contract requirements"));
+        await Dialog.CloseAsync(true);
+    }
+
+    private static BulkFieldChange<decimal> ToDecimal(FieldRow row) =>
+        new(row.Mode, row.Value is double v ? (decimal)v : null);
+
+    private class FieldRow(string label)
+    {
+        public string Label { get; } = label;
+        public BulkFieldMode Mode { get; set; } = BulkFieldMode.Keep;
+        public double? Value { get; set; }
+    }
+}
