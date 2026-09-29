@@ -543,7 +543,8 @@
       "In the demo you can now see Lanyard in your own company's branding: add your company name, theme colour and logo, and the whole demo switches to them - the menu, colours, browser tab icon and home-screen app icon - with a live preview first. Only you see it, and your logo never leaves your browser.",
       "In the demo's branding preview you can now just paste your company's website address: Lanyard picks up your name, theme colour and logo from it (or works out a colour from your logo), and you can adjust anything before applying it.",
       "Fixed the \"How it fits together\" heading on the homepage sitting against the left edge instead of lining up with the rest of the page.",
-      "The homepage now has a \"Get in touch\" section with an email address to contact about Lanyard, a Send an email button, and a Copy address button for anyone without an email app."
+      "The homepage now has a \"Get in touch\" section with an email address to contact about Lanyard, a Send an email button, and a Copy address button for anyone without an email app.",
+      "The homepage now shows which kinds of venue Lanyard is built for, from laser tag arenas and family entertainment centres to trampoline parks, bowling alleys and escape rooms."
     ]
   }
 ]
