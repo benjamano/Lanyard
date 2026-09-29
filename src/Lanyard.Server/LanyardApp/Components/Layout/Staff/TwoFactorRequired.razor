@@ -1,0 +1,53 @@
+@using Lanyard.App.Components.Accounts
+
+@* Shown by RouteAuthorizationGate in place of any page while the user's company requires
+   two-factor authentication and they haven't set it up yet. Setting it up here lets them straight
+   through to the page they asked for, without a reload. *@
+
+<PageTitle>Set up two-factor authentication</PageTitle>
+
+<div class="two-factor-required">
+    <FluentCard Height="auto">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentIcon Value="@(new Icons.Regular.Size48.ShieldLock())" Color="Color.Primary" />
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500" Align="TextAlign.Center">
+                    Set up two-factor authentication to continue
+                </FluentText>
+                <FluentText Align="TextAlign.Center">
+                    Your company now requires everyone to use two-factor authentication. As well as your
+                    password, you'll be asked for a code from an authenticator app or your email when you
+                    sign in. It only takes a minute to set up.
+                </FluentText>
+            </FluentStack>
+
+            <FluentDivider />
+
+            <TwoFactorCard OnStatusChanged="@HandleStatusChanged" />
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentButton Appearance="ButtonAppearance.Transparent"
+                              IconStart="@(new Icons.Regular.Size20.SignOut())"
+                              OnClick="@SignOut">
+                    Sign out
+                </FluentButton>
+            </FluentStack>
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnCompleted { get; set; }
+
+    // A controller endpoint, so forceLoad - see the matching comment in NavMenu.razor.
+    private void SignOut() => _navigationManager.NavigateTo("/api/auth/logout", forceLoad: true);
+
+    private async Task HandleStatusChanged(TwoFactorStatusDto status)
+    {
+        if (status.IsEnabled)
+        {
+            await OnCompleted.InvokeAsync();
+        }
+    }
+}

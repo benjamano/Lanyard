@@ -112,6 +112,7 @@ builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
 builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddScoped<ICompanyFeatureService, CompanyFeatureService>();
+builder.Services.AddScoped<ITwoFactorPolicyService, TwoFactorPolicyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();

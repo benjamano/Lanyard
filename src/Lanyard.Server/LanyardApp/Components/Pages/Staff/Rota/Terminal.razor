@@ -5,6 +5,7 @@
    even then only first names with a surname initial, and today's shift times; every clock action re-checks the terminal
    server-side and needs the person's PIN, or a QR code that only existed on this screen. *@
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 @implements IDisposable
 
 @using System.Text.Json
