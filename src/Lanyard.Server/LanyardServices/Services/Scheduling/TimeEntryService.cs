@@ -272,13 +272,13 @@ public class TimeEntryService(
         }
     }
 
-    public async Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId)
+    public async Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId, string? holdKey = null)
     {
         try
         {
             // Single-use: the code only ever existed on the terminal's screen for a minute, which is
             // what makes scanning it evidence the person is standing at the terminal.
-            Guid? terminalId = _tokenService.ConsumeQrNonce(nonce);
+            Guid? terminalId = _tokenService.ConsumeQrNonce(nonce, holdKey);
 
             if (terminalId is null)
             {
@@ -688,11 +688,26 @@ public class TimeEntryService(
             saved.UpdateDate = now;
             saved.UpdateByUserId = actingUserId;
 
-            // A manager entering or correcting time has, by doing so, reviewed it.
-            saved.NeedsReview = false;
-            saved.ReviewReason = null;
-            saved.ApprovedByUserId = saved.IsOpen ? null : actingUserId;
-            saved.ApprovedDateUtc = saved.IsOpen ? null : now;
+            // A manager entering or correcting time has, by doing so, reviewed it - unless it's
+            // their own time. Nobody approves their own hours (as with time off and shift
+            // requests), so it's left for another manager or an admin, flagged so Approve all
+            // passes over it. Admins are the exception, since someone has to approve theirs.
+            bool ownTime = !scope.IsAdmin && (saved.UserId == actingUserId || existing?.UserId == actingUserId);
+
+            if (ownTime)
+            {
+                saved.NeedsReview = !saved.IsOpen;
+                saved.ReviewReason = saved.IsOpen ? null : "Entered or edited by this person - another manager needs to approve it.";
+                saved.ApprovedByUserId = null;
+                saved.ApprovedDateUtc = null;
+            }
+            else
+            {
+                saved.NeedsReview = false;
+                saved.ReviewReason = null;
+                saved.ApprovedByUserId = saved.IsOpen ? null : actingUserId;
+                saved.ApprovedDateUtc = saved.IsOpen ? null : now;
+            }
 
             try
             {
@@ -734,6 +749,11 @@ public class TimeEntryService(
                 return Result<bool>.Fail("This person is still clocked in - approve it once they've clocked out.");
             }
 
+            if (entry.UserId == approverUserId && !scope.IsAdmin)
+            {
+                return Result<bool>.Fail("You can't approve your own hours. Another manager or an admin needs to.");
+            }
+
             entry.ApprovedByUserId = approverUserId;
             entry.ApprovedDateUtc = Now;
             entry.NeedsReview = false;
@@ -765,7 +785,8 @@ public class TimeEntryService(
 
             List<TimeEntry> ready = await ctx.TimeEntries
                 .Where(x => x.LocationId == locationId && x.IsActive && x.ClockOutUtc != null && x.ApprovedDateUtc == null && !x.NeedsReview
-                    && x.ClockInUtc >= startUtc && x.ClockInUtc < endUtc)
+                    && x.ClockInUtc >= startUtc && x.ClockInUtc < endUtc
+                    && (scope.IsAdmin || x.UserId != approverUserId))
                 .ToListAsync();
 
             foreach (TimeEntry entry in ready)

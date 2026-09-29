@@ -554,5 +554,17 @@
       "The public homepage now shows what Lanyard looks like - screenshots of the rota builder, team chat, music and My Shifts on a phone, taken from the demo.",
       "You can now send a message straight from the homepage's \"Get in touch\" section - name, email, venue and message - and the reply comes back to your own email address. The email address is still there too."
     ]
+  },
+  {
+    "version": "1.4.12",
+    "releaseDate": "2026-09-29",
+    "summary": "Security and reliability fixes ahead of the next release.",
+    "details": [
+      "Fixed: saving your details on the account page shortly after changing your password or turning on two-factor authentication could undo that change, bringing back the old password or switching two-factor off again.",
+      "Managers can no longer approve their own timesheet hours. Time a manager enters or edits for themselves is flagged for another manager or an admin to approve, and \"Approve all\" leaves it out.",
+      "A clock-in QR code opened on a signed-out phone is now only held for that phone while it signs in. Forwarding the link to someone else no longer gives them a code that lasts ten minutes.",
+      "Pinned-post notifications no longer show the post's text on your lock screen when you have turned message previews off.",
+      "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart."
+    ]
   }
 ]

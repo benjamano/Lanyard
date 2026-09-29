@@ -64,13 +64,32 @@ public class TerminalEphemeralTokenServiceTests
         string nonce = service.IssueQrNonce(terminalId);
 
         clock.Advance(TimeSpan.FromSeconds(30));
-        Assert.IsTrue(service.HoldQrNonceForSignIn(nonce));
-        Assert.IsFalse(service.HoldQrNonceForSignIn(nonce), "Only once");
+        string? holdKey = service.HoldQrNonceForSignIn(nonce);
+        Assert.IsNotNull(holdKey);
+        Assert.IsNull(service.HoldQrNonceForSignIn(nonce), "Only once");
 
         // Well past the usual minute, while they sign in.
         clock.Advance(TimeSpan.FromMinutes(5));
-        Assert.AreEqual(terminalId, service.ConsumeQrNonce(nonce));
+        Assert.AreEqual(terminalId, service.ConsumeQrNonce(nonce, holdKey));
+        Assert.IsNull(service.ConsumeQrNonce(nonce, holdKey));
+    }
+
+    [TestMethod]
+    public void QrNonce_HeldForSignIn_OnlyWorksWithTheHoldKey()
+    {
+        (TerminalEphemeralTokenService service, TestClock clock) = Create();
+        Guid terminalId = Guid.NewGuid();
+        string nonce = service.IssueQrNonce(terminalId);
+
+        string? holdKey = service.HoldQrNonceForSignIn(nonce);
+        Assert.IsNotNull(holdKey);
+
+        // The forwarded link alone: no cookie, or someone else's.
+        Assert.IsNull(service.PeekQrNonce(nonce));
         Assert.IsNull(service.ConsumeQrNonce(nonce));
+        Assert.IsNull(service.ConsumeQrNonce(nonce, "not-the-key"));
+
+        Assert.AreEqual(terminalId, service.ConsumeQrNonce(nonce, holdKey));
     }
 
     [TestMethod]
@@ -81,7 +100,7 @@ public class TerminalEphemeralTokenServiceTests
 
         clock.Advance(TimeSpan.FromSeconds(61));
 
-        Assert.IsFalse(service.HoldQrNonceForSignIn(nonce));
+        Assert.IsNull(service.HoldQrNonceForSignIn(nonce));
         Assert.IsNull(service.ConsumeQrNonce(nonce));
     }
 

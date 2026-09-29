@@ -112,7 +112,7 @@
                             <div class="timesheet-line-actions">
                                 @if (entry is not null)
                                 {
-                                    @if (!entry.IsOpen && !entry.IsApproved)
+                                    @if (!entry.IsOpen && !entry.IsApproved && CanApprove(entry))
                                     {
                                         <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => ApproveAsync(entry))">Approve</FluentButton>
                                     }
@@ -149,9 +149,14 @@
     private string? loadedKey;
     private DateTime nowUtc = DateTime.UtcNow;
 
+    private string? currentUserId;
+
     private int ReadyToApprove => view?.People
         .SelectMany(p => p.Lines)
-        .Count(l => l.Entry is { IsOpen: false, IsApproved: false, NeedsReview: false }) ?? 0;
+        .Count(l => l.Entry is { IsOpen: false, IsApproved: false, NeedsReview: false } entry && CanApprove(entry)) ?? 0;
+
+    // Mirrors TimeEntryService: nobody approves their own hours, except an admin.
+    private bool CanApprove(TimeEntry entry) => scope?.IsAdmin == true || entry.UserId != currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,6 +169,7 @@
         }
 
         scope = scopeResult.Data;
+        currentUserId = (await _securityService.GetCurrentUserIdAsync()).Data;
 
         if (scope.IsAdmin)
         {

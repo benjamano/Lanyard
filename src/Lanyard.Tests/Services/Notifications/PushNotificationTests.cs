@@ -216,6 +216,33 @@ public class PushNotificationTests
     }
 
     [TestMethod]
+    public void PushContent_PinnedPost_WithPreviewsOff_HasNoText()
+    {
+        PushContent content = PushContentBuilder.Build(new PinnedPostPayload(Guid.NewGuid(), "Announcements", "Tom Hughes", ""), new DateOnly(2026, 9, 24));
+
+        Assert.AreEqual("Tom Hughes pinned a post", content.Body);
+    }
+
+    [TestMethod]
+    public async Task Deliver_PinnedPost_WithPreviewsOff_LeavesTheTextOffTheLockScreen()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            ctx.Users.Add(new UserProfile { Id = "amy", UserName = "amy", FirstName = "Amy", Email = "amy@example.com", ShowMessagePreviews = false });
+            await ctx.SaveChangesAsync();
+        }
+
+        (NotificationDeliverer deliverer, _, Mock<IPushSender> push) = Deliverer(options);
+
+        await deliverer.DeliverAsync(new NotificationJob("amy", NotificationTopic.PinnedPost,
+            new PinnedPostPayload(Guid.NewGuid(), "Announcements", "Tom Hughes", "Bonus for everyone who covers Saturday")));
+
+        push.Verify(x => x.SendToUserAsync("amy", It.Is<PushContent>(c => !c.Body.Contains("Bonus")), null, It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [TestMethod]
     public void PushContent_NonChat_HasNoChatLine()
     {
         PushContent content = PushContentBuilder.Build(

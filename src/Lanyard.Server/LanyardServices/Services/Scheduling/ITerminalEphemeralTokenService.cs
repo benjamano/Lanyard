@@ -16,14 +16,18 @@ public interface ITerminalEphemeralTokenService
 
     // The terminal shows a new code every QrRotationInterval; each is single-use and accepted a
     // little longer than it's shown, so a scan just as it changes still works.
+    // holdKey is only needed for a code that has been held for sign-in (see below).
     string IssueQrNonce(Guid terminalId);
-    Guid? PeekQrNonce(string nonce);
-    Guid? ConsumeQrNonce(string nonce);
+    Guid? PeekQrNonce(string nonce, string? holdKey = null);
+    Guid? ConsumeQrNonce(string nonce, string? holdKey = null);
 
     // A phone that scans while signed out gets this one code held for QrSignInHold, once, so it
     // is still valid after signing in (and maybe 2FA). The scan itself still had to happen
-    // within the code's minute, and the code is still single-use.
-    bool HoldQrNonceForSignIn(string nonce);
+    // within the code's minute, and the code is still single-use. Returns a hold key (null if
+    // the code can't be held) that the scanning browser keeps in a cookie: once held, the code
+    // only works alongside that key, so forwarding the link to someone who isn't at the
+    // terminal doesn't give them a code that lasts ten minutes.
+    string? HoldQrNonceForSignIn(string nonce);
 
     // Wrong-PIN throttling per person, across every terminal: each 5 wrong PINs locks them out,
     // for 30 seconds the first time and twice as long each time after, up to an hour. A right PIN

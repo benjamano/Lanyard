@@ -65,10 +65,16 @@ public class NotificationDeliverer(
 
             if (preference.Push && info.PushAvailable && _pushSender.IsConfigured)
             {
-                // Lock-screen privacy: someone who has turned message text off gets "New message".
-                NotificationPayload payload = job.Payload is ChatMessagePayload chat && !user.ShowMessagePreviews
-                    ? chat with { Preview = string.Empty }
-                    : job.Payload;
+                // Lock-screen privacy: someone who has turned message text off gets "New message"
+                // (or "pinned a post") without the text.
+                NotificationPayload payload = user.ShowMessagePreviews
+                    ? job.Payload
+                    : job.Payload switch
+                    {
+                        ChatMessagePayload chat => chat with { Preview = string.Empty },
+                        PinnedPostPayload pinned => pinned with { Preview = string.Empty },
+                        _ => job.Payload
+                    };
 
                 PushContent content = PushContentBuilder.Build(payload, RotaTime.Today(_timeProvider.GetUtcNow().UtcDateTime));
                 PushSendSummary summary = await _pushSender.SendToUserAsync(user.Id, content, cancellationToken: cancellationToken);

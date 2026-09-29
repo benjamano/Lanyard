@@ -84,6 +84,14 @@ public class SignalRControlHub(
 
         string clientIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
+        bool supportsDmxBatch = httpContext?.Request.Query["dmxBatch"].ToString() == "1";
+        _dmxClientService.SetConnectionSupportsBatch(Context.ConnectionId, supportsDmxBatch);
+
+        if (!supportsDmxBatch)
+        {
+            _logger.LogInformation("Client {ClientId} ({ConnectionId}) predates batched DMX; sending it one message per channel", clientId, Context.ConnectionId);
+        }
+
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId);
 
         Client client = new();
@@ -179,6 +187,7 @@ public class SignalRControlHub(
         }
 
         _connections.TryRemove(Context.ConnectionId, out _);
+        _dmxClientService.ForgetConnection(Context.ConnectionId);
 
         await base.OnDisconnectedAsync(exception);
     }

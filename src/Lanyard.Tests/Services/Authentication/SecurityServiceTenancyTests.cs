@@ -197,6 +197,33 @@ public class SecurityServiceTenancyTests
         Assert.IsTrue((await service.ChangePasswordAsync(f.StaffB.Id, "New-Staff-Pw1")).IsSuccess);
     }
 
+    // The Manage page loads (and caches) the profile, the user changes their password or turns on
+    // 2FA, then saves their details from that earlier copy. The save must not put the old
+    // password hash back or switch 2FA off again.
+    [TestMethod]
+    public async Task SavingDetailsFromAnEarlierCopy_KeepsANewerPasswordAndTwoFactor()
+    {
+        Fixture f = await SeedAsync();
+        SecurityService service = ServiceFor(f);
+
+        UserProfile stale = (await service.GetCurrentUserProfileAsync()).Data!;
+
+        Assert.IsTrue((await service.ChangePasswordAsync(f.CallerB.Id, "Brand-New-Pw1")).IsSuccess);
+        UserProfile tracked = (await f.UserManager.FindByIdAsync(f.CallerB.Id))!;
+        await f.UserManager.SetTwoFactorEnabledAsync(tracked, true);
+
+        stale.FirstName = "Renamed";
+        await service.UpdateUserProfileAsync(stale);
+
+        await using ApplicationDbContext ctx = new(f.Options);
+        UserProfile saved = await ctx.Users.AsNoTracking().SingleAsync(x => x.Id == f.CallerB.Id);
+
+        Assert.AreEqual("Renamed", saved.FirstName);
+        Assert.IsTrue(saved.TwoFactorEnabled);
+        Assert.AreEqual(tracked.PasswordHash, saved.PasswordHash);
+        Assert.AreEqual(tracked.SecurityStamp, saved.SecurityStamp);
+    }
+
     [TestMethod]
     public async Task AnotherCompanysUser_CannotBeEditedDeletedOrUnlocked()
     {
