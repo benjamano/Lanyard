@@ -564,7 +564,8 @@
       "Managers can no longer approve their own timesheet hours. Time a manager enters or edits for themselves is flagged for another manager or an admin to approve, and \"Approve all\" leaves it out.",
       "A clock-in QR code opened on a signed-out phone is now only held for that phone while it signs in. Forwarding the link to someone else no longer gives them a code that lasts ten minutes.",
       "Pinned-post notifications no longer show the post's text on your lock screen when you have turned message previews off.",
-      "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart."
+      "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart.",
+      "Manage > Chat Channels no longer fails with \"Cannot create ChatConversation in another company\" for admins when other companies have locations; it now only lists your own company's channels."
     ]
   }
 ]
