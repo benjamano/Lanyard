@@ -116,4 +116,24 @@ public class PublicHomepageIntegrationTests
         StringAssert.Contains(robots, "Sitemap: https://lanyard.benjaminmercer.co.uk/sitemap.xml");
         StringAssert.Contains(await OnHost(PublicHost).GetStringAsync("/sitemap.xml"), "<loc>https://lanyard.benjaminmercer.co.uk/</loc>");
     }
+
+    [TestMethod]
+    public async Task Homepage_HasAContactSectionWithTheConfiguredAddress()
+    {
+        string html = await NoRedirects(_factory).GetStringAsync("/");
+
+        StringAssert.Contains(html, "Get in touch");
+        StringAssert.Contains(html, "href=\"mailto:benmercer76@btinternet.com?subject=Lanyard%20enquiry\"");
+        StringAssert.Contains(html, "href=\"#contact\"");
+    }
+
+    [TestMethod]
+    public async Task ContactSection_IsLeftOutWithoutAnAddress()
+    {
+        using WebApplicationFactory<Program> noContact = _factory.WithWebHostBuilder(b => b.UseSetting("PublicSite:ContactEmail", ""));
+
+        string html = await NoRedirects(noContact).GetStringAsync("/");
+
+        Assert.IsFalse(html.Contains("mailto:"), "No address configured, so no contact section.");
+    }
 }

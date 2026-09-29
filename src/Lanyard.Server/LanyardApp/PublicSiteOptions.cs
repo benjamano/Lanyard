@@ -11,6 +11,9 @@ public class PublicSiteOptions
     // URLs, and to decide which host search engines may index.
     public string BaseUrl { get; set; } = string.Empty;
 
+    // Shown in the homepage's "Get in touch" section; the section is left out when this is empty.
+    public string ContactEmail { get; set; } = string.Empty;
+
     // An absolute URL on the public site ("/" -> the base URL itself).
     public string Url(string path) => $"{BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
 

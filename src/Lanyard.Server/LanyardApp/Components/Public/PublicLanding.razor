@@ -3,6 +3,7 @@
    users never see this. Deliberately static: no data, no services beyond configuration. *@
 
 @inject IConfiguration Configuration
+@inject IJSRuntime JS
 @inject Microsoft.Extensions.Options.IOptions<PublicSiteOptions> PublicSite
 
 <PageTitle>@Title</PageTitle>
@@ -48,6 +49,10 @@
                     Log in
                 </FluentAnchorButton>
             </div>
+            @if (HasContact)
+            {
+                <a href="#contact" class="landing-hero-contact">Questions? Get in touch</a>
+            }
         </div>
     </section>
 
@@ -133,6 +138,37 @@
             </p>
         </section>
     }
+
+    @if (HasContact)
+    {
+        <section id="contact" class="landing-section-alt" aria-labelledby="contact-heading">
+            <div class="landing-section landing-contact">
+                <div class="landing-contact-text">
+                    <h2 id="contact-heading" class="landing-section-title">Get in touch</h2>
+                    <p class="landing-contact-lede">
+                        Interested in Lanyard for your venue, want to see more, or have a question? Send an
+                        email and Ben will get back to you.
+                    </p>
+                </div>
+                <div class="landing-contact-card">
+                    <div class="landing-card-icon">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Custom" CustomColor="currentColor" />
+                    </div>
+                    <a href="@MailTo" class="landing-contact-email">@ContactEmail</a>
+                    <div class="landing-contact-actions">
+                        <FluentAnchorButton Href="@MailTo" Appearance="ButtonAppearance.Primary"
+                                            IconStart="@(new Icons.Regular.Size20.Send())">
+                            Send an email
+                        </FluentAnchorButton>
+                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CopyEmailAsync"
+                                      IconStart="@(new Icons.Regular.Size20.Copy())">
+                            Copy address
+                        </FluentButton>
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
 </div>
 
 @code {
@@ -147,6 +183,26 @@
         + "and team chat, plus live control of music, DMX lighting, projection and laser tag scoring.";
 
     private bool DemoEnabled => Configuration.GetValue<bool>("Demo:Enabled");
+
+    private string ContactEmail => PublicSite.Value.ContactEmail.Trim();
+
+    private bool HasContact => ContactEmail.Contains('@');
+
+    private string MailTo => $"mailto:{ContactEmail}?subject={Uri.EscapeDataString("Lanyard enquiry")}";
+
+    // For visitors with no mail app set up, where "Send an email" does nothing useful.
+    private async Task CopyEmailAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", ContactEmail);
+            _toastService.ShowSuccess("Email address copied.");
+        }
+        catch (JSException)
+        {
+            _toastService.ShowError($"Couldn't copy it - the address is {ContactEmail}.");
+        }
+    }
 
     private void OpenDemo(string role) => _navigationManager.NavigateTo($"/api/auth/demo-login?role={role}", forceLoad: true);
 
