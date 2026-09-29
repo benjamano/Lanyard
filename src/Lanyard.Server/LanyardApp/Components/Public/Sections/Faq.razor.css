@@ -1,0 +1,60 @@
+.faq {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 860px;
+}
+
+.faq-item {
+    border-radius: 10px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+.faq-question {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--colorNeutralForeground1);
+    cursor: pointer;
+    list-style: none;
+}
+
+.faq-question::-webkit-details-marker {
+    display: none;
+}
+
+/* A chevron that turns when the answer is open. */
+.faq-question::after {
+    content: "";
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid var(--colorNeutralForeground2);
+    border-bottom: 2px solid var(--colorNeutralForeground2);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    margin-top: -4px;
+}
+
+.faq-item[open] .faq-question::after {
+    transform: rotate(-135deg);
+    margin-top: 4px;
+}
+
+.faq-question:focus-visible {
+    outline: 2px solid var(--colorBrandStroke1, var(--colorBrandBackground));
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
+.faq-answer {
+    margin: 0;
+    padding: 0 18px 18px;
+    color: var(--colorNeutralForeground2);
+    line-height: 1.6;
+}
