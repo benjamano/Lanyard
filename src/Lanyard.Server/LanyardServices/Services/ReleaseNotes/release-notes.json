@@ -566,5 +566,13 @@
       "Pinned-post notifications no longer show the post's text on your lock screen when you have turned message previews off.",
       "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart."
     ]
+    },
+  {
+    "version": "1.4.13",
+    "releaseDate": "2026-09-29",
+    "summary": "See when someone is typing in Chat.",
+    "details": [
+      "Chat now shows when the other person is typing a message, with a \"Tom is typing\" line at the bottom of the conversation. In groups and channels it names up to two people, or says several people are typing."
+    ]
   }
 ]

@@ -65,6 +65,11 @@
     [Parameter]
     public bool ContextIsEdit { get; set; }
 
+    // Told when the person starts typing (repeated every few seconds while they carry on) and when
+    // they empty the box. A plain callback, not an EventCallback, so it doesn't re-render the thread.
+    [Parameter]
+    public Action<bool>? OnTyping { get; set; }
+
     private ElementReference host;
     private ElementReference toolbar;
     private DotNetObjectReference<ChatComposer>? dotNetRef;
@@ -89,6 +94,9 @@
 
     [JSInvokable]
     public async Task<bool> OnSubmit(string html) => await Submit(html);
+
+    [JSInvokable("OnTyping")]
+    public void Typing(bool typing) => OnTyping?.Invoke(typing);
 
     private async Task SendAsync()
     {

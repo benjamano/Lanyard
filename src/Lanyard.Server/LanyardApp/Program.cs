@@ -129,6 +129,7 @@ builder.Services.AddSingleton<IShiftClaimEventBus, ShiftClaimEventBus>();
 builder.Services.AddScoped<IShiftClaimService, ShiftClaimService>();
 builder.Services.AddSingleton<IChatEventBus, ChatEventBus>();
 builder.Services.AddSingleton<IChatPresence, ChatPresence>();
+builder.Services.AddSingleton<IChatTyping, ChatTyping>();
 builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<IChatModerationService, ChatModerationService>();
 builder.Services.AddHostedService<ChatDigestHostedService>();
