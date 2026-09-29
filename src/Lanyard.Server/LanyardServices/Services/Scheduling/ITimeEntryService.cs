@@ -15,7 +15,7 @@ public interface ITimeEntryService
     // company's clock-in window around one of the person's published shifts here; clocking out
     // is always allowed.
     Task<Result<ClockActionResult>> ClockByPinAsync(Guid terminalId, string userId, string pin);
-    Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId);
+    Task<Result<ClockActionResult>> ClockByQrAsync(string nonce, string userId, string? holdKey = null);
 
     Task<Result<ClockState>> GetClockStateAsync(string userId);
 

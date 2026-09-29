@@ -582,4 +582,79 @@ public class TimeEntryServiceTests
         Assert.IsTrue((await verify.TimeEntries.SingleAsync(x => x.UserId == f.Ben.Id)).IsApproved);
         Assert.IsFalse((await verify.TimeEntries.SingleAsync(x => x.UserId == amy.Id)).IsApproved);
     }
+
+    [TestMethod]
+    public async Task SaveEntryAsync_AManagerEnteringTheirOwnTimeLeavesItUnapprovedAndFlagged()
+    {
+        Fixture f = await CreateAsync(20, 0);
+
+        Result<TimeEntry> result = await f.Service.SaveEntryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Location), new TimeEntry
+        {
+            UserId = f.Ben.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 17)
+        }, f.Ben.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.IsNull(result.Data!.ApprovedByUserId);
+        Assert.IsNull(result.Data.ApprovedDateUtc);
+        Assert.IsTrue(result.Data.NeedsReview);
+    }
+
+    [TestMethod]
+    public async Task SaveEntryAsync_AnAdminEnteringTheirOwnTimeApprovesIt()
+    {
+        Fixture f = await CreateAsync(20, 0);
+
+        Result<TimeEntry> result = await f.Service.SaveEntryAsync(SchedulingTestHelpers.AdminScope, new TimeEntry
+        {
+            UserId = f.Ben.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 17)
+        }, f.Ben.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(f.Ben.Id, result.Data!.ApprovedByUserId);
+        Assert.IsFalse(result.Data.NeedsReview);
+    }
+
+    [TestMethod]
+    public async Task ApproveEntryAsync_RefusesAManagersOwnHours()
+    {
+        Fixture f = await CreateAsync(20, 0);
+        TimeEntry entry = new()
+        {
+            Id = Guid.NewGuid(), UserId = f.Ben.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 17), IsActive = true
+        };
+
+        await using (ApplicationDbContext ctx = new(f.Options))
+        {
+            ctx.TimeEntries.Add(entry);
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> result = await f.Service.ApproveEntryAsync(SchedulingTestHelpers.ManagerScopeFor(f.Location), entry.Id, f.Ben.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "your own hours");
+    }
+
+    [TestMethod]
+    public async Task ApproveAllAsync_SkipsTheApprovingManagersOwnHours()
+    {
+        Fixture f = await CreateAsync(20, 0);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(f.Options, f.Location, "Amy");
+
+        await using (ApplicationDbContext ctx = new(f.Options))
+        {
+            ctx.TimeEntries.AddRange(
+                new TimeEntry { Id = Guid.NewGuid(), UserId = f.Ben.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 17), IsActive = true },
+                new TimeEntry { Id = Guid.NewGuid(), UserId = amy.Id, LocationId = f.Location.Id, ClockInUtc = Local(Monday, 9), ClockOutUtc = Local(Monday, 12), IsActive = true });
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<int> result = await f.Service.ApproveAllAsync(SchedulingTestHelpers.ManagerScopeFor(f.Location), f.Location.Id, Monday, Monday.AddDays(6), f.Ben.Id);
+
+        Assert.AreEqual(1, result.Data);
+
+        await using ApplicationDbContext verify = new(f.Options);
+        Assert.IsFalse((await verify.TimeEntries.SingleAsync(x => x.UserId == f.Ben.Id)).IsApproved);
+        Assert.IsTrue((await verify.TimeEntries.SingleAsync(x => x.UserId == amy.Id)).IsApproved);
+    }
 }

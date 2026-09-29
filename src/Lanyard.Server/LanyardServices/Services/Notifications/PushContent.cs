@@ -34,7 +34,8 @@ public static class PushContentBuilder
         TimeOffDecidedPayload decided => Decided(decided),
         _ when ShiftClaimNotices.Handles(payload) => FromNotice(payload),
         ChatMessagePayload chat => ChatMessage(chat),
-        PinnedPostPayload pinned => new PushContent($"📌 {pinned.ChannelName}", $"{pinned.AuthorName}: {pinned.Preview}",
+        PinnedPostPayload pinned => new PushContent($"📌 {pinned.ChannelName}",
+            string.IsNullOrWhiteSpace(pinned.Preview) ? $"{pinned.AuthorName} pinned a post" : $"{pinned.AuthorName}: {pinned.Preview}",
             $"/chat/{pinned.ConversationId}", $"pinned-{pinned.ConversationId:N}", PushMessageUrgency.Normal, TimeSpan.FromDays(3)),
         _ when ChatNotices.Handles(payload) => FromChatNotice(payload),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")

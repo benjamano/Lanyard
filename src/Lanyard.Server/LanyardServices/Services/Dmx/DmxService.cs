@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
@@ -34,6 +35,15 @@ public class DmxService(ISystemDbContextFactory factory,
     /// itself), which previously doubled every write into a second hub call + event.
     /// </summary>
     public const string ReceiveDmxChannelValuesMethod = "ReceiveDmxChannelValues";
+
+    /// <summary>
+    /// Single-channel method understood by kiosks older than client 1.0.40. Sent only to
+    /// connections that didn't advertise batch support, so a kiosk that hasn't auto-updated yet
+    /// still drives its lights. Remove once every kiosk is on 1.0.40 or later.
+    /// </summary>
+    public const string LegacyReceiveDmxChannelValueMethod = "ReceiveDmxChannelValue";
+
+    private readonly ConcurrentDictionary<string, byte> _legacyConnectionIds = new();
 
     private sealed class ClientDmxState
     {
@@ -97,8 +107,37 @@ public class DmxService(ISystemDbContextFactory factory,
         if (clientConnectionIdGetResult.IsSuccess && !string.IsNullOrEmpty(clientConnectionIdGetResult.Data))
         {
             string connectionId = clientConnectionIdGetResult.Data;
-            await _hubContext.Clients.Client(connectionId).SendAsync(ReceiveDmxChannelValuesMethod, channels);
+            ISingleClientProxy proxy = _hubContext.Clients.Client(connectionId);
+
+            if (_legacyConnectionIds.ContainsKey(connectionId))
+            {
+                foreach (DmxChannel channel in channels)
+                {
+                    await proxy.SendAsync(LegacyReceiveDmxChannelValueMethod, channel);
+                }
+            }
+            else
+            {
+                await proxy.SendAsync(ReceiveDmxChannelValuesMethod, channels);
+            }
         }
+    }
+
+    public void SetConnectionSupportsBatch(string connectionId, bool supportsBatch)
+    {
+        if (supportsBatch)
+        {
+            _legacyConnectionIds.TryRemove(connectionId, out _);
+        }
+        else
+        {
+            _legacyConnectionIds[connectionId] = 0;
+        }
+    }
+
+    public void ForgetConnection(string connectionId)
+    {
+        _legacyConnectionIds.TryRemove(connectionId, out _);
     }
 
     public void SetChannelValue(Guid clientId, int channelAddress, byte value)

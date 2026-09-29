@@ -8,6 +8,7 @@
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.Infrastructure.DTO.Scheduling
 @using Lanyard.Infrastructure.Enum
+@using Microsoft.AspNetCore.Http
 
 @inject ITimeEntryService _timeEntryService
 @inject ITerminalEphemeralTokenService _tokenService
@@ -91,13 +92,35 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    // Only set on the prerender pass, which is the one that can read and write cookies.
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    // The sign-in hold key from the cookie, read while prerendering and carried to the circuit.
+    [PersistentState]
+    public string? HoldKey { get; set; }
+
+    private const string HoldCookieName = "lanyard-qr-hold";
+
     protected override async Task OnInitializedAsync()
     {
         AuthenticationState? auth = AuthenticationStateTask is null ? null : await AuthenticationStateTask;
 
         if (auth?.User.Identity?.IsAuthenticated != true)
         {
-            _tokenService.HoldQrNonceForSignIn(Nonce);
+            // The hold is tied to this browser by a cookie, so the link on its own is still only
+            // good for the code's usual minute.
+            if (HttpContext is { Response.HasStarted: false } && _tokenService.HoldQrNonceForSignIn(Nonce) is string holdKey)
+            {
+                HttpContext.Response.Cookies.Append(HoldCookieName, holdKey, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = HttpContext.Request.IsHttps,
+                    SameSite = SameSiteMode.Lax,
+                    Path = "/rota/scan",
+                    MaxAge = TerminalEphemeralTokenService.QrSignInHold
+                });
+            }
 
             // Leading slash: the login only returns to a local URL (Url.IsLocalUrl), else goes home.
             string returnUrl = Uri.EscapeDataString("/" + _navigationManager.ToBaseRelativePath(_navigationManager.Uri));
@@ -117,8 +140,13 @@
         userId = user.Data.Id;
         greetingName = user.Data.GetGreetingName();
 
+        if (HttpContext is not null)
+        {
+            HoldKey = HttpContext.Request.Cookies[HoldCookieName];
+        }
+
         // Only checked here, not consumed - the code is used up when they press the button.
-        codeValid = _tokenService.PeekQrNonce(Nonce) is not null;
+        codeValid = _tokenService.PeekQrNonce(Nonce, HoldKey) is not null;
 
         Result<ClockState> stateResult = await _timeEntryService.GetClockStateAsync(userId);
         state = stateResult.IsSuccess ? stateResult.Data : null;
@@ -136,7 +164,7 @@
         isBusy = true;
         errorMessage = null;
 
-        Result<ClockActionResult> result = await _timeEntryService.ClockByQrAsync(Nonce, userId);
+        Result<ClockActionResult> result = await _timeEntryService.ClockByQrAsync(Nonce, userId, HoldKey);
 
         isBusy = false;
 

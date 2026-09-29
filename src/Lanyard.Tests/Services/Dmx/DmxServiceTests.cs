@@ -80,6 +80,37 @@ public class DmxServiceTests
     }
 
     [TestMethod]
+    public async Task UpdateChannelValuesAsync_KioskWithoutBatchSupport_GetsOneLegacyMessagePerChannel()
+    {
+        Harness harness = new();
+        harness.Service.SetConnectionSupportsBatch(ConnectionId, false);
+
+        await harness.Service.UpdateChannelValuesAsync(Guid.NewGuid(), Batch((1, 255), (2, 128)));
+
+        harness.ClientProxy.Verify(
+            p => p.SendCoreAsync(DmxService.LegacyReceiveDmxChannelValueMethod, It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+        harness.ClientProxy.Verify(
+            p => p.SendCoreAsync(DmxService.ReceiveDmxChannelValuesMethod, It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [TestMethod]
+    public async Task UpdateChannelValuesAsync_ForgottenLegacyConnection_GoesBackToBatches()
+    {
+        Harness harness = new();
+        harness.Service.SetConnectionSupportsBatch(ConnectionId, false);
+        harness.Service.ForgetConnection(ConnectionId);
+
+        await harness.Service.UpdateChannelValuesAsync(Guid.NewGuid(), Batch((1, 255), (2, 128)));
+
+        harness.ClientProxy.Verify(
+            p => p.SendCoreAsync(DmxService.ReceiveDmxChannelValuesMethod, It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        harness.ClientProxy.VerifyNoOtherCalls();
+    }
+
+    [TestMethod]
     public async Task UpdateChannelValuesAsync_UpdatesServerSideUniverse()
     {
         Harness harness = new();

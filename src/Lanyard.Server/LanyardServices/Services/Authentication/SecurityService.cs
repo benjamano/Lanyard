@@ -5,6 +5,7 @@ using Lanyard.Application.Services.Scheduling;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Training;
@@ -161,8 +162,20 @@ public class SecurityService : ISecurityService
     // This service is scoped (one per circuit / request). The layout, nav menu, greeting card
     // and several pages each ask for the current user's profile during one page load, so the
     // row is remembered briefly per instance instead of being fetched again for each of them.
-    // UpdateUserProfileAsync clears it; the TTL covers changes made from another session.
+    // UpdateUserProfileAsync, password changes and 2FA changes clear it; the TTL covers changes
+    // made from another session.
     private static readonly TimeSpan CurrentProfileCacheTtl = TimeSpan.FromMinutes(1);
+
+    private static readonly string[] UserManagerOwnedProperties =
+    [
+        nameof(UserProfile.PasswordHash),
+        nameof(UserProfile.SecurityStamp),
+        nameof(UserProfile.ConcurrencyStamp),
+        nameof(UserProfile.TwoFactorEnabled),
+        nameof(UserProfile.LockoutEnd),
+        nameof(UserProfile.LockoutEnabled),
+        nameof(UserProfile.AccessFailedCount),
+    ];
     private UserProfile? _cachedCurrentProfile;
     private string? _cachedCurrentProfileUserId;
     private DateTime _cachedCurrentProfileAtUtc;
@@ -277,7 +290,19 @@ public class SecurityService : ISecurityService
             return;
         }
 
-        ctx.Entry(userProfile).CurrentValues.SetValues(updatedUserProfile);
+        EntityEntry<UserProfile> entry = ctx.Entry(userProfile);
+        entry.CurrentValues.SetValues(updatedUserProfile);
+
+        // Callers pass back a profile they loaded earlier (the cached current profile, or the one
+        // UserEditor loaded when the page opened). Password and 2FA changes go through UserManager
+        // in the meantime, so copying these columns from that snapshot would restore an old
+        // password hash or switch 2FA back off. Only UserManager writes them.
+        foreach (string property in UserManagerOwnedProperties)
+        {
+            entry.Property(property).CurrentValue = entry.Property(property).OriginalValue;
+            entry.Property(property).IsModified = false;
+        }
+
         await ctx.SaveChangesAsync();
 
         _cachedCurrentProfile = null;
@@ -808,6 +833,7 @@ public class SecurityService : ISecurityService
 
             string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+            _cachedCurrentProfile = null;
 
             if (!result.Succeeded)
             {
@@ -1062,6 +1088,10 @@ public class SecurityService : ISecurityService
     // instead so the entity belongs to the same context UserManager will mutate it through.
     private async Task<UserProfile?> GetCurrentUserForTwoFactorAsync()
     {
+        // Every 2FA change comes through here; drop the cached profile so nothing reuses the
+        // pre-change TwoFactorEnabled/SecurityStamp.
+        _cachedCurrentProfile = null;
+
         Result<string> idResult = await GetCurrentUserIdAsync();
 
         if (!idResult.IsSuccess || idResult.Data is null)

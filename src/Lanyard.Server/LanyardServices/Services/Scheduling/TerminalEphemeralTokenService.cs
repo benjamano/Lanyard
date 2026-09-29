@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text;
 using Lanyard.Infrastructure.DTO.Scheduling;
 
 namespace Lanyard.Application.Services.Scheduling;
@@ -20,7 +21,7 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
     private readonly ConcurrentDictionary<string, PendingPairing> _pairingCodes = new();
     private readonly ConcurrentDictionary<string, QrNonce> _qrNonces = new();
 
-    private sealed record QrNonce(Guid TerminalId, DateTime ExpiresUtc, bool HeldForSignIn);
+    private sealed record QrNonce(Guid TerminalId, DateTime ExpiresUtc, string? HoldKey);
     private readonly ConcurrentDictionary<string, PinFailureState> _pinFailures = new();
 
     private sealed class PinFailureState
@@ -58,30 +59,43 @@ public class TerminalEphemeralTokenService(TimeProvider timeProvider) : ITermina
         Prune();
 
         string nonce = NewToken();
-        _qrNonces[nonce] = new QrNonce(terminalId, Now.Add(QrNonceLifetime), false);
+        _qrNonces[nonce] = new QrNonce(terminalId, Now.Add(QrNonceLifetime), null);
 
         return nonce;
     }
 
-    public Guid? PeekQrNonce(string nonce) =>
-        !string.IsNullOrEmpty(nonce) && _qrNonces.TryGetValue(nonce, out QrNonce? entry) && entry.ExpiresUtc > Now
+    public Guid? PeekQrNonce(string nonce, string? holdKey = null) =>
+        !string.IsNullOrEmpty(nonce) && _qrNonces.TryGetValue(nonce, out QrNonce? entry) && IsUsable(entry, holdKey)
             ? entry.TerminalId
             : null;
 
-    public Guid? ConsumeQrNonce(string nonce) =>
-        !string.IsNullOrEmpty(nonce) && _qrNonces.TryRemove(nonce, out QrNonce? entry) && entry.ExpiresUtc > Now
-            ? entry.TerminalId
-            : null;
-
-    public bool HoldQrNonceForSignIn(string nonce)
+    public Guid? ConsumeQrNonce(string nonce, string? holdKey = null)
     {
-        if (string.IsNullOrEmpty(nonce) || !_qrNonces.TryGetValue(nonce, out QrNonce? entry) || entry.ExpiresUtc <= Now || entry.HeldForSignIn)
+        if (string.IsNullOrEmpty(nonce) || !_qrNonces.TryGetValue(nonce, out QrNonce? entry) || !IsUsable(entry, holdKey))
         {
-            return false;
+            return null;
         }
 
-        return _qrNonces.TryUpdate(nonce, entry with { ExpiresUtc = Now.Add(QrSignInHold), HeldForSignIn = true }, entry);
+        // Removes only the entry just checked, so two presses can't both use it.
+        return _qrNonces.TryRemove(new KeyValuePair<string, QrNonce>(nonce, entry)) ? entry.TerminalId : null;
     }
+
+    public string? HoldQrNonceForSignIn(string nonce)
+    {
+        if (string.IsNullOrEmpty(nonce) || !_qrNonces.TryGetValue(nonce, out QrNonce? entry) || entry.ExpiresUtc <= Now || entry.HoldKey is not null)
+        {
+            return null;
+        }
+
+        string holdKey = NewToken();
+
+        return _qrNonces.TryUpdate(nonce, entry with { ExpiresUtc = Now.Add(QrSignInHold), HoldKey = holdKey }, entry) ? holdKey : null;
+    }
+
+    private bool IsUsable(QrNonce entry, string? holdKey) =>
+        entry.ExpiresUtc > Now
+        && (entry.HoldKey is null
+            || (holdKey is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entry.HoldKey), Encoding.UTF8.GetBytes(holdKey))));
 
     public DateTime? PinLockedUntil(string userId)
     {

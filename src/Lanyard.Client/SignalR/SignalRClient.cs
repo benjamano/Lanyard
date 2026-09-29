@@ -34,7 +34,9 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             ? string.Empty
             : $"&secret={Uri.EscapeDataString(sharedSecret)}";
 
-        string url = serverUrl + $"?clientId={clientId}{secretQuery}";
+        // dmxBatch=1 tells the server this client handles "ReceiveDmxChannelValues". Clients
+        // older than 1.0.40 don't send it, and the server falls back to one message per channel.
+        string url = serverUrl + $"?clientId={clientId}{secretQuery}&dmxBatch=1";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 
