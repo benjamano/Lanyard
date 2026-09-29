@@ -1,0 +1,99 @@
+.landing-footer {
+    margin-top: auto;
+    background: var(--colorNeutralBackground3);
+    border-top: 1px solid var(--colorNeutralStroke2);
+    color: var(--colorNeutralForeground2);
+}
+
+/* Same column as .landing-section, so the footer lines up with the headings above it. */
+.landing-footer-inner,
+.landing-footer-bottom {
+    max-width: 1120px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+.landing-footer-inner {
+    padding: 40px 24px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 32px;
+}
+
+.landing-footer-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.landing-footer-name {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--colorNeutralForeground1);
+}
+
+.landing-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 48px;
+}
+
+.landing-footer-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 120px;
+}
+
+.landing-footer-heading {
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--colorNeutralForeground3);
+}
+
+.landing-footer-group a {
+    color: var(--colorNeutralForeground1);
+    text-decoration: none;
+}
+
+.landing-footer-group a:hover,
+.landing-footer-group a:focus-visible {
+    color: var(--colorBrandForeground1);
+    text-decoration: underline;
+}
+
+.landing-footer-bottom {
+    padding: 16px 24px 28px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+@media (max-width: 600px) {
+    .landing-footer-inner {
+        padding: 32px 16px 20px;
+    }
+
+    .landing-footer-links {
+        gap: 32px;
+    }
+
+    .landing-footer-bottom {
+        padding: 14px 16px 24px;
+    }
+}
+
+/* From 960px up the app-wide footer is showing its own copyright line underneath. */
+@media (min-width: 960px) {
+    .landing-footer-bottom {
+        display: none;
+    }
+
+    .landing-footer-inner {
+        padding-bottom: 40px;
+    }
+}

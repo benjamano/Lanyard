@@ -56,6 +56,12 @@
         </div>
     </section>
 
+    <section id="tour" class="landing-section" aria-labelledby="tour-heading">
+        <h2 id="tour-heading" class="landing-section-title">See it in action</h2>
+        <p class="landing-section-lede">Screens from the live demo - a made-up venue, so every name in them is invented.</p>
+        <Lanyard.App.Components.Public.Sections.ProductTour />
+    </section>
+
     <section class="landing-section landing-section-compact" aria-labelledby="venues-heading">
         <h2 id="venues-heading" class="landing-section-title">Built for venues like yours</h2>
         <Lanyard.App.Components.Public.Sections.VenueTypes />
@@ -104,6 +110,12 @@
                 </div>
             </div>
         </div>
+    </section>
+
+    <section id="faq" class="landing-section" aria-labelledby="faq-heading">
+        <h2 id="faq-heading" class="landing-section-title">Questions venues ask</h2>
+        <p class="landing-section-lede">The things people usually want to know before getting in touch.</p>
+        <Lanyard.App.Components.Public.Sections.Faq />
     </section>
 
     @if (DemoEnabled)
@@ -157,29 +169,32 @@
                 <div class="landing-contact-text">
                     <h2 id="contact-heading" class="landing-section-title">Get in touch</h2>
                     <p class="landing-contact-lede">
-                        Interested in Lanyard for your venue, want to see more, or have a question? Send an
-                        email and Ben will get back to you.
+                        Interested in Lanyard for your venue, want to see more, or have a question? Send a
+                        message and Ben will get back to you, or email directly.
                     </p>
-                </div>
-                <div class="landing-contact-card">
-                    <div class="landing-card-icon">
-                        <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Custom" CustomColor="currentColor" />
+                    <div class="landing-contact-card">
+                        <div class="landing-card-icon">
+                            <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Custom" CustomColor="currentColor" />
+                        </div>
+                        <a href="@MailTo" class="landing-contact-email">@ContactEmail</a>
+                        <div class="landing-contact-actions">
+                            <FluentAnchorButton Href="@MailTo" Appearance="ButtonAppearance.Outline"
+                                                IconStart="@(new Icons.Regular.Size20.Send())">
+                                Send an email
+                            </FluentAnchorButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CopyEmailAsync"
+                                          IconStart="@(new Icons.Regular.Size20.Copy())">
+                                Copy address
+                            </FluentButton>
+                        </div>
                     </div>
-                    <a href="@MailTo" class="landing-contact-email">@ContactEmail</a>
-                    <div class="landing-contact-actions">
-                        <FluentAnchorButton Href="@MailTo" Appearance="ButtonAppearance.Primary"
-                                            IconStart="@(new Icons.Regular.Size20.Send())">
-                            Send an email
-                        </FluentAnchorButton>
-                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CopyEmailAsync"
-                                      IconStart="@(new Icons.Regular.Size20.Copy())">
-                            Copy address
-                        </FluentButton>
-                    </div>
                 </div>
+                <Lanyard.App.Components.Public.Sections.ContactForm />
             </div>
         </section>
     }
+
+    <Lanyard.App.Components.Public.Sections.LandingFooter ShowDemo="DemoEnabled" ContactEmail="@(HasContact ? ContactEmail : null)" Description="@Description" />
 </div>
 
 @code {

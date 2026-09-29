@@ -1,0 +1,93 @@
+@* The homepage's own footer: where to go next, on every screen size (the app-wide footer is hidden on
+   phones). Also carries the site's Organization / SoftwareApplication structured data - in the body,
+   since a second HeadContent would replace the page's own. *@
+
+@using System.Text.Json
+@inject Microsoft.Extensions.Options.IOptions<PublicSiteOptions> PublicSite
+
+@((MarkupString)$"<script type=\"application/ld+json\">{StructuredData}</script>")
+
+<footer class="landing-footer">
+    <div class="landing-footer-inner">
+        <div class="landing-footer-brand">
+            <span class="landing-footer-name">Lanλard</span>
+            <span class="landing-footer-tagline">Venue operations for entertainment centres.</span>
+        </div>
+
+        <nav class="landing-footer-links" aria-label="Footer">
+            <div class="landing-footer-group">
+                <span class="landing-footer-heading">Lanyard</span>
+                <a href="#features-heading">Features</a>
+                @if (ShowDemo)
+                {
+                    <a href="#demo">Try the demo</a>
+                }
+                <a href="/whats-new">What's new</a>
+            </div>
+            <div class="landing-footer-group">
+                <span class="landing-footer-heading">More</span>
+                <a href="/login">Log in</a>
+                @if (!string.IsNullOrWhiteSpace(ContactEmail))
+                {
+                    <a href="#contact">Contact</a>
+                }
+                <a href="/privacy">Privacy policy</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="landing-footer-bottom">© @DateTime.UtcNow.Year Benjamin Mercer</div>
+</footer>
+
+@code {
+    [Parameter]
+    public bool ShowDemo { get; set; }
+
+    // The homepage's contact address, or null when it has no "Get in touch" section.
+    [Parameter]
+    public string? ContactEmail { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string Description { get; set; }
+
+    // Who makes Lanyard and what it is, for search engines. No price or rating: there isn't a public
+    // one, and structured data mustn't claim anything the page doesn't.
+    private string StructuredData
+    {
+        get
+        {
+            string organizationId = PublicSite.Value.Url("/#organization");
+
+            Dictionary<string, object> organization = new()
+            {
+                ["@type"] = "Organization",
+                ["@id"] = organizationId,
+                ["name"] = "Lanyard",
+                ["url"] = PublicSite.Value.Url("/"),
+                ["logo"] = PublicSite.Value.Url("/logo.png"),
+            };
+
+            if (!string.IsNullOrWhiteSpace(ContactEmail))
+            {
+                organization["email"] = ContactEmail;
+            }
+
+            Dictionary<string, object> application = new()
+            {
+                ["@type"] = "SoftwareApplication",
+                ["name"] = "Lanyard",
+                ["url"] = PublicSite.Value.Url("/"),
+                ["description"] = Description,
+                ["applicationCategory"] = "BusinessApplication",
+                ["operatingSystem"] = "Web, Windows",
+                ["publisher"] = new Dictionary<string, object> { ["@id"] = organizationId },
+            };
+
+            return JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["@context"] = "https://schema.org",
+                ["@graph"] = new object[] { organization, application },
+            }).Replace("</", "<\\/", StringComparison.Ordinal);
+        }
+    }
+}

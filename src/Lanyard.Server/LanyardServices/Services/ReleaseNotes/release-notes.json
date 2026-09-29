@@ -544,11 +544,15 @@
       "In the demo's branding preview you can now just paste your company's website address: Lanyard picks up your name, theme colour and logo from it (or works out a colour from your logo), and you can adjust anything before applying it.",
       "Fixed the \"How it fits together\" heading on the homepage sitting against the left edge instead of lining up with the rest of the page.",
       "The homepage now has a \"Get in touch\" section with an email address to contact about Lanyard, a Send an email button, and a Copy address button for anyone without an email app.",
+      "The public homepage has a proper footer - features, the demo, what's new, log in, contact and privacy - and there's a public What's new page listing every release.",
+      "The public homepage now answers the questions venues usually ask - what you need on site, phones, data, security, laser tag and pricing - in an expandable FAQ.",
       "The homepage now has a \"How to get started\" section explaining the three steps from getting in touch to your team using Lanyard.",
       "The homepage now shows which kinds of venue Lanyard is built for, from laser tag arenas and family entertainment centres to trampoline parks, bowling alleys and escape rooms.",
       "Managers and admins can now require everyone at their company to use two-factor authentication. Open Users and choose Two-Factor Settings to turn it on and see who hasn't set it up yet.",
       "When your company requires two-factor authentication and you haven't set it up, Lanyard asks you to set it up before you carry on. You can use an authenticator app or codes sent to your email, and you go straight on to the page you wanted once it's done.",
-      "While your company requires two-factor authentication, it can't be turned off from Account Management. If you use email codes you can still switch to an authenticator app."
+      "While your company requires two-factor authentication, it can't be turned off from Account Management. If you use email codes you can still switch to an authenticator app.",
+      "The public homepage now shows what Lanyard looks like - screenshots of the rota builder, team chat, music and My Shifts on a phone, taken from the demo.",
+      "You can now send a message straight from the homepage's \"Get in touch\" section - name, email, venue and message - and the reply comes back to your own email address. The email address is still there too."
     ]
   }
 ]
