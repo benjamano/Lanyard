@@ -3,8 +3,10 @@
    use their own mail app. *@
 
 @using Lanyard.Application.Services.Email
+@using Microsoft.AspNetCore.DataProtection
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject IDataProtectionProvider DataProtection
 
 <div class="contact-form" aria-live="polite">
     @if (_sentTo is not null)
@@ -60,6 +62,11 @@
     private bool _sending;
     private IJSObjectReference? _module;
 
+    // When the form was shown, signed; the server drops a send that comes too soon after it.
+    private string _token = string.Empty;
+
+    protected override void OnInitialized() => _token = Lanyard.API.Contact.ContactFormToken.Create(DataProtection, DateTimeOffset.UtcNow);
+
     private sealed record SendResult(bool Ok, string? Message);
 
     private async Task SendAsync()
@@ -91,6 +98,7 @@
                 venue = enquiry.Venue,
                 message = enquiry.Message,
                 website = _website,
+                token = _token,
             });
 
             if (result.Ok)
@@ -114,7 +122,11 @@
     }
 
     // Keeps the name, email and venue - the likeliest reason to send another is a follow-up.
-    private void SendAnother() => _sentTo = null;
+    private void SendAnother()
+    {
+        _sentTo = null;
+        _token = Lanyard.API.Contact.ContactFormToken.Create(DataProtection, DateTimeOffset.UtcNow);
+    }
 
     public async ValueTask DisposeAsync()
     {
