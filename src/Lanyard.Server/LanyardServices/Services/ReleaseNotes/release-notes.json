@@ -566,5 +566,13 @@
       "Pinned-post notifications no longer show the post's text on your lock screen when you have turned message previews off.",
       "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart."
     ]
+    },
+  {
+    "version": "1.4.13",
+    "releaseDate": "2026-09-29",
+    "summary": "Mobile navigation fix.",
+    "details": [
+      "On a phone, the Shifts button in the bottom bar now stays highlighted when you open your time off or shifts up for grabs, not just your upcoming shifts."
+    ]
   }
 ]
