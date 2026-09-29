@@ -1,0 +1,74 @@
+@page "/whats-new"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+@* Every release's notes, public so the homepage can link to them - the same notes signed-in users see
+   in the "What's New" dialog. *@
+
+@using Lanyard.Shared.DTO
+@inject IReleaseNotesService ReleaseNotesService
+
+<PageTitle>What's new - Lanyard</PageTitle>
+
+<div class="whats-new">
+    <a href="/" class="whats-new-back">← Back to the homepage</a>
+    <h1 class="whats-new-title">What's new in Lanyard</h1>
+    <p class="whats-new-lede">Everything that's changed, newest first.</p>
+
+    @if (_error)
+    {
+        <p class="whats-new-empty">The release notes couldn't be loaded. Please try again later.</p>
+    }
+    else if (_releases.Count == 0)
+    {
+        <p class="whats-new-empty">No release notes yet.</p>
+    }
+    else
+    {
+        <ol class="whats-new-list">
+            @foreach (ReleaseNote release in _releases)
+            {
+                <li class="whats-new-release">
+                    <div class="whats-new-meta">
+                        <span class="whats-new-version">v@(release.Version)</span>
+                        <time datetime="@release.ReleaseDate.ToString("yyyy-MM-dd")">@release.ReleaseDate.ToString("d MMMM yyyy")</time>
+                    </div>
+                    <p class="whats-new-summary">@release.Summary</p>
+                    @if (release.Details.Count > 0)
+                    {
+                        @* Only the newest release starts open, so the page isn't one very long list. *@
+                        <details class="whats-new-more" open="@(release == _releases[0])">
+                            <summary>@(release.Details.Count == 1 ? "1 change" : $"{release.Details.Count} changes")</summary>
+                            <ul class="whats-new-details">
+                                @foreach (string detail in release.Details)
+                                {
+                                    <li>@detail</li>
+                                }
+                            </ul>
+                        </details>
+                    }
+                </li>
+            }
+        </ol>
+    }
+</div>
+
+@code {
+    private List<ReleaseNote> _releases = [];
+    private bool _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<IEnumerable<ReleaseNote>> result = await ReleaseNotesService.GetReleaseNotesAsync();
+
+        if (!result.IsSuccess)
+        {
+            _error = true;
+            return;
+        }
+
+        _releases = (result.Data ?? [])
+            .OrderByDescending(x => x.ReleaseDate)
+            .ThenByDescending(x => Version.TryParse(x.Version, out Version? version) ? version : new Version())
+            .ToList();
+    }
+}
