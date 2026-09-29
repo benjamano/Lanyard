@@ -210,18 +210,28 @@ public class EmailService : IEmailService
         return await SendResendEmailAsync(user.Id, user.Email, subject, html);
     }
 
+    public async Task<Result<bool>> SendContactEnquiryEmailAsync(string toEmail, ContactEnquiry enquiry)
+    {
+        string subject = enquiry.Venue is null
+            ? $"Lanyard enquiry from {enquiry.Name}"
+            : $"Lanyard enquiry from {enquiry.Name} ({enquiry.Venue})";
+
+        return await SendResendEmailAsync(null, toEmail, subject, BuildContactEnquiryHtml(enquiry), replyTo: enquiry.Email);
+    }
+
     // Single decision point for the Resend HTTP call - the config check, request shape,
     // auth header, and error handling used to be copy-pasted into each Send*Async method above.
+    // userId is null for mail that isn't to an account (the contact form's enquiries).
     private async Task<Result<bool>> SendResendEmailAsync(
-        string userId, string toEmail, string subject, string html,
-        IReadOnlyList<EmailAttachment>? attachments = null)
+        string? userId, string toEmail, string subject, string html,
+        IReadOnlyList<EmailAttachment>? attachments = null, string? replyTo = null)
     {
         try
         {
             // The public demo is full of made-up people, and visitors can type anyone's address
             // into it - so nothing addressed to a demo account ever leaves. Reported as sent so
             // the demo's flows (inviting a user, approving time off) behave as they would for real.
-            if (_demoDirectory is not null && await _demoDirectory.IsDemoUserAsync(userId))
+            if (userId is not null && _demoDirectory is not null && await _demoDirectory.IsDemoUserAsync(userId))
             {
                 _logger.LogInformation("Not emailing {UserId}: demo account", userId);
                 return Result<bool>.Ok(true);
@@ -236,28 +246,28 @@ public class EmailService : IEmailService
 
             string from = $"{config.FromName} <{config.FromAddress}>";
 
-            // Two shapes rather than one object with a null property: Resend rejects a null
-            // "attachments" key, and keeping the no-attachment branch byte-identical to what
-            // the five pre-existing callers have always sent means adding this can't change
-            // their behaviour at all.
-            object payload = attachments is null || attachments.Count == 0
-                ? new
-                {
-                    from,
-                    to = new[] { toEmail },
-                    subject,
-                    html
-                }
-                : new
-                {
-                    from,
-                    to = new[] { toEmail },
-                    subject,
-                    html,
-                    attachments = attachments
-                        .Select(x => new { filename = x.FileName, content = Convert.ToBase64String(x.Content) })
-                        .ToArray()
-                };
+            // Optional keys are left out rather than sent as null: Resend rejects a null
+            // "attachments" key. Without them the body is the same from/to/subject/html it has
+            // always been.
+            Dictionary<string, object> payload = new()
+            {
+                ["from"] = from,
+                ["to"] = new[] { toEmail },
+                ["subject"] = subject,
+                ["html"] = html,
+            };
+
+            if (replyTo is not null)
+            {
+                payload["reply_to"] = replyTo;
+            }
+
+            if (attachments is { Count: > 0 })
+            {
+                payload["attachments"] = attachments
+                    .Select(x => new { filename = x.FileName, content = Convert.ToBase64String(x.Content) })
+                    .ToArray();
+            }
 
             HttpRequestMessage request = new(HttpMethod.Post, "emails")
             {
@@ -545,6 +555,26 @@ public class EmailService : IEmailService
              <strong>{WebUtility.HtmlEncode(locationName)}</strong>{position}:
              <strong>{WebUtility.HtmlEncode(ShiftLineText(shift with { PositionName = null }))}</strong>.</p>
           {ButtonHtml(myShiftsUrl, "See my shifts", accentColorHex)}
+        </div>
+        """;
+    }
+
+    // Everything in it was typed by a stranger, so all of it is encoded.
+    private static string BuildContactEnquiryHtml(ContactEnquiry enquiry)
+    {
+        string venue = enquiry.Venue is null
+            ? string.Empty
+            : $"<p><strong>Venue:</strong> {WebUtility.HtmlEncode(enquiry.Venue)}</p>";
+
+        string message = string.Join("<br>", enquiry.Message.Split('\n').Select(line => WebUtility.HtmlEncode(line.TrimEnd('\r'))));
+
+        return $"""
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2>New enquiry from the Lanyard homepage</h2>
+          <p><strong>From:</strong> {WebUtility.HtmlEncode(enquiry.Name)} &lt;{WebUtility.HtmlEncode(enquiry.Email)}&gt;</p>
+          {venue}
+          <p style="border-left: 4px solid {Lanyard.Infrastructure.Branding.BrandConstants.PrimaryColorHex}; padding-left: 12px; color: #242424;">{message}</p>
+          <p style="color: #666; font-size: 13px;">Reply to this email to answer them.</p>
         </div>
         """;
     }

@@ -1,0 +1,79 @@
+.contact-form {
+    padding: 24px;
+    border-radius: 12px;
+    background: var(--colorNeutralBackground2);
+    border: 1px solid var(--colorNeutralStroke2);
+}
+
+/* Fluent's inputs already leave room under themselves for a message line, so the gap is small. */
+.contact-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.contact-form-title {
+    margin: 0 0 8px;
+    font-weight: 600;
+    font-size: 1.15rem;
+    color: var(--colorNeutralForeground1);
+}
+
+.contact-form ::deep .contact-form-full,
+.contact-form ::deep .contact-form-full fluent-text-input,
+.contact-form ::deep .contact-form-full fluent-textarea {
+    width: 100%;
+    max-width: none;
+}
+
+/* Off-screen rather than display:none, which some bots skip. */
+.contact-form-trap {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* Rows doesn't reach the inner textarea, and Fluent fixes its height, so it's sized here. */
+.contact-form ::deep fluent-textarea {
+    height: 132px;
+}
+
+.contact-form ::deep fluent-textarea::part(root) {
+    height: 100%;
+}
+
+.contact-form-error {
+    margin: 4px 0;
+    color: var(--colorPaletteRedForeground1);
+}
+
+.contact-form ::deep .contact-form-submit {
+    align-self: flex-start;
+    margin-top: 8px;
+}
+
+.contact-form-sent {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    color: var(--colorPaletteGreenForeground1);
+}
+
+.contact-form-text {
+    margin: 0 0 6px;
+    color: var(--colorNeutralForeground2);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .contact-form {
+        padding: 20px 16px;
+    }
+
+    .contact-form ::deep .contact-form-submit {
+        align-self: stretch;
+    }
+}

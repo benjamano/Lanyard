@@ -545,7 +545,8 @@
       "Fixed the \"How it fits together\" heading on the homepage sitting against the left edge instead of lining up with the rest of the page.",
       "The homepage now has a \"Get in touch\" section with an email address to contact about Lanyard, a Send an email button, and a Copy address button for anyone without an email app.",
       "The homepage now has a \"How to get started\" section explaining the three steps from getting in touch to your team using Lanyard.",
-      "The homepage now shows which kinds of venue Lanyard is built for, from laser tag arenas and family entertainment centres to trampoline parks, bowling alleys and escape rooms."
+      "The homepage now shows which kinds of venue Lanyard is built for, from laser tag arenas and family entertainment centres to trampoline parks, bowling alleys and escape rooms.",
+      "You can now send a message straight from the homepage's \"Get in touch\" section - name, email, venue and message - and the reply comes back to your own email address. The email address is still there too."
     ]
   }
 ]

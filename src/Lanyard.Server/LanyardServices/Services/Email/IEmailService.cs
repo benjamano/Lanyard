@@ -30,4 +30,8 @@ public interface IEmailService
     // A short notification: a heading line, a few lines of detail and one button. Used for open
     // shifts, swaps and call-offs, whose wording comes from ShiftClaimNotices.
     Task<Result<bool>> SendNoticeEmailAsync(UserProfile user, string subject, IReadOnlyList<string> lines, string buttonLabel, string url, string? logoUrl, string accentColorHex);
+
+    // An enquiry from the public homepage's contact form, to the site's contact address, with the
+    // visitor as the reply-to.
+    Task<Result<bool>> SendContactEnquiryEmailAsync(string toEmail, ContactEnquiry enquiry);
 }

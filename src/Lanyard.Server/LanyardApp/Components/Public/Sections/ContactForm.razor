@@ -1,0 +1,133 @@
+@* The homepage's contact form: sends an email to the contact address with the visitor as the
+   reply-to (ContactController). The plain email address stays next to it for anyone who'd rather
+   use their own mail app. *@
+
+@using Lanyard.Application.Services.Email
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="contact-form" aria-live="polite">
+    @if (_sentTo is not null)
+    {
+        <div class="contact-form-sent">
+            <FluentIcon Value="@(new Icons.Regular.Size32.CheckmarkCircle())" Color="Color.Custom" CustomColor="currentColor" />
+            <h3 class="contact-form-title">Thanks, your message is on its way</h3>
+            <p class="contact-form-text">Ben will reply to <strong>@_sentTo</strong>.</p>
+            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="SendAnother">Send another message</FluentButton>
+        </div>
+    }
+    else
+    {
+        <form class="contact-form-fields" @onsubmit="SendAsync" @onsubmit:preventDefault novalidate>
+            <h3 class="contact-form-title">Send a message</h3>
+
+            <FluentTextInput @bind-Value="_name" Label="Your name" Required="true" Class="contact-form-full"
+                             Maxlength="@ContactEnquiry.NameMaxLength" autocomplete="name" />
+            <FluentTextInput @bind-Value="_email" Label="Email" TextInputType="TextInputType.Email" Required="true" Class="contact-form-full"
+                             Maxlength="@ContactEnquiry.EmailMaxLength" autocomplete="email" />
+            <FluentTextInput @bind-Value="_venue" Label="Venue (optional)" Class="contact-form-full"
+                             Maxlength="@ContactEnquiry.VenueMaxLength" autocomplete="organization" />
+            <FluentTextArea @bind-Value="_message" Label="Message" Required="true" Rows="5" Class="contact-form-full"
+                            Maxlength="@ContactEnquiry.MessageMaxLength"
+                            Placeholder="Tell us a little about your venue and what you'd like Lanyard for." />
+
+            @* The honeypot: hidden from people and screen readers, so only a bot fills it in. *@
+            <div class="contact-form-trap" aria-hidden="true">
+                <label>Website <input type="text" name="website" tabindex="-1" autocomplete="off" @bind="_website" /></label>
+            </div>
+
+            @if (_error is not null)
+            {
+                <p class="contact-form-error" role="alert">@_error</p>
+            }
+
+            <FluentButton Type="ButtonType.Submit" Appearance="ButtonAppearance.Primary" Loading="_sending"
+                          IconStart="@(new Icons.Regular.Size20.Send())" Class="contact-form-submit">
+                Send message
+            </FluentButton>
+        </form>
+    }
+</div>
+
+@code {
+    private string? _name;
+    private string? _email;
+    private string? _venue;
+    private string? _message;
+    private string? _website;
+    private string? _error;
+    private string? _sentTo;
+    private bool _sending;
+    private IJSObjectReference? _module;
+
+    private sealed record SendResult(bool Ok, string? Message);
+
+    private async Task SendAsync()
+    {
+        if (_sending)
+        {
+            return;
+        }
+
+        // Checked here first so a typo is flagged straight away; the server checks it all again.
+        (ContactEnquiry? enquiry, string? error) = ContactEnquiry.Create(_name, _email, _venue, _message);
+
+        if (enquiry is null)
+        {
+            _error = error;
+            return;
+        }
+
+        _sending = true;
+        _error = null;
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/contactForm.js");
+            SendResult result = await _module.InvokeAsync<SendResult>("send", new
+            {
+                name = enquiry.Name,
+                email = enquiry.Email,
+                venue = enquiry.Venue,
+                message = enquiry.Message,
+                website = _website,
+            });
+
+            if (result.Ok)
+            {
+                _sentTo = enquiry.Email;
+                _message = null;
+            }
+            else
+            {
+                _error = result.Message;
+            }
+        }
+        catch (JSException)
+        {
+            _error = "Your message couldn't be sent. Please try again.";
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    // Keeps the name, email and venue - the likeliest reason to send another is a follow-up.
+    private void SendAnother() => _sentTo = null;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit's already gone, and the module with it.
+        }
+    }
+}
