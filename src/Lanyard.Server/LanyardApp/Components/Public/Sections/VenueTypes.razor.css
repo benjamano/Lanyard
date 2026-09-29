@@ -1,0 +1,32 @@
+.venue-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.venue-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    color: var(--colorNeutralForeground1);
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.venue-type ::deep svg {
+    color: var(--colorBrandForeground1);
+}
+
+.venue-types-note {
+    margin: 16px 0 0;
+    max-width: 720px;
+    color: var(--colorNeutralForeground2);
+    line-height: 1.55;
+}
