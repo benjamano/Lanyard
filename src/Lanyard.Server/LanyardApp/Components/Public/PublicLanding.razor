@@ -169,26 +169,27 @@
                 <div class="landing-contact-text">
                     <h2 id="contact-heading" class="landing-section-title">Get in touch</h2>
                     <p class="landing-contact-lede">
-                        Interested in Lanyard for your venue, want to see more, or have a question? Send an
-                        email and Ben will get back to you.
+                        Interested in Lanyard for your venue, want to see more, or have a question? Send a
+                        message and Ben will get back to you, or email directly.
                     </p>
-                </div>
-                <div class="landing-contact-card">
-                    <div class="landing-card-icon">
-                        <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Custom" CustomColor="currentColor" />
+                    <div class="landing-contact-card">
+                        <div class="landing-card-icon">
+                            <FluentIcon Value="@(new Icons.Regular.Size24.Mail())" Color="Color.Custom" CustomColor="currentColor" />
+                        </div>
+                        <a href="@MailTo" class="landing-contact-email">@ContactEmail</a>
+                        <div class="landing-contact-actions">
+                            <FluentAnchorButton Href="@MailTo" Appearance="ButtonAppearance.Outline"
+                                                IconStart="@(new Icons.Regular.Size20.Send())">
+                                Send an email
+                            </FluentAnchorButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CopyEmailAsync"
+                                          IconStart="@(new Icons.Regular.Size20.Copy())">
+                                Copy address
+                            </FluentButton>
+                        </div>
                     </div>
-                    <a href="@MailTo" class="landing-contact-email">@ContactEmail</a>
-                    <div class="landing-contact-actions">
-                        <FluentAnchorButton Href="@MailTo" Appearance="ButtonAppearance.Primary"
-                                            IconStart="@(new Icons.Regular.Size20.Send())">
-                            Send an email
-                        </FluentAnchorButton>
-                        <FluentButton Appearance="ButtonAppearance.Outline" OnClick="CopyEmailAsync"
-                                      IconStart="@(new Icons.Regular.Size20.Copy())">
-                            Copy address
-                        </FluentButton>
-                    </div>
                 </div>
+                <Lanyard.App.Components.Public.Sections.ContactForm />
             </div>
         </section>
     }
