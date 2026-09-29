@@ -1,0 +1,29 @@
+@* The three steps from "interested" to "up and running", so getting in touch feels like a small first step. *@
+
+<ol class="steps">
+    @for (int i = 0; i < Steps.Length; i++)
+    {
+        Step step = Steps[i];
+        <li class="step">
+            <div class="step-number" aria-hidden="true">@(i + 1)</div>
+            <div class="step-body">
+                <h3 class="step-title">@step.Title</h3>
+                <p class="step-text">@step.Text</p>
+            </div>
+        </li>
+    }
+</ol>
+
+@code {
+    private sealed record Step(string Title, string Text);
+
+    private static readonly Step[] Steps =
+    [
+        new("Get in touch",
+            "Tell us about your venue: how many sites you run, how big the team is, and which parts of Lanyard you'd use."),
+        new("We set up your company",
+            "Your company, sites and branding are set up for you. Your team get an email inviting them to sign in, on their phone or a computer."),
+        new("Install the venue app",
+            "If you'll use the music, lighting, screens or laser tag scoring, put the Lanyard venue app on the PCs that run them. It keeps itself up to date."),
+    ];
+}

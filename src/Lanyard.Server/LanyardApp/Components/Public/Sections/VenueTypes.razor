@@ -1,0 +1,30 @@
+@* The kinds of venue Lanyard suits, so a visitor can tell straight away whether it's for them. *@
+
+<ul class="venue-types" aria-label="Venue types">
+    @foreach (Venue venue in Venues)
+    {
+        <li class="venue-type">
+            <FluentIcon Value="@venue.Icon" Color="Color.Custom" CustomColor="currentColor" />
+            <span>@venue.Name</span>
+        </li>
+    }
+</ul>
+<p class="venue-types-note">
+    Laser tag scoring and the arena controls are for laser tag venues. The rota, training, onboarding, chat
+    and dashboards work for any venue with a team to run.
+</p>
+
+@code {
+    private sealed record Venue(Icon Icon, string Name);
+
+    private static readonly Venue[] Venues =
+    [
+        new(new Icons.Regular.Size20.Flash(), "Laser tag arenas"),
+        new(new Icons.Regular.Size20.Balloon(), "Family entertainment centres"),
+        new(new Icons.Regular.Size20.PeopleCommunity(), "Soft play centres"),
+        new(new Icons.Regular.Size20.ArrowBounce(), "Trampoline parks"),
+        new(new Icons.Regular.Size20.Target(), "Bowling alleys"),
+        new(new Icons.Regular.Size20.LockClosed(), "Escape rooms"),
+        new(new Icons.Regular.Size20.Games(), "Arcades"),
+    ];
+}
