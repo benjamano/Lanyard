@@ -410,6 +410,19 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 
+    // The homepage contact form emails a real inbox, so a handful of messages per visitor is plenty.
+    options.AddPolicy(Lanyard.API.Controllers.ContactController.RateLimitPolicy, httpContext =>
+    {
+        string ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+    });
+
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
