@@ -9,6 +9,24 @@
 }
 
 @media (max-width: 599px) {
+    /* Search plus two buttons don't fit beside the heading on a phone, so they drop onto their
+       own full-width row and wrap there, rather than crushing the search box. */
+    .users-toolbar ::deep #toolbar-fluent-components {
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    .users-toolbar ::deep .users-toolbar-actions {
+        width: 100% !important;
+        margin-left: 0 !important;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    .users-toolbar ::deep .users-toolbar-actions > fluent-text-input {
+        flex: 1 1 100%;
+    }
+
     ::deep .users-col-username,
     ::deep .users-col-email {
         display: none;

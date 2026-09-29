@@ -1,5 +1,6 @@
 ﻿@page "/kiosk/{clientId}/{projectionProgramId}"
 @attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Lanyard.App.Components.Layout.AllowWithoutTwoFactor]
 
 @using Lanyard.Application.Services
 @using Lanyard.App.Components.Kiosk

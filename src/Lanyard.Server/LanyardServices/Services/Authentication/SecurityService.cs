@@ -39,6 +39,7 @@ public class SecurityService : ISecurityService
     private readonly IOnboardingService _onboardingService;
     private readonly ITenantContext? _tenant;
     private readonly IDemoGuard? _demoGuard;
+    private readonly ITwoFactorPolicyService? _twoFactorPolicy;
 
     private async Task<bool> IsDemoSessionAsync() => _demoGuard is not null && await _demoGuard.IsDemoSessionAsync();
 
@@ -56,10 +57,12 @@ public class SecurityService : ISecurityService
         IOptions<EmailOptions> emailOptions,
         IOnboardingService onboardingService,
         ITenantContext? tenant = null,
-        IDemoGuard? demoGuard = null)
+        IDemoGuard? demoGuard = null,
+        ITwoFactorPolicyService? twoFactorPolicy = null)
     {
         _tenant = tenant;
         _demoGuard = demoGuard;
+        _twoFactorPolicy = twoFactorPolicy;
         _authStateProvider = authStateProvider;
         _currentUserAccessor = currentUserAccessor;
         _factory = factory;
@@ -839,7 +842,8 @@ public class SecurityService : ISecurityService
             {
                 IsEnabled = isEnabled,
                 HasAuthenticator = isEnabled && hasAuthenticator,
-                RecoveryCodesRemaining = recoveryCodesRemaining
+                RecoveryCodesRemaining = recoveryCodesRemaining,
+                IsRequiredByCompany = await IsTwoFactorRequiredForCurrentUserAsync()
             });
         }
         catch (Exception ex)
@@ -986,6 +990,11 @@ public class SecurityService : ISecurityService
                 return Result<bool>.Fail("User not found");
             }
 
+            if (await IsTwoFactorRequiredForCurrentUserAsync())
+            {
+                return Result<bool>.Fail("Your company requires two-factor authentication, so it can't be turned off.");
+            }
+
             if (!await _userManager.CheckPasswordAsync(user, currentPassword))
             {
                 return Result<bool>.Fail("Incorrect password.");
@@ -1033,6 +1042,17 @@ public class SecurityService : ISecurityService
         {
             return Result<List<string>>.Fail(ex.Message);
         }
+    }
+
+    private async Task<bool> IsTwoFactorRequiredForCurrentUserAsync()
+    {
+        if (_twoFactorPolicy is null)
+        {
+            return false;
+        }
+
+        Result<bool> required = await _twoFactorPolicy.IsRequiredForCurrentUserAsync();
+        return required.IsSuccess && required.Data;
     }
 
     // UserManager.SetTwoFactorEnabledAsync/GenerateNewTwoFactorRecoveryCodesAsync/etc. attach the

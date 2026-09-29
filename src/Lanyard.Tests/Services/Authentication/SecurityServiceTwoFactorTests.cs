@@ -78,7 +78,8 @@ namespace Lanyard.Tests.Services.Authentication
         private static SecurityService BuildService(
             DbContextOptions<ApplicationDbContext> options,
             UserManager<UserProfile> userManager,
-            string userId)
+            string userId,
+            ITwoFactorPolicyService? twoFactorPolicy = null)
         {
             Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
             factoryMock.Setup(f => f.CreateDbContext()).Returns(() => new ApplicationDbContext(options));
@@ -103,7 +104,8 @@ namespace Lanyard.Tests.Services.Authentication
                 emailServiceMock.Object,
                 companyLocationServiceMock.Object,
                 Options.Create(new EmailOptions()),
-                onboardingServiceMock.Object);
+                onboardingServiceMock.Object,
+                twoFactorPolicy: twoFactorPolicy);
         }
 
         private static async Task<UserProfile> CreateUserAsync(UserManager<UserProfile> userManager, string password = "P@ssword1")
@@ -306,6 +308,39 @@ namespace Lanyard.Tests.Services.Authentication
 
             Assert.IsTrue(result.IsSuccess, result.Error);
             Assert.IsFalse(await userManager.GetTwoFactorEnabledAsync(user));
+        }
+
+        [TestMethod]
+        public async Task DisableTwoFactorAsync_CompanyRequiresIt_RefusesAndLeavesItOn()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+            UserProfile user = await CreateUserAsync(userManager);
+            Mock<ITwoFactorPolicyService> policy = new();
+            policy.Setup(x => x.IsRequiredForCurrentUserAsync()).ReturnsAsync(Result<bool>.Ok(true));
+            SecurityService service = BuildService(options, userManager, user.Id, policy.Object);
+
+            await service.EnableEmailTwoFactorAsync();
+            Result<bool> result = await service.DisableTwoFactorAsync("P@ssword1");
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.IsTrue(await userManager.GetTwoFactorEnabledAsync(user));
+        }
+
+        [TestMethod]
+        public async Task GetTwoFactorStatusAsync_ReportsWhenTheCompanyRequiresIt()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            UserManager<UserProfile> userManager = BuildUserManager(options);
+            UserProfile user = await CreateUserAsync(userManager);
+            Mock<ITwoFactorPolicyService> policy = new();
+            policy.Setup(x => x.IsRequiredForCurrentUserAsync()).ReturnsAsync(Result<bool>.Ok(true));
+            SecurityService service = BuildService(options, userManager, user.Id, policy.Object);
+
+            Result<TwoFactorStatusDto> status = await service.GetTwoFactorStatusAsync();
+
+            Assert.IsTrue(status.IsSuccess, status.Error);
+            Assert.IsTrue(status.Data!.IsRequiredByCompany);
         }
 
         [TestMethod]

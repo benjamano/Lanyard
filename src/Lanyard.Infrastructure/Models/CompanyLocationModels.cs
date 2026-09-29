@@ -18,6 +18,11 @@ namespace Lanyard.Infrastructure.Models
         public Guid? BackgroundImageFileId { get; set; }   // FK -> FileMetadata.Id; null => no background image on login
         public FileMetadata? BackgroundImageFile { get; set; }
 
+        // Set when an Admin or Manager makes two-factor authentication compulsory for everyone at
+        // the company; null means it's optional. Doubles as the "required since" date managers see.
+        public DateTime? TwoFactorRequiredSince { get; set; }
+        public string? TwoFactorRequiredByUserId { get; set; }
+
         public virtual List<Location> Locations { get; set; } = [];
     }
 

@@ -1,0 +1,181 @@
+@* Company-wide "everyone must use two-factor authentication" switch, opened from the Users page.
+   The switch saves as soon as it's flipped (after a confirmation when turning it on), like the
+   company feature switches. *@
+
+@inject ITwoFactorPolicyService TwoFactorPolicyService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ShieldLock())" Margin="@Margin.End2" />
+            <FluentText As="@TextTag.H4" Weight="TextWeight.Semibold" Color="Color.Default">
+                Two-Factor Authentication
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="tfp">
+            @if (_policy is null)
+            {
+                @if (_loadError is not null)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Error">@_loadError</FluentMessageBar>
+                }
+                else
+                {
+                    <FluentProgressBar />
+                }
+            }
+            else
+            {
+                <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+                    <div class="tfp-row">
+                        <div class="tfp-text">
+                            <FluentText Weight="TextWeight.Semibold">Require for everyone at @_policy.CompanyName</FluentText>
+                            <FluentText Class="tfp-hint">
+                                Anyone without two-factor authentication will be asked to set it up before they
+                                can use Lanyard, and nobody will be able to turn it off. This includes managers
+                                and administrators.
+                            </FluentText>
+                        </div>
+                        <FluentSwitch Value="@_policy.IsRequired"
+                                      ValueChanged="@SetRequiredAsync"
+                                      Disabled="@_saving"
+                                      aria-label="@($"Require two-factor authentication for everyone at {_policy.CompanyName}")" />
+                    </div>
+
+                    @if (_confirmingOn)
+                    {
+                        <FluentMessageBar Intent="MessageBarIntent.Warning" Title="Turn this on?">
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                                <span>
+                                    @UsersWithout.Count @(UsersWithout.Count == 1 ? "person" : "people") will be stopped
+                                    at their next page and asked to set up two-factor authentication before carrying on.
+                                </span>
+                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px">
+                                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@(() => SaveAsync(true))"
+                                                  Disabled="@_saving">
+                                        Require 2FA
+                                    </FluentButton>
+                                    <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelTurningOn"
+                                                  Disabled="@_saving">
+                                        Cancel
+                                    </FluentButton>
+                                </FluentStack>
+                            </FluentStack>
+                        </FluentMessageBar>
+                    }
+                    else if (_policy.IsRequired && _policy.RequiredSince is DateTime since)
+                    {
+                        <FluentText Class="tfp-hint">
+                            Required since @since.ToLocalTime().ToString("d MMMM yyyy")@(_policy.RequiredByName is null ? "" : $", turned on by {_policy.RequiredByName}").
+                        </FluentText>
+                    }
+
+                    <FluentDivider Class="my-3" />
+
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
+                        <FluentText Weight="TextWeight.Semibold">
+                            @_policy.UsersWithTwoFactor of @_policy.Users.Count staff have it set up
+                        </FluentText>
+                        <FluentProgressBar Min="0" Max="@Math.Max(_policy.Users.Count, 1)" Value="@_policy.UsersWithTwoFactor"
+                                           aria-label="Staff with two-factor authentication" />
+
+                        @if (UsersWithout.Count == 0)
+                        {
+                            <FluentText Class="tfp-hint">Everyone has two-factor authentication turned on.</FluentText>
+                        }
+                        else
+                        {
+                            <FluentText Class="tfp-hint">Not set up yet:</FluentText>
+                            <ul class="tfp-list">
+                                @foreach (TwoFactorUserStatusDto user in UsersWithout)
+                                {
+                                    <li @key="user.UserId">@(string.IsNullOrWhiteSpace(user.Name) ? "Unnamed user" : user.Name)</li>
+                                }
+                            </ul>
+                        }
+                    </FluentStack>
+                </FluentStack>
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CloseAsync">Close</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private TwoFactorPolicyDto? _policy;
+    private string? _loadError;
+    private bool _saving;
+    private bool _confirmingOn;
+
+    private List<TwoFactorUserStatusDto> UsersWithout => _policy?.Users.Where(x => !x.IsEnabled).ToList() ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<TwoFactorPolicyDto> result = await TwoFactorPolicyService.GetPolicyForCurrentCompanyAsync();
+
+        if (!result.IsSuccess)
+        {
+            _loadError = result.Error;
+            return;
+        }
+
+        _policy = result.Data;
+    }
+
+    private async Task SetRequiredAsync(bool isRequired)
+    {
+        if (_policy is null)
+        {
+            return;
+        }
+
+        if (isRequired)
+        {
+            // Turning it on interrupts everyone who hasn't set it up, so ask first. The switch
+            // stays off until they confirm.
+            _confirmingOn = true;
+            return;
+        }
+
+        _confirmingOn = false;
+        await SaveAsync(false);
+    }
+
+    private void CancelTurningOn() => _confirmingOn = false;
+
+    private async Task SaveAsync(bool isRequired)
+    {
+        _saving = true;
+
+        Result<bool> result = await TwoFactorPolicyService.SetRequiredForCurrentCompanyAsync(isRequired);
+
+        _saving = false;
+        _confirmingOn = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to update two-factor authentication: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess(isRequired
+            ? "Two-factor authentication is now required for everyone."
+            : "Two-factor authentication is now optional.");
+
+        await LoadAsync();
+    }
+
+    private async Task CloseAsync() => await Dialog.CloseAsync();
+}

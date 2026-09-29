@@ -4,6 +4,7 @@
 @using Lanyard.App.Components.Layout.Staff
 @inject NavigationManager Navigation
 @inject ICompanyFeatureService CompanyFeatures
+@inject ITwoFactorPolicyService TwoFactorPolicy
 
 @* Default-deny wrapper around AuthorizeRouteView. Blazor's [Authorize] attribute only takes
    effect for pages that carry it; a page with no [Authorize]/[AllowAnonymous] attribute at all
@@ -17,7 +18,15 @@
 @* A page marked [RequiresFeature] is also refused when the signed-in user's company doesn't have
    that feature. Nothing renders while that check is pending, so a blocked page never gets far
    enough to run its own OnInitializedAsync. *@
-@if (_blockedFeature is CompanyFeature blockedFeature)
+@* When the user's company requires two-factor authentication and they haven't set it up, every
+   page shows them the set-up screen instead - anonymous ones too, since the home page is anonymous
+   so visitors get the public homepage. Pages marked [AllowWithoutTwoFactor] (signing in and out,
+   device displays) are left alone. *@
+@if (_twoFactorSetupRequired)
+{
+    <TwoFactorRequired OnCompleted="@HandleTwoFactorCompleted" />
+}
+else if (_blockedFeature is CompanyFeature blockedFeature)
 {
     <FeatureUnavailable Feature="@blockedFeature" />
 }
@@ -44,6 +53,7 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
     private bool _isAuthenticated;
     private bool _featureCheckPending;
     private CompanyFeature? _blockedFeature;
+    private bool _twoFactorSetupRequired;
 
     // The page type the current allow/block decision was made for.
     private Type? _checkedPageType;
@@ -60,28 +70,36 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
 
         if (!samePage)
         {
-            _featureCheckPending = requiredFeature is not null;
+            // Pending until the 2FA check below has run, so a page never starts initialising for
+            // a user who is about to be held on the set-up screen instead.
+            _featureCheckPending = true;
             _blockedFeature = null;
         }
 
         _allowAnonymous = Attribute.IsDefined(RouteData.PageType, typeof(AllowAnonymousAttribute), inherit: true);
-
-        if (_allowAnonymous)
-        {
-            // Anonymous pages have no user company to check. The clock-in terminal, the one
-            // anonymous page inside a paid module, checks its paired location's company instead.
-            _isAuthenticated = false;
-            _featureCheckPending = false;
-            _blockedFeature = null;
-            _checkedPageType = null;
-            return;
-        }
+        bool allowWithoutTwoFactor = Attribute.IsDefined(RouteData.PageType, typeof(AllowWithoutTwoFactorAttribute), inherit: true);
 
         AuthenticationState authState = AuthenticationStateTask is null
             ? throw new InvalidOperationException("Authentication state is not available.")
             : await AuthenticationStateTask;
 
-        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+        bool signedIn = authState.User.Identity?.IsAuthenticated == true;
+
+        if (_allowAnonymous)
+        {
+            // Anonymous pages have no user company to check features against. The clock-in
+            // terminal, the one anonymous page inside a paid module, checks its paired location's
+            // company instead.
+            _isAuthenticated = false;
+            _blockedFeature = null;
+            _twoFactorSetupRequired = signedIn && !allowWithoutTwoFactor
+                && await TwoFactorPolicy.IsSetupRequiredForCurrentUserAsync();
+            _featureCheckPending = false;
+            _checkedPageType = null;
+            return;
+        }
+
+        _isAuthenticated = signedIn;
 
         if (!_isAuthenticated)
         {
@@ -93,13 +111,20 @@ else if ((_allowAnonymous || _isAuthenticated) && !_featureCheckPending)
             return;
         }
 
+        _twoFactorSetupRequired = !allowWithoutTwoFactor && await TwoFactorPolicy.IsSetupRequiredForCurrentUserAsync();
+
         if (requiredFeature is not null)
         {
             bool enabled = await CompanyFeatures.IsEnabledForCurrentUserAsync(requiredFeature.Feature);
             _blockedFeature = enabled ? null : requiredFeature.Feature;
-            _featureCheckPending = false;
         }
 
+        _featureCheckPending = false;
         _checkedPageType = RouteData.PageType;
+    }
+
+    private void HandleTwoFactorCompleted()
+    {
+        _twoFactorSetupRequired = false;
     }
 }

@@ -1,0 +1,30 @@
+.tfp-row {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.tfp-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.tfp ::deep .tfp-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.tfp-list {
+    margin: 0;
+    padding-left: 20px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.tfp-list li {
+    padding: 2px 0;
+}

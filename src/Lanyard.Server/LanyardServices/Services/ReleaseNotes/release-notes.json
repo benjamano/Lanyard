@@ -503,7 +503,7 @@
   {
     "version": "1.4.11",
     "releaseDate": "2026-09-25",
-    "summary": "Admins can choose which features each company gets. The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone.",
+    "summary": "Admins can choose which features each company gets. The installed app now uses your company's name and logo, the phone's status bar matches your company's colour, and Lanyard reconnects faster when you come back to it on your phone. Managers can also make two-factor authentication compulsory for everyone at their company.",
     "details": [
       "On a phone, the tabs on My Shifts no longer push the whole page sideways. The tab row now scrolls on its own, so you can swipe across to My hours and Time off while the rest of the page stays still.",
       "Coming back to Lanyard after switching apps or locking your phone no longer leaves you on \"Rejoining the server\" for 10-15 seconds. It now reconnects about a second after your phone's connection is back.",
@@ -548,6 +548,9 @@
       "The public homepage now answers the questions venues usually ask - what you need on site, phones, data, security, laser tag and pricing - in an expandable FAQ.",
       "The homepage now has a \"How to get started\" section explaining the three steps from getting in touch to your team using Lanyard.",
       "The homepage now shows which kinds of venue Lanyard is built for, from laser tag arenas and family entertainment centres to trampoline parks, bowling alleys and escape rooms.",
+      "Managers and admins can now require everyone at their company to use two-factor authentication. Open Users and choose Two-Factor Settings to turn it on and see who hasn't set it up yet.",
+      "When your company requires two-factor authentication and you haven't set it up, Lanyard asks you to set it up before you carry on. You can use an authenticator app or codes sent to your email, and you go straight on to the page you wanted once it's done.",
+      "While your company requires two-factor authentication, it can't be turned off from Account Management. If you use email codes you can still switch to an authenticator app.",
       "The public homepage now shows what Lanyard looks like - screenshots of the rota builder, team chat, music and My Shifts on a phone, taken from the demo.",
       "You can now send a message straight from the homepage's \"Get in touch\" section - name, email, venue and message - and the reply comes back to your own email address. The email address is still there too."
     ]

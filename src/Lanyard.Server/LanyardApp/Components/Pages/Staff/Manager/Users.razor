@@ -6,19 +6,25 @@
 <PageTitle>User Management</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
-        <FluentText As="@TextTag.H3">Users</FluentText>
+    <div class="users-toolbar">
+        <FluentStack Orientation="Orientation.Horizontal" class="w-100" id="toolbar-fluent-components">
+            <FluentText As="@TextTag.H3">Users</FluentText>
 
-        <FluentStack Margin="@Margin.StartAuto" Width="auto" HorizontalGap="6"
-                     VerticalAlignment="@VerticalAlignment.Center">
-            <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" Immediate="true"
-                             @bind-Value:after=HandleSearchInput />
+            <FluentStack Margin="@Margin.StartAuto" Width="auto" HorizontalGap="6"
+                         VerticalAlignment="@VerticalAlignment.Center" Class="users-toolbar-actions">
+                <FluentTextInput Placeholder="Search..." AutoComplete="off" @bind-Value="@searchValue" Immediate="true"
+                                 @bind-Value:after=HandleSearchInput />
 
-            <FluentButton Appearance="ButtonAppearance.Outline" IconEnd="new Icons.Regular.Size20.PersonAdd()"
-                          OnClick="OpenRegisterUserDialog">Register a New User
-            </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" IconEnd="new Icons.Regular.Size20.ShieldLock()"
+                              OnClick="OpenTwoFactorPolicyDialog">Two-Factor Settings
+                </FluentButton>
+
+                <FluentButton Appearance="ButtonAppearance.Outline" IconEnd="new Icons.Regular.Size20.PersonAdd()"
+                              OnClick="OpenRegisterUserDialog">Register a New User
+                </FluentButton>
+            </FluentStack>
         </FluentStack>
-    </FluentStack>
+    </div>
 
     <div class="users-grid-wrapper">
         <FluentDataGrid Pagination="@pagination" ShowHover="true" TGridItem="UserProfile"
@@ -122,6 +128,15 @@
         {
             await GetUsers();
         }
+    }
+
+    private async Task OpenTwoFactorPolicyDialog()
+    {
+        await _dialogService.ShowDialogAsync<TwoFactorPolicyDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+        });
     }
 
     // LockoutEnabled must also be true to match ASP.NET Identity's own IsLockedOutAsync check -
