@@ -63,3 +63,20 @@
     max-width: 80px;
     object-fit: contain;
 }
+
+.login-fields ::deep .login-passkey {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.login-fields ::deep .login-passkey-divider {
+    color: var(--colorNeutralForeground3);
+}
+
+.login-fields ::deep .login-passkey-button {
+    width: 100%;
+}
+
+.login-fields ::deep .login-passkey-message {
+    color: var(--colorNeutralForeground2);
+}

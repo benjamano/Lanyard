@@ -581,5 +581,16 @@
       "Changes apply to everyone or no one: if a change would break someone's contract (for example a minimum above their maximum), nobody is changed and you're told who.",
       "Chat now shows when the other person is typing a message, with a \"Tom is typing\" line at the bottom of the conversation. In groups and channels it names up to two people, or says several people are typing."
     ]
+  },
+  {
+    "version": "1.4.13",
+    "releaseDate": "2026-09-30",
+    "summary": "Sign in with Face ID or your fingerprint.",
+    "details": [
+      "You can now sign in with your phone's Face ID, Touch ID or fingerprint instead of typing your password. Set it up under Account Management > Face ID & Fingerprint Sign-in, then choose \"Use Face ID or fingerprint\" on the login page.",
+      "It works on iPhone, Android and computers with Touch ID or Windows Hello. Your face and fingerprint never leave your device.",
+      "Signing in this way skips the two-factor code, since your phone has already checked it's you.",
+      "You can see and remove the devices you've set up from Account Management. Your password still works as before."
+    ]
   }
 ]

@@ -75,7 +75,7 @@ else
                     </FluentMessageBar>
                 }
 
-                <form method="post" class="col-12" action="/api/auth/login-form">
+                <form method="post" class="col-12" action="/api/auth/login-form" @ref="_loginForm">
                     <input type="hidden" name="returnUrl" value="@ReturnUrl" />
                     <input type="hidden" name="company" value="@CompanyId" />
 
@@ -119,6 +119,28 @@ else
                                 Login
                             </FluentButton>
                         </FluentStack>
+
+                        @* Only once the circuit has checked the browser can do passkeys - it needs JS,
+                           so the prerendered page never shows a button that can't work yet. *@
+                        @if (_passkeysSupported)
+                        {
+                            <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px"
+                                         HorizontalAlignment="HorizontalAlignment.Center" Class="login-passkey">
+                                <FluentText Size="TextSize.Size200" Class="login-passkey-divider">or</FluentText>
+                                <FluentButton Appearance="ButtonAppearance.Outline" Type="ButtonType.Button"
+                                              IconStart="@(new Icons.Regular.Size20.PersonKey())"
+                                              Loading="@_passkeyBusy" Disabled="@_passkeyBusy"
+                                              OnClick="SignInWithPasskey" Class="login-passkey-button">
+                                    Use Face ID or fingerprint
+                                </FluentButton>
+                                @if (!string.IsNullOrEmpty(_passkeyMessage))
+                                {
+                                    <FluentText Size="TextSize.Size200" Align="TextAlign.Center" Class="login-passkey-message">
+                                        @_passkeyMessage
+                                    </FluentText>
+                                }
+                            </FluentStack>
+                        }
                     </FluentStack>
                 </form>
 
@@ -189,6 +211,13 @@ else
     private string? _pendingThemeColor;
     private string? _appliedThemeColor;
     private int? _appliedAppCompanyId;
+
+    private ElementReference _loginForm;
+    private int? _selectedLocationId;
+    private bool _passkeysSupported;
+    private bool _passkeysChecked;
+    private bool _passkeyBusy;
+    private string? _passkeyMessage;
 
     private string AccentBarStyle => $"background-color:{SelectedAccentColor};";
 
@@ -282,6 +311,17 @@ else
     // So the colour is chosen during parameter binding and applied here, where interop is legal.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!_passkeysChecked)
+        {
+            _passkeysChecked = true;
+            _passkeysSupported = await JSRuntime.InvokeAsync<bool>("lanyardPasskeys.isSupported");
+
+            if (_passkeysSupported)
+            {
+                StateHasChanged();
+            }
+        }
+
         // Picking a company only changes the query string in-circuit, so App.razor's <head> still
         // links whatever manifest the page first loaded with. Swap it to this company's name and icons,
         // so "Install app"/"Add to Home Screen" from here uses them.
@@ -324,11 +364,38 @@ else
 
     private void OnLocationChanged(int locationId)
     {
+        _selectedLocationId = locationId;
+        _passkeyMessage = null;
         LoginLocationOption? option = LocationOptions.FirstOrDefault(x => x.LocationId == locationId);
 
         SelectedAccentColor = option?.ThemeColorHex;
         SelectedLogoUrl = option?.LogoFileId is Guid ? $"/api/companies/{option.CompanyId}/logo" : null;
     }
+
+    private async Task SignInWithPasskey()
+    {
+        // Checked before the Face ID / fingerprint prompt rather than after, so nobody scans their
+        // face only to be told they missed a field.
+        if (LocationOptions.Any() && _selectedLocationId is null)
+        {
+            _passkeyMessage = "Choose your location first.";
+            return;
+        }
+
+        _passkeyBusy = true;
+        _passkeyMessage = null;
+
+        PasskeyResult result = await JSRuntime.InvokeAsync<PasskeyResult>("lanyardPasskeys.signIn", _loginForm);
+
+        // On success the form has been submitted and the browser is leaving this page.
+        if (!result.Ok)
+        {
+            _passkeyBusy = false;
+            _passkeyMessage = result.Message;
+        }
+    }
+
+    private sealed record PasskeyResult(bool Ok, bool Cancelled, string? Message);
 
     private string BuildLoginUrl(int? companyId)
     {

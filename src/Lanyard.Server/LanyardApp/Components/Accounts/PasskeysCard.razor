@@ -1,0 +1,188 @@
+@using System.Globalization
+@using Lanyard.App.Components.Dialogs
+
+@inject IPasskeyService _passkeyService
+@inject IJSRuntime JSRuntime
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="12">
+    <FluentText>
+        Sign in with your phone's Face ID, Touch ID or fingerprint instead of typing your password.
+        Your fingerprint and face never leave your device - Lanyard only stores a key that your device unlocks.
+    </FluentText>
+
+    @if (passkeys is null)
+    {
+        <FluentSpinner />
+    }
+    else
+    {
+        @if (passkeys.Count == 0)
+        {
+            <FluentText Size="TextSize.Size200" Color="Color.Disabled">
+                You haven't set this up on any devices yet.
+            </FluentText>
+        }
+        else
+        {
+            <ul class="passkey-list">
+                @foreach (PasskeySummaryDto passkey in passkeys)
+                {
+                    <li class="passkey-row">
+                        <FluentIcon Value="@(new Icons.Regular.Size20.PersonKey())" />
+                        <div class="passkey-details">
+                            <FluentText Weight="TextWeight.Semibold">@passkey.Name</FluentText>
+                            <FluentText Size="TextSize.Size200" Class="passkey-meta">
+                                Added @passkey.CreatedAt.ToLocalTime().ToString("d MMM yyyy", UkCulture)@(passkey.IsSynced ? " · Synced to your other devices" : "")
+                            </FluentText>
+                        </div>
+                        <FluentButton Appearance="ButtonAppearance.Subtle"
+                                      IconStart="@(new Icons.Regular.Size20.Delete())"
+                                      Title="@($"Remove {passkey.Name}")"
+                                      Disabled="@busy"
+                                      OnClick="@(() => ConfirmRemove(passkey))" />
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (!supportChecked)
+        {
+            <FluentSpinner />
+        }
+        else if (!isSupported)
+        {
+            <FluentText Size="TextSize.Size200" Color="Color.Disabled">
+                This browser can't set up Face ID or fingerprint sign-in. Open Lanyard on your phone to add it there.
+            </FluentText>
+        }
+        else if (passkeys.Count < Lanyard.Application.Services.Authentication.PasskeyService.MaxPasskeysPerUser)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Wrap="true">
+                <FluentButton Appearance="ButtonAppearance.Outline"
+                              IconStart="@(new Icons.Regular.Size20.Add())"
+                              Loading="@busy" Disabled="@busy"
+                              OnClick="AddPasskey">
+                    @(passkeys.Count == 0 ? AddLabel : "Add Another Device")
+                </FluentButton>
+            </FluentStack>
+        }
+        else
+        {
+            <FluentText Size="TextSize.Size200" Color="Color.Disabled">
+                @Lanyard.Application.Services.Authentication.PasskeyService.LimitReachedMessage
+            </FluentText>
+        }
+    }
+</FluentStack>
+
+@code {
+    private static readonly CultureInfo UkCulture = CultureInfo.GetCultureInfo("en-GB");
+
+    private List<PasskeySummaryDto>? passkeys;
+    private bool supportChecked;
+    private bool isSupported;
+    private bool hasBiometrics;
+    private bool busy;
+
+    // Worded for the device in hand: a laptop without Touch ID/Windows Hello can still make a
+    // passkey (via a phone or security key), it just won't be a face or fingerprint on this device.
+    private string AddLabel => hasBiometrics ? "Set Up on This Device" : "Add a Passkey";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPasskeys();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        isSupported = await JSRuntime.InvokeAsync<bool>("lanyardPasskeys.isSupported");
+        hasBiometrics = isSupported && await JSRuntime.InvokeAsync<bool>("lanyardPasskeys.hasPlatformAuthenticator");
+        supportChecked = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadPasskeys()
+    {
+        Result<List<PasskeySummaryDto>> result = await _passkeyService.GetMyPasskeysAsync();
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load your passkeys: {result.Error}");
+            passkeys = [];
+            return;
+        }
+
+        passkeys = result.Data!;
+    }
+
+    private async Task AddPasskey()
+    {
+        busy = true;
+
+        try
+        {
+            PasskeyResult result = await JSRuntime.InvokeAsync<PasskeyResult>("lanyardPasskeys.register");
+
+            if (result.Ok)
+            {
+                _toastService.ShowSuccess(string.IsNullOrEmpty(result.Name)
+                    ? "Passkey added. You can now sign in with it."
+                    : $"Added {result.Name}. You can now sign in with it.");
+                await LoadPasskeys();
+            }
+            else if (!result.Cancelled)
+            {
+                _toastService.ShowError(result.Message ?? "Couldn't add the passkey.");
+            }
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ConfirmRemove(PasskeySummaryDto passkey)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove Passkey";
+            options.Width = "420px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Remove {passkey.Name}? You'll need your password to sign in on that device until you set it up again.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        busy = true;
+
+        try
+        {
+            Result<bool> result = await _passkeyService.RemoveMyPasskeyAsync(passkey.Id);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError($"Failed to remove the passkey: {result.Error}");
+                return;
+            }
+
+            _toastService.ShowSuccess($"Removed {passkey.Name}.");
+            await LoadPasskeys();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private sealed record PasskeyResult(bool Ok, bool Cancelled, string? Message, string? Name);
+}
