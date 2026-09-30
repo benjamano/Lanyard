@@ -1,0 +1,287 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffBulkUpdateService _staffBulkUpdateService
+@inject IStaffPositionService _staffPositionService
+
+@* Everyone at the company in one list. Tick people, then change their positions, contract or
+   allowances in one go - the per-person Rota tab in the user editor still handles one-offs. *@
+<div class="staff-bulk">
+    <FluentCard Height="auto" Class="mt-2">
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="16">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Staff</FluentText>
+            <FluentText Class="staff-bulk-muted">
+                Select people, then give them positions, contract requirements or time-off allowances all at once.
+                Anything you set here is a personal override, the same as setting it on their Rota tab.
+            </FluentText>
+
+            @if (staff is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (staff.Count == 0)
+            {
+                <FluentText Class="staff-bulk-muted">Nobody is a member of this company's locations yet.</FluentText>
+            }
+            else
+            {
+                <div class="staff-bulk-filters">
+                    <FluentTextInput @bind-Value="search" Immediate="true" Placeholder="Search by name" Label="Search"
+                                     Width="100%" AutoComplete="off" aria-label="Search staff by name" />
+                    <FluentSelect TOption="string" TValue="string" Items="@PositionFilterOptions" OptionText="@PositionFilterLabel"
+                                  OptionValue="@(x => x)" @bind-Value="positionFilter" Label="Position" Width="100%" />
+                </div>
+
+                <div class="staff-bulk-header">
+                    <FluentCheckbox Label="@SelectAllLabel" Value="@AllVisibleSelected" ValueChanged="@ToggleAllVisible"
+                                    Disabled="@(Visible.Count == 0)" />
+                    <span class="staff-bulk-muted">@staff.Count @(staff.Count == 1 ? "person" : "people")</span>
+                </div>
+
+                @if (Visible.Count == 0)
+                {
+                    <FluentText Class="staff-bulk-muted">Nobody matches those filters.</FluentText>
+                }
+
+                <div class="staff-bulk-list" role="list">
+                    @foreach (StaffRotaSummary person in Visible)
+                    {
+                        bool isSelected = selected.Contains(person.UserId);
+                        <div class="staff-bulk-row @(isSelected ? "is-selected" : string.Empty)" role="listitem">
+                            <FluentCheckbox Value="@isSelected" ValueChanged="@(value => Toggle(person.UserId, value))"
+                                            aria-label="@($"Select {person.Name}")" />
+                            <div class="staff-bulk-info">
+                                <div class="staff-bulk-name-line">
+                                    <a class="staff-bulk-name" href="@($"/manage/users/{person.UserId}")">@person.Name</a>
+                                    @if (person.LocationNames.Count > 0)
+                                    {
+                                        <span class="staff-bulk-muted staff-bulk-small">@string.Join(", ", person.LocationNames)</span>
+                                    }
+                                </div>
+                                <div class="staff-bulk-positions">
+                                    @if (person.Positions.Count == 0)
+                                    {
+                                        <span class="staff-bulk-muted staff-bulk-small">No position</span>
+                                    }
+                                    @foreach (StaffRotaPosition position in person.Positions)
+                                    {
+                                        <span class="staff-bulk-chip @(position.IsPrimary ? "is-primary" : string.Empty)"
+                                              title="@(position.IsPrimary ? $"{position.Name} (primary)" : position.Name)">
+                                            <span class="staff-bulk-swatch theme-colour-swatch" style="@PositionColours.CssVariables(position.ColorIndex)" aria-hidden="true"></span>
+                                            @position.Name
+                                            @if (position.IsPrimary && person.Positions.Count > 1)
+                                            {
+                                                <span class="staff-bulk-primary">primary</span>
+                                            }
+                                        </span>
+                                    }
+                                </div>
+                                <div class="staff-bulk-muted staff-bulk-small">
+                                    @ContractSummary(person.Contract)
+                                    @if (person.HasContractOverride)
+                                    {
+                                        <text> · personal contract</text>
+                                    }
+                                    @if (person.AllowanceOverrideCount > 0)
+                                    {
+                                        <text> · @person.AllowanceOverrideCount personal @(person.AllowanceOverrideCount == 1 ? "allowance" : "allowances")</text>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </FluentStack>
+    </FluentCard>
+
+    @if (selected.Count > 0)
+    {
+        <div class="staff-bulk-actions" role="toolbar" aria-label="Bulk actions">
+            <div class="staff-bulk-actions-summary">
+                <span class="staff-bulk-count">@selected.Count selected</span>
+                <FluentButton Appearance="ButtonAppearance.Subtle" OnClick="@(() => selected.Clear())">Clear</FluentButton>
+            </div>
+            <div class="staff-bulk-action-buttons">
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Briefcase())" OnClick="@OpenPositionsAsync">
+                    Positions
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.DocumentBulletList())" OnClick="@OpenContractAsync">
+                    Contract
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.CalendarPerson())" OnClick="@OpenAllowancesAsync">
+                    Allowances
+                </FluentButton>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const string AnyPosition = "any";
+    private const string NoPosition = "none";
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    private List<StaffRotaSummary>? staff;
+    private List<StaffPosition> positions = [];
+    private HashSet<string> selected = [];
+    private string search = string.Empty;
+    private string positionFilter = AnyPosition;
+    private int? loadedCompanyId;
+
+    private List<string> PositionFilterOptions =>
+        [AnyPosition, NoPosition, .. positions.Select(x => x.Id.ToString())];
+
+    private string PositionFilterLabel(string value) => value switch
+    {
+        AnyPosition => "All positions",
+        NoPosition => "No position",
+        _ => positions.FirstOrDefault(x => x.Id.ToString() == value)?.Name ?? "Unknown"
+    };
+
+    private List<StaffRotaSummary> Visible => (staff ?? [])
+        .Where(x => string.IsNullOrWhiteSpace(search) || x.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+        .Where(x => positionFilter switch
+        {
+            AnyPosition => true,
+            NoPosition => x.Positions.Count == 0,
+            _ => x.Positions.Any(p => p.PositionId.ToString() == positionFilter)
+        })
+        .ToList();
+
+    private bool AllVisibleSelected => Visible.Count > 0 && Visible.All(x => selected.Contains(x.UserId));
+
+    private string SelectAllLabel => Visible.Count switch
+    {
+        0 => "Select all shown",
+        int n when n == staff?.Count => "Select everyone",
+        int n => $"Select all {n} shown"
+    };
+
+    private List<StaffRotaSummary> SelectedPeople => (staff ?? []).Where(x => selected.Contains(x.UserId)).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedCompanyId != CompanyId)
+        {
+            loadedCompanyId = CompanyId;
+            selected.Clear();
+            staff = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scope.Error}");
+            staff = [];
+            return;
+        }
+
+        Result<List<StaffRotaSummary>> result = await _staffBulkUpdateService.GetStaffAsync(scope.Data, CompanyId);
+        Result<List<StaffPosition>> positionsResult = await _staffPositionService.GetPositionsAsync(CompanyId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load staff: {result.Error}");
+        }
+
+        staff = result.IsSuccess ? result.Data ?? [] : [];
+        positions = positionsResult.IsSuccess ? positionsResult.Data ?? [] : [];
+
+        // Keep the selection across a reload so a second change can follow the first, but drop
+        // anyone who has left the company since.
+        selected.IntersectWith(staff.Select(x => x.UserId));
+
+        if (positionFilter is not (AnyPosition or NoPosition) && !positions.Any(x => x.Id.ToString() == positionFilter))
+        {
+            positionFilter = AnyPosition;
+        }
+    }
+
+    private void Toggle(string userId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selected.Add(userId);
+        }
+        else
+        {
+            selected.Remove(userId);
+        }
+    }
+
+    private void ToggleAllVisible(bool isChecked)
+    {
+        foreach (StaffRotaSummary person in Visible)
+        {
+            Toggle(person.UserId, isChecked);
+        }
+    }
+
+    private Task OpenPositionsAsync() => OpenAsync<BulkPositionsDialog>();
+
+    private Task OpenContractAsync() => OpenAsync<BulkContractDialog>();
+
+    private Task OpenAllowancesAsync() => OpenAsync<BulkAllowancesDialog>();
+
+    // Every bulk dialog takes the same two parameters and closes with true once it has saved.
+    private async Task OpenAsync<TDialog>() where TDialog : ComponentBase
+    {
+        List<StaffRotaSummary> people = SelectedPeople;
+
+        DialogResult result = await _dialogService.ShowDialogAsync<TDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add("CompanyId", CompanyId);
+            options.Parameters.Add("People", people);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private static string ContractSummary(ResolvedContract contract)
+    {
+        if (!contract.HasAnyRequirement)
+        {
+            return "No contract requirements";
+        }
+
+        List<string> parts = [];
+
+        if (contract.MinShiftsPerWeek.Value is int shifts)
+        {
+            parts.Add($"{shifts}+ {(shifts == 1 ? "shift" : "shifts")}/wk");
+        }
+
+        if (contract.MinShiftLengthHours.Value is decimal length)
+        {
+            parts.Add($"shifts ≥ {RotaFormat.Hours(length)}");
+        }
+
+        (decimal? min, decimal? max) = (contract.MinHoursPerWeek.Value, contract.MaxHoursPerWeek.Value);
+
+        parts.Add((min, max) switch
+        {
+            (decimal lo, decimal hi) => $"{lo:0.##}–{hi:0.##} h/wk",
+            (decimal lo, null) => $"≥ {lo:0.##} h/wk",
+            (null, decimal hi) => $"≤ {hi:0.##} h/wk",
+            _ => string.Empty
+        });
+
+        return string.Join(" · ", parts.Where(x => x.Length > 0));
+    }
+}

@@ -14,7 +14,7 @@ public class TimeOffPolicyService(
     ILogger<TimeOffPolicyService> logger) : ITimeOffPolicyService
 {
     // A year of hours - anything bigger is a typo, and "unlimited" is its own switch.
-    private const decimal MaxAllowanceHours = 8784m;
+    internal const decimal MaxAllowanceHours = 8784m;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ILogger<TimeOffPolicyService> _logger = logger;
