@@ -1,0 +1,32 @@
+.bulk-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bulk-dialog ::deep .bulk-muted,
+.bulk-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.bulk-modes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Segmented-style choice: equal buttons that stay on one line at phone width. */
+.bulk-modes ::deep fluent-button {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 110px;
+}
+
+.bulk-positions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+}

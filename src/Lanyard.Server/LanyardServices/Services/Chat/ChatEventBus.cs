@@ -73,3 +73,80 @@ public class ChatPresence : IChatPresence
         }
     }
 }
+
+// Who is typing in which conversation right now, for the "Tom is typing" line. The message box
+// says so every few seconds while someone types; if that stops (they paused, closed the tab, lost
+// signal) it lapses on its own after Lifetime. Only a change in who's typing is announced, not each
+// refresh.
+public interface IChatTyping
+{
+    event Action<Guid>? OnChanged;
+
+    void Typing(string userId, Guid conversationId);
+
+    void Stopped(string userId, Guid conversationId);
+
+    IReadOnlyCollection<string> WhoIsTyping(Guid conversationId);
+}
+
+public class ChatTyping(TimeProvider time) : IChatTyping
+{
+    public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(6);
+
+    private readonly TimeProvider _time = time;
+    private readonly ConcurrentDictionary<(Guid, string), DateTimeOffset> _typing = new();
+
+    public event Action<Guid>? OnChanged;
+
+    public void Typing(string userId, Guid conversationId)
+    {
+        (Guid, string) key = (conversationId, userId);
+        DateTimeOffset until = _time.GetUtcNow() + Lifetime;
+        bool started = false;
+
+        _typing.AddOrUpdate(key, _ => { started = true; return until; }, (_, _) => until);
+
+        if (started)
+        {
+            OnChanged?.Invoke(conversationId);
+            _ = LapseAsync(key);
+        }
+    }
+
+    public void Stopped(string userId, Guid conversationId)
+    {
+        if (_typing.TryRemove((conversationId, userId), out _))
+        {
+            OnChanged?.Invoke(conversationId);
+        }
+    }
+
+    public IReadOnlyCollection<string> WhoIsTyping(Guid conversationId)
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+
+        return _typing.Where(x => x.Key.Item1 == conversationId && x.Value > now).Select(x => x.Key.Item2).ToList();
+    }
+
+    // Waits until the entry's time is up (it moves on each refresh), then drops it.
+    private async Task LapseAsync((Guid, string) key)
+    {
+        while (_typing.TryGetValue(key, out DateTimeOffset until))
+        {
+            TimeSpan left = until - _time.GetUtcNow();
+
+            if (left <= TimeSpan.Zero)
+            {
+                if (_typing.TryRemove(new KeyValuePair<(Guid, string), DateTimeOffset>(key, until)))
+                {
+                    OnChanged?.Invoke(key.Item1);
+                    return;
+                }
+
+                continue;
+            }
+
+            await Task.Delay(left, _time);
+        }
+    }
+}

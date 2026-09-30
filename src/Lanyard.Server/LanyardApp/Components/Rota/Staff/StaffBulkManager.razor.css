@@ -1,0 +1,184 @@
+/* Plain flex list rather than FluentDataGrid so names and position chips wrap on phone width
+   (see StaffPositionManager.razor.css). ".staff-bulk" is a plain div so ::deep has a scoped root
+   to hang off - Fluent component roots drop the scope attribute. */
+.staff-bulk {
+    /* Room for the sticky action bar so it never covers the last row. */
+    padding-bottom: 80px;
+}
+
+.staff-bulk ::deep .staff-bulk-muted,
+.staff-bulk-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.staff-bulk-small {
+    font-size: 0.85rem;
+}
+
+.staff-bulk-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 12px;
+    width: 100%;
+}
+
+.staff-bulk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.staff-bulk-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.staff-bulk-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 6px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    border-radius: 4px;
+}
+
+.staff-bulk-row:last-child {
+    border-bottom: none;
+}
+
+.staff-bulk-row.is-selected {
+    background: var(--colorNeutralBackground1Selected);
+}
+
+.staff-bulk-info {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+}
+
+.staff-bulk-name-line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px 10px;
+    flex-wrap: wrap;
+}
+
+.staff-bulk-name {
+    font-weight: 600;
+    color: var(--colorNeutralForeground1);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.staff-bulk-name:hover {
+    text-decoration: underline;
+}
+
+.staff-bulk-positions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.staff-bulk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--colorNeutralStroke2);
+    font-size: 0.85rem;
+}
+
+.staff-bulk-chip.is-primary {
+    border-color: var(--colorNeutralStroke1);
+    font-weight: 600;
+}
+
+.staff-bulk-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.staff-bulk-primary {
+    font-weight: 400;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.75rem;
+}
+
+.staff-bulk-actions {
+    position: sticky;
+    bottom: 12px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke1);
+    box-shadow: var(--shadow16);
+}
+
+.staff-bulk-actions-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.staff-bulk-count {
+    font-weight: 600;
+}
+
+.staff-bulk-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+@media (max-width: 600px) {
+    .staff-bulk-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* On phones the layout's scroll area has 80px of bottom padding (room for the app bar),
+       and sticky offsets are measured inside that padding - pull the bar down into it so it
+       sits just above the app bar rather than floating mid-list. */
+    .staff-bulk-actions {
+        bottom: -64px;
+    }
+
+    .staff-bulk-actions-summary {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Three equal buttons in one row; icons dropped so the labels fit at 390px. */
+    .staff-bulk-action-buttons {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .staff-bulk-action-buttons ::deep fluent-button {
+        width: 100%;
+    }
+
+    .staff-bulk-action-buttons ::deep svg {
+        display: none;
+    }
+}

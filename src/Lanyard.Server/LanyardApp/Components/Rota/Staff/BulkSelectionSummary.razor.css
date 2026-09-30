@@ -1,0 +1,14 @@
+.bulk-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+}
+
+.bulk-summary-names {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
