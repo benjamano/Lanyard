@@ -1,0 +1,198 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffBulkUpdateService _staffBulkUpdateService
+@inject ITimeOffPolicyService _timeOffPolicyService
+@inject ISchedulingSettingsService _schedulingSettingsService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.CalendarPerson())" />
+            <FluentText As="@TextTag.H3">Change time-off allowances</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="bulk-dialog">
+            <BulkSelectionSummary People="@People" />
+
+            @if (rows is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (rows.Count == 0)
+            {
+                <FluentText Class="bulk-muted">No time-off types use an allowance yet. Set them up under Manage &gt; Rota &gt; Time Off Types.</FluentText>
+            }
+            else
+            {
+                <FluentText Class="bulk-muted">
+                    How much of each type the selected people get per holiday year. Types left as they are aren't touched;
+                    "Inherit" removes the personal allowance so each person goes back to their position's or the company's.
+                </FluentText>
+
+                <div class="bulk-modes" role="group" aria-label="Show amounts in">
+                    <FluentButton Appearance="@(inDays ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetUnit(true))">Days</FluentButton>
+                    <FluentButton Appearance="@(!inDays ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetUnit(false))">Hours</FluentButton>
+                    <FluentText Class="bulk-muted">A day is @RotaFormat.Hours(hoursPerDay).</FluentText>
+                </div>
+
+                <div class="bulk-fields">
+                    @foreach (AllowanceRow row in rows)
+                    {
+                        <div class="bulk-field">
+                            <div class="bulk-field-label">@row.Type.Name</div>
+                            <FluentSelect TOption="RowMode" TValue="RowMode" Items="@Modes" OptionText="@ModeLabel"
+                                          @bind-Value="row.Mode" Width="140px" aria-label="@($"{row.Type.Name}: what to do")" />
+                            @if (row.Mode == RowMode.Amount)
+                            {
+                                <FluentNumberInput TValue="double?" @bind-Value="row.Amount" Width="90px"
+                                                   aria-label="@($"{row.Type.Name} amount in {(inDays ? "days" : "hours")}")" />
+                                <span class="bulk-muted">@(inDays ? "days" : "hours")</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ApplyAsync"
+                              Disabled="@(isSaving || rows is null || rows.All(x => x.Mode == RowMode.Keep))">
+                    @(isSaving ? "Applying..." : $"Apply to {People.Count}")
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@(() => Dialog.CancelAsync())" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<StaffRotaSummary> People { get; set; }
+
+    // BulkAllowanceMode plus "leave this type alone", which never reaches the service.
+    private enum RowMode { Keep, Inherit, Unlimited, Amount }
+
+    private static readonly List<RowMode> Modes = [.. Enum.GetValues<RowMode>()];
+
+    private List<AllowanceRow>? rows;
+    private decimal hoursPerDay = 8m;
+    private bool inDays = true;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<CompanySchedulingSettings> settings = await _schedulingSettingsService.GetSettingsAsync(CompanyId);
+        hoursPerDay = settings.Data?.HoursPerDay is decimal perDay and > 0 ? perDay : 8m;
+
+        Result<List<TimeOffType>> types = await _timeOffPolicyService.GetTypesAsync(CompanyId);
+
+        if (!types.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load time-off types: {types.Error}");
+        }
+
+        rows = (types.Data ?? [])
+            .Where(x => x.DeductsFromAllowance)
+            .Select(x => new AllowanceRow { Type = x })
+            .ToList();
+    }
+
+    private static string ModeLabel(RowMode mode) => mode switch
+    {
+        RowMode.Keep => "Leave as is",
+        RowMode.Inherit => "Inherit",
+        RowMode.Unlimited => "Unlimited",
+        _ => "Set amount"
+    };
+
+    private decimal ToHours(double amount) => inDays ? (decimal)amount * hoursPerDay : (decimal)amount;
+
+    private void SetUnit(bool days)
+    {
+        if (days == inDays || rows is null)
+        {
+            return;
+        }
+
+        // Convert what's typed so switching units never changes the allowance itself.
+        List<(AllowanceRow Row, decimal Hours)> typed = rows.Where(r => r.Amount is not null).Select(r => (r, ToHours(r.Amount!.Value))).ToList();
+
+        inDays = days;
+
+        foreach ((AllowanceRow row, decimal hours) in typed)
+        {
+            row.Amount = (double)(inDays ? Math.Round(hours / hoursPerDay, 2) : hours);
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (rows is null)
+        {
+            return;
+        }
+
+        if (rows.Any(r => r.Mode == RowMode.Amount && (r.Amount is null || r.Amount < 0)))
+        {
+            _toastService.ShowError("Enter an amount of 0 or more for each type set to an amount.");
+            return;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        Result<string> me = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scope.Error}");
+            return;
+        }
+
+        isSaving = true;
+
+        List<BulkAllowanceChange> changes = rows
+            .Where(r => r.Mode != RowMode.Keep)
+            .Select(r => new BulkAllowanceChange(
+                r.Type.Id,
+                r.Mode switch
+                {
+                    RowMode.Inherit => BulkAllowanceMode.Inherit,
+                    RowMode.Unlimited => BulkAllowanceMode.Unlimited,
+                    _ => BulkAllowanceMode.Amount
+                },
+                r.Mode == RowMode.Amount ? ToHours(r.Amount!.Value) : 0m))
+            .ToList();
+
+        Result<int> result = await _staffBulkUpdateService.ApplyAllowancesAsync(
+            scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), changes, me.IsSuccess ? me.Data : null);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Failed to update allowances.");
+            return;
+        }
+
+        _toastService.ShowSuccess(BulkMessages.Changed(result.Data, People.Count, "allowances"));
+        await Dialog.CloseAsync(true);
+    }
+
+    private class AllowanceRow
+    {
+        public required TimeOffType Type { get; init; }
+        public RowMode Mode { get; set; } = RowMode.Keep;
+        public double? Amount { get; set; }
+    }
+}

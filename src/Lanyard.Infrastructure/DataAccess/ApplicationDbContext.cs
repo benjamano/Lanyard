@@ -158,6 +158,20 @@ namespace Lanyard.Infrastructure.DataAccess
         {
             base.OnModelCreating(modelBuilder);
 
+            // Identity schema v3 (IdentityOptions.Stores.SchemaVersion in Program.cs) adds the
+            // AspNetUserPasskeys table. Identity reads that version from the application service
+            // provider, so a context built straight from bare DbContextOptions - as some unit tests
+            // do - gets the v1 model with no passkey table; the app's own factories always carry it.
+            //
+            // Schema v2 (which v3 builds on) also caps a few existing Identity columns at 128/256
+            // characters. This database was created on v1 where they're unbounded text; keep them
+            // that way so moving to v3 only adds the passkey table and never narrows a column.
+            modelBuilder.Entity<UserProfile>().Property(x => x.PhoneNumber).Metadata.SetMaxLength(null);
+            modelBuilder.Entity<IdentityUserLogin<string>>().Property(x => x.LoginProvider).Metadata.SetMaxLength(null);
+            modelBuilder.Entity<IdentityUserLogin<string>>().Property(x => x.ProviderKey).Metadata.SetMaxLength(null);
+            modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.LoginProvider).Metadata.SetMaxLength(null);
+            modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.Name).Metadata.SetMaxLength(null);
+
             modelBuilder.Entity<DashboardWidget>()
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)

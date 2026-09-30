@@ -413,7 +413,7 @@ public class ChatModerationService(
             DateTime now = Now;
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<Location> locations = await ctx.Locations
+            List<Location> locations = await ChatChannels.TenantLocations(ctx)
                 .TagWithCallSite()
                 .Include(x => x.Company)
                 .Where(x => x.IsActive && (scope.IsAdmin || x.Id == scope.LocationId))

@@ -1,0 +1,28 @@
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@* The "who am I about to change" line at the top of every bulk dialog. *@
+<div class="bulk-summary">
+    <FluentText Weight="TextWeight.Semibold">
+        Applies to @People.Count @(People.Count == 1 ? "person" : "people")
+    </FluentText>
+    <div class="bulk-summary-names">@Names</div>
+</div>
+
+@code {
+    private const int NamesShown = 6;
+
+    [Parameter, EditorRequired]
+    public required List<StaffRotaSummary> People { get; set; }
+
+    private string Names
+    {
+        get
+        {
+            List<string> names = People.Select(x => x.Name).ToList();
+
+            return names.Count <= NamesShown
+                ? string.Join(", ", names)
+                : $"{string.Join(", ", names.Take(NamesShown))} and {names.Count - NamesShown} more";
+        }
+    }
+}

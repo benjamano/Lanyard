@@ -564,7 +564,33 @@
       "Managers can no longer approve their own timesheet hours. Time a manager enters or edits for themselves is flagged for another manager or an admin to approve, and \"Approve all\" leaves it out.",
       "A clock-in QR code opened on a signed-out phone is now only held for that phone while it signs in. Forwarding the link to someone else no longer gives them a code that lasts ten minutes.",
       "Pinned-post notifications no longer show the post's text on your lock screen when you have turned message previews off.",
-      "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart."
+      "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart.",
+      "Manage > Chat Channels no longer fails with \"Cannot create ChatConversation in another company\" for admins when other companies have locations; it now only lists your own company's channels."
+    ]
+    },
+  {
+    "version": "1.4.13",
+    "releaseDate": "2026-09-29",
+    "summary": "Managers can now update positions, contract requirements and time-off allowances for many staff at once.",
+    "details": [
+      "On a phone, the Shifts button in the bottom bar now stays highlighted when you open your time off or shifts up for grabs, not just your upcoming shifts.",
+      "Added a new Staff page under Manage > Rota that lists everyone at your company with their positions, contract and personal allowances.",
+      "Tick people (or \"Select everyone\"), then add, remove or replace their positions and choose their primary position in one go.",
+      "Set, keep or reset (inherit) each contract requirement for everyone selected, such as minimum and maximum hours per week.",
+      "Set, keep, reset or make unlimited each time-off allowance for everyone selected, in days or hours.",
+      "Changes apply to everyone or no one: if a change would break someone's contract (for example a minimum above their maximum), nobody is changed and you're told who.",
+      "Chat now shows when the other person is typing a message, with a \"Tom is typing\" line at the bottom of the conversation. In groups and channels it names up to two people, or says several people are typing."
+    ]
+  },
+  {
+    "version": "1.4.13",
+    "releaseDate": "2026-09-30",
+    "summary": "Sign in with Face ID or your fingerprint.",
+    "details": [
+      "You can now sign in with your phone's Face ID, Touch ID or fingerprint instead of typing your password. Set it up under Account Management > Face ID & Fingerprint Sign-in, then choose \"Use Face ID or fingerprint\" on the login page.",
+      "It works on iPhone, Android and computers with Touch ID or Windows Hello. Your face and fingerprint never leave your device.",
+      "Signing in this way skips the two-factor code, since your phone has already checked it's you.",
+      "You can see and remove the devices you've set up from Account Management. Your password still works as before."
     ]
   }
 ]

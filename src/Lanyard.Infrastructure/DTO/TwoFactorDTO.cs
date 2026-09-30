@@ -30,6 +30,10 @@ namespace Lanyard.Infrastructure.DTO
 
     public record TwoFactorUserStatusDto(string UserId, string Name, bool IsEnabled);
 
+    // One of the signed-in user's passkeys (Face ID / fingerprint sign-in), as listed on Account
+    // Management. Id is the credential id, base64url-encoded, which is what removal takes back.
+    public record PasskeySummaryDto(string Id, string Name, DateTimeOffset CreatedAt, bool IsSynced);
+
     public class AuthenticatorEnrollmentDto
     {
         public required string SharedKey { get; set; }

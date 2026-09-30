@@ -233,7 +233,7 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
         return Coalesce(rows, positionId, null);
     }
 
-    private static string TierLabel(ContractTier tier) => tier switch
+    internal static string TierLabel(ContractTier tier) => tier switch
     {
         ContractTier.User => "user",
         ContractTier.Position => "position",
@@ -256,7 +256,7 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
         return await query.FirstOrDefaultAsync();
     }
 
-    private static ResolvedContract Coalesce(List<ContractRequirement> rows, Guid? positionId, string? userId)
+    internal static ResolvedContract Coalesce(List<ContractRequirement> rows, Guid? positionId, string? userId)
     {
         ContractRequirement? company = rows.FirstOrDefault(x => x.StaffPositionId is null && x.UserId is null);
         ContractRequirement? position = positionId is null ? null : rows.FirstOrDefault(x => x.StaffPositionId == positionId);
@@ -289,7 +289,7 @@ public class ContractRequirementService(IDbContextFactory<ApplicationDbContext> 
         return ContractValue<T>.Unset;
     }
 
-    private static string? Validate(ContractRequirement row)
+    internal static string? Validate(ContractRequirement row)
     {
         if (row.MinShiftsPerWeek is < 0)
         {

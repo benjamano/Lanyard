@@ -1,0 +1,194 @@
+@using Lanyard.Application.Services.Scheduling
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IStaffBulkUpdateService _staffBulkUpdateService
+@inject IStaffPositionService _staffPositionService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Briefcase())" />
+            <FluentText As="@TextTag.H3">Change positions</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="bulk-dialog">
+            <BulkSelectionSummary People="@People" />
+
+            @if (positions is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (positions.Count == 0)
+            {
+                <FluentText Class="bulk-muted">No positions have been set up yet. Add some under Manage &gt; Rota &gt; Positions.</FluentText>
+            }
+            else
+            {
+                <div class="bulk-modes" role="radiogroup" aria-label="What to do">
+                    @foreach (BulkPositionMode option in Enum.GetValues<BulkPositionMode>())
+                    {
+                        <FluentButton Appearance="@(mode == option ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                      role="radio" aria-checked="@(mode == option ? "true" : "false")"
+                                      OnClick="@(() => SetMode(option))">
+                            @ModeLabel(option)
+                        </FluentButton>
+                    }
+                </div>
+                <FluentText Class="bulk-muted">@ModeHelp</FluentText>
+
+                <div class="bulk-positions">
+                    @foreach (StaffPosition position in positions)
+                    {
+                        <FluentCheckbox Label="@position.Name" Value="@chosen.Contains(position.Id)"
+                                        ValueChanged="@(isChecked => TogglePosition(position.Id, isChecked))" />
+                    }
+                </div>
+
+                @if (mode != BulkPositionMode.Remove && chosen.Count > 0)
+                {
+                    <FluentSelect TOption="string" TValue="string" Items="@PrimaryOptions" OptionText="@PrimaryLabel" OptionValue="@(x => x)"
+                                  @bind-Value="primary" Label="Primary position" Width="100%" />
+                    <FluentText Class="bulk-muted">Contract requirements and time-off allowances follow the primary position.</FluentText>
+                }
+            }
+
+            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Margin="@Margin.Top2">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ApplyAsync" Disabled="@(isSaving || !CanApply)">
+                    @(isSaving ? "Applying..." : ApplyLabel)
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@(() => Dialog.CancelAsync())" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+            </FluentStack>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    // "Keep each person's primary" - only meaningful when adding.
+    private const string KeepPrimary = "keep";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
+    [Parameter, EditorRequired]
+    public required List<StaffRotaSummary> People { get; set; }
+
+    private List<StaffPosition>? positions;
+    private BulkPositionMode mode = BulkPositionMode.Add;
+    private List<Guid> chosen = [];
+    private string primary = KeepPrimary;
+    private bool isSaving;
+
+    // Replace with nothing ticked is allowed on purpose: it clears everyone's positions.
+    private bool CanApply => mode == BulkPositionMode.Replace || chosen.Count > 0;
+
+    private string ApplyLabel => mode == BulkPositionMode.Replace && chosen.Count == 0
+        ? $"Remove all positions from {People.Count}"
+        : $"Apply to {People.Count}";
+
+    private string ModeHelp => mode switch
+    {
+        BulkPositionMode.Add => "Adds the ticked positions. Positions people already hold are kept.",
+        BulkPositionMode.Remove => "Removes the ticked positions from anyone who holds them. If someone loses their primary position, their next one becomes primary.",
+        _ => chosen.Count == 0
+            ? "Nothing ticked: this removes every position from the selected people."
+            : "Everyone ends up holding exactly the ticked positions, and loses any others."
+    };
+
+    private List<string> PrimaryOptions =>
+        [.. (mode == BulkPositionMode.Add ? [KeepPrimary] : Array.Empty<string>()), .. OrderedChosen.Select(x => x.ToString())];
+
+    private IEnumerable<Guid> OrderedChosen =>
+        (positions ?? []).Where(x => chosen.Contains(x.Id)).Select(x => x.Id);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<StaffPosition>> result = await _staffPositionService.GetPositionsAsync(CompanyId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to load positions: {result.Error}");
+        }
+
+        positions = result.IsSuccess ? result.Data ?? [] : [];
+    }
+
+    private static string ModeLabel(BulkPositionMode option) => option switch
+    {
+        BulkPositionMode.Add => "Add",
+        BulkPositionMode.Remove => "Remove",
+        _ => "Replace"
+    };
+
+    private string PrimaryLabel(string value) => value == KeepPrimary
+        ? "Keep each person's current primary"
+        : positions?.FirstOrDefault(x => x.Id.ToString() == value)?.Name ?? "Unknown";
+
+    private void SetMode(BulkPositionMode option)
+    {
+        mode = option;
+        FixPrimary();
+    }
+
+    private void TogglePosition(Guid positionId, bool isChecked)
+    {
+        if (isChecked && !chosen.Contains(positionId))
+        {
+            chosen.Add(positionId);
+        }
+        else if (!isChecked)
+        {
+            chosen.Remove(positionId);
+        }
+
+        FixPrimary();
+    }
+
+    // Keep the primary dropdown pointing at an option it actually offers.
+    private void FixPrimary()
+    {
+        if (!PrimaryOptions.Contains(primary))
+        {
+            primary = PrimaryOptions.FirstOrDefault() ?? KeepPrimary;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _toastService.ShowError($"Failed to resolve your location: {scope.Error}");
+            return;
+        }
+
+        isSaving = true;
+
+        Guid? primaryId = mode != BulkPositionMode.Remove && Guid.TryParse(primary, out Guid parsed) ? parsed : null;
+
+        // Sent in rota order so "the first position becomes primary" means the first on the list.
+        BulkPositionChange change = new(mode, OrderedChosen.ToList(), primaryId);
+
+        Result<int> result = await _staffBulkUpdateService.ApplyPositionsAsync(scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), change);
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Failed to update positions.");
+            return;
+        }
+
+        _toastService.ShowSuccess(BulkMessages.Changed(result.Data, People.Count, "positions"));
+        await Dialog.CloseAsync(true);
+    }
+}

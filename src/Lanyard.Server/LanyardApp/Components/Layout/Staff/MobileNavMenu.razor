@@ -34,7 +34,9 @@
 
                         @if (Has(CompanyFeature.StaffScheduling))
                         {
-                            <FluentAppBarItem Href="/rota" Match="NavLinkMatch.All"
+                            @* Prefix, not All: /rota/time-off and /rota/open are the same My Shifts page
+                               opened on another tab, and there's no separate Time Off item on this bar. *@
+                            <FluentAppBarItem Href="/rota" Match="NavLinkMatch.Prefix"
                                               IconRest="new Icons.Regular.Size28.CalendarLtr()" IconActive="new Icons.Filled.Size28.CalendarLtr()"
                                               Text="Shifts" />
                         }

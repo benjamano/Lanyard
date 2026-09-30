@@ -2,6 +2,7 @@ using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Chat;
 using Lanyard.Infrastructure.DTO.Notifications;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Chat;
 
@@ -170,6 +172,46 @@ public class ChatChannelTests
 
         List<ChatChannelAdminView> admins = (await w.Moderation.GetChannelsAsync(w.AdminScope)).Data!;
         Assert.AreEqual(3, admins.Count, "Both locations and the company");
+    }
+
+    private sealed class SignedInTenant(int companyId) : ITenantProvider
+    {
+        public bool IsSystem => false;
+        public int? CompanyId => companyId;
+    }
+
+    // Locations aren't company-filtered, so a signed-in Admin used to be handed another company's
+    // locations and fail trying to create their channels ("Cannot create ChatConversation in
+    // another company").
+    [TestMethod]
+    public async Task Channels_OnlyCoverTheSignedInCompany_WhenAnotherCompanyHasLocations()
+    {
+        World w = await SeedAsync();
+        (_, Location elsewhere) = await SchedulingTestHelpers.SeedCompanyAsync(w.Options, "Partyman", "Peterborough");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.UserLocationMemberships.Add(new UserLocationMembership { UserId = w.Amy.Id, LocationId = elsewhere.Id, CreateDate = Now });
+            await ctx.SaveChangesAsync();
+        }
+
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(w.Options, new SignedInTenant(w.Company.Id)));
+
+        TestClock clock = new(Now);
+        ChatEventBus bus = new();
+        ChatModerationService moderation = new(tenantFactory.Object, w.Notifications, bus, clock, NullLogger<ChatModerationService>.Instance);
+        ChatService chat = new(tenantFactory.Object, w.Notifications, bus, new ChatPresence(), clock, NullLogger<ChatService>.Instance);
+
+        Result<List<ChatChannelAdminView>> channels = await moderation.GetChannelsAsync(w.AdminScope);
+
+        Assert.IsTrue(channels.IsSuccess, channels.Error);
+        Assert.AreEqual(3, channels.Data!.Count, "Both of this company's locations and the company");
+        Assert.IsTrue(channels.Data.All(x => x.Channel.CompanyId == w.Company.Id));
+
+        Result<bool> ensured = await chat.EnsureChannelsAsync(w.Amy.Id);
+        Assert.IsTrue(ensured.IsSuccess, ensured.Error);
     }
 
     [TestMethod]

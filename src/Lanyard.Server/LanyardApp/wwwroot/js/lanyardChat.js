@@ -52,6 +52,28 @@ window.lanyardChat = (() => {
                 }
             });
 
+            // Tells .NET the person is typing, at most every few seconds (the other end lets it
+            // lapse if these stop), and that they've stopped once the box is empty again.
+            let typingSentAt = 0;
+
+            quill.on('text-change', (delta, old, source) => {
+                if (source !== 'user') {
+                    return;
+                }
+
+                const empty = quill.getText().trim().length === 0;
+
+                if (empty) {
+                    if (typingSentAt) {
+                        typingSentAt = 0;
+                        dotNetRef.invokeMethodAsync('OnTyping', false).catch(() => { });
+                    }
+                } else if (Date.now() - typingSentAt > 2500) {
+                    typingSentAt = Date.now();
+                    dotNetRef.invokeMethodAsync('OnTyping', true).catch(() => { });
+                }
+            });
+
             let sending = false;
 
             async function send() {
@@ -66,6 +88,7 @@ window.lanyardChat = (() => {
 
                     if (accepted) {
                         quill.setContents([]);
+                        typingSentAt = 0;
                     }
                 } catch {
                     // Component gone or circuit dropped; the text stays for another try.
