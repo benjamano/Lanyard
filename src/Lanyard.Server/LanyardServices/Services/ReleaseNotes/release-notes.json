@@ -576,7 +576,8 @@
       "Tick people (or \"Select everyone\"), then add, remove or replace their positions and choose their primary position in one go.",
       "Set, keep or reset (inherit) each contract requirement for everyone selected, such as minimum and maximum hours per week.",
       "Set, keep, reset or make unlimited each time-off allowance for everyone selected, in days or hours.",
-      "Changes apply to everyone or no one: if a change would break someone's contract (for example a minimum above their maximum), nobody is changed and you're told who."
+      "Changes apply to everyone or no one: if a change would break someone's contract (for example a minimum above their maximum), nobody is changed and you're told who.",
+      "Chat now shows when the other person is typing a message, with a \"Tom is typing\" line at the bottom of the conversation. In groups and channels it names up to two people, or says several people are typing."
     ]
   }
 ]

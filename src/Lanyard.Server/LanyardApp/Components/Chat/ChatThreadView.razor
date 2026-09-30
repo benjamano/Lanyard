@@ -6,12 +6,14 @@
 @inject IChatService ChatService
 @inject IChatEventBus ChatEvents
 @inject IChatPresence Presence
+@inject IChatTyping Typing
 @inject Lanyard.Application.Services.Scheduling.IShiftClaimEventBus ShiftClaimEvents
 @inject IJSRuntime JS
 
 @* One open conversation: its messages (newest at the bottom, older ones on demand), the message
    box, and the conversation's menu. Stays live: new messages, edits and removals appear as they
-   happen, and while it's open its messages count as read and don't send push notifications. *@
+   happen, and while it's open its messages count as read and don't send push notifications.
+   Shows who else is typing, and tells the others when this person is. *@
 <div class="thread">
     <header class="thread-header">
         @if (ShowBack)
@@ -235,10 +237,18 @@
                     </div>
                 </div>
             }
+
+            @if (typingLabel is not null)
+            {
+                <div class="thread-typing" role="status">
+                    <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="typing-text">@typingLabel</span>
+                </div>
+            }
         }
     </div>
 
-    <ChatComposer @ref="composer" Submit="SubmitAsync" OnCancelContext="CancelContext"
+    <ChatComposer @ref="composer" Submit="SubmitAsync" OnCancelContext="CancelContext" OnTyping="OnComposerTyping"
                   DisabledReason="@thread?.CannotPostReason" Context="@composerContext" ContextIsEdit="@(editing is not null)"
                   Placeholder="@(thread is null ? "Write a message" : $"Message {thread.Title}")" />
 </div>
@@ -296,6 +306,9 @@
     private bool pageVisible = true;
     private DotNetObjectReference<ChatThreadView>? dotNetRef;
 
+    // "Tom is typing", "Tom and Amy are typing": the other members typing here right now.
+    private string? typingLabel;
+
     private string? composerContext => editing is not null ? "Editing your message"
         : replyingTo is not null ? $"Replying to {replyingTo.AuthorName}: {ChatHtml.Preview(replyingTo.Message.BodyText, 60)}"
         : null;
@@ -304,6 +317,77 @@
     {
         ChatEvents.OnChanged += OnChatEvent;
         ShiftClaimEvents.OnChanged += OnShiftClaimsChanged;
+        Typing.OnChanged += OnTypingChanged;
+    }
+
+    // Only a new message counts: editing an old one isn't typing, and nor is a box that can't send.
+    private void OnComposerTyping(bool typing)
+    {
+        if (typing && thread is { CannotPostReason: null } && editing is null)
+        {
+            Typing.Typing(UserId, ConversationId);
+        }
+        else
+        {
+            Typing.Stopped(UserId, ConversationId);
+        }
+    }
+
+    private void OnTypingChanged(Guid conversationId)
+    {
+        if (conversationId != ConversationId)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            string? before = typingLabel;
+            RefreshTyping();
+
+            if (typingLabel == before)
+            {
+                return;
+            }
+
+            // Keep the line in view when it appears, if the reader is already at the bottom.
+            if (typingLabel is not null && before is null)
+            {
+                try
+                {
+                    scrollToBottom = await JS.InvokeAsync<bool>("lanyardChat.isNearBottom", scroller);
+                }
+                catch (JSDisconnectedException)
+                {
+                }
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    // Only people in the conversation, and never the reader themselves (they may be typing in another tab).
+    private void RefreshTyping()
+    {
+        if (thread is null)
+        {
+            typingLabel = null;
+            return;
+        }
+
+        IReadOnlyCollection<string> typing = Typing.WhoIsTyping(ConversationId);
+        List<string> names = thread.Members
+            .Where(m => m.UserId != UserId && typing.Contains(m.UserId))
+            .Select(m => m.Name.Split(' ')[0])
+            .ToList();
+
+        typingLabel = names.Count switch
+        {
+            0 => null,
+            1 => $"{names[0]} is typing",
+            2 => $"{names[0]} and {names[1]} are typing",
+            _ => "Several people are typing"
+        };
     }
 
     // A location's channel shows open-shift and swap cards; when shifts change hands there, the
@@ -362,9 +446,15 @@
 
         bool switching = loadedId != Guid.Empty;
 
+        if (switching)
+        {
+            Typing.Stopped(UserId, loadedId);
+        }
+
         loadedId = ConversationId;
         thread = null;
         messages = [];
+        typingLabel = null;
         replyingTo = null;
         editing = null;
         menuOpen = false;
@@ -409,6 +499,7 @@
         hasOlder = older.Count > 0 ? hasOlder : result.Data.HasOlder;
         messages = [.. older, .. result.Data.Messages];
         scrollToBottom = scrollToBottom || scroll;
+        RefreshTyping();
 
         if (pageVisible)
         {
@@ -551,6 +642,7 @@
         }
 
         Result<ChatMessage> sent = await ChatService.SendAsync(UserId, ConversationId, html, replyingTo?.Message.Id, scope);
+        Typing.Stopped(UserId, ConversationId);
 
         if (!sent.IsSuccess)
         {
@@ -776,6 +868,8 @@
     {
         ChatEvents.OnChanged -= OnChatEvent;
         ShiftClaimEvents.OnChanged -= OnShiftClaimsChanged;
+        Typing.OnChanged -= OnTypingChanged;
+        Typing.Stopped(UserId, ConversationId);
         presence?.Dispose();
 
         try
