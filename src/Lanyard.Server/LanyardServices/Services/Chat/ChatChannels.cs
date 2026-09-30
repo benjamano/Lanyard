@@ -31,6 +31,17 @@ public static class ChatChannels
         _ => false
     };
 
+    // Locations aren't company-filtered, but chat is: a channel for another company's location
+    // would be invisible to this context and refused on save. Channels are only ever set up for
+    // the company the caller is signed in to (every company for system callers).
+    public static IQueryable<Location> TenantLocations(ApplicationDbContext ctx)
+    {
+        bool allCompanies = ctx.TenantFilterDisabled;
+        int companyId = ctx.TenantCompanyId;
+
+        return ctx.Locations.Where(x => allCompanies || x.CompanyId == companyId);
+    }
+
     public static async Task<ChatConversation> GetOrCreateLocationChannelAsync(ApplicationDbContext ctx, Location location, DateTime nowUtc)
     {
         ChatConversation? existing = await ctx.ChatConversations
@@ -89,7 +100,7 @@ public static class ChatChannels
     // no longer do).
     public static async Task EnsureChannelsForUserAsync(ApplicationDbContext ctx, string userId, DateTime nowUtc)
     {
-        List<Location> locations = await ctx.Locations
+        List<Location> locations = await TenantLocations(ctx)
             .TagWithCallSite()
             .Include(x => x.Company)
             .Where(x => x.IsActive && ctx.UserLocationMemberships.Any(m => m.UserId == userId && m.LocationId == x.Id))
