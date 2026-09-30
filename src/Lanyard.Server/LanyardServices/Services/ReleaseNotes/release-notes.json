@@ -574,7 +574,7 @@
     "summary": "Managers can now update positions, contract requirements and time-off allowances for many staff at once.",
     "details": [
       "On a phone, the Shifts button in the bottom bar now stays highlighted when you open your time off or shifts up for grabs, not just your upcoming shifts.",
-      "Added a new Staff page under Manage > Rota that lists everyone at your location with their positions, contract and personal allowances. Admins can switch location from a dropdown.",
+      "Added a new Staff page under Manage > Rota that lists everyone at your company with their positions, contract and personal allowances.",
       "Tick people (or \"Select everyone\"), then add, remove or replace their positions and choose their primary position in one go.",
       "Set, keep or reset (inherit) each contract requirement for everyone selected, such as minimum and maximum hours per week.",
       "Set, keep, reset or make unlimited each time-off allowance for everyone selected, in days or hours.",
@@ -591,6 +591,15 @@
       "It works on iPhone, Android and computers with Touch ID or Windows Hello. Your face and fingerprint never leave your device.",
       "Signing in this way skips the two-factor code, since your phone has already checked it's you.",
       "You can see and remove the devices you've set up from Account Management. Your password still works as before."
+    ]
+  },
+  {
+    "version": "1.4.14",
+    "releaseDate": "2026-09-30",
+    "summary": "The Staff page now shows one location at a time.",
+    "details": [
+      "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
+      "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
   }
 ]
