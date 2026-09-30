@@ -79,6 +79,9 @@
     public required int CompanyId { get; set; }
 
     [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
     public required List<StaffRotaSummary> People { get; set; }
 
     private List<StaffPosition>? positions;
@@ -178,7 +181,7 @@
         // Sent in rota order so "the first position becomes primary" means the first on the list.
         BulkPositionChange change = new(mode, OrderedChosen.ToList(), primaryId);
 
-        Result<int> result = await _staffBulkUpdateService.ApplyPositionsAsync(scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), change);
+        Result<int> result = await _staffBulkUpdateService.ApplyPositionsAsync(scope.Data, CompanyId, LocationId, People.Select(x => x.UserId).ToList(), change);
 
         isSaving = false;
 

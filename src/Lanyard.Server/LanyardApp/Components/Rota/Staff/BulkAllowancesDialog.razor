@@ -79,6 +79,9 @@
     public required int CompanyId { get; set; }
 
     [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
     public required List<StaffRotaSummary> People { get; set; }
 
     // BulkAllowanceMode plus "leave this type alone", which never reaches the service.
@@ -175,7 +178,7 @@
             .ToList();
 
         Result<int> result = await _staffBulkUpdateService.ApplyAllowancesAsync(
-            scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), changes, me.IsSuccess ? me.Data : null);
+            scope.Data, CompanyId, LocationId, People.Select(x => x.UserId).ToList(), changes, me.IsSuccess ? me.Data : null);
 
         isSaving = false;
 
