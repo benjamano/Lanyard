@@ -113,6 +113,7 @@ builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddScoped<ICompanyFeatureService, CompanyFeatureService>();
 builder.Services.AddScoped<ITwoFactorPolicyService, TwoFactorPolicyService>();
+builder.Services.AddScoped<IPasskeyService, PasskeyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
@@ -293,10 +294,31 @@ builder.Services.AddIdentity<UserProfile, ApplicationRole>(options =>
     options.Lockout.AllowedForNewUsers = true;
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+
+    // v3 adds the passkey table for Face ID / fingerprint sign-in. See ApplicationDbContext.OnModelCreating,
+    // which keeps v2's column-length caps from narrowing existing columns.
+    options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddSignInManager()
 .AddDefaultTokenProviders();
+
+// Passkeys: sign in with Face ID, Touch ID or an Android fingerprint/face unlock (WebAuthn).
+builder.Services.Configure<IdentityPasskeyOptions>(options =>
+{
+    // The phone must actually check it's the owner (biometric or device PIN) every time. That's
+    // what lets a passkey sign-in stand in for both the password and the 2FA code.
+    options.UserVerificationRequirement = "required";
+
+    // Discoverable credentials: the phone offers the account itself, so signing in needs no username.
+    options.ResidentKeyRequirement = "required";
+
+    // The domain passkeys are bound to. Blank uses the request's host, which is right for local
+    // development. Set Passkeys__ServerDomain in production: AllowedHosts is "*" behind the proxy,
+    // so the host header alone shouldn't decide it. Changing it later strands every existing passkey.
+    string? serverDomain = builder.Configuration["Passkeys:ServerDomain"];
+    options.ServerDomain = string.IsNullOrWhiteSpace(serverDomain) ? null : serverDomain.Trim();
+});
 
 builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 {

@@ -8,6 +8,7 @@ using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -30,6 +31,7 @@ namespace Lanyard.API.Controllers
         private readonly IOptions<DemoOptions> _demoOptions;
         private readonly IDemoDirectory _demoDirectory;
         private readonly IPushSubscriptionService _pushSubscriptionService;
+        private readonly IPasskeyService _passkeyService;
 
         public AuthController(
             UserManager<UserProfile> userManager,
@@ -40,8 +42,10 @@ namespace Lanyard.API.Controllers
             IAntiforgery antiforgery,
             IPushSubscriptionService pushSubscriptionService,
             IOptions<DemoOptions> demoOptions,
-            IDemoDirectory demoDirectory)
+            IDemoDirectory demoDirectory,
+            IPasskeyService passkeyService)
         {
+            _passkeyService = passkeyService;
             _demoOptions = demoOptions;
             _demoDirectory = demoDirectory;
             _userManager = userManager;
@@ -213,6 +217,181 @@ namespace Lanyard.API.Controllers
             }
 
             return Redirect($"/login/verify-2fa{query}&sent=true");
+        }
+
+        // ---- Passkeys: sign in with Face ID, Touch ID or an Android fingerprint/face unlock ----
+        //
+        // Each WebAuthn ceremony is two requests: the server hands the browser options containing a
+        // random challenge, the phone checks it's the owner and signs the challenge, and the browser
+        // sends the result back. Identity keeps the challenge between the two in an encrypted cookie,
+        // which is why these live here rather than in a service. Storing, listing and removing
+        // passkeys is IPasskeyService's job.
+
+        // Step 1 of adding a passkey to the signed-in account (Account Management).
+        [Authorize]
+        [HttpPost("passkey/creation-options")]
+        public async Task<IActionResult> PasskeyCreationOptions()
+        {
+            UserProfile? user = await _userManager.GetUserAsync(User);
+
+            if (user is null)
+            {
+                return Unauthorized(new { message = "Please sign in again." });
+            }
+
+            Result<bool> canAdd = await _passkeyService.CanAddPasskeyAsync(user.Id);
+
+            if (!canAdd.IsSuccess)
+            {
+                return BadRequest(new { message = canAdd.Error });
+            }
+
+            string userName = user.UserName ?? user.Email ?? user.Id;
+            string displayName = user.GetName();
+
+            PasskeyUserEntity userEntity = new()
+            {
+                Id = user.Id,
+                Name = userName,
+                DisplayName = string.IsNullOrWhiteSpace(displayName) ? userName : displayName
+            };
+
+            string optionsJson = await _signInManager.MakePasskeyCreationOptionsAsync(userEntity);
+
+            return Content(optionsJson, "application/json");
+        }
+
+        // Step 2 of adding a passkey: verify what the phone created and store it.
+        // [FromBody] JSON rather than a form post: a cross-site page can't send application/json
+        // without a CORS preflight this app never grants, so this can't be forged from elsewhere.
+        [Authorize]
+        [HttpPost("passkey/register")]
+        public async Task<IActionResult> RegisterPasskey([FromBody] PasskeyCredentialDto dto)
+        {
+            UserProfile? user = await _userManager.GetUserAsync(User);
+
+            if (user is null)
+            {
+                return Unauthorized(new { message = "Please sign in again." });
+            }
+
+            PasskeyAttestationResult attestation = await _signInManager.PerformPasskeyAttestationAsync(dto.CredentialJson);
+
+            if (!attestation.Succeeded)
+            {
+                _logger.LogWarning(attestation.Failure, "Passkey registration for {UserId} failed verification: {Error}", user.Id, attestation.Failure?.Message);
+                return BadRequest(new { message = "Your device's passkey couldn't be verified. Please try again." });
+            }
+
+            // The options were made for whoever was signed in at step 1. Guard against the account
+            // having changed in between (signed out and back in as someone else in another tab).
+            if (attestation.UserEntity.Id != user.Id)
+            {
+                _logger.LogWarning("Passkey registration for {UserId} was started by a different account ({OtherUserId})", user.Id, attestation.UserEntity.Id);
+                return BadRequest(new { message = "You signed in as someone else while adding the passkey. Please try again." });
+            }
+
+            Result<string> saved = await _passkeyService.SavePasskeyAsync(user.Id, attestation.Passkey, Request.Headers.UserAgent.ToString());
+
+            if (!saved.IsSuccess)
+            {
+                return BadRequest(new { message = saved.Error });
+            }
+
+            return Ok(new { message = "Passkey added", name = saved.Data });
+        }
+
+        // Step 1 of signing in with a passkey, from the login page.
+        // Anonymous by necessity - the person isn't signed in yet. It names no user, so the options
+        // carry no list of credential ids that would reveal who has an account; the phone offers
+        // whichever passkeys it holds for this site. All it hands out is a fresh random challenge,
+        // whose matching state stays in an encrypted cookie on this browser.
+        [AllowAnonymous]
+        [HttpPost("passkey/request-options")]
+        public async Task<IActionResult> PasskeyRequestOptions()
+        {
+            string optionsJson = await _signInManager.MakePasskeyRequestOptionsAsync(null);
+
+            return Content(optionsJson, "application/json");
+        }
+
+        // Step 2 of signing in with a passkey. A form post, like login-form, so the browser follows
+        // the redirect with the new cookie. The login page still picks the location first, and
+        // the same location checks apply as for a password.
+        //
+        // No 2FA code afterwards: the passkey is something the person has (their phone), and
+        // UserVerificationRequirement = "required" means the phone checked their face, fingerprint
+        // or device PIN first - that's already two factors.
+        [AllowAnonymous]
+        [HttpPost("passkey-login-form")]
+        [Consumes("application/x-www-form-urlencoded")]
+        public async Task<IActionResult> PasskeyLoginForm(
+            [FromForm] string credentialJson,
+            [FromForm] bool rememberMe = false,
+            [FromForm] string? returnUrl = null,
+            [FromForm] int? locationId = null,
+            [FromForm] int? company = null)
+        {
+            PasskeyAssertionResult<UserProfile> assertion;
+
+            try
+            {
+                assertion = await _signInManager.PerformPasskeyAssertionAsync(credentialJson);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // No challenge cookie to check against - it expired, or the request didn't come
+                // from our login page.
+                _logger.LogWarning("Passkey sign-in had no matching challenge: {Error}", ex.Message);
+                return Redirect(BuildLoginErrorRedirect("Your sign-in timed out. Please try again.", company));
+            }
+
+            if (!assertion.Succeeded || assertion.User is null)
+            {
+                _logger.LogWarning(assertion.Failure, "Passkey sign-in failed verification: {Error}", assertion.Failure?.Message);
+                return Redirect(BuildLoginErrorRedirect("That passkey wasn't recognised. If you've removed it from your account, sign in with your password instead.", company));
+            }
+
+            UserProfile user = assertion.User;
+
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                return Redirect(BuildLoginErrorRedirect("Account temporarily locked due to repeated failed attempts. Try again later.", company));
+            }
+
+            if (!await _signInManager.CanSignInAsync(user))
+            {
+                return Redirect(BuildLoginErrorRedirect("Invalid username or password", company));
+            }
+
+            // Stores the updated signature counter, which is how a cloned authenticator gets noticed.
+            IdentityResult updated = await _userManager.AddOrUpdatePasskeyAsync(user, assertion.Passkey);
+
+            if (!updated.Succeeded)
+            {
+                _logger.LogWarning("Couldn't update the passkey for {UserId} after sign-in: {Error}", user.Id, string.Join(" ", updated.Errors.Select(x => x.Description)));
+            }
+
+            List<Claim> extraClaims = [];
+            (bool locationOk, string? locationError) = await ValidateAndBuildLocationClaimsAsync(user, locationId, extraClaims);
+
+            if (!locationOk)
+            {
+                return Redirect(BuildLoginErrorRedirect(locationError!, company));
+            }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
+            await _signInManager.SignInWithClaimsAsync(user, rememberMe, extraClaims);
+            UserCultureCookie.Append(Response, user.PreferredCulture);
+
+            _logger.LogInformation("{UserId} signed in with a passkey", user.Id);
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+
+            return Redirect("/");
         }
 
         // Signing out is a state change, so it must not happen on a GET. The kiosk text widget
