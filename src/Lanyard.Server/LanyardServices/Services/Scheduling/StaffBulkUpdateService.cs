@@ -19,26 +19,26 @@ public class StaffBulkUpdateService(
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
     private readonly ILogger<StaffBulkUpdateService> _logger = logger;
 
-    public async Task<Result<List<StaffRotaSummary>>> GetStaffAsync(LocationScope scope, int companyId)
+    public async Task<Result<List<StaffRotaSummary>>> GetStaffAsync(LocationScope scope, int companyId, int locationId)
     {
         try
         {
-            if (!SchedulingAccess.CanManageCompany(scope, companyId))
-            {
-                return Result<List<StaffRotaSummary>>.Fail("You can only manage staff at your own company.");
-            }
-
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            var memberships = await ctx.UserLocationMemberships
+            string? accessError = await CheckLocationAsync(ctx, scope, companyId, locationId);
+
+            if (accessError is not null)
+            {
+                return Result<List<StaffRotaSummary>>.Fail(accessError);
+            }
+
+            List<string> ids = await ctx.UserLocationMemberships
                 .AsNoTracking()
                 .TagWithCallSite()
-                .Where(x => x.Location!.CompanyId == companyId && x.Location.IsActive
-                    && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
-                .Select(x => new { x.UserId, LocationName = x.Location!.Name })
+                .Where(x => x.LocationId == locationId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Select(x => x.UserId)
+                .Distinct()
                 .ToListAsync();
-
-            List<string> ids = memberships.Select(x => x.UserId).Distinct().ToList();
 
             List<UserProfile> users = await ctx.Users
                 .AsNoTracking()
@@ -89,7 +89,6 @@ public class StaffBulkUpdateService(
                     return new StaffRotaSummary(
                         user.Id,
                         DisplayName(user),
-                        memberships.Where(x => x.UserId == user.Id).Select(x => x.LocationName).Distinct().Order().ToList(),
                         held,
                         ContractRequirementService.Coalesce(contracts, primary, user.Id),
                         contracts.Any(x => x.UserId == user.Id),
@@ -107,14 +106,10 @@ public class StaffBulkUpdateService(
         }
     }
 
-    public async Task<Result<int>> ApplyPositionsAsync(LocationScope scope, int companyId, List<string> userIds, BulkPositionChange change)
+    public async Task<Result<int>> ApplyPositionsAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkPositionChange change)
     {
         try
         {
-            if (!SchedulingAccess.CanManageCompany(scope, companyId))
-            {
-                return Result<int>.Fail("You can only manage staff at your own company.");
-            }
 
             List<Guid> positionIds = change.PositionIds.Distinct().ToList();
 
@@ -131,7 +126,14 @@ public class StaffBulkUpdateService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Result<List<string>> members = await CheckMembersAsync(ctx, companyId, userIds);
+            string? accessError = await CheckLocationAsync(ctx, scope, companyId, locationId);
+
+            if (accessError is not null)
+            {
+                return Result<int>.Fail(accessError);
+            }
+
+            Result<List<string>> members = await CheckMembersAsync(ctx, locationId, userIds);
 
             if (!members.IsSuccess)
             {
@@ -262,14 +264,10 @@ public class StaffBulkUpdateService(
         }
     }
 
-    public async Task<Result<int>> ApplyContractAsync(LocationScope scope, int companyId, List<string> userIds, BulkContractChange change, string? updatedByUserId)
+    public async Task<Result<int>> ApplyContractAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, BulkContractChange change, string? updatedByUserId)
     {
         try
         {
-            if (!SchedulingAccess.CanManageCompany(scope, companyId))
-            {
-                return Result<int>.Fail("You can only manage staff at your own company.");
-            }
 
             if (!change.ChangesAnything)
             {
@@ -278,7 +276,14 @@ public class StaffBulkUpdateService(
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            Result<List<string>> members = await CheckMembersAsync(ctx, companyId, userIds);
+            string? accessError = await CheckLocationAsync(ctx, scope, companyId, locationId);
+
+            if (accessError is not null)
+            {
+                return Result<int>.Fail(accessError);
+            }
+
+            Result<List<string>> members = await CheckMembersAsync(ctx, locationId, userIds);
 
             if (!members.IsSuccess)
             {
@@ -420,14 +425,10 @@ public class StaffBulkUpdateService(
         }
     }
 
-    public async Task<Result<int>> ApplyAllowancesAsync(LocationScope scope, int companyId, List<string> userIds, List<BulkAllowanceChange> changes, string? updatedByUserId)
+    public async Task<Result<int>> ApplyAllowancesAsync(LocationScope scope, int companyId, int locationId, List<string> userIds, List<BulkAllowanceChange> changes, string? updatedByUserId)
     {
         try
         {
-            if (!SchedulingAccess.CanManageCompany(scope, companyId))
-            {
-                return Result<int>.Fail("You can only manage staff at your own company.");
-            }
 
             if (changes.Count == 0)
             {
@@ -458,7 +459,14 @@ public class StaffBulkUpdateService(
                 return Result<int>.Fail("That time-off type doesn't belong to this company.");
             }
 
-            Result<List<string>> members = await CheckMembersAsync(ctx, companyId, userIds);
+            string? accessError = await CheckLocationAsync(ctx, scope, companyId, locationId);
+
+            if (accessError is not null)
+            {
+                return Result<int>.Fail(accessError);
+            }
+
+            Result<List<string>> members = await CheckMembersAsync(ctx, locationId, userIds);
 
             if (!members.IsSuccess)
             {
@@ -565,9 +573,27 @@ public class StaffBulkUpdateService(
             .First();
     }
 
-    // Everyone selected must still be a member of one of the company's active locations - the
-    // same rule SchedulingAccess applies to a Manager editing one person, checked in one query.
-    private static async Task<Result<List<string>>> CheckMembersAsync(ApplicationDbContext ctx, int companyId, List<string> userIds)
+    // The page works one location at a time: an Admin may pick any of the company's active
+    // locations, a Manager only the one they signed in under - the same rule the rota builder
+    // follows (SchedulingAccess.CanManageLocation).
+    private static async Task<string?> CheckLocationAsync(ApplicationDbContext ctx, LocationScope scope, int companyId, int locationId)
+    {
+        if (!SchedulingAccess.CanManageCompany(scope, companyId) || !SchedulingAccess.CanManageLocation(scope, locationId))
+        {
+            return "You can only manage staff at your own location.";
+        }
+
+        bool locationInCompany = await ctx.Locations
+            .AsNoTracking()
+            .TagWithCallSite()
+            .AnyAsync(x => x.Id == locationId && x.CompanyId == companyId && x.IsActive);
+
+        return locationInCompany ? null : "That location doesn't belong to this company.";
+    }
+
+    // Everyone selected must still be a member of the location, checked in one query - the list
+    // may be stale, and a hand-built request could name anyone.
+    private static async Task<Result<List<string>>> CheckMembersAsync(ApplicationDbContext ctx, int locationId, List<string> userIds)
     {
         List<string> ids = userIds.Distinct().ToList();
 
@@ -579,7 +605,7 @@ public class StaffBulkUpdateService(
         List<string> members = await ctx.UserLocationMemberships
             .AsNoTracking()
             .TagWithCallSite()
-            .Where(x => ids.Contains(x.UserId) && x.Location!.CompanyId == companyId && x.Location.IsActive)
+            .Where(x => ids.Contains(x.UserId) && x.LocationId == locationId)
             .Select(x => x.UserId)
             .Distinct()
             .ToListAsync();
@@ -589,8 +615,8 @@ public class StaffBulkUpdateService(
         return missing == 0
             ? Result<List<string>>.Ok(ids)
             : Result<List<string>>.Fail(missing == 1
-                ? "One of the selected people is no longer at this company. Refresh the list and try again."
-                : $"{missing} of the selected people are no longer at this company. Refresh the list and try again.");
+                ? "One of the selected people is no longer at this location. Refresh the list and try again."
+                : $"{missing} of the selected people are no longer at this location. Refresh the list and try again.");
     }
 
     private static async Task<Dictionary<string, string>> NamesAsync(ApplicationDbContext ctx, List<string> ids) =>

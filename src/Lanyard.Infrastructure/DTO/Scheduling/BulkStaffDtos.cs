@@ -1,11 +1,10 @@
 namespace Lanyard.Infrastructure.DTO.Scheduling;
 
-// One row of the Manage > Rota > Staff list: a company member with what they hold today, so a
-// manager can pick who to change and see the result straight after.
+// One row of the Manage > Rota > Staff list: a member of the chosen location with what they
+// hold today, so a manager can pick who to change and see the result straight after.
 public record StaffRotaSummary(
     string UserId,
     string Name,
-    List<string> LocationNames,
     List<StaffRotaPosition> Positions,
     ResolvedContract Contract,
     bool HasContractOverride,

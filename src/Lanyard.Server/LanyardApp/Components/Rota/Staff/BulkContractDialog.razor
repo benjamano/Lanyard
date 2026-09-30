@@ -54,6 +54,9 @@
     public required int CompanyId { get; set; }
 
     [Parameter, EditorRequired]
+    public required int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
     public required List<StaffRotaSummary> People { get; set; }
 
     private static readonly List<BulkFieldMode> Modes = [.. Enum.GetValues<BulkFieldMode>()];
@@ -110,7 +113,7 @@
             ToDecimal(rows[3]));
 
         Result<int> result = await _staffBulkUpdateService.ApplyContractAsync(
-            scope.Data, CompanyId, People.Select(x => x.UserId).ToList(), change, me.IsSuccess ? me.Data : null);
+            scope.Data, CompanyId, LocationId, People.Select(x => x.UserId).ToList(), change, me.IsSuccess ? me.Data : null);
 
         isSaving = false;
 

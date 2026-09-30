@@ -592,5 +592,14 @@
       "Signing in this way skips the two-factor code, since your phone has already checked it's you.",
       "You can see and remove the devices you've set up from Account Management. Your password still works as before."
     ]
+  },
+  {
+    "version": "1.4.14",
+    "releaseDate": "2026-09-30",
+    "summary": "The Staff page now shows one location at a time.",
+    "details": [
+      "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
+      "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
+    ]
   }
 ]
