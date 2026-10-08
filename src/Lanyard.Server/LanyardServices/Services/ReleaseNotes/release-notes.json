@@ -601,5 +601,15 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-08",
+    "summary": "Announcements can now be emailed to staff.",
+    "details": [
+      "When you post an announcement, you can choose to email it to everyone at that location. It's on by default for new announcements.",
+      "When you edit an announcement, you can choose to email it again. This is off by default, so fixing a typo doesn't email everyone twice.",
+      "Staff who have turned on push notifications get one too. Anyone can turn announcement emails or pushes off under Notification settings."
+    ]
   }
 ]
