@@ -141,6 +141,18 @@
     color: var(--colorNeutralForeground3);
 }
 
+.party-hint-text {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.party-print {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .party-actions {
     display: flex;
     align-items: center;

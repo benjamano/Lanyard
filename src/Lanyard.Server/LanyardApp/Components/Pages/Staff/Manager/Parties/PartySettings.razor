@@ -1,0 +1,260 @@
+@page "/manage/parties/settings"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Lanyard.App.Components.Parties
+@using Lanyard.Application.Services.Parties
+
+@inject IPartySettingsService _partySettingsService
+
+<PageTitle>Party Settings</PageTitle>
+
+<div class="party-settings">
+    <div class="party-settings-header">
+        <h1>Party settings</h1>
+
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (settings is null || scope is null || locationId is not int location)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="party-settings-grid">
+            <section class="settings-card">
+                <h2>Timings</h2>
+                <p class="settings-intro">
+                    When you book a party, Lanyard fills these in from the arrival time. You can still change them on
+                    any party. Leave a time blank and that box is left empty.
+                </p>
+
+                <FluentNumberInput TValue="int" @bind-Value="settings.DefaultLengthMinutes" Label="Party length (minutes)"
+                                   Min="15" Max="1440" Step="15" Width="100%" />
+                <FluentNumberInput TValue="int?" @bind-Value="settings.EatTimeOffsetMinutes" Label="Eating time (minutes after arrival)"
+                                   Min="0" Max="1440" Step="15" Width="100%" />
+                <FluentNumberInput TValue="int?" @bind-Value="settings.LaserTagOffsetMinutes" Label="Laser tag (minutes after arrival)"
+                                   Min="0" Max="1440" Step="15" Width="100%" />
+
+                <div class="settings-example">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Info())" />
+                    <span>@Example</span>
+                </div>
+
+                <div>
+                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" Loading="@isBusy" OnClick="@SaveTimingsAsync">
+                        Save timings
+                    </FluentButton>
+                </div>
+            </section>
+
+            <section class="settings-card">
+                <h2>Hot food menu</h2>
+                <p class="settings-intro">Printed on the hot food sheet: each meal with its allergens, and a row per side to tally.</p>
+
+                <PartyMenuSection Scope="@scope" LocationId="@location" Kind="PartyMenuItemKind.HotMain" Title="Meals"
+                                  AddLabel="Add a meal" NamePlaceholder="e.g. Chicken nuggets" ShowDescription="true"
+                                  Items="@ItemsOf(PartyMenuItemKind.HotMain)" OnChanged="@LoadMenuAsync" />
+
+                <PartyMenuSection Scope="@scope" LocationId="@location" Kind="PartyMenuItemKind.HotSide" Title="Sides"
+                                  Hint="Offered with every meal." AddLabel="Add a side" NamePlaceholder="e.g. Peas"
+                                  ShowAllergens="false" Items="@ItemsOf(PartyMenuItemKind.HotSide)" OnChanged="@LoadMenuAsync" />
+            </section>
+
+            <section class="settings-card">
+                <h2>Cold food menu</h2>
+                <p class="settings-intro">Printed on the cold food sheet, with an allergy panel listing everything below.</p>
+
+                <PartyMenuSection Scope="@scope" LocationId="@location" Kind="PartyMenuItemKind.Sandwich" Title="Sandwiches"
+                                  AddLabel="Add a sandwich" NamePlaceholder="e.g. Ham"
+                                  Items="@ItemsOf(PartyMenuItemKind.Sandwich)" OnChanged="@LoadMenuAsync" />
+
+                <PartyMenuSection Scope="@scope" LocationId="@location" Kind="PartyMenuItemKind.ColdExtra" Title="Other items in the box"
+                                  Hint="Only shown in the allergy panel." AddLabel="Add an item" NamePlaceholder="e.g. Crisps"
+                                  Items="@ItemsOf(PartyMenuItemKind.ColdExtra)" OnChanged="@LoadMenuAsync" />
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private record LocationOption(int Id, string Name);
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+
+    private PartyLocationSettings? settings;
+    private List<PartyMenuItem> menu = [];
+    private bool isBusy;
+    private string? loadError;
+
+    private List<PartyMenuItem> ItemsOf(PartyMenuItemKind kind) => menu.Where(x => x.Kind == kind).ToList();
+
+    // "A party arriving at 11:00 finishes at 13:00, eats at 12:00 and starts laser tag at 11:30."
+    private string Example
+    {
+        get
+        {
+            if (settings is null)
+            {
+                return string.Empty;
+            }
+
+            TimeOnly arrival = new(11, 0);
+            List<string> parts = [$"finishes at {arrival.AddMinutes(settings.DefaultLengthMinutes):HH:mm}"];
+
+            if (settings.EatTimeOffsetMinutes is int eat)
+            {
+                parts.Add($"eats at {arrival.AddMinutes(eat):HH:mm}");
+            }
+
+            if (settings.LaserTagOffsetMinutes is int laser)
+            {
+                parts.Add($"starts laser tag at {arrival.AddMinutes(laser):HH:mm}");
+            }
+
+            string joined = parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
+
+            return $"A party arriving at 11:00 {joined}.";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // A Manager sets up their own location; an Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int scopeLocationId)
+        {
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                ? own
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is not int location)
+        {
+            loadError = "There are no active locations to set up yet.";
+            return;
+        }
+
+        Result<PartyLocationSettings> result = await _partySettingsService.GetSettingsAsync(scope, location);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            return;
+        }
+
+        loadError = null;
+        settings = result.Data;
+        await LoadMenuAsync();
+    }
+
+    private async Task LoadMenuAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<PartyMenuItem>> result = await _partySettingsService.GetMenuAsync(scope, location);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _toastService.ShowError(result.Error ?? "Couldn't load the menu.");
+            return;
+        }
+
+        menu = result.Data;
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            settings = null;
+            _navigationManager.NavigateTo(_navigationManager.GetUriWithQueryParameter("location", id));
+        }
+    }
+
+    private async Task SaveTimingsAsync()
+    {
+        if (scope is null || settings is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            Result<PartyLocationSettings> result = await _partySettingsService.SaveSettingsAsync(scope, settings, actingUser.Data);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save the timings.");
+                return;
+            }
+
+            settings = result.Data;
+            _toastService.ShowSuccess("Timings saved.");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

@@ -125,6 +125,8 @@ builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddScoped<IPartyBookingService, PartyBookingService>();
+builder.Services.AddScoped<IPartySettingsService, PartySettingsService>();
+builder.Services.AddScoped<IPartyDocumentService, PartyDocumentService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();

@@ -76,4 +76,51 @@ namespace Lanyard.Infrastructure.Models
             BalancePaidUtc is not null ? 0m
             : TotalPrice is decimal total ? Math.Max(0m, total - (DepositPaidUtc is not null ? DepositAmount ?? 0m : 0m)) : null;
     }
+
+    // Per-location party rules. One row per location, created on first save; no row = the defaults.
+    public class PartyLocationSettings
+    {
+        public Guid Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        // The booking form fills these in from the arrival time, so the manager only types the
+        // arrival. Null offsets leave that box empty. A time the manager changes by hand is left
+        // alone after that, and editing an existing party never moves its times.
+        public int DefaultLengthMinutes { get; set; } = 120;
+        public int? EatTimeOffsetMinutes { get; set; }
+        public int? LaserTagOffsetMinutes { get; set; }
+
+        public DateTime UpdateDate { get; set; }
+        public string? UpdatedByUserId { get; set; }
+    }
+
+    // One line of a location's party menu. The food sheets are printed from these, so changing an
+    // allergen here changes the next sheet printed - nothing is copied onto bookings.
+    public class PartyMenuItem
+    {
+        public Guid Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public PartyMenuItemKind Kind { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        // Printed next to the name, e.g. "with chips". Hot meals only.
+        public string? Description { get; set; }
+
+        // e.g. "Contains: Gluten, Wheat, Soya". Printed on the food sheets as written.
+        public string? AllergenText { get; set; }
+
+        public int SortOrder { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreateDate { get; set; }
+        public DateTime? UpdateDate { get; set; }
+        public string? UpdateByUserId { get; set; }
+    }
 }

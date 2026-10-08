@@ -7,6 +7,7 @@
 @using Lanyard.Infrastructure.DTO.Scheduling
 
 @inject IPartyBookingService _partyBookingService
+@inject IPartySettingsService _partySettingsService
 
 <PageTitle>@(IsNew ? "Book a Party" : "Party")</PageTitle>
 
@@ -52,6 +53,22 @@
             </FluentMessageBar>
         }
 
+        @if (existing is not null)
+        {
+            <section class="party-section party-print-card">
+                <h2>Print</h2>
+                <p class="party-hint-text">Opens in a new tab, ready to print. Food sheets use the menu in Party Settings.</p>
+                <div class="party-print">
+                    <FluentAnchorButton Href="@DocumentHref("pack")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Primary"
+                                        IconStart="@(new Icons.Regular.Size20.Print())">Print everything</FluentAnchorButton>
+                    <FluentAnchorButton Href="@DocumentHref("reserved-card")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
+                                        IconStart="@(new Icons.Regular.Size20.TableSimple())">Reserved table card</FluentAnchorButton>
+                    <FluentAnchorButton Href="@DocumentHref("food-sheet")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
+                                        IconStart="@(new Icons.Regular.Size20.Food())">@(existing.MenuType == PartyMenuType.Cold ? "Cold food sheet" : "Hot food sheet")</FluentAnchorButton>
+                </div>
+            </section>
+        }
+
         @* Two columns on a wide screen; on a phone they stack in reading order: who the party is
            for, when and where, then who booked, guests and payment. *@
         <div class="party-sections">
@@ -83,8 +100,8 @@
                     </div>
 
                     <div class="party-pair">
-                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="eatTime" Label="Eating time" />
-                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="laserTagTime" Label="Laser tag time (if any)" />
+                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="eatTime" @bind-Value:after="@(() => eatTouched = true)" Label="Eating time" />
+                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="laserTagTime" @bind-Value:after="@(() => laserTouched = true)" Label="Laser tag time (if any)" />
                     </div>
 
                     <FluentTextInput @bind-Value="booking.PartyType" Label="Party type" Placeholder="e.g. Lazer + Play" Class="party-full" Maxlength="100" />
@@ -228,8 +245,9 @@
 
     private const string NoHost = "";
 
-    // A party is usually two hours; the finish follows the arrival time until someone sets it.
-    private static readonly TimeSpan DefaultLength = TimeSpan.FromHours(2);
+    // The location's party timings. On a new booking the finish, eating and laser tag times
+    // follow the arrival time from these, until someone sets that time by hand.
+    private PartyLocationSettings timings = new() { LocationId = 0 };
 
     private LocationScope? scope;
     private List<LocationOption> locationOptions = [];
@@ -244,6 +262,8 @@
     private TimeOnly startTime = new(11, 0);
     private TimeOnly endTime = new(13, 0);
     private bool endTouched;
+    private bool eatTouched;
+    private bool laserTouched;
     private TimeOnly? eatTime;
     private TimeOnly? laserTagTime;
     private string? hostUserId = NoHost;
@@ -256,6 +276,8 @@
     private bool IsNew => BookingId is null;
 
     private string Title => IsNew ? "Book a party" : $"{existing?.ChildName}'s party";
+
+    private string DocumentHref(string document) => $"/api/parties/{existing?.Id}/documents/{document}";
 
     private string BackHref => locationId is int id ? $"/manage/parties?location={id}" : "/manage/parties";
 
@@ -343,10 +365,9 @@
                 ? parsed.ToDateTime(TimeOnly.MinValue)
                 : null;
             startTime = new TimeOnly(11, 0);
-            endTime = startTime.Add(DefaultLength);
             endTouched = false;
-            eatTime = null;
-            laserTagTime = null;
+            eatTouched = false;
+            laserTouched = false;
             hostUserId = NoHost;
 
             if (locationId is null)
@@ -398,7 +419,10 @@
         date = saved.LocalDate().ToDateTime(TimeOnly.MinValue);
         startTime = RotaTime.LocalTime(saved.StartUtc);
         endTime = RotaTime.LocalTime(saved.EndUtc);
+        // Editing a saved party never moves its times on its own.
         endTouched = true;
+        eatTouched = true;
+        laserTouched = true;
         eatTime = saved.EatTimeUtc is DateTime eat ? RotaTime.LocalTime(eat) : null;
         laserTagTime = saved.LaserTagTimeUtc is DateTime laser ? RotaTime.LocalTime(laser) : null;
         hostUserId = saved.PartyHostUserId ?? NoHost;
@@ -433,6 +457,30 @@
 
         Result<List<string>> types = await _partyBookingService.GetPartyTypeSuggestionsAsync(scope, location);
         partyTypeSuggestions = types.IsSuccess && types.Data is not null ? types.Data : [];
+
+        Result<PartyLocationSettings> settings = await _partySettingsService.GetSettingsAsync(scope, location);
+        timings = settings.IsSuccess && settings.Data is not null ? settings.Data : new PartyLocationSettings { LocationId = location };
+
+        FollowArrivalTime();
+    }
+
+    // Fills in whichever of the finish, eating and laser tag times nobody has set by hand.
+    private void FollowArrivalTime()
+    {
+        if (!endTouched)
+        {
+            endTime = startTime.AddMinutes(timings.DefaultLengthMinutes);
+        }
+
+        if (!eatTouched)
+        {
+            eatTime = timings.EatTimeOffsetMinutes is int eat ? startTime.AddMinutes(eat) : null;
+        }
+
+        if (!laserTouched)
+        {
+            laserTagTime = timings.LaserTagOffsetMinutes is int laser ? startTime.AddMinutes(laser) : null;
+        }
     }
 
     private async Task OnLocationChanged(string? value)
@@ -446,12 +494,8 @@
 
     private void OnStartTimeChanged(TimeOnly value)
     {
-        if (!endTouched)
-        {
-            endTime = value.Add(DefaultLength);
-        }
-
         startTime = value;
+        FollowArrivalTime();
     }
 
     private async Task SaveAsync()

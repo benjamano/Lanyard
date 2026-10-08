@@ -1,0 +1,191 @@
+@using Lanyard.Application.Services.Parties
+
+@inject IPartySettingsService _partySettingsService
+
+@* One kind of menu item (hot meals, sides, sandwiches, other box items) as an editable list.
+   Edits save straight away; OnChanged tells the page to reload the menu. *@
+<div class="menu-section">
+    <div class="menu-section-heading">
+        <h3>@Title</h3>
+        <span class="menu-section-hint">@Hint</span>
+    </div>
+
+    @if (Items.Count == 0 && editing is null)
+    {
+        <div class="menu-empty">Nothing added yet.</div>
+    }
+
+    <ul class="menu-items">
+        @for (int i = 0; i < Items.Count; i++)
+        {
+            PartyMenuItem item = Items[i];
+            int index = i;
+
+            @if (editing is not null && editing.Id == item.Id)
+            {
+                <li class="menu-item menu-item-editing">@EditForm()</li>
+            }
+            else
+            {
+                <li class="menu-item">
+                    <div class="menu-item-text">
+                        <div class="menu-item-name">
+                            @item.Name
+                            @if (item.Description is not null)
+                            {
+                                <span class="menu-item-description">@item.Description</span>
+                            }
+                        </div>
+                        @if (item.AllergenText is not null)
+                        {
+                            <div class="menu-item-allergens">@item.AllergenText</div>
+                        }
+                        else if (ShowAllergens)
+                        {
+                            <div class="menu-item-allergens menu-item-missing">No allergen information</div>
+                        }
+                    </div>
+                    <div class="menu-item-actions">
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowUp())" Title="Move up"
+                                      Disabled="@(isBusy || index == 0)" OnClick="@(() => MoveAsync(item, -1))" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowDown())" Title="Move down"
+                                      Disabled="@(isBusy || index == Items.Count - 1)" OnClick="@(() => MoveAsync(item, 1))" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Edit())" Title="@($"Edit {item.Name}")"
+                                      Disabled="@isBusy" OnClick="@(() => StartEdit(item))" />
+                        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())" Title="@($"Remove {item.Name}")"
+                                      Disabled="@isBusy" OnClick="@(() => RemoveAsync(item))" />
+                    </div>
+                </li>
+            }
+        }
+
+        @if (editing is not null && editing.Id == Guid.Empty)
+        {
+            <li class="menu-item menu-item-editing">@EditForm()</li>
+        }
+    </ul>
+
+    @if (editing is null)
+    {
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())" Disabled="@isBusy"
+                      OnClick="@StartAdd">@AddLabel</FluentButton>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public LocationScope Scope { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public int LocationId { get; set; }
+
+    [Parameter, EditorRequired]
+    public PartyMenuItemKind Kind { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Hint { get; set; }
+
+    [Parameter]
+    public string AddLabel { get; set; } = "Add";
+
+    [Parameter]
+    public string NamePlaceholder { get; set; } = string.Empty;
+
+    // "with chips" etc. Only hot meals use it.
+    [Parameter]
+    public bool ShowDescription { get; set; }
+
+    // Sides are just a choice to tick, with nothing to declare.
+    [Parameter]
+    public bool ShowAllergens { get; set; } = true;
+
+    [Parameter]
+    public List<PartyMenuItem> Items { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private PartyMenuItem? editing;
+    private bool isBusy;
+
+    private RenderFragment EditForm() => __builder =>
+    {
+        <div class="menu-edit">
+            <FluentTextInput @bind-Value="editing!.Name" Label="Name" Placeholder="@NamePlaceholder" Required="true" Maxlength="100" Class="menu-full" />
+            @if (ShowDescription)
+            {
+                <FluentTextInput @bind-Value="editing!.Description" Label="Served with (optional)" Placeholder="e.g. with chips" Maxlength="100" Class="menu-full" />
+            }
+            @if (ShowAllergens)
+            {
+                <FluentTextArea @bind-Value="editing!.AllergenText" Label="Allergens" Placeholder="e.g. Contains: Gluten, Wheat, Soya" Rows="2" Maxlength="500" Class="menu-full" />
+            }
+            <div class="menu-edit-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@SaveAsync">Save</FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => editing = null)">Cancel</FluentButton>
+            </div>
+        </div>
+    };
+
+    private void StartAdd() => editing = new PartyMenuItem { LocationId = LocationId, Kind = Kind };
+
+    private void StartEdit(PartyMenuItem item) => editing = new PartyMenuItem
+    {
+        Id = item.Id,
+        LocationId = item.LocationId,
+        Kind = item.Kind,
+        Name = item.Name,
+        Description = item.Description,
+        AllergenText = item.AllergenText
+    };
+
+    private async Task SaveAsync()
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        await RunAsync(userId => _partySettingsService.SaveMenuItemAsync(Scope, editing, userId), "Couldn't save the menu item.", () => editing = null);
+    }
+
+    private Task RemoveAsync(PartyMenuItem item) =>
+        RunAsync(userId => _partySettingsService.RemoveMenuItemAsync(Scope, item.Id, userId), "Couldn't remove the menu item.");
+
+    private Task MoveAsync(PartyMenuItem item, int direction) =>
+        RunAsync(_ => _partySettingsService.MoveMenuItemAsync(Scope, item.Id, direction), "Couldn't move the menu item.");
+
+    private async Task RunAsync<T>(Func<string, Task<Result<T>>> action, string failure, Action? onSuccess = null)
+    {
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            Result<T> result = await action(actingUser.Data);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? failure);
+                return;
+            }
+
+            onSuccess?.Invoke();
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

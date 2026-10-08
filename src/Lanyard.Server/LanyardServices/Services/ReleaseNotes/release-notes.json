@@ -613,5 +613,17 @@
       "Parties can be cancelled and reinstated. Admins can switch between locations; managers see the parties at their own location.",
       "Admins can switch Parties on or off for each company under Manage > Companies & Locations."
     ]
+  },
+  {
+    "version": "1.4.16",
+    "releaseDate": "2026-10-08",
+    "summary": "Print party documents straight from Lanyard.",
+    "details": [
+      "Each party now has a Print card with a reserved table card, the food sheet, and a Print everything button that puts them in one document. They open in a new tab, ready to print.",
+      "The reserved table card folds in half so the child's name reads from both sides of the table.",
+      "Hot parties get a food sheet with the party details and allergy notes at the top, then every meal with its allergens and a row per side to tally. Cold parties get a row per child for their sandwich choice and an allergy panel.",
+      "New Party Settings page for each location: set the hot and cold menus with their allergens, and how long a party lasts and when the children eat and play laser tag.",
+      "When you book a party, Lanyard now fills in the finish, eating and laser tag times from the arrival time using those settings. You can still change them on any party."
+    ]
   }
 ]
