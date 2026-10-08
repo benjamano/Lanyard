@@ -27,8 +27,11 @@
                                 Rows="5" Style="width: 100%;" />
 
                 @* Only an Admin picks a location - everyone else posts to their own, and the
-                   service overrides whatever is sent anyway. *@
-                @if (Scope?.IsAdmin == true)
+                   service overrides whatever is sent anyway. Rendered only once the locations
+                   have loaded: a select first drawn with no options never picks up its starting
+                   value, so the browser rejects the form as "Please select one of these options"
+                   even though the location shows as chosen. *@
+                @if (Scope?.IsAdmin == true && _locations.Count > 0)
                 {
                     <FluentSelect TOption="Location" TValue="int?" Items="@_locations"
                                   OptionText="@(l => l?.GetDisplayName() ?? string.Empty)"
@@ -43,6 +46,15 @@
 
                 <FluentSwitch @bind-Value="_announcement.IsPinned"
                               Label="Pin to the top of the widget" />
+
+                @* On by default for a new announcement, the moment people most need telling; off
+                   when editing, so fixing a typo doesn't email everyone a second time. *@
+                <FluentSwitch @bind-Value="_notifyStaff"
+                              Label="@(Content is null ? "Email it to staff at this location" : "Email it to staff again")" />
+                <FluentText Size="TextSize.Size200" Style="color: var(--colorNeutralForeground3);">
+                    Staff also get a push notification if they've turned those on. Anyone who has
+                    switched announcement emails off in their notification settings won't be emailed.
+                </FluentText>
             </FluentStack>
 
             <DataAnnotationsValidator />
@@ -79,9 +91,20 @@
     private DateTime? _expiryDate;
 
     private bool _isSaving;
+    private bool _notifyStaff;
+    private string? _currentUserId;
 
     protected override async Task OnInitializedAsync()
     {
+        _notifyStaff = Content is null;
+
+        Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (currentUserResult.IsSuccess)
+        {
+            _currentUserId = currentUserResult.Data;
+        }
+
         if (Content is not null)
         {
             // Edit a copy: binding straight onto the grid's instance would leave the row showing
@@ -107,13 +130,7 @@
         else
         {
             _announcement.LocationId = Scope?.LocationId;
-
-            Result<string> currentUserResult = await _securityService.GetCurrentUserIdAsync();
-
-            if (currentUserResult.IsSuccess)
-            {
-                _announcement.CreatedByUserId = currentUserResult.Data;
-            }
+            _announcement.CreatedByUserId = _currentUserId;
         }
 
         if (Scope?.IsAdmin == true)
@@ -155,6 +172,29 @@
         _announcement.ExpiryDate = _expiryDate?.Date.AddDays(1).ToUniversalTime();
 
         Result<Announcement> result = await _announcementService.SaveAnnouncementAsync(_announcement, Scope);
+
+        if (result.IsSuccess && result.Data is not null && _notifyStaff)
+        {
+            // Saved either way: a failed send is reported, but the announcement itself is live.
+            Result<int> sendResult = await _announcementService.SendAnnouncementAsync(result.Data.Id, Scope, _currentUserId);
+
+            _isSaving = false;
+
+            if (sendResult.IsSuccess)
+            {
+                _toastService.ShowSuccess(sendResult.Data == 0
+                    ? "Announcement saved. There's nobody else at this location to send it to."
+                    : $"Announcement saved and sent to {sendResult.Data} {(sendResult.Data == 1 ? "person" : "people")}.");
+            }
+            else
+            {
+                _toastService.ShowWarning($"Announcement saved, but it couldn't be sent: {sendResult.Error}");
+            }
+
+            await DialogInstance.CloseAsync(true);
+
+            return;
+        }
 
         _isSaving = false;
 
