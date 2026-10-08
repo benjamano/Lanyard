@@ -161,6 +161,15 @@
                         <FluentNavItem Href="/manage/rota/settings">Rota Settings</FluentNavItem>
                     </FluentNavCategory>
                 }
+
+                @if (Has(CompanyFeature.Parties))
+                {
+                    <FluentNavCategory Title="Parties" IconRest="@(new Icons.Regular.Size20.Balloon())"
+                                       IconActive="@(new Icons.Filled.Size20.Balloon())">
+                        <FluentNavItem Href="/manage/parties" Match="NavLinkMatch.All">Parties</FluentNavItem>
+                        <FluentNavItem Href="/manage/parties/new">Book a Party</FluentNavItem>
+                    </FluentNavCategory>
+                }
             }
 
             @if (_isAdmin)

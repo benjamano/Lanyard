@@ -1,0 +1,587 @@
+@page "/manage/parties/new"
+@page "/manage/parties/{BookingId:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Lanyard.Application.Services.Parties
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IPartyBookingService _partyBookingService
+
+<PageTitle>@(IsNew ? "Book a Party" : "Party")</PageTitle>
+
+<div class="party-editor">
+    <div class="party-editor-header">
+        <FluentAnchorButton Href="@BackHref" Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())">
+            Parties
+        </FluentAnchorButton>
+
+        <div class="party-editor-title">
+            <h1>@Title</h1>
+            @if (existing is not null)
+            {
+                @if (existing.Status == PartyBookingStatus.Cancelled)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge>
+                }
+                else
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="@existing.PaymentStatus.Color()">@existing.PaymentStatus.Label()</FluentBadge>
+                }
+            }
+        </div>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (!loaded)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        @if (existing?.Status == PartyBookingStatus.Cancelled)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                This party has been cancelled. Reinstate it to put it back on the list.
+            </FluentMessageBar>
+        }
+
+        @* Two columns on a wide screen; on a phone they stack in reading order: who the party is
+           for, when and where, then who booked, guests and payment. *@
+        <div class="party-sections">
+            <div class="party-column">
+                <section class="party-section">
+                    <h2>Birthday child</h2>
+
+                    <div class="party-pair party-pair-wide">
+                        <FluentTextInput @bind-Value="booking.ChildName" Label="Name" Required="true" Maxlength="100" Class="party-full" />
+                        <FluentNumberInput TValue="int?" @bind-Value="booking.ChildAgeTurning" Label="Turning" Min="0" Max="99" Width="100%" />
+                    </div>
+                </section>
+
+                <section class="party-section">
+                    <h2>Party</h2>
+
+                    @if (locationOptions.Count > 1)
+                    {
+                        <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                                      OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                                      Label="Location" Width="100%" />
+                    }
+
+                    <FluentDatePicker TValue="DateTime?" @bind-Value="date" Label="Date" Culture="@RotaFormat.Uk" Class="party-full" Required="true" />
+
+                    <div class="party-pair">
+                        <AnyTimePicker TValue="TimeOnly" Value="@startTime" ValueChanged="@OnStartTimeChanged" Label="Arrival" Required="true" />
+                        <AnyTimePicker TValue="TimeOnly" @bind-Value="endTime" @bind-Value:after="@(() => endTouched = true)" Label="Finish" Required="true" />
+                    </div>
+
+                    <div class="party-pair">
+                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="eatTime" Label="Eating time" />
+                        <AnyTimePicker TValue="TimeOnly?" @bind-Value="laserTagTime" Label="Laser tag time (if any)" />
+                    </div>
+
+                    <FluentTextInput @bind-Value="booking.PartyType" Label="Party type" Placeholder="e.g. Lazer + Play" Class="party-full" Maxlength="100" />
+
+                    @if (PartyTypeChips.Count > 0)
+                    {
+                        <div class="party-chips" role="group" aria-label="Party types used before">
+                            @foreach (string type in PartyTypeChips)
+                            {
+                                <FluentButton Size="ButtonSize.Small" Appearance="@(booking.PartyType == type ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => booking.PartyType = type)">@type</FluentButton>
+                            }
+                        </div>
+                    }
+
+                    <FluentTextInput @bind-Value="booking.Room" Label="Room or table" Placeholder="e.g. Party room 1" Class="party-full" Maxlength="100" />
+
+                    <div class="party-field">
+                        <span class="party-label">Food</span>
+                        <div class="party-toggle" role="group" aria-label="Food">
+                            <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Hot ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                          OnClick="@(() => booking.MenuType = PartyMenuType.Hot)">Hot food</FluentButton>
+                            <FluentButton Appearance="@(booking.MenuType == PartyMenuType.Cold ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                          OnClick="@(() => booking.MenuType = PartyMenuType.Cold)">Cold food</FluentButton>
+                        </div>
+                    </div>
+
+                    <FluentSelect TOption="HostOption" TValue="string" Items="@hostOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
+                                  @bind-Value="hostUserId" Label="Party host" Width="100%" />
+                </section>
+            </div>
+
+            <div class="party-column">
+                <section class="party-section">
+                    <h2>Contact</h2>
+
+                    <FluentTextInput @bind-Value="booking.ContactName" Label="Parent or guardian" Required="true" Maxlength="100" Class="party-full" />
+                    <FluentTextInput @bind-Value="booking.ContactPhone" Label="Phone" Required="true" TextInputType="TextInputType.Telephone" Maxlength="40" Class="party-full" />
+                    <FluentTextInput @bind-Value="booking.ContactEmail" Label="Email (optional)" TextInputType="TextInputType.Email" Maxlength="200" Class="party-full" />
+                </section>
+
+                <section class="party-section">
+                    <h2>Guests</h2>
+
+                    <div class="party-pair">
+                        <FluentNumberInput TValue="int" @bind-Value="booking.ExpectedChildren" Label="Children coming" Min="1" Max="500" Width="100%" Required="true" />
+                        <FluentNumberInput TValue="int?" @bind-Value="booking.ExpectedAdults" Label="Adults" Min="0" Max="500" Width="100%" />
+                    </div>
+
+                    <FluentTextArea @bind-Value="booking.AllergyNotes" Label="Allergies or dietary needs" Rows="2" Maxlength="1000" Class="party-full" />
+                    <FluentTextArea @bind-Value="booking.Notes" Label="Other notes" Rows="3" Maxlength="2000" Class="party-full" />
+                </section>
+
+                <section class="party-section">
+                    <h2>Payment</h2>
+
+                    <div class="party-pair">
+                        <FluentNumberInput TValue="decimal?" @bind-Value="booking.TotalPrice" Label="Total price (£)" Min="0" Step="@(0.01m)" Width="100%" />
+                        <FluentNumberInput TValue="decimal?" @bind-Value="booking.DepositAmount" Label="Deposit (£)" Min="0" Step="@(0.01m)" Width="100%" />
+                    </div>
+
+                    <FluentTextInput @bind-Value="booking.PaymentNotes" Label="Payment notes" Placeholder="e.g. Paid by card over the phone" Maxlength="500" Class="party-full" />
+
+                    @if (existing is not null)
+                    {
+                        <div class="party-payment-status">
+                            <div class="party-payment-row">
+                                <div>
+                                    <div class="party-payment-title">Deposit</div>
+                                    <div class="party-payment-meta">
+                                        @(existing.DepositPaidUtc is DateTime depositPaid ? $"Paid {RotaFormat.DayAndTime(depositPaid)}" : "Not paid yet")
+                                    </div>
+                                </div>
+                                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy"
+                                              OnClick="@(() => SetDepositPaidAsync(existing.DepositPaidUtc is null))">
+                                    @(existing.DepositPaidUtc is null ? "Mark deposit paid" : "Undo")
+                                </FluentButton>
+                            </div>
+
+                            <div class="party-payment-row">
+                                <div>
+                                    <div class="party-payment-title">Balance</div>
+                                    <div class="party-payment-meta">@BalanceText</div>
+                                </div>
+                                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy"
+                                              OnClick="@(() => SetBalancePaidAsync(existing.BalancePaidUtc is null))">
+                                    @(existing.BalancePaidUtc is null ? "Mark paid in full" : "Undo")
+                                </FluentButton>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <FluentText Class="party-hint">You can mark the deposit and balance as paid once the party is saved.</FluentText>
+                    }
+                </section>
+            </div>
+        </div>
+
+        <div class="party-actions">
+            @if (existing is not null)
+            {
+                @if (existing.Status == PartyBookingStatus.Cancelled)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => SetCancelledAsync(false))">Reinstate party</FluentButton>
+                }
+                else if (confirmingCancel)
+                {
+                    <FluentText>Cancel @existing.ChildName's party?</FluentText>
+                    <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@isBusy" OnClick="@(() => SetCancelledAsync(true))">Yes, cancel it</FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" OnClick="@(() => confirmingCancel = false)">Keep it</FluentButton>
+                }
+                else
+                {
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                  Disabled="@isBusy" OnClick="@(() => confirmingCancel = true)">Cancel party</FluentButton>
+                }
+            }
+
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())" Class="party-save"
+                          Disabled="@isBusy" Loading="@isBusy" OnClick="@SaveAsync">
+                @(IsNew ? "Book party" : "Save changes")
+            </FluentButton>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid? BookingId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateQuery { get; set; }
+
+    private record LocationOption(int Id, string Name);
+
+    private record HostOption(string UserId, string Name);
+
+    private const string NoHost = "";
+
+    // A party is usually two hours; the finish follows the arrival time until someone sets it.
+    private static readonly TimeSpan DefaultLength = TimeSpan.FromHours(2);
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private List<HostOption> hostOptions = [new(NoHost, "No host yet")];
+    private List<string> partyTypeSuggestions = [];
+
+    private PartyBooking booking = NewBooking();
+    private PartyBooking? existing;
+
+    private DateTime? date;
+    private TimeOnly startTime = new(11, 0);
+    private TimeOnly endTime = new(13, 0);
+    private bool endTouched;
+    private TimeOnly? eatTime;
+    private TimeOnly? laserTagTime;
+    private string? hostUserId = NoHost;
+
+    private bool loaded;
+    private bool isBusy;
+    private bool confirmingCancel;
+    private string? loadError;
+
+    private bool IsNew => BookingId is null;
+
+    private string Title => IsNew ? "Book a party" : $"{existing?.ChildName}'s party";
+
+    private string BackHref => locationId is int id ? $"/manage/parties?location={id}" : "/manage/parties";
+
+    private List<string> PartyTypeChips => partyTypeSuggestions.Take(8).ToList();
+
+    private string BalanceText
+    {
+        get
+        {
+            if (existing is null)
+            {
+                return string.Empty;
+            }
+
+            if (existing.BalancePaidUtc is DateTime paid)
+            {
+                return $"Paid in full {RotaFormat.DayAndTime(paid)}";
+            }
+
+            return existing.BalanceDue is decimal due ? $"{PartyDisplayExtensions.Money(due)} still to pay" : "No total price set";
+        }
+    }
+
+    private static PartyBooking NewBooking() => new() { CompanyId = 0, LocationId = 0, ExpectedChildren = 10 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int scopeLocationId)
+        {
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        loaded = false;
+        confirmingCancel = false;
+
+        if (BookingId is Guid id)
+        {
+            Result<PartyBooking> result = await _partyBookingService.GetBookingAsync(scope, id);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                loadError = result.Error;
+                return;
+            }
+
+            ShowBooking(result.Data);
+        }
+        else
+        {
+            existing = null;
+            booking = NewBooking();
+            locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+                ? requested
+                : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                    ? own
+                    : locationOptions.FirstOrDefault()?.Id;
+
+            date = DateOnly.TryParseExact(DateQuery, "yyyy-MM-dd", out DateOnly parsed)
+                ? parsed.ToDateTime(TimeOnly.MinValue)
+                : null;
+            startTime = new TimeOnly(11, 0);
+            endTime = startTime.Add(DefaultLength);
+            endTouched = false;
+            eatTime = null;
+            laserTagTime = null;
+            hostUserId = NoHost;
+
+            if (locationId is null)
+            {
+                loadError = "There are no active locations to book a party at yet.";
+                return;
+            }
+        }
+
+        loadError = null;
+        await LoadLocationListsAsync();
+        loaded = true;
+    }
+
+    private void ShowBooking(PartyBooking saved)
+    {
+        existing = saved;
+
+        // Edit a copy, so an unsaved change never shows up in the header or payment panel.
+        booking = new PartyBooking
+        {
+            Id = saved.Id,
+            CompanyId = saved.CompanyId,
+            LocationId = saved.LocationId,
+            PartyType = saved.PartyType,
+            ChildName = saved.ChildName,
+            ChildAgeTurning = saved.ChildAgeTurning,
+            ContactName = saved.ContactName,
+            ContactPhone = saved.ContactPhone,
+            ContactEmail = saved.ContactEmail,
+            ExpectedChildren = saved.ExpectedChildren,
+            ExpectedAdults = saved.ExpectedAdults,
+            Room = saved.Room,
+            MenuType = saved.MenuType,
+            AllergyNotes = saved.AllergyNotes,
+            Notes = saved.Notes,
+            TotalPrice = saved.TotalPrice,
+            DepositAmount = saved.DepositAmount,
+            PaymentNotes = saved.PaymentNotes
+        };
+
+        locationId = saved.LocationId;
+
+        if (!locationOptions.Any(l => l.Id == saved.LocationId))
+        {
+            locationOptions = [.. locationOptions, new LocationOption(saved.LocationId, saved.Location?.GetDisplayName() ?? "This location")];
+        }
+
+        date = saved.LocalDate().ToDateTime(TimeOnly.MinValue);
+        startTime = RotaTime.LocalTime(saved.StartUtc);
+        endTime = RotaTime.LocalTime(saved.EndUtc);
+        endTouched = true;
+        eatTime = saved.EatTimeUtc is DateTime eat ? RotaTime.LocalTime(eat) : null;
+        laserTagTime = saved.LaserTagTimeUtc is DateTime laser ? RotaTime.LocalTime(laser) : null;
+        hostUserId = saved.PartyHostUserId ?? NoHost;
+    }
+
+    private async Task LoadLocationListsAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        Result<List<UserProfile>> staff = await _companyLocationService.GetUsersInLocationAsync(location);
+
+        hostOptions = [new(NoHost, "No host yet")];
+
+        if (staff.IsSuccess && staff.Data is not null)
+        {
+            hostOptions.AddRange(staff.Data.OrderBy(u => u.GetName()).Select(u => new HostOption(u.Id, u.GetName())));
+        }
+
+        // A host who has since left the location still shows on their old parties.
+        if (existing?.PartyHost is UserProfile host && hostOptions.All(h => h.UserId != host.Id))
+        {
+            hostOptions.Add(new HostOption(host.Id, host.GetName()));
+        }
+
+        if (hostOptions.All(h => h.UserId != hostUserId))
+        {
+            hostUserId = NoHost;
+        }
+
+        Result<List<string>> types = await _partyBookingService.GetPartyTypeSuggestionsAsync(scope, location);
+        partyTypeSuggestions = types.IsSuccess && types.Data is not null ? types.Data : [];
+    }
+
+    private async Task OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            locationId = id;
+            await LoadLocationListsAsync();
+        }
+    }
+
+    private void OnStartTimeChanged(TimeOnly value)
+    {
+        if (!endTouched)
+        {
+            endTime = value.Add(DefaultLength);
+        }
+
+        startTime = value;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        if (date is not DateTime picked)
+        {
+            _toastService.ShowError("Pick the date of the party.");
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        DateOnly day = DateOnly.FromDateTime(picked);
+
+        booking.LocationId = location;
+        booking.StartUtc = RotaTime.ToUtc(day, startTime);
+        booking.EndUtc = RotaTime.ToUtc(day, endTime);
+        booking.EatTimeUtc = eatTime is TimeOnly eat ? RotaTime.ToUtc(day, eat) : null;
+        booking.LaserTagTimeUtc = laserTagTime is TimeOnly laser ? RotaTime.ToUtc(day, laser) : null;
+        booking.PartyHostUserId = string.IsNullOrEmpty(hostUserId) ? null : hostUserId;
+
+        isBusy = true;
+
+        try
+        {
+            Result<PartyBooking> result = await _partyBookingService.SaveBookingAsync(scope, booking, actingUser.Data);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Couldn't save the party.");
+                return;
+            }
+
+            if (IsNew)
+            {
+                _toastService.ShowSuccess($"{result.Data.ChildName}'s party is booked.");
+                _navigationManager.NavigateTo($"/manage/parties/{result.Data.Id}");
+                return;
+            }
+
+            _toastService.ShowSuccess("Changes saved.");
+            await ReloadAsync();
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private Task SetCancelledAsync(bool cancelled) =>
+        RunAsync(userId => _partyBookingService.SetCancelledAsync(scope!, existing!.Id, cancelled, userId),
+            cancelled ? "Party cancelled." : "Party reinstated.");
+
+    private Task SetDepositPaidAsync(bool paid) =>
+        RunAsync(userId => _partyBookingService.SetDepositPaidAsync(scope!, existing!.Id, paid, userId),
+            paid ? "Deposit marked as paid." : "Deposit marked as not paid.");
+
+    private Task SetBalancePaidAsync(bool paid) =>
+        RunAsync(userId => _partyBookingService.SetBalancePaidAsync(scope!, existing!.Id, paid, userId),
+            paid ? "Marked as paid in full." : "Balance marked as not paid.");
+
+    // Payment and cancellation act on the saved booking straight away, separately from the form,
+    // so an unsaved edit in the form is kept rather than overwritten.
+    private async Task RunAsync(Func<string, Task<Result<PartyBooking>>> action, string success)
+    {
+        if (scope is null || existing is null)
+        {
+            return;
+        }
+
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || actingUser.Data is null)
+        {
+            _toastService.ShowError($"Couldn't work out who you are: {actingUser.Error}");
+            return;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            Result<PartyBooking> result = await action(actingUser.Data);
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _toastService.ShowError(result.Error ?? "Something went wrong.");
+                return;
+            }
+
+            confirmingCancel = false;
+            _toastService.ShowSuccess(success);
+
+            Result<PartyBooking> reloaded = await _partyBookingService.GetBookingAsync(scope, existing.Id);
+
+            if (reloaded.IsSuccess && reloaded.Data is not null)
+            {
+                existing = reloaded.Data;
+            }
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (scope is null || BookingId is not Guid id)
+        {
+            return;
+        }
+
+        Result<PartyBooking> result = await _partyBookingService.GetBookingAsync(scope, id);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            ShowBooking(result.Data);
+            await LoadLocationListsAsync();
+        }
+    }
+}

@@ -1,0 +1,118 @@
+.parties-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 8px;
+}
+
+.parties-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Fluent's fields carry a vertical margin that pushes the dropdowns out of line with the buttons. */
+.parties-toolbar ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.parties-filters {
+    display: flex;
+    gap: 6px;
+}
+
+.parties-toolbar ::deep .parties-new {
+    margin-left: auto;
+}
+
+.parties-day {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.parties-day-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.party-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px;
+}
+
+.party-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.party-card:hover,
+.party-card:focus-visible {
+    border-color: var(--colorBrandStroke1);
+    box-shadow: var(--shadow4);
+}
+
+.party-card-cancelled {
+    opacity: 0.65;
+}
+
+.party-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.party-child {
+    font-weight: 600;
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+
+.party-when {
+    font-weight: 600;
+    /* Mixed with the foreground token: plain brand colour on a dark card is hard to read. */
+    color: color-mix(in srgb, var(--colorBrandForeground1) 70%, var(--colorNeutralForeground1));
+}
+
+.party-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.party-allergy {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .party-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .parties-toolbar ::deep .parties-new {
+        margin-left: 0;
+        width: 100%;
+    }
+}

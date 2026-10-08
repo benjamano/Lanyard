@@ -1,0 +1,268 @@
+@page "/manage/parties"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Parties)]
+
+@using Lanyard.Application.Services.Parties
+@using Lanyard.Infrastructure.DTO.Scheduling
+
+@inject IPartyBookingService _partyBookingService
+
+<PageTitle>Parties</PageTitle>
+
+<div class="parties-page">
+    <div class="parties-toolbar">
+        @if (locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="LocationOption" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="260px" />
+        }
+
+        <div class="parties-filters" role="group" aria-label="Which parties to show">
+            <FluentButton Appearance="@(past ? ButtonAppearance.Outline : ButtonAppearance.Primary)" OnClick="@(() => SetPastAsync(false))">Upcoming</FluentButton>
+            <FluentButton Appearance="@(past ? ButtonAppearance.Primary : ButtonAppearance.Outline)" OnClick="@(() => SetPastAsync(true))">Past</FluentButton>
+        </div>
+
+        <FluentSelect TOption="PaymentFilterOption" TValue="string" Items="@PaymentFilters" OptionText="@(x => x.Name)"
+                      OptionValue="@(x => x.Key)" @bind-Value="paymentFilter" Label="Payment" Width="180px" />
+
+        <FluentCheckbox Label="Show cancelled" Value="@includeCancelled" ValueChanged="@OnIncludeCancelledChanged" />
+
+        <FluentAnchorButton Href="@NewPartyHref" Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                            Class="parties-new">
+            Book a party
+        </FluentAnchorButton>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+    }
+    else if (bookings is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else if (!Visible.Any())
+    {
+        <FluentCard Height="auto">
+            <FluentText>@EmptyText</FluentText>
+        </FluentCard>
+    }
+    else
+    {
+        @foreach (IGrouping<DateOnly, PartyBooking> day in Visible.GroupBy(x => x.LocalDate()))
+        {
+            <section class="parties-day">
+                <h2 class="parties-day-heading">
+                    @day.Key.ToString("dddd d MMMM", RotaFormat.Uk)
+                    @if (day.Key == today)
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Brand">Today</FluentBadge>
+                    }
+                </h2>
+
+                <div class="party-cards">
+                    @foreach (PartyBooking party in day)
+                    {
+                        <a class="party-card @(party.Status == PartyBookingStatus.Cancelled ? "party-card-cancelled" : string.Empty)"
+                           href="@($"/manage/parties/{party.Id}")">
+                            <div class="party-card-top">
+                                <div>
+                                    <div class="party-child">@party.ChildLabel()</div>
+                                    <div class="party-when">@party.TimeRange()@(party.PartyType.Length > 0 ? $" · {party.PartyType}" : string.Empty)</div>
+                                </div>
+                                @if (party.Status == PartyBookingStatus.Cancelled)
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">Cancelled</FluentBadge>
+                                }
+                                else
+                                {
+                                    <FluentBadge Appearance="BadgeAppearance.Filled" Color="@party.PaymentStatus.Color()">@party.PaymentStatus.Label()</FluentBadge>
+                                }
+                            </div>
+
+                            <div class="party-facts">
+                                <span>@party.ExpectedChildren @(party.ExpectedChildren == 1 ? "child" : "children")@(party.ExpectedAdults is int adults ? $" · {adults} {(adults == 1 ? "adult" : "adults")}" : string.Empty)</span>
+                                @if (party.Room is not null)
+                                {
+                                    <span>@party.Room</span>
+                                }
+                                <span>@party.MenuType.Label()@(party.EatTimeUtc is DateTime eat ? $" at {RotaFormat.LocalTime(eat)}" : string.Empty)</span>
+                                @if (party.LaserTagTimeUtc is DateTime laser)
+                                {
+                                    <span>Laser tag at @RotaFormat.LocalTime(laser)</span>
+                                }
+                                <span>Host: @(party.PartyHost?.GetName() ?? "not set")</span>
+                            </div>
+
+                            @if (party.AllergyNotes is not null)
+                            {
+                                <div class="party-allergy">
+                                    <FluentIcon Value="@(new Icons.Regular.Size16.Warning())" Color="Color.Warning" />
+                                    <span>@party.AllergyNotes</span>
+                                </div>
+                            }
+                        </a>
+                    }
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    private record LocationOption(int Id, string Name);
+
+    private record PaymentFilterOption(string Key, string Name);
+
+    private static readonly List<PaymentFilterOption> PaymentFilters =
+    [
+        new("all", "All"),
+        new(nameof(PartyPaymentStatus.Unpaid), PartyPaymentStatus.Unpaid.Label()),
+        new(nameof(PartyPaymentStatus.DepositPaid), PartyPaymentStatus.DepositPaid.Label()),
+        new(nameof(PartyPaymentStatus.PaidInFull), PartyPaymentStatus.PaidInFull.Label())
+    ];
+
+    // How far each way the list looks. A year covers how far ahead parties are realistically booked.
+    private const int RangeDays = 365;
+
+    private LocationScope? scope;
+    private List<LocationOption> locationOptions = [];
+    private int? locationId;
+    private DateOnly today;
+    private bool past;
+    private bool includeCancelled;
+    private string? paymentFilter = "all";
+
+    private List<PartyBooking>? bookings;
+    private string? loadError;
+
+    private string NewPartyHref => locationId is int id ? $"/manage/parties/new?location={id}" : "/manage/parties/new";
+
+    private IEnumerable<PartyBooking> Visible
+    {
+        get
+        {
+            IEnumerable<PartyBooking> list = bookings ?? [];
+
+            if (Enum.TryParse(paymentFilter, out PartyPaymentStatus status))
+            {
+                list = list.Where(x => x.Status == PartyBookingStatus.Booked && x.PaymentStatus == status);
+            }
+
+            return past ? list.OrderByDescending(x => x.StartUtc) : list;
+        }
+    }
+
+    private string EmptyText => past
+        ? "No past parties match."
+        : paymentFilter == "all" ? "No parties booked yet. Use \"Book a party\" to add one." : "No upcoming parties match.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = RotaTime.Today(DateTime.UtcNow);
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // A Manager sees the parties at the location they signed in under (the service enforces
+        // the same rule); an Admin may pick any active location.
+        if (scope.IsAdmin)
+        {
+            Result<List<Location>> locationsResult = await _companyLocationService.GetLocationsAsync();
+
+            locationOptions = locationsResult.IsSuccess && locationsResult.Data is not null
+                ? locationsResult.Data.OrderBy(l => l.GetDisplayName()).Select(l => new LocationOption(l.Id, l.GetDisplayName())).ToList()
+                : [];
+        }
+        else if (scope.LocationId is int scopeLocationId)
+        {
+            locationOptions = [new LocationOption(scopeLocationId, scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        locationId = LocationQuery is int requested && locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : scope.LocationId is int own && locationOptions.Any(l => l.Id == own)
+                ? own
+                : locationOptions.FirstOrDefault()?.Id;
+
+        if (locationId is null)
+        {
+            loadError = "There are no active locations to book parties at yet.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null || locationId is not int location)
+        {
+            return;
+        }
+
+        (DateOnly from, DateOnly to) = past
+            ? (today.AddDays(-RangeDays), today.AddDays(-1))
+            : (today, today.AddDays(RangeDays));
+
+        Result<List<PartyBooking>> result = await _partyBookingService.GetBookingsAsync(scope, location, from, to, includeCancelled);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            loadError = result.Error;
+            bookings = null;
+            return;
+        }
+
+        loadError = null;
+        bookings = result.Data;
+    }
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id) && id != locationId)
+        {
+            _navigationManager.NavigateTo(_navigationManager.GetUriWithQueryParameter("location", id));
+        }
+    }
+
+    private async Task SetPastAsync(bool value)
+    {
+        if (past == value)
+        {
+            return;
+        }
+
+        past = value;
+        bookings = null;
+        await LoadAsync();
+    }
+
+    private async Task OnIncludeCancelledChanged(bool value)
+    {
+        includeCancelled = value;
+        await LoadAsync();
+    }
+}

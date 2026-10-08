@@ -601,5 +601,17 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-08",
+    "summary": "Book kids' parties in Lanyard.",
+    "details": [
+      "New Parties section under Management. Book a party with the birthday child's name and age, the parent's contact details, how many children and adults are coming, the room, the eating and laser tag times, hot or cold food and the party host.",
+      "The Parties page lists upcoming parties day by day, with filters for past parties, cancelled parties and payment status.",
+      "Record the total price and deposit, then mark the deposit and the balance as paid. Each party shows whether it's unpaid, deposit paid or paid in full, and how much is still to pay.",
+      "Parties can be cancelled and reinstated. Admins can switch between locations; managers see the parties at their own location.",
+      "Admins can switch Parties on or off for each company under Manage > Companies & Locations."
+    ]
   }
 ]
