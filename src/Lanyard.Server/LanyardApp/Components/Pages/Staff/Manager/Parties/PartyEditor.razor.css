@@ -1,0 +1,171 @@
+.party-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 8px;
+    max-width: 1200px;
+}
+
+.party-editor-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.party-editor-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.party-editor-title h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* Two columns of section cards on a wide screen, one on a phone. */
+.party-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+.party-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+/* Fluent's fields carry their own vertical margin, which doubles up with the section gap. */
+.party-section ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.party-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+.party-section h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.party-section ::deep .party-full,
+.party-section ::deep .party-full fluent-text-input,
+.party-section ::deep .party-full fluent-textarea {
+    width: 100%;
+    max-width: none;
+}
+
+.party-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.party-pair-wide {
+    grid-template-columns: 3fr 1fr;
+}
+
+.party-pair > ::deep *,
+.party-pair ::deep fluent-text-input {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+}
+
+.party-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: -6px;
+}
+
+.party-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.party-label {
+    font-size: var(--fontSizeBase300);
+    font-weight: var(--fontWeightRegular);
+    color: var(--colorNeutralForeground1);
+}
+
+.party-toggle {
+    display: flex;
+    gap: 6px;
+}
+
+.party-payment-status {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.party-payment-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.party-payment-title {
+    font-weight: 600;
+}
+
+.party-payment-meta {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.party-section ::deep .party-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.party-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.party-actions ::deep .party-save {
+    margin-left: auto;
+}
+
+@media (max-width: 900px) {
+    .party-sections {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .party-pair-wide {
+        grid-template-columns: 2fr 1fr;
+    }
+
+    .party-actions ::deep .party-save {
+        width: 100%;
+        margin-left: 0;
+        order: -1;
+    }
+}

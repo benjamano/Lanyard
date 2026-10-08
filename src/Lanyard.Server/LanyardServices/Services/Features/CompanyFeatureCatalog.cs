@@ -20,7 +20,9 @@ public static class CompanyFeatureCatalog
         new(CompanyFeature.Onboarding, "Onboarding",
             "Onboarding emails and staff document types."),
         new(CompanyFeature.Announcements, "Announcements",
-            "The Announcements page and widget.")
+            "The Announcements page and widget."),
+        new(CompanyFeature.Parties, "Parties",
+            "Party bookings, deposits and the documents printed for each party.")
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.

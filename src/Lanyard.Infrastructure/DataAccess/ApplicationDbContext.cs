@@ -120,6 +120,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppInstallation> AppInstallations { get; set; }
         public DbSet<ShiftClaim> ShiftClaims { get; set; }
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
+        public DbSet<PartyBooking> PartyBookings { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -417,6 +418,30 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.LocationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PartyBooking>()
+                .HasIndex(x => new { x.LocationId, x.StartUtc });
+
+            modelBuilder.Entity<PartyBooking>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The host is optional, so a deleted user just leaves the party without a host.
+            modelBuilder.Entity<PartyBooking>()
+                .HasOne(x => x.PartyHost)
+                .WithMany()
+                .HasForeignKey(x => x.PartyHostUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PartyBooking>()
+                .Property(x => x.TotalPrice)
+                .HasPrecision(10, 2);
+
+            modelBuilder.Entity<PartyBooking>()
+                .Property(x => x.DepositAmount)
+                .HasPrecision(10, 2);
 
             // Terminals are looked up by the hash of the device's cookie token on every page load.
             modelBuilder.Entity<ClockInTerminal>()

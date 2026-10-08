@@ -17,5 +17,8 @@ public enum CompanyFeature
     Onboarding = 4,
 
     // The Announcements page and widget.
-    Announcements = 5
+    Announcements = 5,
+
+    // Party bookings and the documents printed for each party.
+    Parties = 6
 }
