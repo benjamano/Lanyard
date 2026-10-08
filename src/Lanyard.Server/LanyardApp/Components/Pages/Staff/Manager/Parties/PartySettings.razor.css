@@ -1,0 +1,71 @@
+.party-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 8px;
+    max-width: 1300px;
+}
+
+.party-settings-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.party-settings-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.party-settings-header ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.party-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.settings-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+    min-width: 0;
+}
+
+.settings-card h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.settings-card ::deep fluent-field {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.settings-intro {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    font-size: 0.9rem;
+}
+
+.settings-example {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--colorNeutralBackground3);
+    font-size: 0.9rem;
+}

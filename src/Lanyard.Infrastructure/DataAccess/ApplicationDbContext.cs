@@ -121,6 +121,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ShiftClaim> ShiftClaims { get; set; }
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
         public DbSet<PartyBooking> PartyBookings { get; set; }
+        public DbSet<PartyLocationSettings> PartyLocationSettings { get; set; }
+        public DbSet<PartyMenuItem> PartyMenuItems { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -442,6 +444,19 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<PartyBooking>()
                 .Property(x => x.DepositAmount)
                 .HasPrecision(10, 2);
+
+            modelBuilder.Entity<PartyLocationSettings>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
+
+            modelBuilder.Entity<PartyMenuItem>()
+                .HasIndex(x => new { x.LocationId, x.Kind, x.SortOrder });
+
+            modelBuilder.Entity<PartyMenuItem>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Terminals are looked up by the hash of the device's cookie token on every page load.
             modelBuilder.Entity<ClockInTerminal>()
@@ -850,6 +865,8 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClockInTerminal>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<TimeEntry>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<TimeOffRequest>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<PartyLocationSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<PartyMenuItem>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
