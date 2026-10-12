@@ -1,0 +1,167 @@
+@using Lanyard.App.Components.Compliance
+@using Lanyard.Application.Services.Compliance
+@using Lanyard.Infrastructure.DTO.Compliance
+
+@inject IComplianceService _complianceService
+@inject ICompanyFeatureService _companyFeatureService
+
+@* Overdue training and expired/expiring staff documents for the viewing Admin or Manager. Nobody
+   else - a plain staff member, or a signed-out kiosk screen - gets anything but a short note, and
+   the data is never even requested for them. Names and counts only; no file links. *@
+
+<FluentCard Height="100%">
+    <div class="sw-body">
+        <div class="sw-header">
+            <span class="sw-title">@(Widget.Title ?? "Compliance at a glance")</span>
+            @if (_state == State.Ready && _summary is not null)
+            {
+                <span class="sw-count">@_summary.LocationName</span>
+            }
+        </div>
+
+        @switch (_state)
+        {
+            case State.Loading:
+                <div class="sw-empty"><FluentSpinner /></div>
+                break;
+            case State.Failed:
+                <div class="sw-empty" title="@_error">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Danger">Couldn't load compliance figures</FluentBadge>
+                </div>
+                break;
+            case State.NotManager:
+                <div class="sw-empty">
+                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Shown to managers</FluentBadge>
+                </div>
+                break;
+            default:
+                @if (VisibleSections.Count == 0)
+                {
+                    <div class="sw-empty">
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Training and onboarding are switched off</FluentBadge>
+                    </div>
+                }
+                else if (VisibleSections.All(x => x.ItemCount == 0))
+                {
+                    <div class="sw-empty">
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Success">All clear</FluentBadge>
+                    </div>
+                }
+                else
+                {
+                    <div class="sw-list">
+                        @foreach (ComplianceSection section in VisibleSections)
+                        {
+                            <div class="cs-section">
+                                <button type="button" class="cs-head" disabled="@(!AllowTrigger)"
+                                        title="@($"See all {ComplianceDisplay.Label(section.Kind).ToLowerInvariant()}")"
+                                        @onclick="@(() => OpenSection(section.Kind))">
+                                    <span class="cs-label">@ComplianceDisplay.Label(section.Kind)</span>
+                                    <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@ComplianceDisplay.Color(section.Kind, section.ItemCount)">
+                                        @section.ItemCount
+                                    </FluentBadge>
+                                </button>
+
+                                @foreach (ComplianceRow row in section.Rows)
+                                {
+                                    <button type="button" class="sw-row" disabled="@(!AllowTrigger)"
+                                            @onclick="@(() => OpenPerson(section.Kind, row.UserId))">
+                                        <span class="sw-text">
+                                            <span class="sw-primary">@row.DisplayName</span>
+                                            <span class="sw-secondary">@row.Detail</span>
+                                        </span>
+                                    </button>
+                                }
+
+                                @if (section.ItemCount > section.Rows.Count)
+                                {
+                                    <span class="cs-more">and @(section.ItemCount - section.Rows.Count) more</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                break;
+        }
+    </div>
+</FluentCard>
+
+@code {
+    [Parameter]
+    public required ComplianceSummaryWidget Widget { get; set; }
+
+    [Parameter]
+    public bool AllowTrigger { get; set; } = true;
+
+    private enum State { Loading, Failed, NotManager, Ready }
+
+    private State _state = State.Loading;
+    private string? _error;
+    private ComplianceSummary? _summary;
+    private IReadOnlySet<CompanyFeature> _hiddenFeatures = new HashSet<CompanyFeature>();
+
+    private List<ComplianceSection> VisibleSections => _summary is null
+        ? []
+        : [.. _summary.Sections.Where(x => !_hiddenFeatures.Contains(ComplianceDisplay.Feature(x.Kind)))];
+
+    // The grid (and the kiosk host) re-render widgets often; only go back to the database when this
+    // widget's settings have actually changed, e.g. after its config dialog is saved.
+    private (int? LocationId, int Days, int MaxItems)? _loadedSettings;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        (int? LocationId, int Days, int MaxItems) settings = (Widget.LocationId, Widget.ExpiryWindowDays, Widget.MaxItems);
+
+        if (_loadedSettings == settings)
+        {
+            return;
+        }
+
+        _loadedSettings = settings;
+
+        // Gate first: a failed scope (signed out, e.g. a kiosk) or a non-manager never reaches the
+        // service. Signed out is not treated as trusted.
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null || !(scope.Data.IsAdmin || scope.Data.IsManager))
+        {
+            _state = State.NotManager;
+            return;
+        }
+
+        _hiddenFeatures = await _companyFeatureService.GetHiddenFeaturesForCurrentUserAsync();
+
+        ComplianceQuery query = new(
+            Widget.LocationId,
+            Math.Clamp(Widget.ExpiryWindowDays, ComplianceQuery.MinExpiryWindowDays, ComplianceQuery.MaxExpiryWindowDays),
+            Math.Clamp(Widget.MaxItems, 0, ComplianceSummaryWidget.MaxSupportedItems));
+
+        Result<ComplianceSummary> result = await _complianceService.GetSummaryAsync(scope.Data, query);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _error = result.Error;
+            _state = State.Failed;
+            return;
+        }
+
+        _summary = result.Data;
+        _state = State.Ready;
+    }
+
+    private void OpenSection(ComplianceSectionKind kind)
+    {
+        if (AllowTrigger && _summary is not null)
+        {
+            _navigationManager.NavigateTo(ComplianceDisplay.PageUrl(kind, _summary.ExpiryWindowDays, _summary.LocationId));
+        }
+    }
+
+    private void OpenPerson(ComplianceSectionKind kind, string userId)
+    {
+        if (AllowTrigger)
+        {
+            _navigationManager.NavigateTo(ComplianceDisplay.PersonUrl(kind, userId));
+        }
+    }
+}

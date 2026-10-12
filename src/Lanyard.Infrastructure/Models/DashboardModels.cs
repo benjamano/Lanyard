@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using Lanyard.Infrastructure.DTO.Compliance;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.FluentUI.AspNetCore.Components;
 
@@ -390,4 +391,28 @@ public class PendingTimeOffWidget : DashboardWidget
     }
 
     public int MaxItems { get; set; }
+}
+
+// Overdue training and expired or expiring staff documents for the viewing Admin/Manager. Shows
+// nothing to anyone else, including a signed-out kiosk. LocationId only applies to an Admin
+// (null = every location in their company); a Manager always sees their own location.
+public class ComplianceSummaryWidget : DashboardWidget
+{
+    public const int MaxSupportedItems = 20;
+
+    [SetsRequiredMembers]
+    public ComplianceSummaryWidget()
+    {
+        Type = WidgetType.ComplianceSummary;
+
+        GridW = 4;
+        GridH = 4;
+
+        MaxItems = 3;
+        ExpiryWindowDays = ComplianceQuery.DefaultExpiryWindowDays;
+    }
+
+    public int MaxItems { get; set; }
+    public int ExpiryWindowDays { get; set; }
+    public int? LocationId { get; set; }
 }

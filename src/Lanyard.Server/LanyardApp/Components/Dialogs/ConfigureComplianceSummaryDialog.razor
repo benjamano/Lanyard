@@ -1,0 +1,94 @@
+@using Lanyard.Infrastructure.Models
+@using Lanyard.Infrastructure.DTO.Compliance
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="6">
+            <FluentIcon Value="@(new Icons.Regular.Size24.ShieldCheckmark())" />
+            <FluentText Weight="TextWeight.Semibold" Color="Color.Default" Size="@TextSize.Size700">
+                Configure Compliance at a Glance
+            </FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            @if (Locations.Count > 0)
+            {
+                <FluentSelect TOption="LocationOption" TValue="string" Items="@Options" OptionText="@(x => x.Name)" OptionValue="@(x => x.Value)"
+                              @bind-Value="selectedValue" Label="Location" Width="100%" />
+            }
+            <p class="cfg-note">
+                Managers always see the location they signed in to. The location set here only applies when an Admin is viewing.
+                Staff and signed-out screens see nothing.
+            </p>
+            <FluentNumberInput TValue="int" @bind-Value="Widget.ExpiryWindowDays"
+                               Min="ComplianceQuery.MinExpiryWindowDays" Max="ComplianceQuery.MaxExpiryWindowDays"
+                               Label="Count documents expiring within (days)" />
+            <FluentNumberInput TValue="int" @bind-Value="Widget.MaxItems" Min="0" Max="ComplianceSummaryWidget.MaxSupportedItems"
+                               Label="Names to show per section (0 for counts only)" />
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync">Save</FluentButton>
+        <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    private const string AllLocationsValue = "all";
+
+    private record LocationOption(string Value, string Name);
+
+    [Parameter]
+    public required ComplianceSummaryWidget Widget { get; set; }
+
+    // Every location in the company for an Admin; empty for anyone else, who can't pick one.
+    [Parameter]
+    public List<Location> Locations { get; set; } = [];
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    private string? selectedValue;
+    private int? _originalLocationId;
+    private int _originalExpiryWindowDays;
+    private int _originalMaxItems;
+
+    private List<LocationOption> Options =>
+    [
+        new(AllLocationsValue, "All locations"),
+        .. Locations.Select(x => new LocationOption(x.Id.ToString(), x.GetDisplayName())),
+        // Keep an already-saved location selectable even if it's no longer in the list.
+        .. Widget.LocationId is int saved && Locations.All(x => x.Id != saved)
+            ? [new LocationOption(saved.ToString(), "The location already set")]
+            : Array.Empty<LocationOption>()
+    ];
+
+    protected override void OnInitialized()
+    {
+        _originalLocationId = Widget.LocationId;
+        _originalExpiryWindowDays = Widget.ExpiryWindowDays;
+        _originalMaxItems = Widget.MaxItems;
+        selectedValue = Widget.LocationId?.ToString() ?? AllLocationsValue;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Locations.Count > 0)
+        {
+            Widget.LocationId = int.TryParse(selectedValue, out int id) ? id : null;
+        }
+
+        Widget.ExpiryWindowDays = Math.Clamp(Widget.ExpiryWindowDays, ComplianceQuery.MinExpiryWindowDays, ComplianceQuery.MaxExpiryWindowDays);
+        Widget.MaxItems = Math.Clamp(Widget.MaxItems, 0, ComplianceSummaryWidget.MaxSupportedItems);
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task CancelAsync()
+    {
+        Widget.LocationId = _originalLocationId;
+        Widget.ExpiryWindowDays = _originalExpiryWindowDays;
+        Widget.MaxItems = _originalMaxItems;
+        await Dialog.CancelAsync();
+    }
+}
