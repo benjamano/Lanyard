@@ -605,8 +605,12 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Announcements can now be emailed to staff.",
+    "summary": "Announcements can now be emailed to staff, See who is behind on training or documents at a glance.",
     "details": [
+      "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
+      "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
+      "The widget only shows anything to Admins and Managers. Other staff, and screens nobody is signed in to, just see \"Shown to managers\".",
+      "Added a new Compliance page under Management, which lists everyone behind each count. Click a name to go straight to their Documents tab or the training dashboard.",
       "When you post an announcement, you can choose to email it to everyone at that location. It's on by default for new announcements.",
       "When you edit an announcement, you can choose to email it again. This is off by default, so fixing a typo doesn't email everyone twice.",
       "Staff who have turned on push notifications get one too. Anyone can turn announcement emails or pushes off under Notification settings.",
