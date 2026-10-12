@@ -91,8 +91,12 @@
                 @GetClientName(context.TriggerClientId)
             </TemplateColumn>
             <PropertyColumn Title="Executed At" Property="@(e => e.ExecutedAt)" />
-            <TemplateColumn Title="Success">
-                @if (context.OverallSuccess)
+            <TemplateColumn Title="Result">
+                @if (context.SkipReason != null)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" title="@context.SkipReason">Skipped</FluentBadge>
+                }
+                else if (context.OverallSuccess)
                 {
                     <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
                 }
@@ -116,7 +120,8 @@
 
     private IEnumerable<AutomationRuleExecution> FilteredExecutions =>
         _showFailuresOnly
-            ? _executions.Where(e => !e.OverallSuccess)
+            // A skipped rule did what it was told (not run), so it isn't a failure.
+            ? _executions.Where(e => !e.OverallSuccess && e.SkipReason == null)
             : _executions;
 
     protected override async Task OnInitializedAsync()
@@ -173,6 +178,18 @@
     }
 
     private static string DescribeTrigger(AutomationRule rule)
+    {
+        int conditionCount = rule.Conditions.Count(c => c.IsActive);
+
+        return conditionCount switch
+        {
+            0 => DescribeTriggerOnly(rule),
+            1 => $"{DescribeTriggerOnly(rule)}, only if 1 condition",
+            _ => $"{DescribeTriggerOnly(rule)}, only if {conditionCount} conditions"
+        };
+    }
+
+    private static string DescribeTriggerOnly(AutomationRule rule)
     {
         switch (rule.TriggerType)
         {

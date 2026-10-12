@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs, and give automation rules \"only if\" conditions.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -632,7 +632,11 @@
       "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
-      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
+      "Automation rules can now have conditions. A rule only runs if every condition is true when it's triggered: the time of day is between two times (a window like 22:00 to 02:00 runs past midnight), it's one of the days you pick, or another kiosk is or isn't in a game.",
+      "Conditions use UK venue time, so they're right in summer as well as winter.",
+      "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
+      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on."
     ]
   }
 ]

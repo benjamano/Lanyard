@@ -74,6 +74,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Folder> Folders { get; set; }
         public DbSet<AutomationRule> AutomationRules { get; set; }
         public DbSet<AutomationRuleAction> AutomationRuleActions { get; set; }
+        public DbSet<AutomationRuleCondition> AutomationRuleConditions { get; set; }
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
@@ -833,6 +834,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ProjectionProgramParameterValue>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgramStep!.ProjectionProgram!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DashboardWidget>().HasQueryFilter(x => TenantFilterDisabled || x.Dashboard!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleAction>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleCondition>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
