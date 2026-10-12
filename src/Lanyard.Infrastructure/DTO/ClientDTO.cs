@@ -57,3 +57,14 @@ public class ClientUpdateTargetDTO
     // True when the kiosk has reported a version and it isn't the one it should be on.
     public bool IsOffTarget => TargetVersion is not null && ReportedVersion is not null && ReportedVersion != TargetVersion;
 }
+
+// One kiosk release as the Kiosk Releases page shows it.
+public class ClientReleaseOverviewDTO
+{
+    public required ClientRelease Release { get; set; }
+
+    public bool IsStable { get; set; }
+
+    // How many PCs, across every company, last reported running this version.
+    public int ReportedPcCount { get; set; }
+}

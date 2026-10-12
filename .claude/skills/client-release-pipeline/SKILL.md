@@ -23,7 +23,15 @@ The workflow does **not** compare the new version against the previous release. 
 2. `dotnet publish`es a self-contained `win-x64` build.
 3. Packages it with Velopack (`vpk pack --packVersion <that version>`).
 4. Tags the commit `LanyardClient-<version>` and pushes the tag.
-5. Uploads and publishes a GitHub Release via `vpk upload github ... --publish`.
+5. Uploads and publishes a GitHub Release via `vpk upload github ... --publish`, adding `--pre` (a GitHub prerelease) when the repository variable `CLIENT_RELEASES_AS_PRERELEASE` is `true`.
+
+## Canary first: the CLIENT_RELEASES_AS_PRERELEASE switch
+
+The Lanyard server treats a non-prerelease as **stable** (every Stable PC gets it) and a prerelease as **canary only** until a PlatformAdmin promotes it on **Manage > Kiosk Releases** (`/manage/client-releases`). That page also withdraws a bad release (no PC is sent it again, and PCs on it move back) or restores one.
+
+The switch is a repository variable, not code, on purpose: kiosks older than 1.0.41 ignore the server and take the newest **non-prerelease** GitHub release. So 1.0.41 (the first server-driven client) must ship as a normal release, and the variable is only flipped to `true` once every PC reports 1.0.41 or newer on the Clients page. If it were a code change, it could land in the same dev->main release as 1.0.41 and strand the old kiosks.
+
+`vpk` is installed unpinned (latest) while the `Velopack` library is pinned in `Lanyard.Client.csproj`. It has worked so far; pinning the tool to the library's 0.0.x version would change the packer and may need an older .NET runtime on the runner, so that's a separate, tested change if it's ever wanted.
 
 There is **no CI gate forcing the client's version to increase**. This is easy to assume exists because the *server* app has exactly that gate: `.github/workflows/ci.yml`'s "Require Lanyard.App version bump" step, which runs on every PR into `main` and fails if `<Version>` in `src/Lanyard.Server/LanyardApp/Lanyard.App.csproj` didn't go up. That check only covers `Lanyard.App.csproj` — it says nothing about `Lanyard.Client.csproj`.
 
