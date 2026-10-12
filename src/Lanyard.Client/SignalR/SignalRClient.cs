@@ -368,6 +368,18 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         await _connection!.InvokeAsync("UpdateLaserGameStatus", status);
     }
 
+    public bool IsConnected => _connection?.State == HubConnectionState.Connected;
+
+    public async Task<bool> ReportKioskHealthAsync(KioskHealthReportDTO report)
+    {
+        if (_connection is null || _connection.State != HubConnectionState.Connected)
+        {
+            return false;
+        }
+
+        return await _connection.InvokeAsync<bool>("ReportKioskHealth", report);
+    }
+
     public async Task<string> IssueKioskTokenAsync()
     {
         if (_connection is null || _connection.State != HubConnectionState.Connected)

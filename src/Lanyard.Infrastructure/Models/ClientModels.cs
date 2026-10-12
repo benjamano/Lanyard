@@ -36,6 +36,41 @@ public class Client : ICompanyOwned
     public string? PreferredAudioDeviceName { get; set; }
 }
 
+/// <summary>
+/// The latest health report a kiosk sent over the hub. One row per kiosk, overwritten on every
+/// heartbeat - there is deliberately no history. A kiosk with no row has never reported (it runs
+/// a client too old to send heartbeats), which is shown differently from a silent one.
+/// </summary>
+public class ClientHealthSnapshot
+{
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    public DateTime FirstHeartbeatUtc { get; set; }
+    public DateTime LastHeartbeatUtc { get; set; }
+
+    public string? ClientVersion { get; set; }
+
+    public DateTime ProcessStartedUtc { get; set; }
+    public long MachineUptimeSeconds { get; set; }
+
+    public double? CpuPercent { get; set; }
+    public double? MemoryPercent { get; set; }
+
+    public long? SystemDriveFreeBytes { get; set; }
+    public long? SystemDriveTotalBytes { get; set; }
+
+    public bool DmxConfigured { get; set; }
+    public bool DmxOpen { get; set; }
+
+    public bool? PreferredAudioDevicePresent { get; set; }
+
+    public bool PacketCaptureConfigured { get; set; }
+    public bool PacketCaptureRunning { get; set; }
+
+    public int ProjectionRunningCount { get; set; }
+}
+
 public class ClientProjectionSettings
 {
     public Guid Id { get; set; }

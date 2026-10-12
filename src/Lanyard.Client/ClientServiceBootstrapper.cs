@@ -1,5 +1,6 @@
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
+using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Client.RemoteRestart;
@@ -70,6 +71,7 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<RemoteRestartController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
+        services.AddSingleton<KioskHealthReporter>();
 
         return services.BuildServiceProvider();
     }

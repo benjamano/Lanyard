@@ -601,5 +601,19 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-12",
+    "summary": "See at a glance whether each kiosk is healthy.",
+    "details": [
+      "Kiosks now check in with the server every 30 seconds, so a kiosk that has frozen or lost its network shows as Unresponsive within about a minute and a half, and as Offline after five more minutes. Before, a frozen kiosk could still look online.",
+      "Manage > Clients has a new Health column, replacing Currently Connected, showing whether each kiosk is Healthy, Degraded, Unresponsive, Offline or Disconnected. Hover over it to see why.",
+      "A kiosk shows as Degraded when it is low on disk space, its DMX device or preferred speaker isn't connected, its zone scoreboard capture has stopped, or its CPU or memory is nearly maxed out.",
+      "Each kiosk's settings have a new Health tab with its version, how long it has been running, CPU, memory, disk space, and whether DMX, audio, scoreboard capture and projection are working.",
+      "The Kiosk Health dashboard widget uses the same health check and lists kiosks that need attention first. Its \"only show offline kiosks\" option is now \"only show kiosks that need attention\" and includes degraded kiosks.",
+      "Kiosks need to update to start reporting health, which they do the next time they restart. Until then the Health column just shows whether they are connected.",
+      "A kiosk no longer shuts itself down when it can't check for updates at start-up (for example while the internet is down); it now starts on its current version."
+    ]
   }
 ]

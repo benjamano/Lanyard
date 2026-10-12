@@ -825,6 +825,62 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableVideoDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientHealthSnapshot", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<double?>("CpuPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("DmxConfigured")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("DmxOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("FirstHeartbeatUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastHeartbeatUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("MachineUptimeSeconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<double?>("MemoryPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("PacketCaptureConfigured")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PacketCaptureRunning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("PreferredAudioDevicePresent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ProcessStartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ProjectionRunningCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("SystemDriveFreeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("SystemDriveTotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("ClientHealthSnapshots");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3626,6 +3682,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
                         .WithMany()
                         .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientHealthSnapshot", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithOne()
+                        .HasForeignKey("Lanyard.Infrastructure.Models.ClientHealthSnapshot", "ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

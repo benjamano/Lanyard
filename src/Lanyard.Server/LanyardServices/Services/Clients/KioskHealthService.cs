@@ -1,0 +1,152 @@
+using Lanyard.Application.SignalR;
+using Lanyard.Infrastructure.DataAccess;
+using Lanyard.Infrastructure.Models;
+using Lanyard.Infrastructure.DTO;
+using Lanyard.Shared.DTO;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Lanyard.Application.Services.Clients;
+
+public class KioskHealthService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    IOptions<KioskHealthOptions> options,
+    TimeProvider timeProvider,
+    ILogger<KioskHealthService> logger) : IKioskHealthService
+{
+    // Anyone holding the shared kiosk secret can call the hub as any client, so a report is
+    // ignored if it comes in faster than this rather than turning into a write per call.
+    internal static readonly TimeSpan MinReportSpacing = TimeSpan.FromSeconds(10);
+
+    private const int MaxVersionLength = 32;
+    private const int MaxProjectionCount = 64;
+
+    private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly KioskHealthOptions _options = options.Value;
+    private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly ILogger<KioskHealthService> _logger = logger;
+
+    public async Task<Result<bool>> RecordReportAsync(Guid clientId, KioskHealthReportDTO report)
+    {
+        try
+        {
+            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            ClientHealthSnapshot? snapshot = await ctx.ClientHealthSnapshots
+                .FirstOrDefaultAsync(x => x.ClientId == clientId);
+
+            if (snapshot == null)
+            {
+                if (!await ctx.Clients.AnyAsync(x => x.Id == clientId))
+                {
+                    return Result<bool>.Fail("Client not found");
+                }
+
+                snapshot = new ClientHealthSnapshot { ClientId = clientId, FirstHeartbeatUtc = now };
+                ctx.ClientHealthSnapshots.Add(snapshot);
+            }
+            else if (now - snapshot.LastHeartbeatUtc < MinReportSpacing)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            Apply(snapshot, report, now);
+
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record a health report for client {ClientId}", clientId);
+            return Result<bool>.Fail($"Failed to record the health report: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<Dictionary<Guid, KioskHealthView>>> GetHealthAsync()
+    {
+        try
+        {
+            DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
+            HashSet<string> connectedIds = GetConnectedConnectionIds().ToHashSet();
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Select(x => new { x.Id, x.MostRecentConnectionId, x.LastDisconnectDate })
+                .ToListAsync();
+
+            Dictionary<Guid, ClientHealthSnapshot> snapshots = await ctx.ClientHealthSnapshots
+                .AsNoTracking()
+                .TagWithCallSite()
+                .ToDictionaryAsync(x => x.ClientId);
+
+            string? newestVersion = KioskHealthEvaluator.Newest(snapshots.Values.Select(x => x.ClientVersion));
+
+            Dictionary<Guid, KioskHealthView> health = clients.ToDictionary(
+                x => x.Id,
+                x => KioskHealthEvaluator.Evaluate(
+                    snapshots.GetValueOrDefault(x.Id),
+                    x.MostRecentConnectionId != null && connectedIds.Contains(x.MostRecentConnectionId),
+                    x.LastDisconnectDate,
+                    now,
+                    _options,
+                    newestVersion));
+
+            return Result<Dictionary<Guid, KioskHealthView>>.Ok(health);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load kiosk health");
+            return Result<Dictionary<Guid, KioskHealthView>>.Fail($"Failed to load kiosk health: {ex.Message}");
+        }
+    }
+
+    // Same seam as ClientService.GetConnectedConnectionIds: the hub's connection set is
+    // process-static, so tests override this instead.
+    protected internal virtual IReadOnlyCollection<string> GetConnectedConnectionIds()
+    {
+        return SignalRControlHub.ConnectedIds;
+    }
+
+    private static void Apply(ClientHealthSnapshot snapshot, KioskHealthReportDTO report, DateTime now)
+    {
+        snapshot.LastHeartbeatUtc = now;
+
+        string? version = report.ClientVersion?.Trim();
+        snapshot.ClientVersion = string.IsNullOrEmpty(version)
+            ? null
+            : version.Length > MaxVersionLength ? version[..MaxVersionLength] : version;
+
+        snapshot.ProcessStartedUtc = DateTime.SpecifyKind(report.ProcessStartedUtc, DateTimeKind.Utc);
+        snapshot.MachineUptimeSeconds = Math.Max(0, report.MachineUptimeSeconds);
+
+        snapshot.CpuPercent = ClampPercent(report.CpuPercent);
+        snapshot.MemoryPercent = ClampPercent(report.MemoryPercent);
+
+        snapshot.SystemDriveFreeBytes = report.SystemDriveFreeBytes is >= 0 ? report.SystemDriveFreeBytes : null;
+        snapshot.SystemDriveTotalBytes = report.SystemDriveTotalBytes is > 0 ? report.SystemDriveTotalBytes : null;
+
+        snapshot.DmxConfigured = report.DmxConfigured;
+        snapshot.DmxOpen = report.DmxOpen;
+        snapshot.PreferredAudioDevicePresent = report.PreferredAudioDevicePresent;
+        snapshot.PacketCaptureConfigured = report.PacketCaptureConfigured;
+        snapshot.PacketCaptureRunning = report.PacketCaptureRunning;
+        snapshot.ProjectionRunningCount = Math.Clamp(report.ProjectionRunningCount, 0, MaxProjectionCount);
+    }
+
+    private static double? ClampPercent(double? value)
+    {
+        if (value is not double v || double.IsNaN(v) || double.IsInfinity(v))
+        {
+            return null;
+        }
+
+        return Math.Clamp(v, 0, 100);
+    }
+}

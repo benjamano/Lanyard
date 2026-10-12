@@ -10,4 +10,7 @@ public interface IProjectionProgramsService
     Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms);
     Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted);
     Task CloseWindowForDisplayAsync(int displayIndex);
+
+    /// <summary>How many projection windows are open right now.</summary>
+    int RunningCount { get; }
 }

@@ -1,3 +1,4 @@
+using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -37,7 +38,17 @@ public partial class App : Application
             {
                 VelopackApp.Build().Run();
 
-                await AutoUpdater.CheckForUpdatesAsync();
+                // An update check that fails (GitHub unreachable, rate limited) must not stop the
+                // kiosk: it used to fall through to the fatal handler below, so a network blip at
+                // boot exited the client and counted towards the Watchdog's crash-loop limit.
+                try
+                {
+                    await AutoUpdater.CheckForUpdatesAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Update check failed, starting the current version: {ex.Message}");
+                }
 
                 string version = AutoUpdater.GetCurrentVersion() ?? "Unknown Version";
 
@@ -63,6 +74,8 @@ public partial class App : Application
 
             await signalRClient.Connect(registrations);
             await laserGameStatePublisher.PublishAsync();
+
+            provider.GetRequiredService<KioskHealthReporter>().Start();
         }
         catch (Exception ex)
         {

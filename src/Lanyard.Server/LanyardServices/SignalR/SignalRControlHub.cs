@@ -30,7 +30,8 @@ public class SignalRControlHub(
     IClientZoneScoreboardService clientZoneScoreboardService,
     IVideoStreamTokenService videoStreamTokenService,
     IGameResultService gameResultService,
-    IClientSecretValidator clientSecretValidator) : Hub, ISignalRProjectionControlHub
+    IClientSecretValidator clientSecretValidator,
+    IKioskHealthService kioskHealthService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
@@ -44,6 +45,7 @@ public class SignalRControlHub(
     private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
     private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;
     private readonly IGameResultService _gameResultService = gameResultService;
+    private readonly IKioskHealthService _kioskHealthService = kioskHealthService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -341,6 +343,28 @@ public class SignalRControlHub(
                 _logger.LogWarning("Failed to record completed game for client {ClientId}: {Error}", clientId, recordResult.Error);
             }
         }
+    }
+
+    // Called by the kiosk's KioskHealthReporter every heartbeat; the name must match its
+    // InvokeAsync call. Returns whether the report was stored, so the client knows it landed.
+    public async Task<bool> ReportKioskHealth(KioskHealthReportDTO report)
+    {
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID for health report from {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return false;
+        }
+
+        Result<bool> recordResult = await _kioskHealthService.RecordReportAsync(getResult.Data, report);
+
+        if (!recordResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to record health report for client {ClientId}: {Error}", getResult.Data, recordResult.Error);
+            return false;
+        }
+
+        return recordResult.Data;
     }
 
     // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.
