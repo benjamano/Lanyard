@@ -1,11 +1,13 @@
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.Controllers;
+using Lanyard.Client.Diagnostics;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Client.RemoteRestart;
 using Lanyard.Client.RestartScheduler;
 using Lanyard.Client.SignalR;
 using Lanyard.Client.VideoPublisher;
+using Lanyard.Shared.Diagnostics;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -17,6 +19,11 @@ public static class ClientServiceBootstrapper
     public static ServiceProvider BuildServiceProvider()
     {
         ServiceCollection services = new ServiceCollection();
+
+        // Created up front because the logging provider below and the diagnostics controller
+        // must share the same instance.
+        LogLineBuffer logLineBuffer = new LogLineBuffer();
+        string?[] knownSecrets = [Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET")];
 
         services.AddLogging(config =>
         {
@@ -39,6 +46,8 @@ public static class ClientServiceBootstrapper
                     .AddService(serviceName: "Lanyard.Client", serviceInstanceId: Environment.MachineName));
                 otel.AddOtlpExporter();
             });
+
+            config.AddProvider(new RingBufferLoggerProvider(logLineBuffer, knownSecrets));
         });
 
         services.Configure<Microsoft.Extensions.Logging.Console.ConsoleFormatterOptions>(options =>
@@ -70,6 +79,8 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<RemoteRestartController>();
         services.AddSingleton<IAudioDeviceService, AudioDeviceService>();
         services.AddSingleton<AudioSettingsController>();
+        services.AddSingleton(logLineBuffer);
+        services.AddSingleton<ClientDiagnosticsController>();
 
         return services.BuildServiceProvider();
     }
@@ -85,7 +96,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<VideoPublisherSignalRController>().Register,
             provider.GetRequiredService<RestartScheduleController>().Register,
             provider.GetRequiredService<RemoteRestartController>().Register,
-            provider.GetRequiredService<AudioSettingsController>().Register
+            provider.GetRequiredService<AudioSettingsController>().Register,
+            provider.GetRequiredService<ClientDiagnosticsController>().Register
         ];
     }
 }

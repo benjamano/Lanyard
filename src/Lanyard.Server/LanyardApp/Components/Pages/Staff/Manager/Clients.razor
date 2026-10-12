@@ -17,14 +17,14 @@
         Clients
     </FluentText>
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 1fr" Style="width: 100%;" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr 1fr 1fr 140px" Style="width: 100%;" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
                 <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
-                                Property="x => x.LastLogin" Title="Last Login" />
-                <TemplateColumn Title="Capabilities">
+                                Property="x => x.LastLogin" Title="Last Login" Class="clients-col-login" />
+                <TemplateColumn Title="Capabilities" Class="clients-col-capabilities">
                     @if (context.ProjectionEnabled)
                     {
                         <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">Projection</FluentBadge>
@@ -35,7 +35,7 @@
                         <FluentBadge Appearance="BadgeAppearance.Filled" Class="me-1">DMX</FluentBadge>
                     }
                 </TemplateColumn>
-                <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" />
+                <PropertyColumn Sortable="true" Property="@(x => x.IsCurrentlyConnected ? "Yes" : "No")" Title="Currently Connected" Class="clients-col-connected" />
                 <TemplateColumn Title="Current Session Length" Class="clients-col-session">
                     @if (context.IsCurrentlyConnected && context.LastLogin is DateTime lastLogin)
                     {
@@ -58,6 +58,11 @@
                                       IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenRestartClientDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Diagnostics" : "Diagnostics (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenDiagnosticsDialogAsync(context)" />
                     </FluentStack>
                 </TemplateColumn>
             </ChildContent>
@@ -175,6 +180,18 @@
         }
 
         await GetClientsAsync();
+    }
+
+    private async Task OpenDiagnosticsDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientDiagnosticsDialog>(options =>
+        {
+            options.Header.Title = $"Diagnostics: {client.Name}";
+            options.Width = "min(1100px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientName), client.Name);
+        });
     }
 
     private async Task OpenClientSettingsDialog(Guid clientId)

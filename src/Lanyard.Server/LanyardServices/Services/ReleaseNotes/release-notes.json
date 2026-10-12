@@ -601,5 +601,16 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-12",
+    "summary": "Admins can read a kiosk's recent log from the Clients page.",
+    "details": [
+      "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
+      "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
+      "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
+      "On a phone, the Clients list now shows just each kiosk's name, whether it's connected and its buttons, so Settings, Restart and Diagnostics no longer need a sideways scroll."
+    ]
   }
 ]

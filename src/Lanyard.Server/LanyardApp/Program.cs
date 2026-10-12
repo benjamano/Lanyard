@@ -102,6 +102,7 @@ builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
+builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
@@ -168,6 +169,7 @@ builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();

@@ -128,6 +128,14 @@ time off, erasure keeps the decision but clears their name from it. Requests can
 reason for a rejection and notes from the requester; managers should avoid putting medical detail
 in either. Leave types and company or position allowances contain no personal data.
 
+### Kiosk diagnostics
+
+An Admin can fetch the last 500 lines a kiosk has logged (Manage > Clients > Diagnostics). Those
+lines can mention staff or customers, so the log tail is **held in server memory only, for 10
+minutes**, then dropped (and on any server restart). It is never written to the database, file
+storage or telemetry, only Admins can view it, and each request is recorded in the server log with
+the Admin's name. The shared secret and tokens in URLs are redacted on the kiosk before it is sent.
+
 ## Required follow-up work (tracked separately)
 
 These are deliberately **not** implemented as part of the security-hardening change because they

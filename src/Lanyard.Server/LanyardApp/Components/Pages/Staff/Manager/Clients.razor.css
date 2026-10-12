@@ -4,14 +4,18 @@
     overflow-x: auto;
 }
 
+/* Phone: only the name, whether it's connected, and the action buttons (settings, restart,
+   diagnostics) fit, so the actions stay on screen instead of behind a sideways scroll. */
 @media (max-width: 599px) {
     ::deep .clients-col-id,
     ::deep .clients-col-ip,
+    ::deep .clients-col-login,
+    ::deep .clients-col-capabilities,
     ::deep .clients-col-session {
         display: none;
     }
 
     ::deep .clients-grid {
-        grid-template-columns: 0px 2fr 0px 1fr 1fr 1fr 0px 1fr !important;
+        grid-template-columns: 0px 1fr 0px 0px 0px 84px 0px 140px !important;
     }
 }

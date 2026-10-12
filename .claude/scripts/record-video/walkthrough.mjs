@@ -152,7 +152,11 @@ function overlayInit() {
         flex-direction: column; gap: 10px; background: #14151a; color: #fff; font-family: system-ui, 'Segoe UI', sans-serif;
         text-align: center; padding: 24px; transition: opacity .5s; }
       #__wt_title h1 { margin: 0; font-size: clamp(26px, 4.5vw, 48px); font-weight: 650; }
-      #__wt_title p { margin: 0; font-size: clamp(14px, 1.8vw, 20px); color: #b8bcc8; }`;
+      #__wt_title p { margin: 0; font-size: clamp(14px, 1.8vw, 20px); color: #b8bcc8; }
+      /* Undo the UA [popover] defaults (inset: 0, margin: auto, border, padding, Canvas background). */
+      #__wt_cursor:popover-open { right: auto; bottom: auto; padding: 0; border: 0; background: transparent; overflow: visible; }
+      #__wt_caption:popover-open { top: auto; right: auto; margin: 0; border: 0; overflow: visible; }
+      #__wt_box:popover-open { right: auto; bottom: auto; margin: 0; padding: 0; background: transparent; overflow: visible; }`;
     document.documentElement.appendChild(css);
     const cursor = document.createElement('div');
     cursor.id = '__wt_cursor';
@@ -162,6 +166,24 @@ function overlayInit() {
     const box = document.createElement('div');
     box.id = '__wt_box';
     document.documentElement.append(box, caption, cursor);
+    // A modal <dialog> (Fluent dialogs use showModal) sits in the browser's top layer, above
+    // any z-index, which hid the caption and highlight behind it. Manual popovers live in the
+    // top layer too, stacked in the order they were shown, so re-showing them after the page
+    // changes puts them back above a dialog that has just opened.
+    if ('showPopover' in HTMLElement.prototype) {
+      const overlays = [box, caption, cursor];
+      overlays.forEach((el) => el.setAttribute('popover', 'manual'));
+      const raise = () => overlays.forEach((el) => {
+        if (el.matches(':popover-open')) el.hidePopover();
+        el.showPopover();
+      });
+      raise();
+      let pending = 0;
+      new MutationObserver(() => {
+        clearTimeout(pending);
+        pending = setTimeout(raise, 120);
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'hidden', 'class'] });
+    }
     const pos = JSON.parse(sessionStorage.getItem('__wt_pos') || 'null');
     if (pos) { cursor.style.left = pos[0] + 'px'; cursor.style.top = pos[1] + 'px'; }
     const text = sessionStorage.getItem('__wt_caption');
