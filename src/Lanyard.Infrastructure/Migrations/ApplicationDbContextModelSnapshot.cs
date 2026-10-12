@@ -3159,6 +3159,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(4);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ComplianceSummaryWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int>("ExpiryWindowDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_ExpiryWindowDays");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(18);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.DigitalClockWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");

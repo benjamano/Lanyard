@@ -251,6 +251,18 @@
                                     <RenderPendingTimeOffWidget Widget="pendingTimeOffWidget" AllowTrigger="PreviewMode" />
                                 </div>
                                 break;
+                            case WidgetType.ComplianceSummary:
+                                if (widget is not ComplianceSummaryWidget complianceSummaryWidget)
+                                {
+                                    break;
+                                }
+
+                                <div class="dashboard-widget-host"
+                                    @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
+                                    @oncontextmenu:preventDefault="true">
+                                    <RenderComplianceSummaryWidget Widget="complianceSummaryWidget" AllowTrigger="PreviewMode" />
+                                </div>
+                                break;
                             case WidgetType.Greeting:
                                 @* Nothing to configure, so no right-click config dialog here. *@
                                 <div class="dashboard-widget-host">
@@ -485,6 +497,9 @@
             case PendingTimeOffWidget pendingTimeOffWidget:
                 await ShowSimpleConfigDialog<ConfigurePendingTimeOffDialog>(nameof(ConfigurePendingTimeOffDialog.Widget), pendingTimeOffWidget);
                 break;
+            case ComplianceSummaryWidget complianceSummaryWidget:
+                await ShowConfigureComplianceSummaryDialog(complianceSummaryWidget);
+                break;
             case ProjectionStatusWidget projectionStatusWidget:
                 await ShowConfigureProjectionStatusDialog(projectionStatusWidget);
                 break;
@@ -665,6 +680,32 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ConfigureWhoIsOnTodayDialog.Widget), whoIsOnTodayWidget);
             options.Parameters.Add(nameof(ConfigureWhoIsOnTodayDialog.Locations), pickable);
+        });
+
+        if (!dialogResult.Cancelled)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfigureComplianceSummaryDialog(ComplianceSummaryWidget complianceSummaryWidget)
+    {
+        // Only an Admin picks a location; a Manager's view is always their own location, so they
+        // get no list to choose from.
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+        List<Location> pickable = [];
+
+        if (scope.Data?.IsAdmin == true)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            pickable = [.. (locations.Data ?? []).OrderBy(x => x.GetDisplayName())];
+        }
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfigureComplianceSummaryDialog>(options =>
+        {
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfigureComplianceSummaryDialog.Widget), complianceSummaryWidget);
+            options.Parameters.Add(nameof(ConfigureComplianceSummaryDialog.Locations), pickable);
         });
 
         if (!dialogResult.Cancelled)
