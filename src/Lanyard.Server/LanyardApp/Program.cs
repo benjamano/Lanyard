@@ -107,6 +107,7 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddHttpClient<IGitHubClientReleaseSource, GitHubClientReleaseSource>(client => client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<IClientReleaseCatalogService, ClientReleaseCatalogService>();
 builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService>();
+builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();

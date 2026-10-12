@@ -1,0 +1,71 @@
+@using Lanyard.Application.Services.ClientReleases
+
+@* Confirms promoting, withdrawing or restoring a kiosk release. Closes with the withdraw reason
+   (or an empty string for the other two); cancelling closes with nothing. *@
+<FluentDialogBody>
+    <ChildContent>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+            <FluentText>@Explanation()</FluentText>
+
+            @if (Action == ClientReleaseAction.Withdraw)
+            {
+                <FluentTextArea @bind-Value="_reason" Immediate="true" Rows="3" Maxlength="@ClientReleaseAdminService.MaxWithdrawReasonLength"
+                                Label="Why is it being withdrawn?" Placeholder="For example: projector windows don't open after updating"
+                                Class="w-100" />
+            }
+        </FluentStack>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.End">
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@ConfirmAsync"
+                          Disabled="@(Action == ClientReleaseAction.Withdraw && string.IsNullOrWhiteSpace(_reason))">
+                @ConfirmLabel()
+            </FluentButton>
+            <FluentButton OnClick="@CancelAsync">Cancel</FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    public enum ClientReleaseAction
+    {
+        Promote,
+        Withdraw,
+        Restore
+    }
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public ClientReleaseAction Action { get; set; }
+
+    [Parameter]
+    public string Version { get; set; } = string.Empty;
+
+    private string? _reason;
+
+    private string Explanation() => Action switch
+    {
+        ClientReleaseAction.Promote => $"Every PC set to Stable, at every company, moves to v{Version} the next time it restarts. Only do this once it has run well on your canary PCs.",
+        ClientReleaseAction.Withdraw => $"No PC will be sent v{Version} again. PCs already on it move back to the newest release still allowed for them the next time they restart. PCs pinned to it stay where they are until someone picks another version.",
+        _ => $"v{Version} can be sent to PCs again, as it was before it was withdrawn."
+    };
+
+    private string ConfirmLabel() => Action switch
+    {
+        ClientReleaseAction.Promote => "Promote to stable",
+        ClientReleaseAction.Withdraw => "Withdraw release",
+        _ => "Restore release"
+    };
+
+    private async Task ConfirmAsync()
+    {
+        await Dialog.CloseAsync(_reason?.Trim() ?? string.Empty);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

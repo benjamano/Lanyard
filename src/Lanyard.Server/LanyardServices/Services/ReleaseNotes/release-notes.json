@@ -616,7 +616,8 @@
       "Games already recorded have been moved to the company whose kiosk played them.",
       "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard.",
       "A new Updates tab in each PC's settings chooses which version it runs: Stable (the version approved for every PC), Canary (tries each new release first), or Pinned to one version. A PC can be pinned back to an older version if a new one causes problems.",
-      "Update now asks a connected PC to update straight away instead of waiting for its next restart. PCs marked Canary or Pinned are labelled on the Clients page, along with any PC that isn't yet on the version it should be."
+      "Update now asks a connected PC to update straight away instead of waiting for its next restart. PCs marked Canary or Pinned are labelled on the Clients page, along with any PC that isn't yet on the version it should be.",
+      "Lanyard's own administrators get a Kiosk Releases page to approve a new kiosk release for every PC once it has run well on Canary PCs, or withdraw a bad one so PCs move back to the version before."
     ]
   }
 ]
