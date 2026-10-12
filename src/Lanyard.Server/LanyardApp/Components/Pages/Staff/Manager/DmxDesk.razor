@@ -39,6 +39,7 @@
                                     <FluentButton IconStart="@(isEditModeEnabled ? new Icons.Filled.Size20.Edit() : new Icons.Regular.Size20.Edit())"
                                             Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleEditMode"
+                                            Title="Toggle Edit Mode"
                                             Tooltip="Toggle Edit Mode"/>
                                 </FluentGridItem>
                         </FluentGrid>
@@ -57,6 +58,7 @@
                                     <FluentButton IconStart="@(showFixturePreview ? new Icons.Filled.Size20.Lightbulb() : new Icons.Regular.Size20.SlideGrid())"
                                             Appearance="ButtonAppearance.Outline"
                                             OnClick="ToggleFixturePreview"
+                                            Title="Toggle Fixture Preview"
                                             Tooltip="Toggle Fixture Preview"/>
                                 </FluentGridItem>
                         </FluentGrid>
@@ -66,6 +68,7 @@
                                     Appearance="ButtonAppearance.Outline"
                                     Disabled="@(selectedClientId == null)"
                                     OnClick="OpenFixtureManager"
+                                    Title="Manage Fixtures"
                                     Tooltip="Manage Fixtures" />
 
                     @if (isEditModeEnabled)
@@ -83,6 +86,7 @@
                                         <FluentButton IconStart="@(isBlindModeEnabled ? new Icons.Filled.Size20.EyeOff() : new Icons.Regular.Size20.Eye())"
                                             Appearance="ButtonAppearance.Primary"
                                             OnClick="ToggleBlindMode"
+                                            Title="Toggle Blind Mode"
                                             Tooltip="Toggle Blind Mode"/>
                                     </FluentGridItem>
                             </FluentGrid>

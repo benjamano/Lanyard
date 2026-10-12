@@ -745,7 +745,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
     {
         for (int i = 0; i < 4; i++)
         {
-            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureType = DmxFixtureType.Rgb, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
+            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureModeId = BuiltInDmxFixtureDefinitions.RgbModeId, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
         }
 
         DmxScene standby = NewScene(arena, "Arena standby", loop: false, bpmSync: false, [[(0, 40, 120)]]);

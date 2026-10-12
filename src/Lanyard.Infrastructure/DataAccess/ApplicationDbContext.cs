@@ -90,6 +90,10 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<DmxSceneStep> DmxSceneSteps { get; set; }
         public DbSet<DmxSceneStepChannelValue> DmxSceneStepChannelValues { get; set; }
         public DbSet<DmxFixture> DmxFixtures { get; set; }
+        public DbSet<DmxFixtureDefinition> DmxFixtureDefinitions { get; set; }
+        public DbSet<DmxFixtureMode> DmxFixtureModes { get; set; }
+        public DbSet<DmxFixtureModeChannel> DmxFixtureModeChannels { get; set; }
+        public DbSet<DmxFixtureModeChannelColorRange> DmxFixtureModeChannelColorRanges { get; set; }
         public DbSet<Course> Courses { get; set; }
         public DbSet<CourseSection> CourseSections { get; set; }
         public DbSet<CourseQuestion> CourseQuestions { get; set; }
@@ -787,7 +791,92 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<Song>()
                 .HasIndex(x => x.BpmAnalysisStatus);
 
+            ConfigureDmxFixtureDefinitions(modelBuilder);
+
             ConfigureCompanyTenancy(modelBuilder);
+        }
+
+        // Fixture definition -> mode -> channel -> colour range. Built-ins are seeded here with
+        // fixed ids (BuiltInDmxFixtureDefinitions) because the migration points every fixture that
+        // predates definitions at one of them.
+        private static void ConfigureDmxFixtureDefinitions(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<DmxFixtureDefinition>(entity =>
+            {
+                entity.Property(x => x.Manufacturer).HasMaxLength(100);
+                entity.Property(x => x.Model).HasMaxLength(100);
+                entity.Property(x => x.OflKey).HasMaxLength(200);
+                entity.Property(x => x.OflRevision).HasMaxLength(50);
+
+                entity.HasOne<Company>()
+                    .WithMany()
+                    .HasForeignKey(x => x.CompanyId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<UserProfile>()
+                    .WithMany()
+                    .HasForeignKey(x => x.CreateByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                // An OFL import is reused per company, keyed by fixture and revision.
+                entity.HasIndex(x => new { x.CompanyId, x.OflKey, x.OflRevision });
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Definitions);
+            });
+
+            modelBuilder.Entity<DmxFixtureMode>(entity =>
+            {
+                entity.Property(x => x.Name).HasMaxLength(100);
+                entity.Property(x => x.ShortName).HasMaxLength(50);
+
+                entity.HasOne(x => x.Definition)
+                    .WithMany(x => x.Modes)
+                    .HasForeignKey(x => x.DefinitionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Modes);
+            });
+
+            modelBuilder.Entity<DmxFixtureModeChannel>(entity =>
+            {
+                entity.Property(x => x.Label).HasMaxLength(100);
+
+                entity.HasOne(x => x.Mode)
+                    .WithMany(x => x.Channels)
+                    .HasForeignKey(x => x.ModeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.ModeId, x.Offset }).IsUnique();
+
+                entity.HasData(BuiltInDmxFixtureDefinitions.Channels.Select(c => new
+                {
+                    c.Id,
+                    c.ModeId,
+                    c.Offset,
+                    c.Label,
+                    c.Role,
+                    c.CoarseOffset,
+                    c.FineLevel,
+                    c.DefaultValue
+                }));
+            });
+
+            modelBuilder.Entity<DmxFixtureModeChannelColorRange>(entity =>
+            {
+                entity.Property(x => x.ColorHex).HasMaxLength(7);
+
+                entity.HasOne(x => x.ModeChannel)
+                    .WithMany(x => x.ColorRanges)
+                    .HasForeignKey(x => x.ModeChannelId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Restrict: a mode that still has fixtures patched in it can't disappear underneath them.
+            modelBuilder.Entity<DmxFixture>()
+                .HasOne(x => x.FixtureMode)
+                .WithMany()
+                .HasForeignKey(x => x.FixtureModeId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
 
         // Every ICompanyOwned root gets a FK to Company and a filter so a signed-in user only ever
@@ -837,6 +926,13 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStepChannelValue>().HasQueryFilter(x => TenantFilterDisabled || x.SceneStep!.Scene!.CompanyId == TenantCompanyId);
+
+            // Shared-or-owned: built-in definitions (CompanyId null) are visible to everyone, a
+            // company's own imports and custom fixtures only to that company.
+            modelBuilder.Entity<DmxFixtureDefinition>().HasQueryFilter(x => TenantFilterDisabled || x.CompanyId == null || x.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureMode>().HasQueryFilter(x => TenantFilterDisabled || x.Definition!.CompanyId == null || x.Definition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureModeChannel>().HasQueryFilter(x => TenantFilterDisabled || x.Mode!.Definition!.CompanyId == null || x.Mode!.Definition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<DmxFixtureModeChannelColorRange>().HasQueryFilter(x => TenantFilterDisabled || x.ModeChannel!.Mode!.Definition!.CompanyId == null || x.ModeChannel!.Mode!.Definition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<GameResultPlayerScore>().HasQueryFilter(x => TenantFilterDisabled || x.GameResult!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseSection>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<CourseQuestion>().HasQueryFilter(x => TenantFilterDisabled || x.Course!.CompanyId == TenantCompanyId);
@@ -922,6 +1018,66 @@ namespace Lanyard.Infrastructure.DataAccess
                             throw new CrossTenantWriteException($"Cannot change {entry.Metadata.ClrType.Name} belonging to another company.");
                         }
                         break;
+                }
+            }
+
+            // Shared rows (CompanyId null) are reference data only system code may write; a tenant
+            // insert is always stamped into the tenant's own company.
+            foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ISharedOrCompanyOwned> entry in ChangeTracker.Entries<ISharedOrCompanyOwned>())
+            {
+                switch (entry.State)
+                {
+                    case EntityState.Added:
+                        if (isSystem)
+                        {
+                            break;
+                        }
+
+                        if (tenantCompanyId is null)
+                        {
+                            throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name}: the current user isn't linked to a company.");
+                        }
+
+                        if (entry.Entity.CompanyId is null)
+                        {
+                            entry.Entity.CompanyId = tenantCompanyId;
+                        }
+                        else if (entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot create {entry.Metadata.ClrType.Name} in another company.");
+                        }
+                        break;
+
+                    case EntityState.Modified:
+                    case EntityState.Deleted:
+                        if (isSystem)
+                        {
+                            break;
+                        }
+
+                        int? originalCompanyId = entry.Property(x => x.CompanyId).OriginalValue;
+
+                        if (originalCompanyId is null || originalCompanyId != tenantCompanyId || entry.Entity.CompanyId != tenantCompanyId)
+                        {
+                            throw new CrossTenantWriteException($"Cannot change {entry.Metadata.ClrType.Name}: it is shared, or belongs to another company.");
+                        }
+                        break;
+                }
+            }
+
+            // Built-in fixture modes and their channels have no CompanyId of their own; their ids are
+            // fixed, so a tenant change to (or under) one can be refused without loading the parent.
+            if (!isSystem)
+            {
+                bool touchesBuiltIn =
+                    ChangeTracker.Entries<DmxFixtureMode>().Any(e => e.State != EntityState.Unchanged && e.State != EntityState.Detached
+                        && BuiltInDmxFixtureDefinitions.Modes.Any(m => m.Id == e.Entity.Id || m.DefinitionId == e.Entity.DefinitionId))
+                    || ChangeTracker.Entries<DmxFixtureModeChannel>().Any(e => e.State != EntityState.Unchanged && e.State != EntityState.Detached
+                        && BuiltInDmxFixtureDefinitions.Modes.Any(m => m.Id == e.Entity.ModeId));
+
+                if (touchesBuiltIn)
+                {
+                    throw new CrossTenantWriteException("Built-in fixture definitions can't be changed.");
                 }
             }
         }

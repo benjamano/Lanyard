@@ -1,0 +1,95 @@
+.fixture-manager {
+    width: 100%;
+}
+
+.fixture-manager ::deep .fixture-add-card {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Phone first: each field on its own full-width line, side by side once there's room. */
+.fixture-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.fixture-form-row ::deep .fixture-name-input,
+.fixture-form-row ::deep .fixture-name-input fluent-text-input {
+    width: 100%;
+    max-width: none;
+}
+
+@media (min-width: 600px) {
+    .fixture-form-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .fixture-form-row ::deep .fixture-name-input,
+    .fixture-form-row ::deep .fixture-name-input fluent-text-input {
+        width: 180px;
+    }
+}
+
+.fixture-manager ::deep .fixture-footprint-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.fixture-manager ::deep .fixture-footprint-hint-error {
+    color: var(--colorStatusDangerForeground1);
+}
+
+.fixture-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.fixture-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.fixture-list-item:last-child {
+    border-bottom: none;
+}
+
+.fixture-list-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.fixture-list-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.fixture-list-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.fixture-list-warning {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fontSizeBase200);
+    color: var(--colorStatusWarningForeground1);
+}
+
+.fixture-list-actions {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+}

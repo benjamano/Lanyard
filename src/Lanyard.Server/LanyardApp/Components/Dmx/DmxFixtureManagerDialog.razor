@@ -1,4 +1,5 @@
 @using Lanyard.App.Components.Dialogs
+@using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
 
 @inject IDmxFixtureService _dmxFixtureService
@@ -11,101 +12,102 @@
         </FluentStack>
     </TitleTemplate>
     <ChildContent>
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
-            <FluentText Size="TextSize.Size300">
-                Fixtures map a starting channel to a light type (dimmer, RGB, or RGB with a dimmer) so the preview can show it as a colored light instead of raw channel numbers.
-            </FluentText>
+        <div class="fixture-manager">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+                <FluentText Size="TextSize.Size300">
+                    Fixtures map a starting channel to a kind of light, so the preview can show it as a coloured light and Lanyard knows which channels it uses.
+                </FluentText>
 
-            <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
-                    <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Style="width: 160px; max-width: none;" />
-                    <FluentNumberInput TValue="int" Label="Start Channel" Value="@newStartChannel" ValueChanged="@(v => newStartChannel = v)" Min="1" Max="512" Width="120px" />
-                    <FluentSelect TOption="DmxFixtureType" TValue="DmxFixtureType" Label="Type" @bind-Value="newFixtureType" Width="160px">
-                        <FluentOption Value="@DmxFixtureType.Dimmer">Dimmer</FluentOption>
-                        <FluentOption Value="@DmxFixtureType.Rgb">RGB</FluentOption>
-                        <FluentOption Value="@DmxFixtureType.RgbDimmer">RGB + Dimmer</FluentOption>
-                    </FluentSelect>
-                    <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
-                                  Appearance="ButtonAppearance.Primary"
-                                  Disabled="@string.IsNullOrWhiteSpace(newName)"
-                                  OnClick="CreateFixture"
-                                  Class="mt-5">
-                        Add Fixture
-                    </FluentButton>
-                </FluentStack>
-            </FluentCard>
-
-            <FluentDataGrid Items="@fixtures.AsQueryable()"
-                            Loading="@isLoading"
-                            TGridItem="DmxFixture"
-                            RowSize="@DataGridRowSize.Medium">
-                <ChildContent>
-                    <TemplateColumn Title="Name">
-                        <ChildContent>
-                            @if (editingFixtureId == context.Id)
-                            {
-                                <FluentTextInput Value="@editName" ValueChanged="@(v => editName = v)" Style="width: 100%; max-width: none;" />
-                            }
-                            else
-                            {
-                                @context.Name
-                            }
-                        </ChildContent>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Start Channel">
-                        <ChildContent>
-                            @if (editingFixtureId == context.Id)
-                            {
-                                <FluentNumberInput TValue="int" Value="@editStartChannel" ValueChanged="@(v => editStartChannel = v)" Min="1" Max="512" Width="90px" />
-                            }
-                            else
-                            {
-                                @context.StartChannel
-                            }
-                        </ChildContent>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Type">
-                        <ChildContent>
-                            @if (editingFixtureId == context.Id)
-                            {
-                                <FluentSelect TOption="DmxFixtureType" TValue="DmxFixtureType" @bind-Value="editFixtureType" Width="150px">
-                                    <FluentOption Value="@DmxFixtureType.Dimmer">Dimmer</FluentOption>
-                                    <FluentOption Value="@DmxFixtureType.Rgb">RGB</FluentOption>
-                                    <FluentOption Value="@DmxFixtureType.RgbDimmer">RGB + Dimmer</FluentOption>
-                                </FluentSelect>
-                            }
-                            else
-                            {
-                                @FixtureTypeLabel(context.FixtureType)
-                            }
-                        </ChildContent>
-                    </TemplateColumn>
-                    <TemplateColumn>
-                        <ChildContent>
-                            @if (editingFixtureId == context.Id)
-                            {
-                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
-                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Checkmark()" Tooltip="Save" OnClick="SaveEditingFixture" />
-                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Dismiss()" Tooltip="Cancel" OnClick="@(() => editingFixtureId = null)" />
-                                </FluentStack>
-                            }
-                            else
-                            {
-                                <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4">
-                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Edit()" Tooltip="Edit fixture" OnClick="@(() => StartEditing(context))" />
-                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.BinRecycle()" Tooltip="Delete fixture" OnClick="@(() => DeleteFixture(context))" />
-                                </FluentStack>
-                            }
-                        </ChildContent>
-                    </TemplateColumn>
-                </ChildContent>
-                <EmptyContent>
-                    <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" Height="100%">
-                        <FluentText Size="TextSize.Size400">No fixtures yet. Add one above to preview it as a light.</FluentText>
+                <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3" Class="fixture-add-card">
+                    <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+                        <div class="fixture-form-row">
+                            <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Class="fixture-name-input" />
+                            <FluentNumberInput TValue="int" Label="Start Channel" Value="@newStartChannel" ValueChanged="@(v => newStartChannel = v)" Min="1" Max="512" Width="120px" />
+                            <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="newModeId" Width="200px">
+                                @foreach (DmxFixtureMode mode in builtInModes)
+                                {
+                                    <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
+                                }
+                            </FluentSelect>
+                        </div>
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                            <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
+                                          Appearance="ButtonAppearance.Primary"
+                                          Disabled="@(string.IsNullOrWhiteSpace(newName) || isSaving || RunsPastUniverse(newStartChannel, newModeId))"
+                                          OnClick="CreateFixture">
+                                Add Fixture
+                            </FluentButton>
+                            <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(newStartChannel, newModeId) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
+                                @FootprintHint(newStartChannel, newModeId)
+                            </FluentText>
+                        </FluentStack>
                     </FluentStack>
-                </EmptyContent>
-            </FluentDataGrid>
-        </FluentStack>
+                </FluentCard>
+
+                @if (isLoading)
+                {
+                    <FluentProgressBar />
+                }
+                else if (fixtures.Count == 0)
+                {
+                    <FluentText Size="TextSize.Size400">No fixtures yet. Add one above to preview it as a light.</FluentText>
+                }
+                else
+                {
+                    <ul class="fixture-list">
+                        @foreach (DmxFixture fixture in fixtures)
+                        {
+                            <li class="fixture-list-item" @key="fixture.Id">
+                                @if (editingFixtureId == fixture.Id)
+                                {
+                                    <div class="fixture-list-body">
+                                        <div class="fixture-form-row">
+                                            <FluentTextInput Label="Name" Value="@editName" ValueChanged="@(v => editName = v)" Class="fixture-name-input" />
+                                            <FluentNumberInput TValue="int" Label="Start Channel" Value="@editStartChannel" ValueChanged="@(v => editStartChannel = v)" Min="1" Max="512" Width="120px" />
+                                            <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="editModeId" Width="200px">
+                                                @foreach (DmxFixtureMode mode in ModeChoicesFor(fixture))
+                                                {
+                                                    <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        </div>
+                                        <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(editStartChannel, editModeId) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
+                                            @FootprintHint(editStartChannel, editModeId)
+                                        </FluentText>
+                                    </div>
+                                    <div class="fixture-list-actions">
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Checkmark()" Title="Save" Tooltip="Save" Disabled="@(isSaving || (RunsPastUniverse(editStartChannel, editModeId) && PlacementChanged(fixture)))" OnClick="SaveEditingFixture" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Dismiss()" Title="Cancel" Tooltip="Cancel" OnClick="@(() => editingFixtureId = null)" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    string? problem = PlacementProblem(fixture);
+
+                                    <div class="fixture-list-body">
+                                        <span class="fixture-list-name">@fixture.Name</span>
+                                        <span class="fixture-list-meta">
+                                            @ChannelRange(fixture) · @FixtureDescription(fixture)
+                                        </span>
+                                        @if (problem != null)
+                                        {
+                                            <span class="fixture-list-warning">
+                                                <FluentIcon Value="new Icons.Regular.Size16.Warning()" Color="Color.Warning" />
+                                                @problem
+                                            </span>
+                                        }
+                                    </div>
+                                    <div class="fixture-list-actions">
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Edit()" Title="Edit fixture" Tooltip="Edit fixture" OnClick="@(() => StartEditing(fixture))" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.BinRecycle()" Title="Delete fixture" Tooltip="Delete fixture" OnClick="@(() => DeleteFixture(fixture))" />
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </FluentStack>
+        </div>
     </ChildContent>
     <ActionTemplate>
         <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CloseAsync">Close</FluentButton>
@@ -119,17 +121,24 @@
     [Parameter]
     public required Guid ClientId { get; set; }
 
+    private const int UniverseSize = 512;
+
+    private readonly List<DmxFixtureMode> builtInModes = BuiltInDmxFixtureDefinitions.Modes
+        .Select(m => BuiltInDmxFixtureDefinitions.BuildMode(m.Id))
+        .ToList();
+
     private List<DmxFixture> fixtures = [];
     private bool isLoading = true;
+    private bool isSaving;
 
     private string newName = string.Empty;
     private int newStartChannel = 1;
-    private DmxFixtureType newFixtureType = DmxFixtureType.Rgb;
+    private Guid newModeId = BuiltInDmxFixtureDefinitions.RgbModeId;
 
     private Guid? editingFixtureId;
     private string editName = string.Empty;
     private int editStartChannel = 1;
-    private DmxFixtureType editFixtureType = DmxFixtureType.Rgb;
+    private Guid editModeId = BuiltInDmxFixtureDefinitions.RgbModeId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -158,26 +167,44 @@
 
     private async Task CreateFixture()
     {
-        if (string.IsNullOrWhiteSpace(newName))
+        if (string.IsNullOrWhiteSpace(newName) || isSaving)
         {
             return;
         }
 
-        Result<DmxFixture> result = await _dmxFixtureService.CreateFixtureAsync(ClientId, newName, newStartChannel, newFixtureType);
+        isSaving = true;
 
-        if (result.IsSuccess && result.Data != null)
+        try
         {
-            fixtures.Add(result.Data);
+            int channelCount = FindMode(newModeId)?.ChannelCount ?? 1;
 
-            newName = string.Empty;
-            newStartChannel = 1;
-            newFixtureType = DmxFixtureType.Rgb;
+            bool? allowOverlap = await ConfirmOverlapsAsync(newStartChannel, channelCount, null);
 
-            _toastService.ShowSuccess("Fixture added successfully.");
+            if (allowOverlap is null)
+            {
+                return;
+            }
+
+            Result<DmxFixture> result = await _dmxFixtureService.CreateFixtureAsync(ClientId, newName, newStartChannel, newModeId, allowOverlap.Value);
+
+            if (result.IsSuccess && result.Data != null)
+            {
+                fixtures.Add(result.Data);
+                fixtures = fixtures.OrderBy(f => f.StartChannel).ToList();
+
+                newName = string.Empty;
+                newStartChannel = NextFreeChannel();
+
+                _toastService.ShowSuccess("Fixture added successfully.");
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to add fixture: {result.Error}");
+            }
         }
-        else
+        finally
         {
-            _toastService.ShowError($"Failed to add fixture: {result.Error}");
+            isSaving = false;
         }
     }
 
@@ -186,46 +213,86 @@
         editingFixtureId = fixture.Id;
         editName = fixture.Name;
         editStartChannel = fixture.StartChannel;
-        editFixtureType = fixture.FixtureType;
+        editModeId = fixture.FixtureModeId;
     }
 
     private async Task SaveEditingFixture()
     {
         DmxFixture? fixture = fixtures.FirstOrDefault(f => f.Id == editingFixtureId);
 
-        if (fixture == null)
+        if (fixture == null || isSaving)
         {
             editingFixtureId = null;
 
             return;
         }
 
-        DmxFixture updated = new()
+        isSaving = true;
+
+        try
         {
-            Id = fixture.Id,
-            ClientId = fixture.ClientId,
-            Name = editName,
-            StartChannel = editStartChannel,
-            FixtureType = editFixtureType,
-            CreateByUserId = fixture.CreateByUserId
-        };
+            bool placementChanged = fixture.StartChannel != editStartChannel || fixture.FixtureModeId != editModeId;
+            bool allowOverlap = false;
 
-        Result<bool> result = await _dmxFixtureService.UpdateFixtureAsync(updated);
+            if (placementChanged)
+            {
+                int channelCount = FindMode(editModeId)?.ChannelCount ?? 1;
+                bool? confirmed = await ConfirmOverlapsAsync(editStartChannel, channelCount, fixture.Id);
 
-        if (result.IsSuccess)
-        {
-            fixture.Name = editName;
-            fixture.StartChannel = editStartChannel;
-            fixture.FixtureType = editFixtureType;
+                if (confirmed is null)
+                {
+                    return;
+                }
 
-            editingFixtureId = null;
+                allowOverlap = confirmed.Value;
+            }
 
-            _toastService.ShowSuccess("Fixture updated successfully.");
+            Result<bool> result = await _dmxFixtureService.UpdateFixtureAsync(fixture.Id, editName, editStartChannel, editModeId, allowOverlap);
+
+            if (result.IsSuccess)
+            {
+                editingFixtureId = null;
+
+                await LoadFixtures();
+
+                _toastService.ShowSuccess("Fixture updated successfully.");
+            }
+            else
+            {
+                _toastService.ShowError($"Failed to update fixture: {result.Error}");
+            }
         }
-        else
+        finally
         {
-            _toastService.ShowError($"Failed to update fixture: {result.Error}");
+            isSaving = false;
         }
+    }
+
+    // True: save as a deliberate double-patch. False: nothing overlaps. Null: the user backed out.
+    private async Task<bool?> ConfirmOverlapsAsync(int startChannel, int channelCount, Guid? excludeFixtureId)
+    {
+        Result<IReadOnlyList<DmxFixtureOverlap>> overlapResult = await _dmxFixtureService.GetOverlapsAsync(ClientId, startChannel, channelCount, excludeFixtureId);
+
+        if (!overlapResult.IsSuccess || overlapResult.Data == null || overlapResult.Data.Count == 0)
+        {
+            // Let the save itself report a failed check; it re-checks on the server anyway.
+            return false;
+        }
+
+        string names = string.Join(", ", overlapResult.Data.Select(o => o.FirstSharedChannel == o.LastSharedChannel
+            ? $"{o.FixtureName} (channel {o.FirstSharedChannel})"
+            : $"{o.FixtureName} (channels {o.FirstSharedChannel}-{o.LastSharedChannel})"));
+
+        DialogResult dialogResult = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Channels already in use";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"This fixture would share channels with {names}. Both fixtures will respond to the same channels. Patch it anyway?");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Patch anyway");
+        });
+
+        return !dialogResult.Cancelled && dialogResult.Value is true ? true : null;
     }
 
     private async Task DeleteFixture(DmxFixture fixture)
@@ -256,13 +323,98 @@
         }
     }
 
-    private static string FixtureTypeLabel(DmxFixtureType fixtureType) => fixtureType switch
+    // The fixture's own mode stays selectable even when it isn't one of the generic ones.
+    private IEnumerable<DmxFixtureMode> ModeChoicesFor(DmxFixture fixture) =>
+        fixture.FixtureMode != null && builtInModes.All(m => m.Id != fixture.FixtureModeId)
+            ? builtInModes.Prepend(fixture.FixtureMode)
+            : builtInModes;
+
+    private DmxFixtureMode? FindMode(Guid modeId) =>
+        builtInModes.FirstOrDefault(m => m.Id == modeId)
+        ?? fixtures.Select(f => f.FixtureMode).FirstOrDefault(m => m?.Id == modeId);
+
+    private static string ModeLabel(DmxFixtureMode mode)
     {
-        DmxFixtureType.Dimmer => "Dimmer",
-        DmxFixtureType.Rgb => "RGB",
-        DmxFixtureType.RgbDimmer => "RGB + Dimmer",
-        _ => fixtureType.ToString()
-    };
+        string model = mode.Definition?.Model
+            ?? BuiltInDmxFixtureDefinitions.Definitions.FirstOrDefault(d => d.Id == mode.DefinitionId)?.Model
+            ?? mode.Name;
+
+        return $"{model} ({mode.ChannelCount} ch)";
+    }
+
+    private static string FixtureDescription(DmxFixture fixture)
+    {
+        if (fixture.FixtureMode == null)
+        {
+            return "Unknown type";
+        }
+
+        DmxFixtureDefinition? definition = fixture.FixtureMode.Definition;
+
+        if (definition == null || definition.Source == DmxFixtureDefinitionSource.BuiltIn)
+        {
+            return ModeLabel(fixture.FixtureMode);
+        }
+
+        return $"{definition.Manufacturer} {definition.Model} · {fixture.FixtureMode.Name}";
+    }
+
+    private static int ChannelCount(DmxFixture fixture) => fixture.FixtureMode?.ChannelCount ?? 1;
+
+    private static string ChannelRange(DmxFixture fixture)
+    {
+        int last = fixture.StartChannel + ChannelCount(fixture) - 1;
+
+        return last == fixture.StartChannel ? $"Ch {fixture.StartChannel}" : $"Ch {fixture.StartChannel}-{last}";
+    }
+
+    private bool RunsPastUniverse(int startChannel, Guid modeId) =>
+        startChannel + (FindMode(modeId)?.ChannelCount ?? 1) - 1 > UniverseSize;
+
+    // Renaming a fixture that was saved before these checks existed is still allowed.
+    private bool PlacementChanged(DmxFixture fixture) =>
+        fixture.StartChannel != editStartChannel || fixture.FixtureModeId != editModeId;
+
+    private string FootprintHint(int startChannel, Guid modeId)
+    {
+        int channelCount = FindMode(modeId)?.ChannelCount ?? 1;
+        int last = startChannel + channelCount - 1;
+
+        if (last > UniverseSize)
+        {
+            return $"Needs channels {startChannel}-{last}, past the end of the universe ({UniverseSize}).";
+        }
+
+        return channelCount == 1 ? $"Uses channel {startChannel}." : $"Uses channels {startChannel}-{last}.";
+    }
+
+    // Fixtures saved before overlap checks existed (or double-patched on purpose) are flagged,
+    // not changed.
+    private string? PlacementProblem(DmxFixture fixture)
+    {
+        int last = fixture.StartChannel + ChannelCount(fixture) - 1;
+
+        if (last > UniverseSize)
+        {
+            return $"Runs past channel {UniverseSize}";
+        }
+
+        List<string> sharedWith = fixtures
+            .Where(other => other.Id != fixture.Id
+                && other.StartChannel <= last
+                && other.StartChannel + ChannelCount(other) - 1 >= fixture.StartChannel)
+            .Select(other => other.Name)
+            .ToList();
+
+        return sharedWith.Count == 0 ? null : $"Shares channels with {string.Join(", ", sharedWith)}";
+    }
+
+    private int NextFreeChannel()
+    {
+        int next = fixtures.Count == 0 ? 1 : fixtures.Max(f => f.StartChannel + ChannelCount(f));
+
+        return Math.Clamp(next, 1, UniverseSize);
+    }
 
     private async Task CloseAsync()
     {
