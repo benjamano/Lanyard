@@ -57,7 +57,7 @@
         {
             <section class="party-section party-print-card">
                 <h2>Print</h2>
-                <p class="party-hint-text">Opens in a new tab, ready to print. Food sheets use the menu in Party Settings.</p>
+                <p class="party-hint-text">Opens in a new tab, ready to print. Food sheets use the menu in Party Settings; the voucher is signed with your name.</p>
                 <div class="party-print">
                     <FluentAnchorButton Href="@DocumentHref("pack")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Primary"
                                         IconStart="@(new Icons.Regular.Size20.Print())">Print everything</FluentAnchorButton>
@@ -65,6 +65,10 @@
                                         IconStart="@(new Icons.Regular.Size20.TableSimple())">Reserved table card</FluentAnchorButton>
                     <FluentAnchorButton Href="@DocumentHref("food-sheet")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
                                         IconStart="@(new Icons.Regular.Size20.Food())">@(existing.MenuType == PartyMenuType.Cold ? "Cold food sheet" : "Hot food sheet")</FluentAnchorButton>
+                    <FluentAnchorButton Href="@DocumentHref("voucher")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
+                                        IconStart="@(new Icons.Regular.Size20.Gift())">Free return voucher</FluentAnchorButton>
+                    <FluentAnchorButton Href="@DocumentHref("feedback-form")" Target="LinkTarget.Blank" Appearance="ButtonAppearance.Outline"
+                                        IconStart="@(new Icons.Regular.Size20.CommentNote())">Feedback form</FluentAnchorButton>
                 </div>
             </section>
         }

@@ -44,5 +44,40 @@ public enum PartyDocumentType
 {
     ReservedCard,
     FoodSheet,
+    Voucher,
+    FeedbackForm,
     Pack
+}
+
+// The printouts drawn on a company's own artwork. Stored as ints - never renumber.
+public enum PartyArtworkDocument
+{
+    Voucher = 0,
+    FeedbackForm = 1
+}
+
+// What goes in a box on the artwork.
+public enum PartyTemplateFieldKind
+{
+    PresentedTo,
+    PartyDate,
+    ExpiryDate,
+    AuthorisedBy,
+    PartyName,
+    PartyHost,
+    ChildAge
+}
+
+public enum PartyTemplateFont
+{
+    Standard = 0,
+
+    // Chewy, the rounded hand-lettered face Play2Day's artwork is set in.
+    Handwritten = 1
+}
+
+public enum PartyTextAlign
+{
+    Left,
+    Centre
 }

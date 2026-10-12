@@ -3,7 +3,9 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Parties;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
@@ -14,11 +16,13 @@ namespace Lanyard.API.Controllers
     public class PartyDocumentsController(
         IPartyDocumentService documentService,
         ICurrentLocationContext locationContext,
-        ICompanyFeatureService companyFeatures) : ControllerBase
+        ICompanyFeatureService companyFeatures,
+        UserManager<UserProfile> userManager) : ControllerBase
     {
         private readonly IPartyDocumentService _documentService = documentService;
         private readonly ICurrentLocationContext _locationContext = locationContext;
         private readonly ICompanyFeatureService _companyFeatures = companyFeatures;
+        private readonly UserManager<UserProfile> _userManager = userManager;
 
         // Cookie auth, managers and admins only, like the party pages. The location check is the
         // service's, against the caller's own session; a party in another company isn't visible
@@ -36,6 +40,8 @@ namespace Lanyard.API.Controllers
             {
                 "reserved-card" => PartyDocumentType.ReservedCard,
                 "food-sheet" => PartyDocumentType.FoodSheet,
+                "voucher" => PartyDocumentType.Voucher,
+                "feedback-form" => PartyDocumentType.FeedbackForm,
                 "pack" => PartyDocumentType.Pack,
                 _ => null
             };
@@ -52,8 +58,46 @@ namespace Lanyard.API.Controllers
                 return NotFound();
             }
 
-            Result<PartyDocument> result = await _documentService.BuildAsync(scope.Data, bookingId, type.Value, cancellationToken);
+            Result<PartyDocument> result = await _documentService.BuildAsync(scope.Data, bookingId, type.Value, await AuthorisedByAsync(), cancellationToken);
 
+            return Inline(result);
+        }
+
+        // The company's saved voucher or feedback form filled in with a made-up party, for checking
+        // the box positions on the Printouts page.
+        [HttpGet("printouts/{document}/preview")]
+        [Authorize(Roles = "Admin,Manager")]
+        public async Task<IActionResult> GetPreview(string document, CancellationToken cancellationToken)
+        {
+            PartyArtworkDocument? which = document.ToLowerInvariant() switch
+            {
+                "voucher" => PartyArtworkDocument.Voucher,
+                "feedback-form" => PartyArtworkDocument.FeedbackForm,
+                _ => null
+            };
+
+            Result<LocationScope> scope = await _locationContext.GetScopeAsync(User);
+
+            if (which is null || !scope.IsSuccess || scope.Data?.CompanyId is not int companyId || !await HasPartiesAsync(scope.Data))
+            {
+                return NotFound();
+            }
+
+            Result<PartyDocument> result = await _documentService.BuildPreviewAsync(scope.Data, companyId, which.Value, await AuthorisedByAsync(), cancellationToken);
+
+            return Inline(result);
+        }
+
+        // The voucher is signed by whoever prints it.
+        private async Task<string?> AuthorisedByAsync()
+        {
+            UserProfile? user = await _userManager.GetUserAsync(User);
+
+            return user?.GetName() is { Length: > 0 } name ? name : user?.UserName;
+        }
+
+        private IActionResult Inline(Result<PartyDocument> result)
+        {
             if (!result.IsSuccess || result.Data is null)
             {
                 return NotFound();
