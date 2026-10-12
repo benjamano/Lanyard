@@ -695,6 +695,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeOnly>("AutoRestartTimeOfDay")
                         .HasColumnType("time without time zone");
 
+                    b.Property<DateTime?>("ClientVersionReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
@@ -732,6 +735,10 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("PreferredAudioDeviceName")
                         .HasColumnType("text");
+
+                    b.Property<string>("ReportedClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.HasKey("Id");
 
