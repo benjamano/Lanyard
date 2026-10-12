@@ -1,17 +1,75 @@
+.clients-version-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0 16px;
+}
+
+.clients-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+::deep .clients-grid {
+    width: 100%;
+}
+
 .clients-grid-wrapper {
     width: 100%;
     min-width: 0;
     overflow-x: auto;
 }
 
+.clients-phone-list {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+}
+
+.clients-phone-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.clients-phone-item:last-child {
+    border-bottom: none;
+}
+
+.clients-phone-info {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.clients-phone-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.clients-phone-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.clients-phone-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+/* Phone: the card list replaces the grid entirely, so the grid needs no column juggling. */
 @media (max-width: 599px) {
-    ::deep .clients-col-id,
-    ::deep .clients-col-ip,
-    ::deep .clients-col-session {
+    .clients-grid-wrapper {
         display: none;
     }
 
-    ::deep .clients-grid {
-        grid-template-columns: 0px 2fr 0px 1fr 1fr 1fr 0px 1fr !important;
+    .clients-phone-list {
+        display: flex;
     }
 }

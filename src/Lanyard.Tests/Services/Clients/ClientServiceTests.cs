@@ -1420,5 +1420,41 @@ namespace Lanyard.Tests.Services.Clients
 
             Assert.IsTrue(result.Success);
         }
+
+        [TestMethod]
+        public async Task GetClientsWithCapabilitiesAsync_ShouldProjectReportedClientVersion()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+            DateTime reportedAt = new(2026, 10, 12, 9, 0, 0, DateTimeKind.Utc);
+
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Reported", ReportedClientVersion = "1.0.41", ClientVersionReportedAt = reportedAt });
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Old build" });
+
+            Result<IEnumerable<ClientConnectedWithCapabilitiesDTO>> result = await service.GetClientsWithCapabilitiesAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            ClientConnectedWithCapabilitiesDTO reported = result.Data!.Single(x => x.Name == "Reported");
+            ClientConnectedWithCapabilitiesDTO oldBuild = result.Data!.Single(x => x.Name == "Old build");
+
+            Assert.AreEqual("1.0.41", reported.ReportedClientVersion);
+            Assert.AreEqual(reportedAt, reported.ClientVersionReportedAt);
+            Assert.IsNull(oldBuild.ReportedClientVersion);
+            Assert.IsNull(oldBuild.ClientVersionReportedAt);
+        }
+
+        [TestMethod]
+        public async Task GetClientsAsync_ShouldProjectReportedClientVersion()
+        {
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+
+            await service.CreateClientAsync(new Client { Id = Guid.NewGuid(), Name = "Reported", ReportedClientVersion = "1.0.41" });
+
+            Result<IEnumerable<ClientConnectedDTO>> result = await service.GetClientsAsync();
+
+            Assert.IsTrue(result.Success, result.Error);
+            Assert.AreEqual("1.0.41", result.Data!.Single().ReportedClientVersion);
+        }
     }
 }
