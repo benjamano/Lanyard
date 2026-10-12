@@ -110,7 +110,7 @@ public static class PartyDocumentRenderer
 
             if (model.LogoBytes is not null)
             {
-                column.Item().AlignCenter().Height(40).Image(model.LogoBytes).FitHeight();
+                column.Item().AlignCenter().Height(40).Image(model.LogoBytes).FitArea();
             }
 
             column.Item().AlignCenter().Text("RESERVED FOR").FontSize(26).SemiBold().FontColor(Colors.Grey.Darken3);
@@ -336,7 +336,7 @@ public static class PartyDocumentRenderer
 
             if (model.LogoBytes is not null)
             {
-                row.ConstantItem(110).Height(32).AlignRight().Image(model.LogoBytes).FitHeight();
+                row.ConstantItem(110).Height(32).AlignRight().Image(model.LogoBytes).FitArea();
             }
         });
     }
