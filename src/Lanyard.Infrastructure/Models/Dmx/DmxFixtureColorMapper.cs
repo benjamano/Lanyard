@@ -88,6 +88,8 @@ public static class DmxFixtureColorMapper
                     break;
                 case DmxChannelRole.ColorWheel:
                 case DmxChannelRole.ColorMacro:
+                // A shutter's "closed" range is black and its "open" range white.
+                case DmxChannelRole.Strobe:
                     byte value = Get(channel);
                     DmxFixtureModeChannelColorRange? range = channel.ColorRanges
                         .FirstOrDefault(r => value >= r.DmxStart && value <= r.DmxEnd);
@@ -136,12 +138,14 @@ public static class DmxFixtureColorMapper
             Percent(fixture, channels, DmxChannelRole.Tilt, channelValues));
     }
 
-    // True when the fixture has a strobe channel that isn't at zero.
+    // True when a strobe channel is above zero and not in one of its plain open/closed shutter
+    // ranges (a channel without ranges strobes at any non-zero value).
     public static bool IsStrobing(DmxFixture fixture, IReadOnlyDictionary<int, byte> channelValues) =>
         ChannelsOf(fixture).Any(c => c.Role == DmxChannelRole.Strobe
             && c.CoarseOffset is null
             && channelValues.TryGetValue(fixture.StartChannel + c.Offset, out byte value)
-            && value > 0);
+            && value > 0
+            && !c.ColorRanges.Any(r => value >= r.DmxStart && value <= r.DmxEnd));
 
     private static double? Percent(DmxFixture fixture, List<DmxFixtureModeChannel> channels, DmxChannelRole role, IReadOnlyDictionary<int, byte> channelValues)
     {

@@ -22,6 +22,6 @@ public class DmxFixtureModeChannel
 
     public byte DefaultValue { get; set; }
 
-    // Only for ColorWheel / ColorMacro channels: which DMX ranges show which colour.
+    // Only for ColorWheel / ColorMacro / Strobe (shutter) channels: which DMX ranges show which colour.
     public ICollection<DmxFixtureModeChannelColorRange> ColorRanges { get; set; } = [];
 }
