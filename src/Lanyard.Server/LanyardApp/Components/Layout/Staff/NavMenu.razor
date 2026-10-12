@@ -92,6 +92,14 @@
                     </FluentNavItem>
                 }
 
+                @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding))
+                {
+                    <FluentNavItem Href="/manage/compliance" IconRest="@(new Icons.Regular.Size20.ShieldCheckmark())"
+                                   IconActive="@(new Icons.Filled.Size20.ShieldCheckmark())">
+                        Compliance
+                    </FluentNavItem>
+                }
+
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
                     @if (_isAdmin)
@@ -189,6 +197,11 @@
                     {
                         <FluentNavItem Href="/dmx">DMX Control</FluentNavItem>
                     }
+
+                    @if (_isPlatformAdmin)
+                    {
+                        <FluentNavItem Href="/manage/client-releases">Kiosk Releases</FluentNavItem>
+                    }
                 </FluentNavCategory>
             }
 
@@ -250,6 +263,7 @@
 
     private bool _isAuthenticated;
     private bool _isAdmin;
+    private bool _isPlatformAdmin;
     private bool _isManager;
     private bool _canControlMusic;
     private bool _canManageDmx;
@@ -304,6 +318,7 @@
 
         _isAuthenticated = user.Identity?.IsAuthenticated == true;
         _isAdmin = user.IsInRole("Admin");
+        _isPlatformAdmin = user.IsInRole(LanyardRoles.PlatformAdmin);
         _isManager = _isAdmin || user.IsInRole("Manager");
         _canControlMusic = _isAdmin || user.IsInRole("CanControlMusic");
         _canManageDmx = _isAdmin || user.IsInRole("CanManageDmxSystems");

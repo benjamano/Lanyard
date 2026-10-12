@@ -22,6 +22,9 @@
                                   IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
                 </EditForm>
             </FluentTab>
+            <FluentTab Header="Health" IconStart="@(new Icons.Regular.Size16.Heart())" DeferredLoading="true">
+                <ClientHealthDetails ClientId="@ClientId" />
+            </FluentTab>
             <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
                 <ClientProjectionCapabilities ClientId="@ClientId" />
             </FluentTab>
@@ -36,6 +39,9 @@
             </FluentTab>
             <FluentTab Header="Auto Restart" IconStart="@(new Icons.Regular.Size16.ArrowClockwise())" DeferredLoading="true">
                 <ClientRestartSchedule ClientId="@ClientId" />
+            </FluentTab>
+            <FluentTab Header="Updates" IconStart="@(new Icons.Regular.Size16.ArrowSync())" DeferredLoading="true">
+                <ClientUpdateSettings ClientId="@ClientId" />
             </FluentTab>
         </FluentTabs>
     </ChildContent>

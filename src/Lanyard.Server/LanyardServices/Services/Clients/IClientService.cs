@@ -41,6 +41,10 @@ public interface IClientService
     Task<Result<bool>> StartVideoPublisherOnClientAsync(Guid clientId, string publisherToken);
     Task<Result<bool>> StopVideoPublisherOnClientAsync(Guid clientId);
     Task<Result<bool>> RestartClientAsync(Guid clientId, ClientRestartType restartType);
+
+    // Asks a connected kiosk to check for an update now. Ok(true) means it found one and is
+    // downloading it (it restarts itself once done); Ok(false) means it's already on its target.
+    Task<Result<bool>> RequestUpdateCheckAsync(Guid clientId);
     Task<Result<IEnumerable<ClientAvailableDmxDevice>>> GetClientAvailableDmxDevicesAsync(Guid clientId);
     Task<Result<bool>> SetClientPrimaryDmxDeviceAsync(Guid clientId, Guid deviceId);
     Task<Result<bool>> RemoveClientPrimaryDevice(Guid clientId, Guid deviceId);

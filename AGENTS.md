@@ -149,7 +149,7 @@ Important FluentDataGrid note from docs:
 4. Keep identity operations in service/controller layers, not UI-only logic.
 5. Use least privilege; do not expose admin-only workflows accidentally.
 6. **Every `@page` route must declare `@attribute [Authorize]`/`[Authorize(Roles = "...")]` or `@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]`** — there is no default-allow path (`RouteAuthorizationGate.razor` enforces this). See the `route-authorization` skill for history and edge cases.
-7. **`_currentLocationContext`/`LocationScope` is not an app-wide tenancy filter** — it's only implemented for the Training/Course module. See the `location-scoping` skill before assuming any query in another module is already location-filtered — it isn't, because the concept doesn't exist there yet.
+7. **Company tenancy is global; location scoping is not.** `ICompanyOwned` rows are filtered to the signed-in user's company by EF query filters, but a signed-out caller (kiosk/anonymous pages, hosted services) is the unfiltered "system" tenant. `_currentLocationContext`/`LocationScope` is opt-in per service (Training, Scheduling, Compliance). See the `location-scoping` skill before assuming a query is location-filtered.
 
 ## Database And Migration Workflow
 

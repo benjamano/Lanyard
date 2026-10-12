@@ -7,6 +7,7 @@ using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.DTO.ZoneScoreboard;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.Http;
@@ -30,7 +31,8 @@ public class SignalRControlHub(
     IClientZoneScoreboardService clientZoneScoreboardService,
     IVideoStreamTokenService videoStreamTokenService,
     IGameResultService gameResultService,
-    IClientSecretValidator clientSecretValidator) : Hub, ISignalRProjectionControlHub
+    IClientSecretValidator clientSecretValidator,
+    IKioskHealthService kioskHealthService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
@@ -44,6 +46,7 @@ public class SignalRControlHub(
     private readonly IClientZoneScoreboardService _clientZoneScoreboardService = clientZoneScoreboardService;
     private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;
     private readonly IGameResultService _gameResultService = gameResultService;
+    private readonly IKioskHealthService _kioskHealthService = kioskHealthService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -53,7 +56,7 @@ public class SignalRControlHub(
     {
         HttpContext? httpContext = Context.GetHttpContext();
 
-        if (string.IsNullOrEmpty(httpContext?.Request.Query["clientId"].ToString()) == true)
+        if (string.IsNullOrEmpty(httpContext?.Request.Query[ClientConnectionQuery.ClientId].ToString()) == true)
         {
             _logger.LogWarning("Client connected without an ID, disconnecting");
 
@@ -65,7 +68,7 @@ public class SignalRControlHub(
         // secret. Delegates to the same decision point the client REST endpoints use
         // (ClientRequestAuthorization.EvaluateAndLog / IClientSecretValidator.Authorize) so the
         // unconfigured-secret case can never be decided differently here than there.
-        string providedSecret = httpContext?.Request.Query["secret"].ToString() ?? string.Empty;
+        string providedSecret = httpContext?.Request.Query[ClientConnectionQuery.Secret].ToString() ?? string.Empty;
         string connectingIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         if (!ClientRequestAuthorization.EvaluateAndLog(_clientSecretValidator, providedSecret, _logger, connectingIp, "/websocket"))
@@ -74,7 +77,7 @@ public class SignalRControlHub(
             return;
         }
 
-        if (!Guid.TryParse(httpContext?.Request.Query["clientId"].ToString(), out Guid clientId))
+        if (!Guid.TryParse(httpContext?.Request.Query[ClientConnectionQuery.ClientId].ToString(), out Guid clientId))
         {
             _logger.LogWarning("Client connected with a malformed client ID, disconnecting");
 
@@ -84,13 +87,15 @@ public class SignalRControlHub(
 
         string clientIp = httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
-        bool supportsDmxBatch = httpContext?.Request.Query["dmxBatch"].ToString() == "1";
+        bool supportsDmxBatch = httpContext?.Request.Query[ClientConnectionQuery.DmxBatch].ToString() == "1";
         _dmxClientService.SetConnectionSupportsBatch(Context.ConnectionId, supportsDmxBatch);
 
         if (!supportsDmxBatch)
         {
             _logger.LogInformation("Client {ClientId} ({ConnectionId}) predates batched DMX; sending it one message per channel", clientId, Context.ConnectionId);
         }
+
+        string? rawClientVersion = httpContext?.Request.Query[ClientConnectionQuery.ClientVersion].ToString();
 
         Result<Client?> result = await _clientService.GetClientFromIdAsync(clientId);
 
@@ -110,6 +115,8 @@ public class SignalRControlHub(
                 CreateDate = DateTime.UtcNow,
                 LastLogin = DateTime.UtcNow
             };
+
+            LogClientVersionReport(clientId, ClientVersionReport.Apply(newClient, rawClientVersion, DateTime.UtcNow), rawClientVersion);
 
             Result<Client?> createResult = await _clientService.CreateClientAsync(newClient);
 
@@ -131,6 +138,8 @@ public class SignalRControlHub(
             client.MostRecentConnectionId = Context.ConnectionId;
             client.MostRecentIpAddress = clientIp;
             client.LastLogin = DateTime.UtcNow;
+
+            LogClientVersionReport(clientId, ClientVersionReport.Apply(client, rawClientVersion, DateTime.UtcNow), rawClientVersion);
 
             Result<Client?> updateResult = await _clientService.UpdateClientAsync(client);
 
@@ -160,6 +169,26 @@ public class SignalRControlHub(
         _connections.TryAdd(Context.ConnectionId, true);
 
         await base.OnConnectedAsync();
+    }
+
+    private void LogClientVersionReport(Guid clientId, ClientVersionReportOutcome outcome, string? rawClientVersion)
+    {
+        switch (outcome)
+        {
+            case ClientVersionReportOutcome.Recorded:
+                _logger.LogInformation("Client {ClientId} ({ConnectionId}) reported client version {ClientVersion}", clientId, Context.ConnectionId, rawClientVersion?.Trim());
+                break;
+            case ClientVersionReportOutcome.NotReported:
+                _logger.LogInformation("Client {ClientId} ({ConnectionId}) did not report a client version; it predates version reporting", clientId, Context.ConnectionId);
+                break;
+            case ClientVersionReportOutcome.Rejected:
+                // Truncated: the value is untrusted and only the shape of it is useful in a log.
+                string sample = rawClientVersion is { Length: > ClientVersionFormat.MaxLength }
+                    ? rawClientVersion[..ClientVersionFormat.MaxLength] + "..."
+                    : rawClientVersion ?? string.Empty;
+                _logger.LogWarning("Client {ClientId} ({ConnectionId}) reported an invalid client version {ClientVersion}; ignoring it", clientId, Context.ConnectionId, sample);
+                break;
+        }
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -341,6 +370,28 @@ public class SignalRControlHub(
                 _logger.LogWarning("Failed to record completed game for client {ClientId}: {Error}", clientId, recordResult.Error);
             }
         }
+    }
+
+    // Called by the kiosk's KioskHealthReporter every heartbeat; the name must match its
+    // InvokeAsync call. Returns whether the report was stored, so the client knows it landed.
+    public async Task<bool> ReportKioskHealth(KioskHealthReportDTO report)
+    {
+        Result<Guid> getResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID for health report from {ConnectionId}: {Error}", Context.ConnectionId, getResult.Error);
+            return false;
+        }
+
+        Result<bool> recordResult = await _kioskHealthService.RecordReportAsync(getResult.Data, report);
+
+        if (!recordResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to record health report for client {ClientId}: {Error}", getResult.Data, recordResult.Error);
+            return false;
+        }
+
+        return recordResult.Data;
     }
 
     // Kiosks share one hub, so music commands go only to kiosks of the sender's own company.

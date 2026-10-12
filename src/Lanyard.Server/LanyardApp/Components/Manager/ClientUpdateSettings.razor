@@ -1,0 +1,216 @@
+@using Lanyard.Application.Services.ClientReleases
+@using Lanyard.Shared.Contracts
+@using Lanyard.Shared.Enum
+@using System.Globalization
+
+@inject IClientService _clientService
+@inject IClientUpdatePolicyService _updatePolicyService
+@inject IClientReleaseCatalogService _releaseCatalog
+
+@if (_loadError is not null)
+{
+    <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false" Class="mt-2">@_loadError</FluentMessageBar>
+}
+else if (_target is null)
+{
+    <FluentText Class="mt-2">Loading...</FluentText>
+}
+else
+{
+    <div class="client-updates mt-2">
+        <div class="client-updates-status">
+            <div class="client-updates-status-item">
+                <span class="client-updates-label">Running</span>
+                <span class="client-updates-value">@VersionLabel(_target.ReportedVersion)</span>
+                <span class="client-updates-hint">@ReportedHint()</span>
+            </div>
+            <div class="client-updates-status-item">
+                <span class="client-updates-label">Should be on</span>
+                <span class="client-updates-value">@(_target.TargetVersion is null ? "No change" : VersionLabel(_target.TargetVersion))</span>
+                @if (_target.IsOffTarget)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Moves on next restart</FluentBadge>
+                }
+            </div>
+        </div>
+
+        @if (_target.Problem is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">@_target.Problem</FluentMessageBar>
+        }
+
+        <div class="client-updates-ring">
+            <FluentRadioGroup TValue="ClientUpdateRing" Orientation="Orientation.Vertical" Label="Which version this PC runs"
+                              @bind-Value="_ring">
+                <FluentRadio Value="ClientUpdateRing.Stable" Label="Stable: the release that's been approved for every PC (recommended)" />
+                <FluentRadio Value="ClientUpdateRing.Canary" Label="Canary: try each new release on this PC first" />
+                <FluentRadio Value="ClientUpdateRing.Pinned" Label="Pinned: stay on one version until changed" />
+            </FluentRadioGroup>
+        </div>
+
+        @if (_ring == ClientUpdateRing.Pinned)
+        {
+            <FluentSelect TOption="ClientRelease" TValue="string" Items="@_pinnableReleases"
+                          OptionText="@ReleaseOptionLabel" OptionValue="@(x => x.Version)"
+                          @bind-Value="_pinnedVersion" Label="Version" Placeholder="Choose a version" Width="100%" />
+        }
+
+        <FluentText>@RingExplanation()</FluentText>
+
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Wrap="true" VerticalGap="8px">
+            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                          Loading="@_saving" Disabled="@(_saving || !HasChanges)" OnClick="SaveAsync">
+                Save
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                          Loading="@_checking" Disabled="@(_checking || !_isConnected || HasChanges)"
+                          Title="@UpdateNowTitle()" OnClick="UpdateNowAsync">
+                Update now
+            </FluentButton>
+        </FluentStack>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid ClientId { get; set; }
+
+    private ClientUpdateTargetDTO? _target;
+    private List<ClientRelease> _pinnableReleases = [];
+    private string? _loadError;
+
+    private ClientUpdateRing _ring;
+    private string? _pinnedVersion;
+    private DateTime? _reportedAt;
+    private bool _isConnected;
+    private bool _saving;
+    private bool _checking;
+
+    private bool HasChanges => _target is not null
+        && (_ring != _target.Ring || (_ring == ClientUpdateRing.Pinned && _pinnedVersion != _target.PinnedVersion));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<ClientUpdateTargetDTO> target = await _updatePolicyService.GetTargetAsync(ClientId);
+
+        if (!target.IsSuccess)
+        {
+            _loadError = $"Couldn't load this PC's update setting: {target.Error}";
+            return;
+        }
+
+        Result<IReadOnlyList<ClientRelease>> releases = await _releaseCatalog.GetReleasesAsync();
+
+        if (!releases.IsSuccess)
+        {
+            _loadError = $"Couldn't load kiosk releases: {releases.Error}";
+            return;
+        }
+
+        Result<Client?> client = await _clientService.GetClientFromIdAsync(ClientId);
+        Result<bool> connected = await _clientService.IsClientConnectedAsync(ClientId);
+
+        _target = target.Data!;
+        _pinnableReleases = releases.Data!.Where(x => x.WithdrawnAt == null).ToList();
+        _ring = _target.Ring;
+        _pinnedVersion = _target.PinnedVersion ?? _target.ReportedVersion;
+        _reportedAt = client.Data?.ClientVersionReportedAt;
+        _isConnected = connected.IsSuccess && connected.Data;
+        _loadError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+
+        try
+        {
+            Result<ClientUpdateTargetDTO> result = await _updatePolicyService.SetUpdateRingAsync(ClientId, _ring, _pinnedVersion);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "Failed to save the update setting.");
+                return;
+            }
+
+            _target = result.Data!;
+
+            _toastService.ShowSuccess(_target.IsOffTarget
+                ? $"Saved. This PC moves to v{_target.TargetVersion} the next time it restarts, or press Update now."
+                : "Saved.");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task UpdateNowAsync()
+    {
+        _checking = true;
+
+        try
+        {
+            Result<bool> result = await _clientService.RequestUpdateCheckAsync(ClientId);
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "The update check failed.");
+            }
+            else if (result.Data)
+            {
+                _toastService.ShowSuccess("The PC is downloading the update. It restarts by itself when it's done.");
+            }
+            else
+            {
+                _toastService.ShowInfo("This PC is already on the version it should be on.");
+            }
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private string RingExplanation() => _ring switch
+    {
+        ClientUpdateRing.Canary => "New releases reach this PC before everyone else, so a problem shows up here first. Pick a PC that is easy to get to if something goes wrong.",
+        ClientUpdateRing.Pinned => "This PC stays on the chosen version, moving back to it if it's on something newer, until you change this.",
+        _ => "This PC updates when a release is approved for every PC."
+    };
+
+    private string ReportedHint()
+    {
+        if (_target?.ReportedVersion is null)
+        {
+            return "Not reported yet. Kiosk software older than 1.0.41 doesn't send its version.";
+        }
+
+        return _reportedAt is DateTime reportedAt
+            ? $"Reported {reportedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("en-GB"))}"
+            : string.Empty;
+    }
+
+    private string UpdateNowTitle()
+    {
+        if (!_isConnected)
+        {
+            return "The PC is offline. It checks for updates the next time it starts.";
+        }
+
+        return HasChanges ? "Save your change first." : "Ask the PC to check for an update straight away.";
+    }
+
+    private static string ReleaseOptionLabel(ClientRelease release)
+    {
+        string state = ClientTargetVersionResolver.IsStable(release) ? "stable" : "canary only";
+        return $"v{release.Version} ({state}, {release.PublishedAt.ToLocalTime().ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("en-GB"))})";
+    }
+
+    private static string VersionLabel(string? version) => version is null ? "Unknown" : $"v{version}";
+}

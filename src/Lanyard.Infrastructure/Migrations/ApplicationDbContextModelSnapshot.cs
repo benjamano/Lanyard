@@ -695,6 +695,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<TimeOnly>("AutoRestartTimeOfDay")
                         .HasColumnType("time without time zone");
 
+                    b.Property<DateTime?>("ClientVersionReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
@@ -727,11 +730,22 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PinnedClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PreferredAudioDeviceId")
                         .HasColumnType("text");
 
                     b.Property<string>("PreferredAudioDeviceName")
                         .HasColumnType("text");
+
+                    b.Property<string>("ReportedClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("UpdateRing")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -825,6 +839,62 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientAvailableVideoDevices");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientHealthSnapshot", b =>
+                {
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<double?>("CpuPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("DmxConfigured")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("DmxOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("FirstHeartbeatUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastHeartbeatUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("MachineUptimeSeconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<double?>("MemoryPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("PacketCaptureConfigured")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PacketCaptureRunning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("PreferredAudioDevicePresent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ProcessStartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ProjectionRunningCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("SystemDriveFreeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("SystemDriveTotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ClientId");
+
+                    b.ToTable("ClientHealthSnapshots");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientProjectionSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -874,6 +944,59 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ProjectionProgramId");
 
                     b.ToTable("ClientProjectionSettings");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientRelease", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsPrerelease")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PromotedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("PromotedToStableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WithdrawnByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("WithdrawnReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Version")
+                        .IsUnique();
+
+                    b.ToTable("ClientReleases");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClockInTerminal", b =>
@@ -3159,6 +3282,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(4);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ComplianceSummaryWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int>("ExpiryWindowDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_ExpiryWindowDays");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_LocationId");
+
+                    b.Property<int>("MaxItems")
+                        .HasColumnType("integer")
+                        .HasColumnName("ComplianceSummaryWidget_MaxItems");
+
+                    b.HasDiscriminator().HasValue(18);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.DigitalClockWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
@@ -3626,6 +3768,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
                         .WithMany()
                         .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientHealthSnapshot", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithOne()
+                        .HasForeignKey("Lanyard.Infrastructure.Models.ClientHealthSnapshot", "ClientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

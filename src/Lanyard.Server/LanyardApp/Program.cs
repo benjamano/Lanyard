@@ -12,6 +12,7 @@ using Lanyard.Application.Services.Gdpr;
 using Lanyard.Application.Services.Email;
 using Lanyard.Application.Services.Training;
 using Lanyard.Application.Services.StaffDocuments;
+using Lanyard.Application.Services.Compliance;
 using Lanyard.Application.Services.Onboarding;
 using Lanyard.Application.Services.Notifications;
 using Lanyard.Application.Services.Scheduling;
@@ -24,6 +25,7 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -41,6 +43,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Lanyard.Application.Services.Clients;
+using Lanyard.Application.Services.ClientReleases;
 using Lanyard.Application.Services.VideoStreaming;
 using Lanyard.App.Components.Layout;
 using OpenTelemetry;
@@ -102,6 +105,13 @@ builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
+builder.Services.AddHttpClient<IGitHubClientReleaseSource, GitHubClientReleaseSource>(client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<IClientReleaseCatalogService, ClientReleaseCatalogService>();
+builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService>();
+builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
+builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
+builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ICourseAssignmentService, CourseAssignmentService>();
@@ -116,6 +126,7 @@ builder.Services.AddScoped<ITwoFactorPolicyService, TwoFactorPolicyService>();
 builder.Services.AddScoped<IPasskeyService, PasskeyService>();
 builder.Services.AddScoped<IStaffDocumentTypeService, StaffDocumentTypeService>();
 builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
+builder.Services.AddScoped<IComplianceService, ComplianceService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
@@ -168,6 +179,7 @@ builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
@@ -529,7 +541,7 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/websocket"))
     {
-        string? providedSecret = context.Request.Query["secret"].ToString();
+        string? providedSecret = context.Request.Query[ClientConnectionQuery.Secret].ToString();
         string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         // Delegates to the same decision point the client REST endpoints use

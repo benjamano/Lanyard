@@ -29,9 +29,28 @@ public class GameResultService(
                 return Result<bool>.Ok(false);
             }
 
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // Kiosk hub calls run as the system tenant, which would otherwise stamp every game as
+            // Play2Day. The game belongs to whichever company owns the kiosk that played it.
+            int? companyId = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .Select(x => (int?)x.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (companyId is null)
+            {
+                _logger.LogWarning("Dropped a completed game for client {ClientId} - client not found", clientId);
+
+                return Result<bool>.Fail("Cannot record the completed game: the client was not found.");
+            }
+
             GameResult gameResult = new()
             {
                 Id = Guid.NewGuid(),
+                CompanyId = companyId.Value,
                 ClientId = clientId,
                 PlayedAtUtc = DateTime.UtcNow,
                 DurationSeconds = status.TotalTimeSeconds,
@@ -46,13 +65,11 @@ public class GameResultService(
                 })]
             };
 
-            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
-
             ctx.GameResults.Add(gameResult);
 
             await ctx.SaveChangesAsync();
 
-            _logger.LogInformation("Recorded completed game {GameResultId} for client {ClientId} with {PlayerCount} player(s)", gameResult.Id, clientId, gameResult.PlayerScores.Count);
+            _logger.LogInformation("Recorded completed game {GameResultId} for client {ClientId} in company {CompanyId} with {PlayerCount} player(s)", gameResult.Id, clientId, gameResult.CompanyId, gameResult.PlayerScores.Count);
 
             return Result<bool>.Ok(true);
         }
@@ -64,23 +81,23 @@ public class GameResultService(
         }
     }
 
-    public async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopScoresAsync(HallOfFamePeriod period, int take, Guid? clientId)
+    public async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopScoresAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId)
     {
-        return await GetTopEntriesAsync(period, take, clientId, orderByAccuracy: false);
+        return await GetTopEntriesAsync(period, take, clientId, companyId, orderByAccuracy: false);
     }
 
-    public async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopAccuracyAsync(HallOfFamePeriod period, int take, Guid? clientId)
+    public async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopAccuracyAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId)
     {
-        return await GetTopEntriesAsync(period, take, clientId, orderByAccuracy: true);
+        return await GetTopEntriesAsync(period, take, clientId, companyId, orderByAccuracy: true);
     }
 
-    public async Task<Result<IReadOnlyList<HallOfFameTeamTotalDTO>>> GetTopTeamTotalsAsync(HallOfFamePeriod period, Guid? clientId)
+    public async Task<Result<IReadOnlyList<HallOfFameTeamTotalDTO>>> GetTopTeamTotalsAsync(HallOfFamePeriod period, Guid? clientId, int? companyId)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            List<HallOfFameTeamTotalDTO> totals = await BuildScoreQuery(ctx, period, clientId)
+            List<HallOfFameTeamTotalDTO> totals = await BuildScoreQuery(ctx, period, clientId, companyId)
                 .Where(x => x.Team != null)
                 .GroupBy(x => x.Team!.Value)
                 .Select(g => new HallOfFameTeamTotalDTO
@@ -102,13 +119,13 @@ public class GameResultService(
         }
     }
 
-    private async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopEntriesAsync(HallOfFamePeriod period, int take, Guid? clientId, bool orderByAccuracy)
+    private async Task<Result<IReadOnlyList<HallOfFameEntryDTO>>> GetTopEntriesAsync(HallOfFamePeriod period, int take, Guid? clientId, int? companyId, bool orderByAccuracy)
     {
         try
         {
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
-            IQueryable<GameResultPlayerScore> query = BuildScoreQuery(ctx, period, clientId);
+            IQueryable<GameResultPlayerScore> query = BuildScoreQuery(ctx, period, clientId, companyId);
 
             // Ties break on the other metric, then on recency, so the board is stable between
             // refreshes rather than reshuffling equal rows on every poll.
@@ -140,7 +157,7 @@ public class GameResultService(
         }
     }
 
-    private static IQueryable<GameResultPlayerScore> BuildScoreQuery(ApplicationDbContext ctx, HallOfFamePeriod period, Guid? clientId)
+    private static IQueryable<GameResultPlayerScore> BuildScoreQuery(ApplicationDbContext ctx, HallOfFamePeriod period, Guid? clientId, int? companyId)
     {
         DateTime? fromUtc = period.ToUtcLowerBound(DateTime.Now);
 
@@ -159,6 +176,13 @@ public class GameResultService(
         if (clientId.HasValue)
         {
             query = query.Where(x => x.GameResult!.ClientId == clientId.Value);
+        }
+
+        // The tenant filter already does this for signed-in staff, but kiosk displays run as the
+        // system tenant and see every company's games unless the caller scopes them here.
+        if (companyId.HasValue)
+        {
+            query = query.Where(x => x.GameResult!.CompanyId == companyId.Value);
         }
 
         return query;

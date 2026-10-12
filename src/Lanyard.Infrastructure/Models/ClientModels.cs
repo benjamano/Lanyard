@@ -1,4 +1,6 @@
-﻿using Lanyard.Shared.Enum;
+﻿using Lanyard.Shared.Contracts;
+using Lanyard.Shared.Enum;
+using System.ComponentModel.DataAnnotations;
 
 namespace Lanyard.Infrastructure.Models;
 
@@ -34,6 +36,56 @@ public class Client : ICompanyOwned
     // so the client can fall back to a name match if the endpoint comes back under a new ID.
     public string? PreferredAudioDeviceId { get; set; }
     public string? PreferredAudioDeviceName { get; set; }
+
+    // The Velopack version the kiosk said it was running when it last connected. Null means it
+    // has never reported one - every client older than 1.0.41, which doesn't send it. Kept when
+    // a connection arrives without a version, so an old build reconnecting can't blank it.
+    [MaxLength(ClientVersionFormat.MaxLength)]
+    public string? ReportedClientVersion { get; set; }
+    public DateTime? ClientVersionReportedAt { get; set; }
+
+    // Which version this kiosk should update to - see ClientUpdateRing. Only an Admin of the
+    // client's own company sets these (ClientUpdatePolicyService, through the tenant filter);
+    // nothing the kiosk sends can change them.
+    public ClientUpdateRing UpdateRing { get; set; } = ClientUpdateRing.Stable;
+
+    [MaxLength(ClientVersionFormat.MaxLength)]
+    public string? PinnedClientVersion { get; set; }
+}
+
+/// <summary>
+/// The latest health report a kiosk sent over the hub. One row per kiosk, overwritten on every
+/// heartbeat - there is deliberately no history. A kiosk with no row has never reported (it runs
+/// a client too old to send heartbeats), which is shown differently from a silent one.
+/// </summary>
+public class ClientHealthSnapshot
+{
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+
+    public DateTime FirstHeartbeatUtc { get; set; }
+    public DateTime LastHeartbeatUtc { get; set; }
+
+    public string? ClientVersion { get; set; }
+
+    public DateTime ProcessStartedUtc { get; set; }
+    public long MachineUptimeSeconds { get; set; }
+
+    public double? CpuPercent { get; set; }
+    public double? MemoryPercent { get; set; }
+
+    public long? SystemDriveFreeBytes { get; set; }
+    public long? SystemDriveTotalBytes { get; set; }
+
+    public bool DmxConfigured { get; set; }
+    public bool DmxOpen { get; set; }
+
+    public bool? PreferredAudioDevicePresent { get; set; }
+
+    public bool PacketCaptureConfigured { get; set; }
+    public bool PacketCaptureRunning { get; set; }
+
+    public int ProjectionRunningCount { get; set; }
 }
 
 public class ClientProjectionSettings

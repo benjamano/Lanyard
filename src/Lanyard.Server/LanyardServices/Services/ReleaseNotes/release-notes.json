@@ -567,7 +567,7 @@
       "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart.",
       "Manage > Chat Channels no longer fails with \"Cannot create ChatConversation in another company\" for admins when other companies have locations; it now only lists your own company's channels."
     ]
-    },
+  },
   {
     "version": "1.4.13",
     "releaseDate": "2026-09-29",
@@ -600,6 +600,39 @@
     "details": [
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
+    ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-12",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
+    "details": [
+      "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
+      "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
+      "The widget only shows anything to Admins and Managers. Other staff, and screens nobody is signed in to, just see \"Shown to managers\".",
+      "Added a new Compliance page under Management, which lists everyone behind each count. Click a name to go straight to their Documents tab or the training dashboard.",
+      "When you post an announcement, you can choose to email it to everyone at that location. It's on by default for new announcements.",
+      "When you edit an announcement, you can choose to email it again. This is off by default, so fixing a typo doesn't email everyone twice.",
+      "Staff who have turned on push notifications get one too. Anyone can turn announcement emails or pushes off under Notification settings.",
+      "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
+      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
+      "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
+      "Games already recorded have been moved to the company whose kiosk played them.",
+      "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard.",
+      "A new Updates tab in each PC's settings chooses which version it runs: Stable (the version approved for every PC), Canary (tries each new release first), or Pinned to one version. A PC can be pinned back to an older version if a new one causes problems.",
+      "Update now asks a connected PC to update straight away instead of waiting for its next restart. PCs marked Canary or Pinned are labelled on the Clients page, along with any PC that isn't yet on the version it should be.",
+      "Lanyard's own administrators get a Kiosk Releases page to approve a new kiosk release for every PC once it has run well on Canary PCs, or withdraw a bad one so PCs move back to the version before.",
+      "Kiosks now check in with the server every 30 seconds, so a kiosk that has frozen or lost its network shows as Unresponsive within about a minute and a half, and as Offline after five more minutes. Before, a frozen kiosk could still look online.",
+      "Manage > Clients has a new Health column, in place of Connected, showing whether each kiosk is Healthy, Degraded, Unresponsive, Offline or Disconnected. Hover over it to see why.",
+      "A kiosk shows as Degraded when it is low on disk space, its DMX device or preferred speaker isn't connected, its zone scoreboard capture has stopped, or its CPU or memory is nearly maxed out.",
+      "Each kiosk's settings have a new Health tab with its version, how long it has been running, CPU, memory, disk space, and whether DMX, audio, scoreboard capture and projection are working.",
+      "The Kiosk Health dashboard widget uses the same health check and lists kiosks that need attention first. Its \"only show offline kiosks\" option is now \"only show kiosks that need attention\" and includes degraded kiosks.",
+      "Kiosks need to update to start reporting health, which they do the next time they restart. Until then the Health column just shows whether they are connected.",
+      "A kiosk no longer shuts itself down when it can't check for updates at start-up (for example while the internet is down); it now starts on its current version.",
+      "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
+      "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
+      "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
     ]
   }
 ]

@@ -5,10 +5,12 @@ using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.DTO.VideoDevices;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Infrastructure.Models.Dmx;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -142,6 +144,13 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             ctx.Clients.Update(updatedClient);
 
+            // Callers here write back a whole Client they loaded earlier (the settings tabs, the
+            // hub on every connect), so a stale copy would quietly undo an admin's update setting.
+            // Those two columns are owned by ClientUpdatePolicyService.SetUpdateRingAsync alone.
+            EntityEntry<Client> entry = ctx.Entry(updatedClient);
+            entry.Property(x => x.UpdateRing).IsModified = false;
+            entry.Property(x => x.PinnedClientVersion).IsModified = false;
+
             await ctx.SaveChangesAsync();
 
             // Keep both cached connection-ID lookups in sync immediately, otherwise a
@@ -202,6 +211,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x=> new ClientConnectedDTO
                 {
                     Id = x.Id,
@@ -213,6 +224,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
                 })
                 .ToListAsync();
@@ -234,6 +247,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x => new ClientConnectedWithCapabilitiesDTO
                 {
                     Id = x.Id,
@@ -245,6 +260,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()
@@ -1170,6 +1187,69 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending {RestartType} restart command to client {ClientId}", restartType, clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    // The kiosk only fetches its feed before answering (the download carries on afterwards), so
+    // this is the time for one round trip to the server plus a little slack.
+    private static readonly TimeSpan UpdateCheckAcknowledgementTimeout = TimeSpan.FromSeconds(30);
+
+    public async Task<Result<bool>> RequestUpdateCheckAsync(Guid clientId)
+    {
+        try
+        {
+            Result<Client?> getResult = await GetClientFromIdAsync(clientId);
+
+            if (!getResult.IsSuccess || getResult.Data == null)
+            {
+                return Result<bool>.Fail("Failed to get client.");
+            }
+
+            Result<bool> connectedResult = await IsClientConnectedAsync(clientId);
+
+            if (!connectedResult.IsSuccess)
+            {
+                return Result<bool>.Fail(connectedResult.Error!);
+            }
+
+            string? connectionId = getResult.Data.MostRecentConnectionId;
+
+            if (!connectedResult.Data || string.IsNullOrEmpty(connectionId))
+            {
+                return Result<bool>.Fail("Client is not currently connected. It will check for updates the next time it starts.");
+            }
+
+            _logger.LogInformation("Asking client {ClientId} to check for updates", clientId);
+
+            bool updating;
+
+            using (CancellationTokenSource timeout = new(UpdateCheckAcknowledgementTimeout))
+            {
+                try
+                {
+                    updating = await _hubContext.Clients.Client(connectionId).InvokeAsync<bool>(ClientHubEvents.CheckForUpdates, timeout.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogWarning("Client {ClientId} did not answer the update check in time", clientId);
+                    return Result<bool>.Fail("The client didn't answer in time. Try again, or restart it.");
+                }
+                catch (HubException ex)
+                {
+                    // No CheckForUpdates handler: a kiosk older than this feature.
+                    _logger.LogWarning("Client {ClientId} rejected the update check: {Error}", clientId, ex.Message);
+                    return Result<bool>.Fail("This client's version can't check for updates on request. Restart it instead; it checks every time it starts.");
+                }
+            }
+
+            _logger.LogInformation("Client {ClientId} answered the update check: {Updating}", clientId, updating ? "updating" : "already on its target version");
+
+            return Result<bool>.Ok(updating);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error asking client {ClientId} to check for updates", clientId);
             return Result<bool>.Fail(ex.Message);
         }
     }

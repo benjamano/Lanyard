@@ -28,6 +28,10 @@ public class DmxSignalRController(ILogger<DmxSignalRController> logger, DmxContr
             {
                 _dmxController.Open(settings.DmxUsbDeviceIndex);
             }
+            else
+            {
+                _dmxController.MarkNotConfigured();
+            }
         });
 
         // Batched form: one message per scene step / desk push, applied to the frame in one go.

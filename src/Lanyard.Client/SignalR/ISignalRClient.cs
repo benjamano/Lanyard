@@ -8,4 +8,9 @@ public interface ISignalRClient
     Task Connect(List<Action<HubConnection>> registrations);
     Task SendLaserGameStatusAsync(LaserGameStatusDTO status);
     Task<string> IssueKioskTokenAsync();
+
+    bool IsConnected { get; }
+
+    /// <summary>Sends a heartbeat. True when the server stored it.</summary>
+    Task<bool> ReportKioskHealthAsync(KioskHealthReportDTO report);
 }
