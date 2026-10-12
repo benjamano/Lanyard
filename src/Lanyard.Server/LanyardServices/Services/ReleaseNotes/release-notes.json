@@ -605,8 +605,11 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "See which version of the kiosk software each PC is running.",
+    "summary": "Announcements can now be emailed to staff.",
     "details": [
+      "When you post an announcement, you can choose to email it to everyone at that location. It's on by default for new announcements.",
+      "When you edit an announcement, you can choose to email it again. This is off by default, so fixing a typo doesn't email everyone twice.",
+      "Staff who have turned on push notifications get one too. Anyone can turn announcement emails or pushes off under Notification settings.",
       "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
       "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
       "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
