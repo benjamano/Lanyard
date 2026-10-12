@@ -25,10 +25,16 @@ public class PacketSniffer(ILogger<PacketSniffer> logger, IActionFunctions actio
     // gets a duplicate += subscription (CaptureDeviceList.Instance returns the same cached
     // device object) and the capture is reopened, so after N reconnects every real packet
     // is processed and republished N times.
-    private ILiveDevice? _activeDevice;
+    private volatile ILiveDevice? _activeDevice;
+    private volatile bool _isConfigured;
+
+    public bool IsConfigured => _isConfigured;
+    public bool IsCapturing => _activeDevice != null;
 
     public async Task StartSniffingAsync(ZoneScoreboardSettingsDTO settings)
     {
+        _isConfigured = true;
+
         CaptureDeviceList devices = CaptureDeviceList.Instance;
 
         if (devices.Any() == false)

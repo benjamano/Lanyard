@@ -1,13 +1,13 @@
 ﻿@using Lanyard.Application.Services.Clients
+@using Lanyard.App.Components.Clients
 @using Humanizer;
 @implements IDisposable
 
 @inject IClientService _clientService
+@inject IKioskHealthService _kioskHealthService
 
-@* Known limitation: Client has no LocationId, so this roster is not location-scoped - it
-   lists every kiosk on the deployment. Dashboards.razor is [Authorize] with no role, so any
-   authenticated staff member can see kiosks belonging to other companies and locations.
-   Fixing that properly means location-scoping the whole Client model. *@
+@* Known limitation: Client has no LocationId, so this roster is company-wide (the tenant filter
+   scopes it to the viewer's company) rather than location-scoped. *@
 
 <FluentCard Height="100%">
     @* Laid out with plain elements rather than FluentStack so the kiosk name can ellipsize
@@ -22,7 +22,7 @@
         {
             <div class="kiosk-health-empty">
                 <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">
-                    @(Widget.OnlyShowOffline && _totalCount > 0 ? "All kiosks online" : "No kiosks registered")
+                    @(Widget.OnlyShowOffline && _totalCount > 0 ? "All kiosks healthy" : "No kiosks registered")
                 </FluentBadge>
             </div>
         }
@@ -31,11 +31,22 @@
             <div class="kiosk-health-list">
                 @foreach (ClientConnectedWithCapabilitiesDTO client in _displayedClients)
                 {
+                    KioskHealthView? health = _health.GetValueOrDefault(client.Id);
+
                     <div class="kiosk-health-row">
+
                         <span class="kiosk-health-indicator">
-                            @if (client.IsCurrentlyConnected)
+                            @if (health?.Status == KioskHealthStatus.Degraded)
+                            {
+                                <FluentIcon Value="@(new Icons.Filled.Size20.Warning())" Color="Color.Warning" />
+                            }
+                            else if (KioskHealthDisplay.IsUp(health, client.IsCurrentlyConnected))
                             {
                                 <FluentIcon Value="@(new Icons.Filled.Size20.CheckmarkCircle())" Color="Color.Success" />
+                            }
+                            else if (health?.Status == KioskHealthStatus.Unresponsive)
+                            {
+                                <FluentIcon Value="@(new Icons.Filled.Size20.ErrorCircle())" Color="Color.Warning" />
                             }
                             else
                             {
@@ -45,7 +56,7 @@
 
                         <span class="kiosk-health-text">
                             <span class="kiosk-health-name" title="@client.Name">@client.Name</span>
-                            <span class="kiosk-health-status">@DescribeStatus(client)</span>
+                            <span class="kiosk-health-status" title="@string.Join("\n", KioskHealthDisplay.Details(health))">@DescribeStatus(client, health)</span>
                         </span>
                     </div>
                 }
@@ -120,8 +131,13 @@
                 return;
             }
 
+            Result<Dictionary<Guid, KioskHealthView>> healthResult = await _kioskHealthService.GetHealthAsync();
+
+            // Without health the roster still shows hub connectivity, as it did before heartbeats.
+            _health = healthResult.IsSuccess && healthResult.Data != null ? healthResult.Data : new();
+
             _allClients = result.Data
-                .OrderBy(x => x.IsCurrentlyConnected)
+                .OrderBy(x => KioskHealthDisplay.SortOrder(_health.GetValueOrDefault(x.Id), x.IsCurrentlyConnected))
                 .ThenBy(x => x.Name)
                 .ToList();
 
@@ -134,22 +150,38 @@
     }
 
     private List<ClientConnectedWithCapabilitiesDTO> _allClients = new();
+    private Dictionary<Guid, KioskHealthView> _health = new();
+
+    private bool IsUp(ClientConnectedWithCapabilitiesDTO client) =>
+        KioskHealthDisplay.IsUp(_health.GetValueOrDefault(client.Id), client.IsCurrentlyConnected);
 
     private void ApplyFilter()
     {
         _totalCount = _allClients.Count;
-        _onlineCount = _allClients.Count(x => x.IsCurrentlyConnected);
+        _onlineCount = _allClients.Count(IsUp);
 
+        // "Only show problems": degraded kiosks are up but still need attention.
         _displayedClients = Widget.OnlyShowOffline
-            ? _allClients.Where(x => !x.IsCurrentlyConnected).ToList()
+            ? _allClients.Where(x => !IsUp(x) || _health.GetValueOrDefault(x.Id)?.Status == KioskHealthStatus.Degraded).ToList()
             : _allClients;
     }
 
     // A hard server kill never runs OnDisconnectedAsync, so LastDisconnectDate can be missing
     // or older than the last connection. Take whichever timestamp is newer and describe it as
     // "last seen" rather than claiming a precise downtime we cannot know.
-    private static string DescribeStatus(ClientConnectedWithCapabilitiesDTO client)
+    private static string DescribeStatus(ClientConnectedWithCapabilitiesDTO client, KioskHealthView? health)
     {
+        switch (health?.Status)
+        {
+            case KioskHealthStatus.Healthy:
+                return "healthy";
+            case KioskHealthStatus.Degraded:
+                return string.Join(", ", health.Reasons);
+            case KioskHealthStatus.Unresponsive:
+            case KioskHealthStatus.Offline:
+                return $"{KioskHealthDisplay.Label(health.Status).ToLowerInvariant()}, last heartbeat {KioskHealthDisplay.Ago(health.SinceLastHeartbeat ?? TimeSpan.Zero)}";
+        }
+
         if (client.IsCurrentlyConnected)
         {
             return "online";

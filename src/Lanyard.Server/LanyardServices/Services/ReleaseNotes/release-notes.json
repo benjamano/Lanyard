@@ -567,7 +567,7 @@
       "DMX lighting keeps working on kiosks that haven't yet updated to client 1.0.40. They're sent one message per channel, as before, until they update on their next restart.",
       "Manage > Chat Channels no longer fails with \"Cannot create ChatConversation in another company\" for admins when other companies have locations; it now only lists your own company's channels."
     ]
-    },
+  },
   {
     "version": "1.4.13",
     "releaseDate": "2026-09-29",
@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Announcements can now be emailed to staff, See who is behind on training or documents at a glance.",
+    "summary": "Announcements can now be emailed to staff, see who is behind on training or documents at a glance, and you can check each kiosk's health from the Clients page.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -618,7 +618,14 @@
       "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
       "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
       "Games already recorded have been moved to the company whose kiosk played them.",
-      "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard."
+      "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard.",
+      "Kiosks now check in with the server every 30 seconds, so a kiosk that has frozen or lost its network shows as Unresponsive within about a minute and a half, and as Offline after five more minutes. Before, a frozen kiosk could still look online.",
+      "Manage > Clients has a new Health column, in place of Connected, showing whether each kiosk is Healthy, Degraded, Unresponsive, Offline or Disconnected. Hover over it to see why.",
+      "A kiosk shows as Degraded when it is low on disk space, its DMX device or preferred speaker isn't connected, its zone scoreboard capture has stopped, or its CPU or memory is nearly maxed out.",
+      "Each kiosk's settings have a new Health tab with its version, how long it has been running, CPU, memory, disk space, and whether DMX, audio, scoreboard capture and projection are working.",
+      "The Kiosk Health dashboard widget uses the same health check and lists kiosks that need attention first. Its \"only show offline kiosks\" option is now \"only show kiosks that need attention\" and includes degraded kiosks.",
+      "Kiosks need to update to start reporting health, which they do the next time they restart. Until then the Health column just shows whether they are connected.",
+      "A kiosk no longer shuts itself down when it can't check for updates at start-up (for example while the internet is down); it now starts on its current version."
     ]
   }
 ]

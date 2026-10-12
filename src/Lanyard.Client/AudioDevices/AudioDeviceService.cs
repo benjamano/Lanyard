@@ -26,6 +26,11 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
     // Last problem logged, so a missing device warns once rather than every minute.
     private string? _lastReportedProblem;
 
+    // Boxed so reads from the heartbeat thread see a whole value; written only under _lock.
+    private volatile object? _preferredDevicePresent;
+
+    public bool? PreferredDevicePresent => (bool?)_preferredDevicePresent;
+
     public void Apply(ClientAudioSettingsDTO settings)
     {
         if (!OperatingSystem.IsWindows())
@@ -42,6 +47,7 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
 
         if (string.IsNullOrWhiteSpace(settings.PreferredDeviceId))
         {
+            _preferredDevicePresent = null;
             _logger.LogInformation("No preferred audio device configured; leaving the Windows default alone");
             return;
         }
@@ -71,6 +77,7 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
 
             if (settings == null || string.IsNullOrWhiteSpace(settings.PreferredDeviceId))
             {
+                _preferredDevicePresent = null;
                 return;
             }
 
@@ -94,6 +101,8 @@ public class AudioDeviceService(ILogger<AudioDeviceService> logger) : IAudioDevi
 
                     target = nameMatches.Count == 1 ? nameMatches[0] : null;
                 }
+
+                _preferredDevicePresent = target != null;
 
                 if (target == null)
                 {

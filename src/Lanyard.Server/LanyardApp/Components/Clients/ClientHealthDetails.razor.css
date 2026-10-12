@@ -1,0 +1,51 @@
+.client-health {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+.client-health-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.client-health-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.client-health-reasons {
+    margin: 0;
+    padding-left: 20px;
+}
+
+/* Label beside value on wide screens, stacked on a phone where both won't fit. */
+.client-health-metrics {
+    display: grid;
+    grid-template-columns: minmax(160px, max-content) 1fr;
+    column-gap: 16px;
+    row-gap: 6px;
+    margin: 0;
+}
+
+.client-health-metrics dt {
+    color: var(--colorNeutralForeground3);
+}
+
+.client-health-metrics dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 599px) {
+    .client-health-metrics {
+        grid-template-columns: 1fr;
+        row-gap: 2px;
+    }
+
+    .client-health-metrics dd {
+        margin-bottom: 8px;
+    }
+}

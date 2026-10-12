@@ -20,6 +20,10 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
     // from before a replug/reorder. Entries remove themselves when their window closes.
     private readonly Dictionary<string, (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs)> _runningByDisplayKey = [];
 
+    // The dictionary is only changed on the dispatcher thread; the heartbeat reads its count from
+    // a timer thread, where a value one window stale is fine.
+    public int RunningCount => _runningByDisplayKey.Count;
+
     public async Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms)
     {
         if (projectionPrograms == null || !projectionPrograms.Any())

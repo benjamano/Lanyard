@@ -73,3 +73,17 @@
         display: flex;
     }
 }
+
+/* Grid cells pad 18px a side, which left "Unresponsive" a couple of pixels short even in the
+   column's minimum width (see GridTemplateColumns), so the cell ellipsized after the badge.
+   The selector matches Fluent's own "td:not([col-select])" padding rule so this one wins. */
+::deep td.clients-col-health:not([col-select="true"]) {
+    padding-inline: 8px;
+}
+
+/* The badge is a Fluent component root, so it is styled via its wrapper span. */
+::deep .kiosk-health-badge {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}

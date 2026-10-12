@@ -87,7 +87,8 @@ public class SignalRControlHubGameCaptureTests
             Mock.Of<IClientZoneScoreboardService>(),
             Mock.Of<IVideoStreamTokenService>(),
             gameResultServiceMock.Object,
-            Mock.Of<IClientSecretValidator>())
+            Mock.Of<IClientSecretValidator>(),
+            Mock.Of<IKioskHealthService>())
         {
             Context = hubCallerContextMock.Object
         };
