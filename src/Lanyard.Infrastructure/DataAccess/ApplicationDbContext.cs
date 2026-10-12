@@ -1,4 +1,5 @@
 ﻿using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -61,6 +62,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Client> Clients { get; set; }
         public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
+        public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
@@ -173,6 +175,17 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.LoginProvider).Metadata.SetMaxLength(null);
             modelBuilder.Entity<IdentityUserToken<string>>().Property(x => x.Name).Metadata.SetMaxLength(null);
 
+            // One row per kiosk, keyed by the kiosk itself: the latest heartbeat overwrites it.
+            modelBuilder.Entity<ClientHealthSnapshot>(entity =>
+            {
+                entity.HasKey(x => x.ClientId);
+                entity.HasOne(x => x.Client)
+                    .WithOne()
+                    .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
+            });
+
             modelBuilder.Entity<DashboardWidget>()
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)
@@ -192,7 +205,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<ProjectionStatusWidget>(WidgetType.ProjectionStatus)
                 .HasValue<MyShiftsWidget>(WidgetType.MyShifts)
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
-                .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff);
+                .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
+                .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -244,6 +258,19 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<WhoIsOnTodayWidget>()
                 .Property(x => x.LocationId)
                 .HasColumnName("WhoIsOnTodayWidget_LocationId");
+
+            // Shares MaxItems and LocationId with the widgets above, so pinned the same way.
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.MaxItems)
+                .HasColumnName("ComplianceSummaryWidget_MaxItems");
+
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("ComplianceSummaryWidget_LocationId");
+
+            modelBuilder.Entity<ComplianceSummaryWidget>()
+                .Property(x => x.ExpiryWindowDays)
+                .HasColumnName("ComplianceSummaryWidget_ExpiryWindowDays");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
@@ -794,6 +821,7 @@ namespace Lanyard.Infrastructure.DataAccess
             }
 
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);

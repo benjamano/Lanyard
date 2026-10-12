@@ -1,0 +1,25 @@
+@using Lanyard.Application.Services.Clients
+
+@* The title carries the reasons on hover; pages that have room also list them as text,
+   because a phone has no hover. *@
+<span class="kiosk-health-badge" title="@string.Join("\n", KioskHealthDisplay.Details(Health))">
+    <FluentBadge Appearance="@KioskHealthDisplay.Appearance(Status)" Color="@KioskHealthDisplay.Color(Status)">
+        @(Status == KioskHealthStatus.NoTelemetry && IsConnected is bool connected
+            ? (connected ? "Connected" : "Not connected")
+            : KioskHealthDisplay.Label(Status))
+    </FluentBadge>
+</span>
+
+@code {
+    [Parameter]
+    public KioskHealthView? Health { get; set; }
+
+    /// <summary>
+    /// Hub connectivity, shown instead of "No data" for kiosks too old to send heartbeats, so a
+    /// page can drop its separate connected column without losing that.
+    /// </summary>
+    [Parameter]
+    public bool? IsConnected { get; set; }
+
+    private KioskHealthStatus Status => Health?.Status ?? KioskHealthStatus.NoTelemetry;
+}

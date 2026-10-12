@@ -99,7 +99,8 @@ public class SignalRControlHubDisconnectTests
             Mock.Of<IClientZoneScoreboardService>(),
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
-            Mock.Of<IClientSecretValidator>())
+            Mock.Of<IClientSecretValidator>(),
+            Mock.Of<IKioskHealthService>())
         {
             Context = hubCallerContextMock.Object,
             Groups = Mock.Of<IGroupManager>()

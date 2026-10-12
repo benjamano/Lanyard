@@ -1731,4 +1731,105 @@ public class DashboardServiceTests
         Assert.AreEqual(5, (await ctx.DashboardWidgets.OfType<WhoIsOnTodayWidget>().SingleAsync()).LocationId);
         Assert.AreEqual(9, (await ctx.DashboardWidgets.OfType<PendingTimeOffWidget>().SingleAsync()).MaxItems);
     }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_PersistsNewComplianceSummaryWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        // Id = Guid.Empty forces CreateWidgetCopy, whose default arm fails the whole save.
+        dashboard.Widgets =
+        [
+            new ComplianceSummaryWidget { Id = Guid.Empty, MaxItems = 6, ExpiryWindowDays = 60, LocationId = 2, IsActive = true }
+        ];
+
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ComplianceSummaryWidget saved = await ctx.DashboardWidgets.OfType<ComplianceSummaryWidget>().SingleAsync();
+
+        Assert.AreEqual(WidgetType.ComplianceSummary, saved.Type);
+        Assert.AreEqual(6, saved.MaxItems);
+        Assert.AreEqual(60, saved.ExpiryWindowDays);
+        Assert.AreEqual(2, saved.LocationId);
+    }
+
+    [TestMethod]
+    public void ComplianceSummaryWidget_DefaultsToAThirtyDayWindowForEveryLocation()
+    {
+        ComplianceSummaryWidget widget = new();
+
+        Assert.AreEqual(WidgetType.ComplianceSummary, widget.Type);
+        Assert.AreEqual(30, widget.ExpiryWindowDays);
+        Assert.AreEqual(3, widget.MaxItems);
+        Assert.IsNull(widget.LocationId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveDashboard_UpdatesExistingComplianceSummaryWidget()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ComplianceSummaryWidget compliance = new() { Id = Guid.Empty, IsActive = true };
+        dashboard.Widgets = [compliance];
+        Assert.IsTrue((await service.SaveDashboardAsync(dashboard)).Success);
+
+        await using (ApplicationDbContext read = new(options))
+        {
+            compliance.Id = (await read.DashboardWidgets.OfType<ComplianceSummaryWidget>().SingleAsync()).Id;
+        }
+
+        compliance.ExpiryWindowDays = 90;
+        compliance.MaxItems = 0;
+        compliance.LocationId = 7;
+        Result<bool> result = await service.SaveDashboardAsync(dashboard);
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ComplianceSummaryWidget saved = await ctx.DashboardWidgets.OfType<ComplianceSummaryWidget>().SingleAsync();
+        Assert.AreEqual(90, saved.ExpiryWindowDays);
+        Assert.AreEqual(0, saved.MaxItems);
+        Assert.AreEqual(7, saved.LocationId);
+    }
+
+    [TestMethod]
+    public async Task DashboardService_SaveWidget_CopiesComplianceSummaryConfiguration()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DashboardService service = GetService(options);
+        Dashboard dashboard = await SeedDashboardAsync(options);
+
+        ComplianceSummaryWidget compliance = new() { Id = Guid.NewGuid(), DashboardId = dashboard.Id, IsActive = true };
+
+        await using (ApplicationDbContext seedCtx = new(options))
+        {
+            seedCtx.DashboardWidgets.Add(compliance);
+            await seedCtx.SaveChangesAsync();
+        }
+
+        Result<DashboardWidget> result = await service.SaveWidgetAsync(new ComplianceSummaryWidget
+        {
+            Id = compliance.Id,
+            DashboardId = dashboard.Id,
+            MaxItems = 10,
+            ExpiryWindowDays = 14,
+            LocationId = null,
+            IsActive = true
+        });
+
+        Assert.IsTrue(result.Success, result.Error);
+
+        await using ApplicationDbContext ctx = new(options);
+        ComplianceSummaryWidget saved = await ctx.DashboardWidgets.OfType<ComplianceSummaryWidget>().SingleAsync();
+        Assert.AreEqual(10, saved.MaxItems);
+        Assert.AreEqual(14, saved.ExpiryWindowDays);
+        Assert.IsNull(saved.LocationId);
+    }
 }

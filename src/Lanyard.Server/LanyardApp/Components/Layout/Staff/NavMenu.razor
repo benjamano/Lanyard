@@ -92,6 +92,14 @@
                     </FluentNavItem>
                 }
 
+                @if (Has(CompanyFeature.Training) || Has(CompanyFeature.Onboarding))
+                {
+                    <FluentNavItem Href="/manage/compliance" IconRest="@(new Icons.Regular.Size20.ShieldCheckmark())"
+                                   IconActive="@(new Icons.Filled.Size20.ShieldCheckmark())">
+                        Compliance
+                    </FluentNavItem>
+                }
+
                 <FluentNavCategory Title="Manage" IconRest="@(new Icons.Regular.Size20.Settings())"
                                    IconActive="@(new Icons.Filled.Size20.Settings())">
                     @if (_isAdmin)

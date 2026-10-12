@@ -53,8 +53,8 @@ else
             </FluentText>
         </FluentStack>
 
-        <FluentTabs>
-            <FluentTab Header="Details" IconStart="new Icons.Regular.Size20.Edit()">
+        <FluentTabs @bind-ActiveTabId="activeTabId">
+            <FluentTab Id="user-details" Header="Details" IconStart="new Icons.Regular.Size20.Edit()">
                 <EditForm EditContext="@_detailsEditContext" OnValidSubmit="HandleSaveDetails">
                     <DataAnnotationsValidator />
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-editor-tab-content">
@@ -83,7 +83,7 @@ else
                 </EditForm>
             </FluentTab>
 
-            <FluentTab Header="Password" IconStart="new Icons.Regular.Size20.Key()">
+            <FluentTab Id="user-password" Header="Password" IconStart="new Icons.Regular.Size20.Key()">
                 <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword">
                     <DataAnnotationsValidator />
                     <FluentStack Orientation="Orientation.Vertical" VerticalGap="6" Class="user-editor-tab-content">
@@ -106,7 +106,7 @@ else
                 </EditForm>
             </FluentTab>
 
-            <FluentTab Header="Account" IconStart="new Icons.Regular.Size20.PersonSettings()">
+            <FluentTab Id="user-account" Header="Account" IconStart="new Icons.Regular.Size20.PersonSettings()">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
                     <FluentText>Status: <strong>@StatusText</strong></FluentText>
 
@@ -127,7 +127,7 @@ else
 
             @if (!_hiddenFeatures.Contains(CompanyFeature.Onboarding))
             {
-                <FluentTab Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
+                <FluentTab Id="user-documents" Header="Documents" IconStart="new Icons.Regular.Size20.DocumentBulletList()">
                     <div class="documents-tab-content">
                         @if (isLoadingDocuments)
                         {
@@ -191,7 +191,7 @@ else
 
             @if (!_hiddenFeatures.Contains(CompanyFeature.StaffScheduling))
             {
-                <FluentTab Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
+                <FluentTab Id="user-rota" Header="Rota" IconStart="new Icons.Regular.Size20.CalendarLtr()">
                     <div class="rota-tab-content">
                         @if (isLoadingDocuments)
                         {
@@ -205,7 +205,7 @@ else
                 </FluentTab>
             }
 
-            <FluentTab Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
+            <FluentTab Id="user-danger" Header="Danger Zone" IconStart="new Icons.Regular.Size20.ShieldError()">
                 <FluentStack Orientation="Orientation.Vertical" VerticalGap="12" Class="user-editor-tab-content">
                     <AuthorizeView Roles="Admin" Context="authContext">
                         <Authorized>
@@ -232,6 +232,12 @@ else
 @code {
     [Parameter]
     public string UserId { get; set; } = string.Empty;
+
+    // Lets a link land on a tab, e.g. the compliance widget opening someone's Documents tab.
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
+    private string? activeTabId;
 
     private UserProfile? user;
     private bool isLoadingUser = true;
@@ -275,6 +281,21 @@ else
         {
             await LoadDocumentsAsync();
         }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Seeded once from the query string (after OnInitializedAsync, so the hidden modules are
+        // known) - after that, tab clicks own this via @bind-ActiveTabId.
+        activeTabId ??= Tab switch
+        {
+            "password" => "user-password",
+            "account" => "user-account",
+            "documents" when !_hiddenFeatures.Contains(CompanyFeature.Onboarding) => "user-documents",
+            "rota" when !_hiddenFeatures.Contains(CompanyFeature.StaffScheduling) => "user-rota",
+            "danger" => "user-danger",
+            _ => "user-details"
+        };
     }
 
     private async Task LoadUserAsync()

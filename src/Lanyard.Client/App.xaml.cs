@@ -1,3 +1,4 @@
+using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -70,6 +71,8 @@ public partial class App : Application
 
             await signalRClient.Connect(registrations);
             await laserGameStatePublisher.PublishAsync();
+
+            provider.GetRequiredService<KioskHealthReporter>().Start();
         }
         catch (Exception ex)
         {
