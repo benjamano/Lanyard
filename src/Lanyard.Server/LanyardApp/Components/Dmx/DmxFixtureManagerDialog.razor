@@ -193,7 +193,7 @@
                 fixtures = fixtures.OrderBy(f => f.StartChannel).ToList();
 
                 newName = string.Empty;
-                newStartChannel = NextFreeChannel();
+                newStartChannel = FirstFreeChannel(result.Data.StartChannel + channelCount, channelCount);
 
                 _toastService.ShowSuccess("Fixture added successfully.");
             }
@@ -409,11 +409,27 @@
         return sharedWith.Count == 0 ? null : $"Shares channels with {string.Join(", ", sharedWith)}";
     }
 
-    private int NextFreeChannel()
+    // The first start channel from `from` onwards where a fixture this wide fits without sharing
+    // channels, wrapping round to channel 1; the user's own `from` if nothing is free.
+    private int FirstFreeChannel(int from, int channelCount)
     {
-        int next = fixtures.Count == 0 ? 1 : fixtures.Max(f => f.StartChannel + ChannelCount(f));
+        int lastStart = UniverseSize - channelCount + 1;
 
-        return Math.Clamp(next, 1, UniverseSize);
+        IEnumerable<int> candidates = Enumerable.Range(Math.Clamp(from, 1, Math.Max(lastStart, 1)), Math.Max(lastStart - from + 1, 0))
+            .Concat(Enumerable.Range(1, Math.Max(Math.Min(from, lastStart + 1) - 1, 0)));
+
+        foreach (int start in candidates)
+        {
+            int last = start + channelCount - 1;
+            bool clashes = fixtures.Any(f => f.StartChannel <= last && f.StartChannel + ChannelCount(f) - 1 >= start);
+
+            if (!clashes)
+            {
+                return start;
+            }
+        }
+
+        return Math.Clamp(from, 1, UniverseSize);
     }
 
     private async Task CloseAsync()
