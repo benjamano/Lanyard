@@ -601,5 +601,15 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-12",
+    "summary": "Laser tag Hall of Fame now only shows your own company's games.",
+    "details": [
+      "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
+      "Games already recorded have been moved to the company whose kiosk played them.",
+      "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard."
+    ]
   }
 ]
