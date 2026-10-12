@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.ClientReleases;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Microsoft.AspNetCore.Hosting;
@@ -28,6 +29,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         .BuildServiceProvider();
 
     public const string SeedAdminPassword = "Integration-Test-Admin-Pw1!";
+
+    // What the app sees as GitHub's kiosk releases. Empty by default; tests add to it.
+    public FakeGitHubClientReleaseSource GitHubReleases { get; } = new();
 
     public CustomWebApplicationFactory()
     {
@@ -75,6 +79,11 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // Re-applied because the AddDbContextFactory above put back EF's own (untenanted)
             // factory - without this the test host wouldn't exercise company filtering at all.
             services.AddCompanyTenancy();
+
+            // The kiosk release catalogue reads GitHub; keep the test host off the network.
+            services.RemoveAll<IGitHubClientReleaseSource>();
+            services.AddSingleton(GitHubReleases);
+            services.AddSingleton<IGitHubClientReleaseSource>(sp => sp.GetRequiredService<FakeGitHubClientReleaseSource>());
         });
     }
 }

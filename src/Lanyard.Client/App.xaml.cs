@@ -33,27 +33,34 @@ public partial class App : Application
         {
             Console.WriteLine("▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\r\n██ ████ ▄▄▀██ ▀██ ██ ███ █ ▄▄▀██ ▄▄▀██ ▄▄▀████ ▄▄▀██ ████▄ ▄██ ▄▄▄██ ▀██ █▄▄ ▄▄\r\n██ ████ ▀▀ ██ █ █ ██▄▀▀▀▄█ ▀▀ ██ ▀▀▄██ ██ ████ █████ █████ ███ ▄▄▄██ █ █ ███ ██\r\n██ ▀▀ █ ██ ██ ██▄ ████ ███ ██ ██ ██ ██ ▀▀ ████ ▀▀▄██ ▀▀ █▀ ▀██ ▀▀▀██ ██▄ ███ ██\r\n▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀");
 
-            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") != "Development")
+            bool isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+
+            if (!isDevelopment)
             {
+                // Must run before anything else: Velopack hooks install/update events here.
                 VelopackApp.Build().Run();
 
-                await AutoUpdater.CheckForUpdatesAsync();
-
-                string version = AutoUpdater.GetCurrentVersion() ?? "Unknown Version";
-
-                Console.WriteLine($"Lanyard Client {version}");
+                Console.WriteLine($"Lanyard Client {AutoUpdater.GetCurrentVersion() ?? "Unknown Version"}");
             }
 
             Console.WriteLine("Starting...");
 
+            // The update check asks the server which version this kiosk should run, so it needs
+            // the server URL, shared secret and client ID loaded first.
             VerifyEnvironmentVariables.Check();
+
+            Guid clientId = ClientIdentity.LoadOrCreateClientId();
+            ClientIdentity.ApplyToEnvironment(clientId);
+
+            if (!isDevelopment)
+            {
+                await AutoUpdater.CheckAndApplyAtStartupAsync(clientId);
+            }
+
             StartupScheduler.EnsureStartupTaskExists();
 
             ServiceProvider provider = ClientServiceBootstrapper.BuildServiceProvider();
             List<Action<HubConnection>> registrations = ClientServiceBootstrapper.BuildHubRegistrations(provider);
-
-            Guid clientId = ClientIdentity.LoadOrCreateClientId();
-            ClientIdentity.ApplyToEnvironment(clientId);
 
             await StartupControls.ShowIfInterruptedAsync();
 

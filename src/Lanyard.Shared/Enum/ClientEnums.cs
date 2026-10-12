@@ -32,3 +32,15 @@ public enum ClientRestartType
     Application = 1,
     Computer = 2
 }
+
+// Which kiosk software version a client is told to run. Stored on Client; the server resolves it
+// to one concrete version on every update check (see ClientTargetVersionResolver).
+public enum ClientUpdateRing
+{
+    // The newest release an admin has promoted to everyone (or that was published as a normal release).
+    Stable = 0,
+    // The newest release of any kind, so this PC tries new releases before everyone else.
+    Canary = 1,
+    // Exactly PinnedClientVersion, until an admin changes it. Can be older than the current version.
+    Pinned = 2
+}

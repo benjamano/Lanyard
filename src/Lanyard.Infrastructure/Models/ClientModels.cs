@@ -43,6 +43,14 @@ public class Client : ICompanyOwned
     [MaxLength(ClientVersionFormat.MaxLength)]
     public string? ReportedClientVersion { get; set; }
     public DateTime? ClientVersionReportedAt { get; set; }
+
+    // Which version this kiosk should update to - see ClientUpdateRing. Only an Admin of the
+    // client's own company sets these (ClientUpdatePolicyService, through the tenant filter);
+    // nothing the kiosk sends can change them.
+    public ClientUpdateRing UpdateRing { get; set; } = ClientUpdateRing.Stable;
+
+    [MaxLength(ClientVersionFormat.MaxLength)]
+    public string? PinnedClientVersion { get; set; }
 }
 
 public class ClientProjectionSettings

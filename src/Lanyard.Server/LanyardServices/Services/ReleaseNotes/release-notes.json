@@ -605,10 +605,12 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "See which version of the kiosk software each PC is running.",
+    "summary": "See and control which version of the kiosk software each PC runs.",
     "details": [
       "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
-      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version."
+      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
+      "A new Updates tab in each PC's settings chooses which version it runs: Stable (the version approved for every PC), Canary (tries each new release first), or Pinned to one version. A PC can be pinned back to an older version if a new one causes problems.",
+      "Update now asks a connected PC to update straight away instead of waiting for its next restart. PCs marked Canary or Pinned are labelled on the Clients page, along with any PC that isn't yet on the version it should be."
     ]
   }
 ]

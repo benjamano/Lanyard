@@ -1,3 +1,4 @@
+using Lanyard.Shared.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,8 +17,8 @@ namespace Lanyard.Application.Services.Authentication
     /// </summary>
     public static class ClientRequestAuthorization
     {
-        public const string SecretHeaderName = "X-Lanyard-Client-Secret";
-        public const string SecretQueryName = "secret";
+        public const string SecretHeaderName = ClientConnectionQuery.SecretHeader;
+        public const string SecretQueryName = ClientConnectionQuery.Secret;
 
         // ILoggerFactory is an app-wide singleton, so the logger it produces for this fixed
         // category name is the same on every call - resolving and creating it fresh per request
