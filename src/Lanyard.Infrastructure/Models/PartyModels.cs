@@ -123,4 +123,36 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? UpdateDate { get; set; }
         public string? UpdateByUserId { get; set; }
     }
+
+    // A company's own artwork for a printout (voucher or feedback form), with where to print each
+    // value on it. One row per company per document; no row = Lanyard's standard design. Company-
+    // wide rather than per location: it's the company's branding, the same at every venue.
+    public class PartyDocumentTemplate : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public PartyArtworkDocument Document { get; set; }
+
+        // A PNG or JPEG of the blank artwork (boxes empty), filling the page. QuestPDF can't draw a
+        // PDF onto a page, so the artwork has to be an image. Null = the standard design.
+        public Guid? ArtworkFileId { get; set; }
+
+        // The artwork's printed size. The voucher and feedback form are A5 portrait at Play2Day.
+        public decimal WidthMm { get; set; } = 148;
+        public decimal HeightMm { get; set; } = 210;
+
+        public PartyTemplateFont Font { get; set; } = PartyTemplateFont.Handwritten;
+
+        // JSON list of PartyTemplateField - the boxes on the artwork. See PartyTemplateFields.
+        public string FieldsJson { get; set; } = "[]";
+
+        // Vouchers only: how long the free return is valid from the party date.
+        public int VoucherValidityMonths { get; set; } = 12;
+
+        public DateTime UpdateDate { get; set; }
+        public string? UpdatedByUserId { get; set; }
+    }
 }

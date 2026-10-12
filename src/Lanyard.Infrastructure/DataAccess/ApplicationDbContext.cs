@@ -123,6 +123,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<PartyBooking> PartyBookings { get; set; }
         public DbSet<PartyLocationSettings> PartyLocationSettings { get; set; }
         public DbSet<PartyMenuItem> PartyMenuItems { get; set; }
+        public DbSet<PartyDocumentTemplate> PartyDocumentTemplates { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -451,6 +452,18 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<PartyMenuItem>()
                 .HasIndex(x => new { x.LocationId, x.Kind, x.SortOrder });
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .HasIndex(x => new { x.CompanyId, x.Document })
+                .IsUnique();
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .Property(x => x.WidthMm)
+                .HasPrecision(6, 1);
+
+            modelBuilder.Entity<PartyDocumentTemplate>()
+                .Property(x => x.HeightMm)
+                .HasPrecision(6, 1);
 
             modelBuilder.Entity<PartyMenuItem>()
                 .HasOne(x => x.Location)

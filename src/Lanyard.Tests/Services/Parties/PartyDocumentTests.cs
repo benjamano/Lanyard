@@ -115,6 +115,7 @@ public class PartyDocumentTests
         return new PartyDocumentService(
             new PartyBookingService(SchedulingTestHelpers.GetFactory(options)),
             new PartySettingsService(SchedulingTestHelpers.GetFactory(options)),
+            new PartyTemplateService(SchedulingTestHelpers.GetFactory(options)),
             locations.Object,
             new Mock<IFileService>().Object,
             NullLogger<PartyDocumentService>.Instance);
@@ -143,7 +144,7 @@ public class PartyDocumentTests
         (_, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
         PartyBooking booking = await SeedBookingAsync(options, location, PartyMenuType.Cold);
 
-        Result<PartyDocument> result = await GetDocumentService(options).BuildAsync(SchedulingTestHelpers.ManagerScopeFor(location), booking.Id, PartyDocumentType.FoodSheet);
+        Result<PartyDocument> result = await GetDocumentService(options).BuildAsync(SchedulingTestHelpers.ManagerScopeFor(location), booking.Id, PartyDocumentType.FoodSheet, "Amy Clarke");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         Assert.AreEqual("Lily 2026-03-14 cold food sheet.pdf", result.Data!.FileName);
@@ -158,7 +159,7 @@ public class PartyDocumentTests
         (_, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
         PartyBooking booking = await SeedBookingAsync(options, location, PartyMenuType.Hot);
 
-        Result<PartyDocument> result = await GetDocumentService(options).BuildAsync(SchedulingTestHelpers.ManagerScopeFor(otherLocation), booking.Id, PartyDocumentType.Pack);
+        Result<PartyDocument> result = await GetDocumentService(options).BuildAsync(SchedulingTestHelpers.ManagerScopeFor(otherLocation), booking.Id, PartyDocumentType.Pack, "Amy Clarke");
 
         Assert.IsFalse(result.IsSuccess);
     }

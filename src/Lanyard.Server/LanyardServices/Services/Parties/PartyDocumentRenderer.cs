@@ -1,4 +1,5 @@
 using System.Globalization;
+using Lanyard.Infrastructure.DTO.Parties;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using QuestPDF.Fluent;
@@ -13,7 +14,15 @@ public record PartyDocumentModel(
     string? HostName,
     IReadOnlyList<PartyMenuItem> Menu,
     byte[]? LogoBytes,
-    string AccentColorHex);
+    string AccentColorHex,
+    PartyArtwork? Voucher = null,
+    PartyArtwork? Feedback = null,
+    string? AuthorisedBy = null,
+    string? CompanyName = null);
+
+// A company's artwork for the voucher or feedback form: the template, its boxes, and the image
+// itself. Artwork null = draw Lanyard's standard design instead.
+public record PartyArtwork(PartyDocumentTemplate Template, IReadOnlyList<PartyTemplateField> Fields, byte[]? Artwork);
 
 // Lays out the party printouts. Pure (data in, PDF bytes out) so the layouts can be changed or
 // replaced without touching how the data is loaded, and tested without a database.
@@ -22,7 +31,7 @@ public record PartyDocumentModel(
 // hot food tally sheet (each meal with its allergens and a row per side to count on) and the cold
 // sheet (a row per child for their sandwich choice, with an allergy panel). Food is chosen when
 // the children arrive, so the sheets print with the party details filled in and the rest blank.
-public static class PartyDocumentRenderer
+public static partial class PartyDocumentRenderer
 {
     private static readonly CultureInfo Uk = CultureInfo.GetCultureInfo("en-GB");
 
@@ -35,6 +44,7 @@ public static class PartyDocumentRenderer
     static PartyDocumentRenderer()
     {
         QuestPDF.Settings.License = LicenseType.Community;
+        RegisterFonts();
     }
 
     public static byte[] Render(PartyDocumentModel model, PartyDocumentType type) =>
@@ -48,9 +58,16 @@ public static class PartyDocumentRenderer
                 case PartyDocumentType.FoodSheet:
                     ComposeFoodSheet(container, model);
                     break;
+                case PartyDocumentType.Voucher:
+                    ComposeArtworkSheets(container, model, [PartyArtworkDocument.Voucher]);
+                    break;
+                case PartyDocumentType.FeedbackForm:
+                    ComposeArtworkSheets(container, model, [PartyArtworkDocument.FeedbackForm]);
+                    break;
                 default:
                     ComposeReservedCard(container, model);
                     ComposeFoodSheet(container, model);
+                    ComposeArtworkSheets(container, model, [PartyArtworkDocument.Voucher, PartyArtworkDocument.FeedbackForm]);
                     break;
             }
         })
@@ -64,6 +81,8 @@ public static class PartyDocumentRenderer
         {
             PartyDocumentType.ReservedCard => "Reserved table card",
             PartyDocumentType.FoodSheet => model.Booking.MenuType == PartyMenuType.Cold ? "Cold food sheet" : "Hot food sheet",
+            PartyDocumentType.Voucher => "Free return voucher",
+            PartyDocumentType.FeedbackForm => "Feedback form",
             _ => "Party documents"
         };
 

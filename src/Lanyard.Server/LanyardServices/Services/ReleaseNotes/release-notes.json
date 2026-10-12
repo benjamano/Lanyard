@@ -625,5 +625,18 @@
       "New Party Settings page for each location: set the hot and cold menus with their allergens, and how long a party lasts and when the children eat and play laser tag.",
       "When you book a party, Lanyard now fills in the finish, eating and laser tag times from the arrival time using those settings. You can still change them on any party."
     ]
+  },
+  {
+    "version": "1.4.17",
+    "releaseDate": "2026-10-12",
+    "summary": "Print the free return voucher and feedback form for each party.",
+    "details": [
+      "Each party's Print card now has a Free return voucher and a Feedback form. The voucher shows the child's name, the party date, an expiry date and \"Authorised by\" with the name of whoever prints it. The feedback form has the party name and host filled in.",
+      "New Parties > Printouts page: upload your own blank artwork for the voucher and feedback form, and Lanyard prints each party's details into the boxes. A drawing of the artwork shows where every box goes as you move it, and Preview prints a sample.",
+      "Choose how many months a voucher is valid for (12 by default).",
+      "Without your own artwork, Lanyard prints a standard voucher and feedback form with your logo and colour.",
+      "A5 printouts print at their real size on A4. Print everything puts the voucher and feedback form side by side on one sheet.",
+      "Fixed party printouts failing for companies with a wide logo."
+    ]
   }
 ]
