@@ -1,0 +1,292 @@
+@using Lanyard.Application.Services.Dmx
+@using Lanyard.Infrastructure.DTO.Dmx
+@using Lanyard.Infrastructure.Models.Dmx
+
+@inject IDmxFixtureDefinitionService _definitionService
+
+@* Build a fixture type by hand, channel by channel, for a light the Open Fixture Library doesn't
+   have. Closes with the saved DmxFixtureDefinition. *@
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="new Icons.Regular.Size24.Wrench()" Margin="@Margin.End2" />
+            <FluentText Size="@TextSize.Size500">@(StartFrom == null ? "New Fixture Type" : "Copy Fixture Type")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="custom-fixture">
+            <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
+                <FluentText Size="TextSize.Size300">
+                    List the light's channels in the order its manual gives them, and say what each one does. Check the manual for the mode the light is set to.
+                </FluentText>
+
+                <div class="custom-fixture-names">
+                    <FluentTextInput Label="Manufacturer" Value="@manufacturer" ValueChanged="@(v => manufacturer = v ?? string.Empty)" Immediate="true" Class="custom-fixture-text" />
+                    <FluentTextInput Label="Model" Value="@model" ValueChanged="@(v => model = v ?? string.Empty)" Immediate="true" Class="custom-fixture-text" />
+                </div>
+
+                @for (int modeIndex = 0; modeIndex < modes.Count; modeIndex++)
+                {
+                    ModeDraft mode = modes[modeIndex];
+                    int capturedModeIndex = modeIndex;
+
+                    <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3" Class="custom-fixture-mode" @key="mode">
+                        <FluentStack Orientation="Orientation.Vertical" VerticalGap="12px">
+                            <div class="custom-fixture-mode-header">
+                                <FluentTextInput Label="Mode name" Value="@mode.Name" ValueChanged="@(v => mode.Name = v ?? string.Empty)" Immediate="true" Class="custom-fixture-text" />
+                                <span class="custom-fixture-muted">@mode.Channels.Count channel@(mode.Channels.Count == 1 ? "" : "s")</span>
+                                @if (modes.Count > 1)
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                  Title="@($"Remove the {mode.Name} mode")" Tooltip="Remove this mode"
+                                                  OnClick="@(() => modes.RemoveAt(capturedModeIndex))" />
+                                }
+                            </div>
+
+                            <ol class="custom-fixture-channels">
+                                @for (int channelIndex = 0; channelIndex < mode.Channels.Count; channelIndex++)
+                                {
+                                    ChannelDraft channel = mode.Channels[channelIndex];
+                                    int capturedChannelIndex = channelIndex;
+
+                                    <li class="custom-fixture-channel" @key="channel">
+                                        <span class="custom-fixture-offset" aria-hidden="true">@(channelIndex + 1)</span>
+                                        <div class="custom-fixture-channel-fields">
+                                            <FluentTextInput Label="@($"Channel {channelIndex + 1} name")" Value="@channel.Label" ValueChanged="@(v => channel.Label = v ?? string.Empty)" Immediate="true" Class="custom-fixture-text" />
+                                            <FluentSelect TOption="DmxChannelRole" TValue="DmxChannelRole" Label="Controls" Value="@channel.Role" ValueChanged="@(r => channel.Role = r)" Disabled="@channel.IsFine" Class="custom-fixture-role">
+                                                @foreach (DmxChannelRole role in DmxChannelRoleText.PickerOrder)
+                                                {
+                                                    <FluentOption Value="@role">@DmxChannelRoleText.Name(role)</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                            @if (channelIndex > 0)
+                                            {
+                                                <FluentCheckbox Value="@channel.IsFine" ValueChanged="@((bool v) => channel.IsFine = v)" Label="Fine (16-bit) for the channel above" />
+                                            }
+                                        </div>
+                                        <div class="custom-fixture-channel-actions">
+                                            <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.ArrowUp())"
+                                                          Title="Move up" Tooltip="Move up" Disabled="@(channelIndex == 0)"
+                                                          OnClick="@(() => Move(mode, capturedChannelIndex, -1))" />
+                                            <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.ArrowDown())"
+                                                          Title="Move down" Tooltip="Move down" Disabled="@(channelIndex == mode.Channels.Count - 1)"
+                                                          OnClick="@(() => Move(mode, capturedChannelIndex, 1))" />
+                                            <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                                          Title="Remove channel" Tooltip="Remove channel" Disabled="@(mode.Channels.Count == 1)"
+                                                          OnClick="@(() => mode.Channels.RemoveAt(capturedChannelIndex))" />
+                                        </div>
+
+                                        @if (!channel.IsFine && channel.Role is DmxChannelRole.ColorWheel or DmxChannelRole.ColorMacro or DmxChannelRole.Strobe)
+                                        {
+                                            <div class="custom-fixture-ranges">
+                                                <span class="custom-fixture-muted">
+                                                    @(channel.Role == DmxChannelRole.Strobe
+                                                        ? "Optional: which values close the shutter (black) or open it (white), so the preview goes dark when it's shut."
+                                                        : "Which values show which colour, so the preview can show it.")
+                                                </span>
+                                                @foreach (RangeDraft range in channel.Ranges)
+                                                {
+                                                    <div class="custom-fixture-range" @key="range">
+                                                        <FluentNumberInput TValue="int" Label="From" Value="@range.Start" ValueChanged="@(v => range.Start = v)" Min="0" Max="255" Width="90px" />
+                                                        <FluentNumberInput TValue="int" Label="To" Value="@range.End" ValueChanged="@(v => range.End = v)" Min="0" Max="255" Width="90px" />
+                                                        <label class="custom-fixture-colour">
+                                                            <span>Colour</span>
+                                                            <input type="color" value="@range.ColorHex" @onchange="@(e => range.ColorHex = e.Value?.ToString() ?? "#FFFFFF")" />
+                                                        </label>
+                                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                                                      Title="Remove range" Tooltip="Remove range"
+                                                                      OnClick="@(() => channel.Ranges.Remove(range))" />
+                                                    </div>
+                                                }
+                                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size16.Add())"
+                                                              OnClick="@(() => AddRange(channel))">
+                                                    Add range
+                                                </FluentButton>
+                                            </div>
+                                        }
+                                    </li>
+                                }
+                            </ol>
+
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.AddCircle())"
+                                          Disabled="@(mode.Channels.Count >= 512)"
+                                          OnClick="@(() => mode.Channels.Add(new ChannelDraft { Label = $"Channel {mode.Channels.Count + 1}" }))">
+                                Add channel
+                            </FluentButton>
+                        </FluentStack>
+                    </FluentCard>
+                }
+
+                <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size20.Add())"
+                              Disabled="@(modes.Count >= DmxFixtureDefinitionService.MaxCustomModes)"
+                              OnClick="AddMode">
+                    Add another mode
+                </FluentButton>
+            </FluentStack>
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" HorizontalAlignment="HorizontalAlignment.Right">
+            <FluentButton Appearance="ButtonAppearance.Default" OnClick="CancelAsync" Disabled="@isSaving">Cancel</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary" OnClick="SaveAsync" Disabled="@(isSaving || string.IsNullOrWhiteSpace(manufacturer) || string.IsNullOrWhiteSpace(model))">
+                Save Fixture Type
+            </FluentButton>
+        </FluentStack>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    // When set, the new type starts as a copy of this mode (and its definition's name).
+    [Parameter]
+    public DmxFixtureMode? StartFrom { get; set; }
+
+    private string manufacturer = string.Empty;
+    private string model = string.Empty;
+    private List<ModeDraft> modes = [];
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        if (StartFrom == null)
+        {
+            modes = [new ModeDraft
+            {
+                Name = "Standard",
+                Channels =
+                [
+                    new ChannelDraft { Label = "Red", Role = DmxChannelRole.Red },
+                    new ChannelDraft { Label = "Green", Role = DmxChannelRole.Green },
+                    new ChannelDraft { Label = "Blue", Role = DmxChannelRole.Blue },
+                ]
+            }];
+
+            return;
+        }
+
+        DmxFixtureDefinition? definition = StartFrom.Definition;
+        manufacturer = definition?.Source == DmxFixtureDefinitionSource.BuiltIn ? string.Empty : definition?.Manufacturer ?? string.Empty;
+        model = definition == null ? string.Empty : $"{definition.Model} (copy)";
+
+        modes = [new ModeDraft
+        {
+            Name = StartFrom.Name,
+            Channels = StartFrom.Channels
+                .OrderBy(c => c.Offset)
+                .Select(c => new ChannelDraft
+                {
+                    Label = c.Label,
+                    Role = c.Role,
+                    IsFine = c.FineLevel > 0,
+                    Ranges = c.ColorRanges
+                        .OrderBy(r => r.DmxStart)
+                        .Select(r => new RangeDraft { Start = r.DmxStart, End = r.DmxEnd, ColorHex = r.ColorHex })
+                        .ToList()
+                })
+                .ToList()
+        }];
+    }
+
+    private void AddMode()
+    {
+        // A new mode starts as a copy of the last one; modes usually differ by a channel or two.
+        ModeDraft last = modes[^1];
+
+        modes.Add(new ModeDraft
+        {
+            Name = $"Mode {modes.Count + 1}",
+            Channels = last.Channels.Select(c => new ChannelDraft
+            {
+                Label = c.Label,
+                Role = c.Role,
+                IsFine = c.IsFine,
+                Ranges = c.Ranges.Select(r => new RangeDraft { Start = r.Start, End = r.End, ColorHex = r.ColorHex }).ToList()
+            }).ToList()
+        });
+    }
+
+    private static void Move(ModeDraft mode, int index, int direction)
+    {
+        int target = index + direction;
+
+        if (target < 0 || target >= mode.Channels.Count)
+        {
+            return;
+        }
+
+        (mode.Channels[index], mode.Channels[target]) = (mode.Channels[target], mode.Channels[index]);
+    }
+
+    private static void AddRange(ChannelDraft channel)
+    {
+        int start = channel.Ranges.Count == 0 ? 0 : Math.Min(channel.Ranges.Max(r => r.End) + 1, 255);
+
+        channel.Ranges.Add(new RangeDraft { Start = start, End = Math.Min(start + 9, 255), ColorHex = channel.Role == DmxChannelRole.Strobe ? "#000000" : "#FFFFFF" });
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            CustomFixtureInput input = new(
+                manufacturer,
+                model,
+                modes.Select(m => new CustomFixtureModeInput(
+                    m.Name,
+                    m.Channels.Select(c => new CustomFixtureChannelInput(
+                        c.Label,
+                        c.Role,
+                        c.IsFine,
+                        c.Ranges.Select(r => new CustomFixtureColorRangeInput(
+                            (byte)Math.Clamp(r.Start, 0, 255),
+                            (byte)Math.Clamp(r.End, 0, 255),
+                            r.ColorHex)).ToList())).ToList())).ToList());
+
+            Result<DmxFixtureDefinition> result = await _definitionService.CreateCustomAsync(input);
+
+            if (!result.IsSuccess || result.Data == null)
+            {
+                _toastService.ShowError(result.Error ?? "The fixture type couldn't be saved.");
+                return;
+            }
+
+            _toastService.ShowSuccess($"{result.Data.Manufacturer} {result.Data.Model} saved.");
+
+            await Dialog.CloseAsync(result.Data);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private sealed class ModeDraft
+    {
+        public string Name { get; set; } = string.Empty;
+        public List<ChannelDraft> Channels { get; set; } = [];
+    }
+
+    private sealed class ChannelDraft
+    {
+        public string Label { get; set; } = string.Empty;
+        public DmxChannelRole Role { get; set; } = DmxChannelRole.Generic;
+        public bool IsFine { get; set; }
+        public List<RangeDraft> Ranges { get; set; } = [];
+    }
+
+    private sealed class RangeDraft
+    {
+        public int Start { get; set; }
+        public int End { get; set; }
+        public string ColorHex { get; set; } = "#FFFFFF";
+    }
+}

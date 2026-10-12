@@ -64,6 +64,30 @@
                         </FluentGrid>
                     </FluentStack>
 
+                    @if (!showFixturePreview)
+                    {
+                        <FluentStack Width="auto">
+                            <FluentGrid>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.SmAndDown">
+                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
+                                                  Appearance="ButtonAppearance.Outline"
+                                                  Disabled="@(selectedClientId == null)"
+                                                  OnClick="ToggleGroupByFixture">
+                                        @(groupByFixture ? "All Channels" : "Group by Fixture")
+                                    </FluentButton>
+                                </FluentGridItem>
+                                <FluentGridItem HiddenWhen="@GridItemHidden.MdAndUp">
+                                    <FluentButton IconStart="@(groupByFixture ? new Icons.Filled.Size20.GroupList() : new Icons.Regular.Size20.GroupList())"
+                                                  Appearance="ButtonAppearance.Outline"
+                                                  Disabled="@(selectedClientId == null)"
+                                                  OnClick="ToggleGroupByFixture"
+                                                  Title="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")"
+                                                  Tooltip="@(groupByFixture ? "Show all channels" : "Group sliders by fixture")" />
+                                </FluentGridItem>
+                            </FluentGrid>
+                        </FluentStack>
+                    }
+
                     <FluentButton IconStart="new Icons.Regular.Size20.Settings()"
                                     Appearance="ButtonAppearance.Outline"
                                     Disabled="@(selectedClientId == null)"
@@ -103,6 +127,7 @@
                         IsBlindModeEnabled="@isBlindModeEnabled"
                         EditingStep="@editingStep"
                         ShowFixturePreview="@showFixturePreview"
+                        GroupByFixture="@groupByFixture"
                         PreviewingSceneId="@previewingSceneId"
                         PreviewingSceneSteps="@previewingSceneSteps"
                         PreviewSceneLoop="@(selectedScene?.Loop ?? true)" />
@@ -142,6 +167,7 @@
     private bool isBlindModeEnabled = true;
 
     private bool showFixturePreview = false;
+    private bool groupByFixture = false;
 
     private bool isASceneOpen = false;
 
@@ -227,6 +253,11 @@
     private void ToggleFixturePreview()
     {
         showFixturePreview = !showFixturePreview;
+    }
+
+    private void ToggleGroupByFixture()
+    {
+        groupByFixture = !groupByFixture;
     }
 
     private async Task OpenFixtureManager()

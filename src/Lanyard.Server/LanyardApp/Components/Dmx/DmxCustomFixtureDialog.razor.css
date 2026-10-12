@@ -1,0 +1,157 @@
+.custom-fixture {
+    width: 100%;
+}
+
+.custom-fixture ::deep .custom-fixture-mode {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.custom-fixture ::deep .custom-fixture-text,
+.custom-fixture ::deep .custom-fixture-text fluent-text-input,
+.custom-fixture ::deep .custom-fixture-role {
+    width: 100%;
+    max-width: none;
+}
+
+.custom-fixture ::deep .custom-fixture-muted,
+.custom-fixture-muted {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+/* Phone first: one field per line; side by side once there's room. */
+.custom-fixture-names,
+.custom-fixture-mode-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.custom-fixture-channels {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.custom-fixture-channel {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    grid-template-areas:
+        "offset fields"
+        "offset actions"
+        "ranges ranges";
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.custom-fixture-channel:last-child {
+    border-bottom: none;
+}
+
+.custom-fixture-offset {
+    grid-area: offset;
+    align-self: start;
+    margin-top: 28px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--colorNeutralForeground3);
+}
+
+.custom-fixture-channel-fields {
+    grid-area: fields;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.custom-fixture-channel-actions {
+    grid-area: actions;
+    display: flex;
+    gap: 2px;
+}
+
+.custom-fixture-ranges {
+    grid-area: ranges;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 36px;
+    padding: 8px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground3);
+}
+
+.custom-fixture-range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.custom-fixture-colour {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--fontSizeBase300);
+}
+
+.custom-fixture-colour input {
+    width: 48px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    cursor: pointer;
+}
+
+@media (min-width: 700px) {
+    .custom-fixture-names,
+    .custom-fixture-mode-header {
+        flex-direction: row;
+        align-items: flex-end;
+    }
+
+    .custom-fixture-channel {
+        grid-template-columns: 28px 1fr auto;
+        grid-template-areas:
+            "offset fields actions"
+            "ranges ranges ranges";
+        align-items: end;
+    }
+
+    .custom-fixture-channel-fields {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .custom-fixture-channel-fields ::deep .custom-fixture-text,
+    .custom-fixture-channel-fields ::deep .custom-fixture-text fluent-text-input {
+        width: 200px;
+    }
+
+    .custom-fixture-channel-fields ::deep .custom-fixture-role {
+        width: 190px;
+    }
+
+    .custom-fixture-channel-actions {
+        align-self: end;
+    }
+
+    .custom-fixture-mode-header ::deep .custom-fixture-text,
+    .custom-fixture-mode-header ::deep .custom-fixture-text fluent-text-input {
+        width: 320px;
+    }
+
+    .custom-fixture-mode-header .custom-fixture-muted {
+        padding-bottom: 6px;
+        white-space: nowrap;
+    }
+}
