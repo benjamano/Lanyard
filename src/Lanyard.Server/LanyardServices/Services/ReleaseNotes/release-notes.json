@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, choose which kiosk software version each PC runs, and export approved timesheet hours for payroll.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -632,7 +632,12 @@
       "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
-      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
+      "Manage > Rota > Timesheets has a new Export button that downloads approved hours as a CSV file for payroll: one row per person per day, and a total for each person.",
+      "Choose any date range up to 93 days, or pick This week, Last week or Last month. Times are UK local time, and a shift that runs past midnight counts on the day it started.",
+      "Only approved, finished time counts towards the hours. Time still waiting for approval, flagged for review, or still on the clock is listed in the file as Excluded, and you're warned before you download.",
+      "Hours are rounded to the nearest minute, with a Minutes column and an Hours column to two decimal places. Breaks aren't taken off; the rota break is shown so payroll can decide.",
+      "Managers can export their own location. Admins can export any location."
     ]
   }
 ]

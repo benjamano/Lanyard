@@ -1,0 +1,45 @@
+.export-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.export-dialog ::deep .export-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: 0.85rem;
+}
+
+.export-presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Stacked on a phone, side by side once there's room. */
+.export-dates {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+@media (min-width: 480px) {
+    .export-dates {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.export-summary {
+    padding: 10px 12px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+    background: var(--colorNeutralBackground2);
+}
+
+.export-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    width: 100%;
+}

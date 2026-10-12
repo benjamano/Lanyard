@@ -150,6 +150,7 @@ builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
+builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
 builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
