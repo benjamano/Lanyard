@@ -6,7 +6,21 @@ namespace Lanyard.Infrastructure.DTO.Scheduling;
 
 // An open shift someone could ask for. NotEligibleReason says why they can't ("You're already
 // working then"), and is null when they can; MyClaim is their request if they've made one.
-public record OpenShiftView(Shift Shift, bool NeedsApproval, ShiftClaim? MyClaim, string? NotEligibleReason);
+// MissingTraining is the position's required training they haven't done (or that runs out before
+// the shift), so the card can link each course.
+public record OpenShiftView(Shift Shift, bool NeedsApproval, ShiftClaim? MyClaim, string? NotEligibleReason)
+{
+    public List<TrainingGap> MissingTraining { get; init; } = [];
+}
+
+// A course someone needs for a shift's position but isn't current on. RanOutUtc is set when they
+// did pass it but it's a recurring course that runs out before the shift; null means they never
+// have. OpenAssignmentId is their assignment still to complete, if they've been given one -
+// that's where a link sends them (the course player is keyed by assignment, not course).
+public record TrainingGap(Guid CourseId, string CourseName, DateTime? RanOutUtc, Guid? OpenAssignmentId)
+{
+    public bool Lapsed => RanOutUtc is not null;
+}
 
 // A colleague's swap request. ShiftsICanOffer are the viewer's own shifts they could give in
 // return; empty means they have nothing to offer.

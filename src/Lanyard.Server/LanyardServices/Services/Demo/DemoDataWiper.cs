@@ -18,7 +18,8 @@ internal static class DemoDataWiper
 
         await EnsureIsDemoCompanyAsync(ctx, demoCompanyId, ct);
 
-        // Training
+        // Training (the position requirements point at courses, so they go first)
+        await ctx.StaffPositionRequiredCourses.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttemptAnswers.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttempts.ExecuteDeleteAsync(ct);
         await ctx.CourseSectionProgresses.ExecuteDeleteAsync(ct);
