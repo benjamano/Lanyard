@@ -1,6 +1,6 @@
 ---
 name: dashboard-widgets
-description: Checklist for adding a new dashboard widget type in LanyardApp — touches 7 separate places with no compiler enforcement tying them together, so missing one causes either a runtime EF error, a widget that saves fine but silently renders blank, or a widget whose whole dashboard save silently fails. Use whenever adding a new widget type to the dashboard system, or debugging a widget that isn't rendering/configuring/saving correctly despite the data looking right.
+description: Checklist for adding a new dashboard widget type in LanyardApp — touches 8 separate places with no compiler enforcement tying them together, so missing one causes either a runtime EF error, a widget that saves fine but silently renders blank, or a widget whose whole dashboard save silently fails. Use whenever adding a new widget type to the dashboard system, or debugging a widget that isn't rendering/configuring/saving correctly despite the data looking right.
 ---
 
 # Adding a dashboard widget type
@@ -21,5 +21,10 @@ Widget type dispatch in this repo is pure manual `switch`/enum matching — ther
    - `UpdateTypeSpecificWidgetProperties` — the equivalent copy for an *existing* widget's edits (same properties, different code path, no shared helper).
    - `SaveWidgetAsync`'s `switch` **statement** — a separate single-widget save path; if the type has configurable properties, add a case here too or edits silently don't stick.
    If the new widget type has no configurable properties at all (like `GreetingWidget`), it still needs a bare case in `CreateWidgetCopy` (`GreetingWidget => new GreetingWidget()`) — omitting it entirely hits the same `InvalidOperationException` fallback.
+8. **`Services/Features/CompanyFeatureCatalog.cs`'s `ForWidget`** — maps the widget to the paid module it belongs to, so `DashboardGrid` hides it for a company without that module. Leave it out (falls through to `null`) for widgets every company gets, or for a widget spanning several modules, which must then hide its own sections (see `RenderComplianceSummaryWidget`).
+
+`src/Lanyard.Tests/Integration/WidgetDispatchCoverageTests.cs` now checks steps 1, 3, 4, 5 and 7 for every `WidgetType` (discriminator mapping, a save through `CreateWidgetCopy`, both `DashboardGrid` switches and the editor menu item), so a missed step fails the build's tests instead of failing silently. If a new type legitimately has no config dialog, add it to that test's `WidgetsWithoutConfigDialog`.
+
+If the widget can show anything sensitive, remember a dashboard can be shown on an anonymous kiosk, which runs as the unfiltered "system" tenant: gate on a signed-in role *and* have the service refuse system callers (see `ComplianceService`).
 
 When debugging a widget that "saves but doesn't show up," check step 5 first (both switches in `DashboardGrid.razor`) before assuming the problem is in the data layer — the data almost always round-trips correctly since the EF discriminator (step 3) would have thrown loudly if that part were broken. When debugging a widget that "doesn't save at all" (dashboard save fails with a generic error toast, or a config-dialog edit doesn't persist), check step 7 — `DashboardService.cs`'s three widget-copy/update switches — before assuming the problem is in the dialog or the grid.
