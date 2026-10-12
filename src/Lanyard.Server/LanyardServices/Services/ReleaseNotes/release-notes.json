@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Announcements can be emailed to staff, see who is behind on training or documents at a glance, check each kiosk's health, and choose which kiosk software version each PC runs.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -628,7 +628,11 @@
       "Each kiosk's settings have a new Health tab with its version, how long it has been running, CPU, memory, disk space, and whether DMX, audio, scoreboard capture and projection are working.",
       "The Kiosk Health dashboard widget uses the same health check and lists kiosks that need attention first. Its \"only show offline kiosks\" option is now \"only show kiosks that need attention\" and includes degraded kiosks.",
       "Kiosks need to update to start reporting health, which they do the next time they restart. Until then the Health column just shows whether they are connected.",
-      "A kiosk no longer shuts itself down when it can't check for updates at start-up (for example while the internet is down); it now starts on its current version."
+      "A kiosk no longer shuts itself down when it can't check for updates at start-up (for example while the internet is down); it now starts on its current version.",
+      "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
+      "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
+      "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
     ]
   }
 ]

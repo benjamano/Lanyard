@@ -109,6 +109,7 @@ builder.Services.AddHttpClient<IGitHubClientReleaseSource, GitHubClientReleaseSo
 builder.Services.AddScoped<IClientReleaseCatalogService, ClientReleaseCatalogService>();
 builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService>();
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
+builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
@@ -178,6 +179,7 @@ builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
+builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();
 builder.Services.AddScoped<IGameResultService, GameResultService>();
 builder.Services.AddSingleton<SignalRProjectionControlHubEvents>();
 builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>();
