@@ -1,0 +1,205 @@
+@page "/manage/client-releases"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = LanyardRoles.PlatformAdmin)]
+
+@using Lanyard.App.Components.Manager
+@using Lanyard.Application.Services.ClientReleases
+@using Lanyard.Shared.Enum
+@using System.Globalization
+@using static Lanyard.App.Components.Manager.ClientReleaseActionDialog
+
+@inject IClientReleaseAdminService _releaseAdminService
+
+<PageTitle>Kiosk Releases</PageTitle>
+
+<FluentCard Height="auto">
+    <div class="releases-header">
+        <div>
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Kiosk Releases</FluentText>
+            <p class="releases-intro">
+                New kiosk software goes to Canary PCs first. When it has run well there, promote it so every Stable PC gets it.
+                If a release causes problems, withdraw it and PCs move back to the one before. This affects every company.
+            </p>
+        </div>
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowSync())"
+                      Loading="@_loading" Disabled="@_loading" OnClick="@(() => LoadAsync(forceRefresh: true))">
+            Check GitHub
+        </FluentButton>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_releases is null)
+    {
+        <FluentText>Loading...</FluentText>
+    }
+    else if (_releases.Count == 0)
+    {
+        <p class="releases-empty">No kiosk releases found on GitHub yet. Releases appear here once the release workflow publishes one.</p>
+    }
+    else
+    {
+        <div class="releases-list">
+            @foreach (ClientReleaseOverviewDTO item in _releases)
+            {
+                <div class="releases-item @(item.Release.WithdrawnAt is not null ? "releases-item-withdrawn" : null)">
+                    <div class="releases-info">
+                        <div class="releases-title">
+                            <span class="releases-version">v@(item.Release.Version)</span>
+                            @if (item.Release.Version == _currentStable)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">Current stable</FluentBadge>
+                            }
+                            else if (item.Release.Version == _currentCanary)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Informative">Current canary</FluentBadge>
+                            }
+
+                            @if (item.Release.WithdrawnAt is not null)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Danger">Withdrawn</FluentBadge>
+                            }
+                            else if (item.IsStable)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Success">Stable</FluentBadge>
+                            }
+                            else
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Canary only</FluentBadge>
+                            }
+                        </div>
+                        <div class="releases-meta">
+                            <span>Published @FormatDate(item.Release.PublishedAt)</span>
+                            <span>·</span>
+                            <span>@item.ReportedPcCount @(item.ReportedPcCount == 1 ? "PC" : "PCs") running it</span>
+                            @if (item.Release.PromotedToStableAt is DateTime promotedAt)
+                            {
+                                <span>·</span>
+                                <span>Promoted @FormatDate(promotedAt)</span>
+                            }
+                        </div>
+                        @if (item.Release.WithdrawnAt is DateTime withdrawnAt)
+                        {
+                            <div class="releases-reason">Withdrawn @FormatDate(withdrawnAt): @item.Release.WithdrawnReason</div>
+                        }
+                    </div>
+                    <div class="releases-actions">
+                        @if (item.Release.WithdrawnAt is not null)
+                        {
+                            <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@_busy"
+                                          OnClick="@(() => RunActionAsync(ClientReleaseAction.Restore, item.Release.Version))">Restore</FluentButton>
+                        }
+                        else
+                        {
+                            @if (!item.IsStable)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Primary" Disabled="@_busy"
+                                              OnClick="@(() => RunActionAsync(ClientReleaseAction.Promote, item.Release.Version))">Promote</FluentButton>
+                            }
+                            <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@_busy"
+                                          OnClick="@(() => RunActionAsync(ClientReleaseAction.Withdraw, item.Release.Version))">Withdraw</FluentButton>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private IReadOnlyList<ClientReleaseOverviewDTO>? _releases;
+    private string? _currentStable;
+    private string? _currentCanary;
+    private string? _error;
+    private bool _loading;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(forceRefresh: false);
+    }
+
+    private async Task LoadAsync(bool forceRefresh)
+    {
+        _loading = true;
+
+        try
+        {
+            Result<IReadOnlyList<ClientReleaseOverviewDTO>> result = await _releaseAdminService.GetOverviewAsync(forceRefresh);
+
+            if (!result.IsSuccess)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            _releases = result.Data!;
+            _error = null;
+
+            List<ClientRelease> releases = _releases.Select(x => x.Release).ToList();
+            _currentStable = ClientTargetVersionResolver.Resolve(ClientUpdateRing.Stable, null, releases).TargetVersion;
+            _currentCanary = ClientTargetVersionResolver.Resolve(ClientUpdateRing.Canary, null, releases).TargetVersion;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RunActionAsync(ClientReleaseAction action, string version)
+    {
+        DialogResult dialog = await _dialogService.ShowDialogAsync<ClientReleaseActionDialog>(options =>
+        {
+            options.Header.Title = action switch
+            {
+                ClientReleaseAction.Promote => $"Promote v{version} to stable?",
+                ClientReleaseAction.Withdraw => $"Withdraw v{version}?",
+                _ => $"Restore v{version}?"
+            };
+            options.Width = "min(520px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientReleaseActionDialog.Action), action);
+            options.Parameters.Add(nameof(ClientReleaseActionDialog.Version), version);
+        });
+
+        if (dialog.Cancelled || dialog.Value is not string reason)
+        {
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            Result<bool> result = action switch
+            {
+                ClientReleaseAction.Promote => await _releaseAdminService.PromoteAsync(version),
+                ClientReleaseAction.Withdraw => await _releaseAdminService.WithdrawAsync(version, reason),
+                _ => await _releaseAdminService.RestoreAsync(version)
+            };
+
+            if (!result.IsSuccess)
+            {
+                _toastService.ShowError(result.Error ?? "That didn't work.");
+                return;
+            }
+
+            _toastService.ShowSuccess(action switch
+            {
+                ClientReleaseAction.Promote => $"v{version} is now the stable release. Stable PCs move to it on their next restart.",
+                ClientReleaseAction.Withdraw => $"v{version} withdrawn. PCs on it move back on their next restart.",
+                _ => $"v{version} restored."
+            });
+
+            await LoadAsync(forceRefresh: false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string FormatDate(DateTime utc) =>
+        utc.ToLocalTime().ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("en-GB"));
+}

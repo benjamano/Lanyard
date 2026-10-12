@@ -77,5 +77,30 @@ jobs:
           git tag "LanyardClient-${{ steps.version.outputs.VERSION }}"
           git push origin "LanyardClient-${{ steps.version.outputs.VERSION }}"
 
+      # Kiosks on 1.0.41+ ask the Lanyard server which version to run, and the server treats a
+      # prerelease as canary-only until a platform admin promotes it (Manage > Kiosk Releases).
+      # Kiosks older than 1.0.41 take the newest non-prerelease GitHub release on their own, so
+      # this stays off until they have all moved to 1.0.41 - then set the repository variable
+      # CLIENT_RELEASES_AS_PRERELEASE to true (Settings > Secrets and variables > Actions).
       - name: Upload to GitHub Releases
-        run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --tag "LanyardClient-${{ steps.version.outputs.VERSION }}" --releaseName "Lanyard Client ${{ steps.version.outputs.VERSION }}" --publish
+        env:
+          CLIENT_RELEASES_AS_PRERELEASE: ${{ vars.CLIENT_RELEASES_AS_PRERELEASE }}
+        run: |
+          $uploadArgs = @(
+            'upload', 'github',
+            '--repoUrl', 'https://github.com/${{ github.repository }}',
+            '--token', '${{ secrets.GITHUB_TOKEN }}',
+            '--tag', 'LanyardClient-${{ steps.version.outputs.VERSION }}',
+            '--releaseName', 'Lanyard Client ${{ steps.version.outputs.VERSION }}',
+            '--publish'
+          )
+
+          if ($env:CLIENT_RELEASES_AS_PRERELEASE -eq 'true') {
+            Write-Host "Publishing as a prerelease: canary PCs only until promoted in Kiosk Releases"
+            $uploadArgs += '--pre'
+          }
+          else {
+            Write-Host "Publishing as a normal release: every PC on the Stable ring gets it"
+          }
+
+          vpk @uploadArgs
