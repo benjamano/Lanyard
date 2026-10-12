@@ -19,7 +19,7 @@
     <div class="mx-3">
         @if (_homeScreenWidgets.Count > 0)
         {
-            <DashboardGrid Widgets="_homeScreenWidgets" PreviewMode="true" />
+            <DashboardGrid Widgets="_homeScreenWidgets" CompanyId="_homeScreenDashboard?.CompanyId" PreviewMode="true" />
         }
         else
         {
