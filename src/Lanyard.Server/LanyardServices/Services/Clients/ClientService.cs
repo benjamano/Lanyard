@@ -202,6 +202,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x=> new ClientConnectedDTO
                 {
                     Id = x.Id,
@@ -213,6 +215,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? "")
                 })
                 .ToListAsync();
@@ -234,6 +238,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
 
             IEnumerable<ClientConnectedWithCapabilitiesDTO> clients = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
                 .Select(x => new ClientConnectedWithCapabilitiesDTO
                 {
                     Id = x.Id,
@@ -245,6 +251,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
                     LastUpdateDate = x.LastUpdateDate,
                     LastDisconnectDate = x.LastDisconnectDate,
                     CreateDate = x.CreateDate,
+                    ReportedClientVersion = x.ReportedClientVersion,
+                    ClientVersionReportedAt = x.ClientVersionReportedAt,
                     IsCurrentlyConnected = ids.Contains(x.MostRecentConnectionId ?? ""),
                     ProjectionEnabled = ctx.ClientProjectionSettings
                         .AsNoTracking()

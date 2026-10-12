@@ -128,6 +128,8 @@ public class NotificationDeliverer(
 
                 _ when ChatNotices.Handles(job.Payload) => await SendNoticeAsync(user, ChatNotices.For(job.Payload), logoUrl, accent),
 
+                AnnouncementPayload announcement => await SendNoticeAsync(user, AnnouncementNotices.For(announcement), logoUrl, accent),
+
                 _ => Result<bool>.Fail($"No delivery for {job.Payload.GetType().Name}.")
             };
 

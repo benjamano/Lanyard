@@ -605,12 +605,20 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Admins can read a kiosk's recent log from the Clients page.",
+    "summary": "Announcements can now be emailed to staff, and admins can read a kiosk's recent log from the Clients page.",
     "details": [
+      "When you post an announcement, you can choose to email it to everyone at that location. It's on by default for new announcements.",
+      "When you edit an announcement, you can choose to email it again. This is off by default, so fixing a typo doesn't email everyone twice.",
+      "Staff who have turned on push notifications get one too. Anyone can turn announcement emails or pushes off under Notification settings.",
+      "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
+      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
+      "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
+      "Games already recorded have been moved to the company whose kiosk played them.",
+      "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard.",
       "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
-      "On a phone, the Clients list now shows just each kiosk's name, whether it's connected and its buttons, so Settings, Restart and Diagnostics no longer need a sideways scroll."
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
     ]
   }
 ]

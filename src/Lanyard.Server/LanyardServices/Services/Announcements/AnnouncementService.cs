@@ -1,6 +1,9 @@
 ﻿using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,12 +12,14 @@ namespace Lanyard.Application.Services.Announcements;
 
 public class AnnouncementService(
     IDbContextFactory<ApplicationDbContext> factory,
+    INotificationDispatcher notifications,
     ILogger<AnnouncementService> logger) : IAnnouncementService
 {
     private const int MaxTitleLength = 120;
     private const int MaxBodyLength = 2000;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly INotificationDispatcher _notifications = notifications;
     private readonly ILogger<AnnouncementService> _logger = logger;
 
     public async Task<Result<List<Announcement>>> GetAnnouncementsAsync(LocationScope scope, bool allLocations)
@@ -181,6 +186,84 @@ public class AnnouncementService(
             _logger.LogError(ex, "Failed to save announcement {AnnouncementId}", announcement.Id);
 
             return Result<Announcement>.Fail($"Failed to save announcement: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<int>> SendAnnouncementAsync(Guid announcementId, LocationScope scope, string? senderUserId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Announcement? announcement = await ctx.Announcements
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Location)
+                    .ThenInclude(x => x!.Company)
+                .FirstOrDefaultAsync(x => x.Id == announcementId && x.IsActive);
+
+            if (announcement is null)
+            {
+                return Result<int>.Fail("Announcement not found.");
+            }
+
+            if (!scope.IsAdmin && announcement.LocationId != scope.LocationId)
+            {
+                return Result<int>.Fail("You do not have access to this announcement.");
+            }
+
+            if (announcement.LocationId is not int locationId || announcement.Location is null)
+            {
+                return Result<int>.Fail("An announcement must be assigned to a location before it can be sent.");
+            }
+
+            if (announcement.ExpiryDate is DateTime expiry && expiry <= DateTime.UtcNow)
+            {
+                return Result<int>.Fail("This announcement has expired, so it can't be sent.");
+            }
+
+            // Everyone who belongs to the location, the same people its chat channel holds. The
+            // sender already knows what they wrote.
+            List<string> recipients = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId && x.UserId != senderUserId)
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            recipients.Remove(ApplicationDbContext.SystemDeletedUserPlaceholderId);
+
+            string? authorName = null;
+
+            if (senderUserId is not null)
+            {
+                UserProfile? sender = await ctx.Users
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .FirstOrDefaultAsync(x => x.Id == senderUserId);
+
+                authorName = sender is null ? null : sender.GetName().Trim() is { Length: > 0 } name ? name : sender.UserName;
+            }
+
+            _notifications.Enqueue(recipients, NotificationTopic.Announcement, new AnnouncementPayload(
+                locationId,
+                announcement.Location.GetDisplayName(),
+                announcement.Id,
+                announcement.Title,
+                announcement.Body,
+                authorName));
+
+            _logger.LogInformation("User {UserId} sent announcement {AnnouncementId} to {Count} people at location {LocationId}",
+                senderUserId, announcement.Id, recipients.Count, locationId);
+
+            return Result<int>.Ok(recipients.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send announcement {AnnouncementId}", announcementId);
+
+            return Result<int>.Fail($"Failed to send announcement: {ex.Message}");
         }
     }
 

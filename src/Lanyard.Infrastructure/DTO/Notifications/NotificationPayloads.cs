@@ -90,4 +90,9 @@ public record ChatReportedPayload(int LocationId) : NotificationPayload(Location
 // For the person who reported a message: a manager has dealt with it (not what they did).
 public record ChatReportReviewedPayload(int LocationId) : NotificationPayload(LocationId);
 
+// A manager posted an announcement and chose to send it out to everyone at its location. Carries
+// the full text: an announcement is meant to be read, and the email is often where it is read.
+public record AnnouncementPayload(int LocationId, string LocationName, Guid AnnouncementId, string Title, string Body, string? AuthorName)
+    : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);
