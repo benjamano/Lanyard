@@ -8,7 +8,13 @@ public class DmxController
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<DmxController> _logger;
 
-    private bool _isDeviceOpen = false;
+    private volatile bool _isDeviceOpen = false;
+    private volatile bool _isConfigured = false;
+
+    public bool IsDeviceOpen => _isDeviceOpen;
+
+    /// <summary>True once the server has told this kiosk to drive a DMX device, even if opening it failed.</summary>
+    public bool IsConfigured => _isConfigured;
 
     public DmxController(IServiceScopeFactory serviceScopeFactory, ILogger<DmxController> logger)
     {
@@ -20,6 +26,8 @@ public class DmxController
 
     public void Open(uint dmxUsbDeviceIndex)
     {
+        _isConfigured = true;
+
         if (!_device.Open(dmxUsbDeviceIndex))
         {
             throw new InvalidOperationException("Failed to open DMX device.");
@@ -114,6 +122,11 @@ public class DmxController
         {
             _logger.LogError(ex, "Error sending DMX frame.");
         }
+    }
+
+    public void MarkNotConfigured()
+    {
+        _isConfigured = false;
     }
 
     public List<string> GetAvailableDevices()
