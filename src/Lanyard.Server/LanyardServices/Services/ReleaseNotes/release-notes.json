@@ -601,5 +601,14 @@
       "Manage > Rota > Staff now lists only the people at the location you signed in at, and bulk changes only apply to them.",
       "Admins can switch to any of the company's locations from a Location dropdown. Managers only see their own location."
     ]
+  },
+  {
+    "version": "1.4.15",
+    "releaseDate": "2026-10-12",
+    "summary": "See which version of the kiosk software each PC is running.",
+    "details": [
+      "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
+      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version."
+    ]
   }
 ]
