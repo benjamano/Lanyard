@@ -15,5 +15,9 @@ public interface IAnnouncementService
 
     Task<Result<Announcement>> SaveAnnouncementAsync(Announcement announcement, LocationScope scope);
 
+    // Emails (and pushes, per each person's notification settings) the announcement to everyone at
+    // its location except the sender. Returns how many people it was queued for.
+    Task<Result<int>> SendAnnouncementAsync(Guid announcementId, LocationScope scope, string? senderUserId);
+
     Task<Result<bool>> DeleteAnnouncementAsync(Guid announcementId, LocationScope scope);
 }

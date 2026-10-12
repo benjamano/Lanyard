@@ -1,6 +1,7 @@
 using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Shared.DTO;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,6 @@ public class KioskHealthService(
     // ignored if it comes in faster than this rather than turning into a write per call.
     internal static readonly TimeSpan MinReportSpacing = TimeSpan.FromSeconds(10);
 
-    private const int MaxVersionLength = 32;
     private const int MaxProjectionCount = 64;
 
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
@@ -118,10 +118,8 @@ public class KioskHealthService(
     {
         snapshot.LastHeartbeatUtc = now;
 
-        string? version = report.ClientVersion?.Trim();
-        snapshot.ClientVersion = string.IsNullOrEmpty(version)
-            ? null
-            : version.Length > MaxVersionLength ? version[..MaxVersionLength] : version;
+        // Same rule as the version a kiosk reports on connect: only a short SemVer is kept.
+        snapshot.ClientVersion = ClientVersionFormat.TryNormalize(report.ClientVersion, out string version) ? version : null;
 
         snapshot.ProcessStartedUtc = DateTime.SpecifyKind(report.ProcessStartedUtc, DateTimeKind.Utc);
         snapshot.MachineUptimeSeconds = Math.Max(0, report.MachineUptimeSeconds);

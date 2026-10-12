@@ -1,4 +1,6 @@
-﻿using Lanyard.Shared.Enum;
+﻿using Lanyard.Shared.Contracts;
+using Lanyard.Shared.Enum;
+using System.ComponentModel.DataAnnotations;
 
 namespace Lanyard.Infrastructure.Models;
 
@@ -34,6 +36,13 @@ public class Client : ICompanyOwned
     // so the client can fall back to a name match if the endpoint comes back under a new ID.
     public string? PreferredAudioDeviceId { get; set; }
     public string? PreferredAudioDeviceName { get; set; }
+
+    // The Velopack version the kiosk said it was running when it last connected. Null means it
+    // has never reported one - every client older than 1.0.41, which doesn't send it. Kept when
+    // a connection arrives without a version, so an old build reconnecting can't blank it.
+    [MaxLength(ClientVersionFormat.MaxLength)]
+    public string? ReportedClientVersion { get; set; }
+    public DateTime? ClientVersionReportedAt { get; set; }
 }
 
 /// <summary>

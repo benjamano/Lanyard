@@ -5,7 +5,9 @@
 @using Lanyard.App.Components.Manager
 @using Lanyard.App.Components.Clients
 @using Lanyard.Application.Services.Clients
+@using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
+@using System.Globalization
 
 @implements IDisposable
 
@@ -19,12 +21,34 @@
     <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
         Clients
     </FluentText>
+    @if (_versionCounts.Count > 0)
+    {
+        <div class="clients-version-summary">
+            <span class="clients-muted">Kiosk versions</span>
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" HorizontalGap="8px" VerticalGap="8px">
+                @foreach (ClientVersionCount versionCount in _versionCounts)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint"
+                                 Color="@(versionCount.Version is null ? BadgeColor.Subtle : BadgeColor.Informative)"
+                                 Title="@($"{versionCount.Count} {(versionCount.Count == 1 ? "PC" : "PCs")} on {VersionLabel(versionCount.Version)}")">
+                        @VersionLabel(versionCount.Version) · @versionCount.Count
+                    </FluentBadge>
+                }
+            </FluentStack>
+        </div>
+    }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="2fr 2fr 1fr 1fr 1fr minmax(125px, 1fr) 1fr 1fr" Style="width: 100%;" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.9fr) minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.9fr)" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
+                <TemplateColumn Title="Version" Class="clients-col-version">
+                    <span class="@(context.ReportedClientVersion is null ? "clients-muted" : null)"
+                          title="@VersionTooltip(context)">
+                        @VersionLabel(context.ReportedClientVersion)
+                    </span>
+                </TemplateColumn>
                 <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
                                 Property="x => x.LastLogin" Title="Last Login" Class="clients-col-lastlogin" />
                 <TemplateColumn Title="Capabilities" Class="clients-col-capabilities">
@@ -41,7 +65,7 @@
                 <TemplateColumn Title="Health" Class="clients-col-health">
                     <KioskHealthBadge Health="@_health.GetValueOrDefault(context.Id)" IsConnected="@context.IsCurrentlyConnected" />
                 </TemplateColumn>
-                <TemplateColumn Title="Current Session Length" Class="clients-col-session">
+                <TemplateColumn Title="Session Length" Class="clients-col-session">
                     @if (context.IsCurrentlyConnected && context.LastLogin is DateTime lastLogin)
                     {
                         <span>
@@ -71,6 +95,52 @@
             </LoadingContent>
         </FluentDataGrid>
     </div>
+
+    @* Phone width: a fixed-column grid truncates the name and can't fit the version, so each
+       client becomes a row with its details wrapping underneath instead. *@
+    <div class="clients-phone-list">
+        @foreach (ClientConnectedWithCapabilitiesDTO client in _sortedClients)
+        {
+            <div class="clients-phone-item">
+                <div class="clients-phone-info">
+                    <div class="clients-phone-name">@client.Name</div>
+                    <div class="clients-phone-meta">
+                        <span class="@(client.ReportedClientVersion is null ? "clients-muted" : null)">@VersionLabel(client.ReportedClientVersion)</span>
+                        <span>·</span>
+                        <KioskHealthBadge Health="@_health.GetValueOrDefault(client.Id)" IsConnected="@client.IsCurrentlyConnected" />
+                        @if (client.LastLogin is DateTime lastLogin)
+                        {
+                            <span>·</span>
+                            <span>Last login @FormatUkDateTime(lastLogin)</span>
+                        }
+                    </div>
+                    @if (client.ProjectionEnabled || client.DmxEnabled)
+                    {
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" Class="mt-1">
+                            @if (client.ProjectionEnabled)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled">Projection</FluentBadge>
+                            }
+                            @if (client.DmxEnabled)
+                            {
+                                <FluentBadge Appearance="BadgeAppearance.Filled">DMX</FluentBadge>
+                            }
+                        </FluentStack>
+                    }
+                </div>
+                <div class="clients-phone-actions">
+                    <FluentButton Appearance="ButtonAppearance.Transparent" Title="Settings"
+                                  IconStart="@(new Icons.Regular.Size20.Settings())"
+                                  OnClick="() => OpenClientSettingsDialog(client.Id)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Restart" : "Restart (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenRestartClientDialogAsync(client)" />
+                </div>
+            </div>
+        }
+    </div>
 </FluentCard>
 
 @code {
@@ -81,6 +151,10 @@
     private IQueryable<ClientConnectedWithCapabilitiesDTO> _sortedClients = Enumerable.Empty<ClientConnectedWithCapabilitiesDTO>().AsQueryable();
 
     private Dictionary<Guid, KioskHealthView> _health = new();
+
+    private sealed record ClientVersionCount(string? Version, int Count);
+
+    private List<ClientVersionCount> _versionCounts = [];
 
     private PeriodicTimer? timer;
     private CancellationTokenSource? timerCancellation;
@@ -153,12 +227,49 @@
         {
             clients = result.Data!;
             _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
+            _versionCounts = BuildVersionCounts(clients);
         }
         else if (showErrors)
         {
             _toastService.ShowError($"Failed to load connected clients, {result.Error}");
         }
     }
+
+    // Newest version first; clients that have never reported one ("Unknown") always go last.
+    private static List<ClientVersionCount> BuildVersionCounts(IEnumerable<ClientConnectedWithCapabilitiesDTO> source)
+    {
+        List<ClientVersionCount> counts = source
+            .GroupBy(x => x.ReportedClientVersion)
+            .Select(g => new ClientVersionCount(g.Key, g.Count()))
+            .ToList();
+
+        counts.Sort((left, right) =>
+        {
+            if (left.Version is null || right.Version is null)
+            {
+                return (left.Version is null ? 1 : 0) - (right.Version is null ? 1 : 0);
+            }
+
+            return ClientVersionFormat.Compare(right.Version, left.Version);
+        });
+
+        return counts;
+    }
+
+    private static string VersionLabel(string? version) => version is null ? "Unknown" : $"v{version}";
+
+    private static string VersionTooltip(ClientConnectedWithCapabilitiesDTO client)
+    {
+        if (client.ReportedClientVersion is null || client.ClientVersionReportedAt is not DateTime reportedAt)
+        {
+            return "This PC hasn't reported a version. Kiosk software older than 1.0.41 doesn't send one.";
+        }
+
+        return $"Reported {FormatUkDateTime(reportedAt)}";
+    }
+
+    private static string FormatUkDateTime(DateTime utc) =>
+        utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("en-GB"));
 
     private async Task OpenRestartClientDialogAsync(ClientConnectedWithCapabilitiesDTO client)
     {

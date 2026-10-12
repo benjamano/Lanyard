@@ -1,4 +1,6 @@
-﻿using Lanyard.Shared.DTO;
+﻿using Lanyard.Shared.Contracts;
+using Lanyard.Shared.DTO;
+using AutoUpdater = Lanyard.Client.AutoUpdate.AutoUpdate;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using NAudio.CoreAudioApi;
@@ -32,11 +34,18 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
         string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
             ? string.Empty
-            : $"&secret={Uri.EscapeDataString(sharedSecret)}";
+            : $"&{ClientConnectionQuery.Secret}={Uri.EscapeDataString(sharedSecret)}";
+
+        // Lets the server show which build each kiosk runs. Left off entirely for a dev build
+        // that isn't a Velopack install, so the server keeps "unknown" rather than a fake value.
+        string? clientVersion = AutoUpdater.GetCurrentVersion();
+        string versionQuery = string.IsNullOrWhiteSpace(clientVersion)
+            ? string.Empty
+            : $"&{ClientConnectionQuery.ClientVersion}={Uri.EscapeDataString(clientVersion)}";
 
         // dmxBatch=1 tells the server this client handles "ReceiveDmxChannelValues". Clients
         // older than 1.0.40 don't send it, and the server falls back to one message per channel.
-        string url = serverUrl + $"?clientId={clientId}{secretQuery}&dmxBatch=1";
+        string url = serverUrl + $"?{ClientConnectionQuery.ClientId}={clientId}{secretQuery}&{ClientConnectionQuery.DmxBatch}=1{versionQuery}";
 
         _logger.LogInformation("Waiting 5 seconds to start the SignalR connection.");
 

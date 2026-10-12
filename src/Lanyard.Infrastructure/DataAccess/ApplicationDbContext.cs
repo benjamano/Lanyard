@@ -1,4 +1,5 @@
 ﻿using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Infrastructure.Models.Dmx;
 using Lanyard.Infrastructure.Enum;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -181,7 +182,7 @@ namespace Lanyard.Infrastructure.DataAccess
                     .WithOne()
                     .HasForeignKey<ClientHealthSnapshot>(x => x.ClientId)
                     .OnDelete(DeleteBehavior.Cascade);
-                entity.Property(x => x.ClientVersion).HasMaxLength(32);
+                entity.Property(x => x.ClientVersion).HasMaxLength(ClientVersionFormat.MaxLength);
             });
 
             modelBuilder.Entity<DashboardWidget>()

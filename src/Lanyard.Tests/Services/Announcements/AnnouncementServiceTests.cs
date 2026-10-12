@@ -2,8 +2,11 @@
 
 using Lanyard.Application.Services.Announcements;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Notifications;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Notifications;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -29,13 +32,13 @@ public class AnnouncementServiceTests
             .Options;
     }
 
-    private static AnnouncementService GetService(DbContextOptions<ApplicationDbContext> options)
+    private static AnnouncementService GetService(DbContextOptions<ApplicationDbContext> options, INotificationDispatcher? notifications = null)
     {
         Mock<IDbContextFactory<ApplicationDbContext>> factoryMock = new();
         factoryMock.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new ApplicationDbContext(options));
 
-        return new AnnouncementService(factoryMock.Object, NullLogger<AnnouncementService>.Instance);
+        return new AnnouncementService(factoryMock.Object, notifications ?? new Mock<INotificationDispatcher>().Object, NullLogger<AnnouncementService>.Instance);
     }
 
     private static async Task SeedAsync(DbContextOptions<ApplicationDbContext> options, params Announcement[] announcements)
@@ -445,5 +448,116 @@ public class AnnouncementServiceTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual("Announcement not found.", result.Error);
+    }
+
+    // A location with three members: the manager sending, and two staff.
+    private static async Task SeedLocationAsync(DbContextOptions<ApplicationDbContext> options)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ctx.Companies.Add(new Company { Id = 1, Name = "Acme" });
+        ctx.Locations.Add(new Location { Id = HomeLocationId, CompanyId = 1, Name = "Home" });
+        ctx.Locations.Add(new Location { Id = OtherLocationId, CompanyId = 1, Name = "Other" });
+        ctx.Users.Add(new UserProfile { Id = "manager", UserName = "manager", FirstName = "Sam", LastName = "Lee" });
+        ctx.UserLocationMemberships.AddRange(
+            new UserLocationMembership { UserId = "manager", LocationId = HomeLocationId },
+            new UserLocationMembership { UserId = "staff-1", LocationId = HomeLocationId },
+            new UserLocationMembership { UserId = "staff-2", LocationId = HomeLocationId },
+            new UserLocationMembership { UserId = "elsewhere", LocationId = OtherLocationId });
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task SendAnnouncement_QueuesEveryoneAtTheLocationExceptTheSender()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedLocationAsync(options);
+
+        Announcement announcement = Make("Staff party");
+        await SeedAsync(options, announcement);
+
+        List<string> queuedFor = [];
+        NotificationPayload? queued = null;
+        Mock<INotificationDispatcher> dispatcher = new();
+        dispatcher.Setup(x => x.Enqueue(It.IsAny<IEnumerable<string>>(), NotificationTopic.Announcement, It.IsAny<NotificationPayload>()))
+            .Callback<IEnumerable<string>, NotificationTopic, NotificationPayload>((ids, _, payload) =>
+            {
+                queuedFor.AddRange(ids);
+                queued = payload;
+            });
+
+        Result<int> result = await GetService(options, dispatcher.Object).SendAnnouncementAsync(announcement.Id, StaffScope, "manager");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(2, result.Data);
+        CollectionAssert.AreEquivalent(new[] { "staff-1", "staff-2" }, queuedFor);
+
+        AnnouncementPayload payload = (AnnouncementPayload)queued!;
+        Assert.AreEqual("Staff party", payload.Title);
+        Assert.AreEqual("Body of Staff party", payload.Body);
+        Assert.AreEqual("Sam Lee", payload.AuthorName);
+        Assert.AreEqual("Acme Home", payload.LocationName);
+    }
+
+    [TestMethod]
+    public async Task SendAnnouncement_RefusesAnotherLocationsAnnouncement()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedLocationAsync(options);
+
+        Announcement announcement = Make("Not yours", locationId: OtherLocationId);
+        await SeedAsync(options, announcement);
+
+        Mock<INotificationDispatcher> dispatcher = new();
+
+        Result<int> result = await GetService(options, dispatcher.Object).SendAnnouncementAsync(announcement.Id, StaffScope, "manager");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("You do not have access to this announcement.", result.Error);
+        dispatcher.Verify(x => x.Enqueue(It.IsAny<IEnumerable<string>>(), It.IsAny<NotificationTopic>(), It.IsAny<NotificationPayload>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task SendAnnouncement_RefusesExpiredOrDeleted()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedLocationAsync(options);
+
+        Announcement expired = Make("Old news", expiryDate: DateTime.UtcNow.AddDays(-1));
+        Announcement deleted = Make("Gone", isActive: false);
+        await SeedAsync(options, expired, deleted);
+
+        Mock<INotificationDispatcher> dispatcher = new();
+        AnnouncementService service = GetService(options, dispatcher.Object);
+
+        Assert.IsFalse((await service.SendAnnouncementAsync(expired.Id, StaffScope, "manager")).IsSuccess);
+        Assert.AreEqual("Announcement not found.", (await service.SendAnnouncementAsync(deleted.Id, StaffScope, "manager")).Error);
+        dispatcher.Verify(x => x.Enqueue(It.IsAny<IEnumerable<string>>(), It.IsAny<NotificationTopic>(), It.IsAny<NotificationPayload>()), Times.Never);
+    }
+
+    [TestMethod]
+    public void AnnouncementNotice_KeepsParagraphsAndSignsOff()
+    {
+        Notice notice = AnnouncementNotices.For(new AnnouncementPayload(
+            HomeLocationId, "Acme Home", Guid.NewGuid(), "Staff party", "First paragraph.\r\n\r\nSecond paragraph.", "Sam Lee"));
+
+        Assert.AreEqual("Staff party", notice.Title);
+        CollectionAssert.AreEqual(
+            new[] { "First paragraph.", "Second paragraph.", "Posted by Sam Lee for Acme Home." },
+            notice.Lines);
+        Assert.AreEqual("/", notice.Url);
+    }
+
+    [TestMethod]
+    public void AnnouncementPush_TrimsLongBodies()
+    {
+        PushContent content = PushContentBuilder.Build(
+            new AnnouncementPayload(HomeLocationId, "Acme Home", Guid.NewGuid(), "Staff party", new string('a', 500), null),
+            new DateOnly(2026, 10, 8));
+
+        Assert.AreEqual("📣 Staff party", content.Title);
+        Assert.AreEqual(AnnouncementNotices.PushBodyLength + 1, content.Body.Length);
+        Assert.IsTrue(content.Body.EndsWith('…'));
     }
 }

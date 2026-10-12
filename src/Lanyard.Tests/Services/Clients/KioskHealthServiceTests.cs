@@ -129,7 +129,7 @@ public class KioskHealthServiceTests
     }
 
     [TestMethod]
-    public async Task RecordReport_ClampsAndTrimsWhatTheKioskSends()
+    public async Task RecordReport_ClampsAndValidatesWhatTheKioskSends()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Guid clientId = await SeedClientAsync(options);
@@ -139,7 +139,7 @@ public class KioskHealthServiceTests
             r.CpuPercent = 250;
             r.MemoryPercent = double.NaN;
             r.SystemDriveFreeBytes = -5;
-            r.ClientVersion = new string('9', 100);
+            r.ClientVersion = "1.0.41; DROP TABLE";
             r.ProjectionRunningCount = -3;
             r.MachineUptimeSeconds = -1;
         }));
@@ -149,7 +149,7 @@ public class KioskHealthServiceTests
         Assert.AreEqual(100, snapshot.CpuPercent);
         Assert.IsNull(snapshot.MemoryPercent);
         Assert.IsNull(snapshot.SystemDriveFreeBytes);
-        Assert.AreEqual(32, snapshot.ClientVersion!.Length);
+        Assert.IsNull(snapshot.ClientVersion);
         Assert.AreEqual(0, snapshot.ProjectionRunningCount);
         Assert.AreEqual(0, snapshot.MachineUptimeSeconds);
     }
