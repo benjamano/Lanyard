@@ -608,7 +608,7 @@
     "summary": "See which version of the kiosk software each PC is running.",
     "details": [
       "Manage > Clients now shows the kiosk software version each PC reported when it last connected, with a count of how many PCs are on each version.",
-      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version."
+      "PCs show \"Unknown\" until they update to kiosk version 1.0.41, which is the first one that reports its version.",
       "Games played on another company's kiosks no longer appear on your Hall of Fame, and your own games now show up on yours. Before this fix, every finished game was saved under Play2Day.",
       "Games already recorded have been moved to the company whose kiosk played them.",
       "Hall of Fame widgets on kiosk display screens now only show the company that owns the dashboard."
