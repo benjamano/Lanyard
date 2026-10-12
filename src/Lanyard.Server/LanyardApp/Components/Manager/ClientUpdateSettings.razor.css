@@ -1,0 +1,35 @@
+.client-updates {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 640px;
+}
+
+.client-updates-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+}
+
+.client-updates-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.client-updates-label {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+}
+
+.client-updates-value {
+    font-size: var(--fontSizeBase500);
+    font-weight: var(--fontWeightSemibold);
+}
+
+.client-updates-hint {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    overflow-wrap: anywhere;
+}

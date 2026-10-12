@@ -1456,5 +1456,37 @@ namespace Lanyard.Tests.Services.Clients
             Assert.IsTrue(result.Success, result.Error);
             Assert.AreEqual("1.0.41", result.Data!.Single().ReportedClientVersion);
         }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_DoesNotOverwriteUpdateRingOrPin_FromAStaleCopy()
+        {
+            // The settings tabs and the hub write back a whole Client loaded earlier; that must not
+            // undo an update setting an admin saved in between.
+            DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+            ClientService service = GetService(options);
+            Guid id = Guid.NewGuid();
+
+            await service.CreateClientAsync(new Client { Id = id, Name = "Kiosk" });
+            Client staleCopy = (await service.GetClientFromIdAsync(id)).Data!;
+
+            await using (ApplicationDbContext ctx = new(options))
+            {
+                Client stored = await ctx.Clients.SingleAsync(x => x.Id == id);
+                stored.UpdateRing = Lanyard.Shared.Enum.ClientUpdateRing.Pinned;
+                stored.PinnedClientVersion = "1.0.40";
+                await ctx.SaveChangesAsync();
+            }
+
+            staleCopy.Name = "Renamed";
+            Result<Client?> result = await service.UpdateClientAsync(staleCopy);
+
+            Assert.IsTrue(result.Success, result.Error);
+
+            await using ApplicationDbContext check = new(options);
+            Client after = await check.Clients.AsNoTracking().SingleAsync(x => x.Id == id);
+            Assert.AreEqual("Renamed", after.Name);
+            Assert.AreEqual(Lanyard.Shared.Enum.ClientUpdateRing.Pinned, after.UpdateRing);
+            Assert.AreEqual("1.0.40", after.PinnedClientVersion);
+        }
     }
 }

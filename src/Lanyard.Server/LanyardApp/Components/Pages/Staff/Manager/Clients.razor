@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Lanyard.App.Components.Manager
+@using Lanyard.Application.Services.ClientReleases
 @using Lanyard.Shared.Contracts
 @using Lanyard.Shared.Enum
 @using System.Globalization
@@ -10,6 +11,7 @@
 @implements IDisposable
 
 @inject IClientService _clientService
+@inject IClientUpdatePolicyService _updatePolicyService
 @inject INotificationService _toastService
 
 <PageTitle>Clients</PageTitle>
@@ -35,16 +37,19 @@
         </div>
     }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.9fr) minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.9fr)" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.9fr)" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
                 <PropertyColumn Property="x => x.MostRecentIpAddress" Title="IP Address" Class="clients-col-ip"/>
                 <TemplateColumn Title="Version" Class="clients-col-version">
-                    <span class="@(context.ReportedClientVersion is null ? "clients-muted" : null)"
-                          title="@VersionTooltip(context)">
-                        @VersionLabel(context.ReportedClientVersion)
-                    </span>
+                    <div class="clients-version-cell">
+                        <span class="@(context.ReportedClientVersion is null ? "clients-muted" : null)"
+                              title="@VersionTooltip(context)">
+                            @VersionLabel(context.ReportedClientVersion)
+                        </span>
+                        <ClientUpdateRingBadges Target="@TargetFor(context.Id)" />
+                    </div>
                 </TemplateColumn>
                 <PropertyColumn IsDefaultSortColumn="true" InitialSortDirection="DataGridSortDirection.Descending" Sortable="true"
                                 Property="x => x.LastLogin" Title="Last Login" />
@@ -101,6 +106,7 @@
                     <div class="clients-phone-name">@client.Name</div>
                     <div class="clients-phone-meta">
                         <span class="@(client.ReportedClientVersion is null ? "clients-muted" : null)">@VersionLabel(client.ReportedClientVersion)</span>
+                        <ClientUpdateRingBadges Target="@TargetFor(client.Id)" />
                         <span>·</span>
                         <span>@(client.IsCurrentlyConnected ? "Connected" : "Offline")</span>
                         @if (client.LastLogin is DateTime lastLogin)
@@ -148,6 +154,10 @@
     private sealed record ClientVersionCount(string? Version, int Count);
 
     private List<ClientVersionCount> _versionCounts = [];
+
+    // Update ring and target per client. Empty (no badges) if releases couldn't be loaded, which
+    // must not stop the rest of the page working.
+    private IReadOnlyDictionary<Guid, ClientUpdateTargetDTO> _targets = new Dictionary<Guid, ClientUpdateTargetDTO>();
 
     private PeriodicTimer? timer;
     private CancellationTokenSource? timerCancellation;
@@ -214,6 +224,13 @@
             clients = result.Data!;
             _sortedClients = clients.OrderBy(x => x.Name).ToList().AsQueryable();
             _versionCounts = BuildVersionCounts(clients);
+
+            Result<IReadOnlyDictionary<Guid, ClientUpdateTargetDTO>> targets = await _updatePolicyService.GetTargetsAsync();
+
+            if (targets.IsSuccess)
+            {
+                _targets = targets.Data!;
+            }
         }
         else if (showErrors)
         {
@@ -241,6 +258,8 @@
 
         return counts;
     }
+
+    private ClientUpdateTargetDTO? TargetFor(Guid clientId) => _targets.TryGetValue(clientId, out ClientUpdateTargetDTO? target) ? target : null;
 
     private static string VersionLabel(string? version) => version is null ? "Unknown" : $"v{version}";
 

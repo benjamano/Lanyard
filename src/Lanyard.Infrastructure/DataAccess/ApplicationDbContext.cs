@@ -59,6 +59,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Playlist> Playlists { get; set; }
         public DbSet<PlaylistSongMember> PlaylistSongMembers { get; set; }
         public DbSet<Client> Clients { get; set; }
+        public DbSet<ClientRelease> ClientReleases { get; set; }
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }

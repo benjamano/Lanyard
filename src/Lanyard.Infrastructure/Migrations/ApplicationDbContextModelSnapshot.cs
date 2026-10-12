@@ -730,6 +730,10 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PinnedClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PreferredAudioDeviceId")
                         .HasColumnType("text");
 
@@ -739,6 +743,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("ReportedClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int>("UpdateRing")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -881,6 +888,59 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasIndex("ProjectionProgramId");
 
                     b.ToTable("ClientProjectionSettings");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientRelease", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsPrerelease")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PromotedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("PromotedToStableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WithdrawnByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("WithdrawnReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Version")
+                        .IsUnique();
+
+                    b.ToTable("ClientReleases");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClockInTerminal", b =>

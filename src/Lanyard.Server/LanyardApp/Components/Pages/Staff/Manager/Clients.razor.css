@@ -19,6 +19,21 @@
     overflow-x: auto;
 }
 
+.clients-version-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Badges come from ClientUpdateRingBadges; a squeezed badge reads as gibberish ("nne"), so
+   they keep their width and the cell clips whole badges at the end instead. */
+.clients-version-cell ::deep fluent-badge,
+.clients-phone-meta ::deep fluent-badge {
+    flex-shrink: 0;
+}
+
 .clients-phone-list {
     display: none;
     flex-direction: column;

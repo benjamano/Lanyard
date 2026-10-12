@@ -12,4 +12,8 @@ public static class ClientConnectionQuery
     // The Velopack version the kiosk is running. Clients older than 1.0.41 don't send it, so the
     // server must treat a missing value as "unknown", not as "no version".
     public const string ClientVersion = "clientVersion";
+
+    // The header form of the shared secret, used by the kiosk's REST calls (the hub can't send
+    // headers on every transport, so it uses the Secret query key instead).
+    public const string SecretHeader = "X-Lanyard-Client-Secret";
 }
