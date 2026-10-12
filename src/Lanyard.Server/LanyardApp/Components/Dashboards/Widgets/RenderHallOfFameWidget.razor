@@ -91,6 +91,11 @@
     [Parameter]
     public required HallOfFameWidget Widget { get; set; }
 
+    // The dashboard's company. On a kiosk display nobody is signed in, so without this the
+    // leaderboard would include every company's games.
+    [Parameter]
+    public int? CompanyId { get; set; }
+
     // Leaderboard rows only change when a game finishes, so this polls on a slow interval rather
     // than subscribing to the live status store the way the scoreboard widget does.
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
@@ -113,6 +118,7 @@
     // to trigger a reload rather than waiting for the next poll.
     private HallOfFamePeriod _loadedPeriod;
     private Guid? _loadedClientId;
+    private int? _loadedCompanyId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,6 +127,7 @@
         // parameter change is what would let the header get ahead of the rows.
         _loadedPeriod = Widget.Period;
         _loadedClientId = Widget.ClientId;
+        _loadedCompanyId = CompanyId;
 
         await LoadAsync();
 
@@ -148,7 +155,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedPeriod == Widget.Period && _loadedClientId == Widget.ClientId)
+        if (_loadedPeriod == Widget.Period && _loadedClientId == Widget.ClientId && _loadedCompanyId == CompanyId)
         {
             return;
         }
@@ -179,15 +186,19 @@
                 // these rows were actually fetched with.
                 HallOfFamePeriod period = Widget.Period;
                 Guid? clientId = Widget.ClientId;
+                // An unsaved dashboard in the editor has no company yet (0); the editor is signed in,
+                // so the tenant filter already scopes it.
+                int? requestedCompanyId = CompanyId;
+                int? companyId = requestedCompanyId is > 0 ? requestedCompanyId : null;
 
                 Result<IReadOnlyList<HallOfFameEntryDTO>> scoresResult =
-                    await _gameResultService.GetTopScoresAsync(period, TakeCount, clientId);
+                    await _gameResultService.GetTopScoresAsync(period, TakeCount, clientId, companyId);
 
                 Result<IReadOnlyList<HallOfFameEntryDTO>> accuracyResult =
-                    await _gameResultService.GetTopAccuracyAsync(period, TakeCount, clientId);
+                    await _gameResultService.GetTopAccuracyAsync(period, TakeCount, clientId, companyId);
 
                 Result<IReadOnlyList<HallOfFameTeamTotalDTO>> teamResult =
-                    await _gameResultService.GetTopTeamTotalsAsync(period, clientId);
+                    await _gameResultService.GetTopTeamTotalsAsync(period, clientId, companyId);
 
                 _hasError = !scoresResult.IsSuccess || !accuracyResult.IsSuccess || !teamResult.IsSuccess;
 
@@ -199,6 +210,7 @@
 
                 _loadedPeriod = period;
                 _loadedClientId = clientId;
+                _loadedCompanyId = requestedCompanyId;
             }
             while (_reloadRequested);
         }

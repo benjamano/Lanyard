@@ -25,6 +25,7 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -531,7 +532,7 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/websocket"))
     {
-        string? providedSecret = context.Request.Query["secret"].ToString();
+        string? providedSecret = context.Request.Query[ClientConnectionQuery.Secret].ToString();
         string remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         // Delegates to the same decision point the client REST endpoints use

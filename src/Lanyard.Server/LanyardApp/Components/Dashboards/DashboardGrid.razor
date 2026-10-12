@@ -184,7 +184,7 @@
                                 <div class="dashboard-widget-host"
                                     @oncontextmenu="@(() => ShowWidgetConfigDialog(widget.Id))"
                                     @oncontextmenu:preventDefault="true">
-                                    <RenderHallOfFameWidget Widget="hallOfFameWidget" />
+                                    <RenderHallOfFameWidget Widget="hallOfFameWidget" CompanyId="CompanyId" />
                                 </div>
                                 break;
                             case WidgetType.MyTraining:
@@ -331,6 +331,11 @@
 
     [Parameter]
     public bool PreviewMode { get; set; } = false;
+
+    // The company that owns the dashboard. Kiosk displays render without a signed-in user, so
+    // nothing filters their data by company - widgets that read company data scope to this.
+    [Parameter]
+    public int? CompanyId { get; set; }
 
     public ButtonAppearance buttonAppearance = ButtonAppearance.Subtle;
 
