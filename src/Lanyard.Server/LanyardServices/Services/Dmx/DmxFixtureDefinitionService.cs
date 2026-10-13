@@ -78,7 +78,17 @@ public partial class DmxFixtureDefinitionService(
             return Result<DmxFixtureDefinition>.Fail("Enter the fixture's manufacturer.");
         }
 
-        Result<OflParsedFixture> parsed = _parser.Parse(json, null, manufacturer);
+        Result<OflParsedFixture> parsed;
+
+        try
+        {
+            parsed = await _parser.ParseAsync(json, null, manufacturer);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't read an uploaded fixture file for {Manufacturer}", manufacturer);
+            return Result<DmxFixtureDefinition>.Fail("That file couldn't be read.");
+        }
 
         if (!parsed.IsSuccess || parsed.Data == null)
         {

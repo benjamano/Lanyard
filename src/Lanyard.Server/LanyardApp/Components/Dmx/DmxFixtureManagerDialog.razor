@@ -406,6 +406,11 @@
 
             _toastService.ShowSuccess($"{imported.Data.Manufacturer} {imported.Data.Model} is now one of your saved types. Choose its mode, then add the fixture.");
         }
+        catch (Exception)
+        {
+            // The service already turns bad files into a Fail; this is the browser connection dropping mid-upload.
+            _toastService.ShowError($"Couldn't read {file.Name}. Try uploading it again.");
+        }
         finally
         {
             await file.Stream.DisposeAsync();
