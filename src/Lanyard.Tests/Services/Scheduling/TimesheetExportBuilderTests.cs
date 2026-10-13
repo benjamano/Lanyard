@@ -151,8 +151,8 @@ public class TimesheetExportBuilderTests
 
         string[] lines = Csv(export).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.AreEqual("Day,Amy Clark,2026-10-05,09:00,09:07,1,7,0.12,,Approved", lines[1]);
-        Assert.AreEqual("Total,Amy Clark,,,,3,21,0.35,,", lines[4]);
+        Assert.AreEqual("Day,Amy Clark,2026-10-05,09:00,09:07,1,7,0.12,,0,7,0.12,Approved", lines[1]);
+        Assert.AreEqual("Total,Amy Clark,,,,3,21,0.35,,0,21,0.35,", lines[4]);
     }
 
     [TestMethod]
@@ -240,7 +240,7 @@ public class TimesheetExportBuilderTests
         string[] lines = Encoding.UTF8.GetString(bytes[3..]).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
         CollectionAssert.AreEqual(new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3]);
-        Assert.AreEqual("Row type,Employee,Date,First in,Last out,Entries,Minutes,Hours,Rota break (min),Status", lines[0]);
+        Assert.AreEqual("Row type,Employee,Date,First in,Last out,Entries,Minutes,Hours,Rota break (min),Break deducted (min),Paid minutes,Paid hours,Status", lines[0]);
         StringAssert.StartsWith(lines[1], "Day,\"'=HYPERLINK(\"\"http://evil\"\",\"\"Amy\"\")\",2026-10-05,");
     }
 
@@ -252,8 +252,8 @@ public class TimesheetExportBuilderTests
 
         string[] lines = Csv(export).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.AreEqual("Excluded,Amy Clark,2026-10-05,09:00,,1,,,,Still clocked in", lines[1]);
-        Assert.AreEqual("Total,Amy Clark,,,,0,0,0.00,,", lines[2]);
+        Assert.AreEqual("Excluded,Amy Clark,2026-10-05,09:00,,1,,,,,,,Still clocked in", lines[1]);
+        Assert.AreEqual("Total,Amy Clark,,,,0,0,0.00,,0,0,0.00,", lines[2]);
     }
 
     [TestMethod]
@@ -264,5 +264,105 @@ public class TimesheetExportBuilderTests
     public void FileName_IsSlugged(string locationName, string expected)
     {
         Assert.AreEqual(expected, TimesheetExportBuilder.FileName(locationName, Monday, Monday.AddDays(6)));
+    }
+
+    private static readonly BreakDeductionPolicy TwentyOverSix = new(BreakDeductionRule.FixedOverThreshold, 20, 360);
+
+    [TestMethod]
+    public void Build_NoBreakRule_PaidEqualsClocked()
+    {
+        TimesheetExport export = TimesheetExportBuilder.Build(View(Person("Amy Clark",
+            Line(Entry(Local(Monday, 9), Local(Monday, 17), shift: ShiftOn(Monday, 9, 17, 30))))));
+
+        TimesheetExportRow day = export.Rows.Single(r => r.Type == TimesheetExportRowType.Day);
+
+        Assert.AreEqual(0, day.BreakDeductedMinutes);
+        Assert.AreEqual(480, day.PaidMinutes);
+        Assert.AreEqual(480, export.Summary.PaidMinutes);
+    }
+
+    [TestMethod]
+    public void Build_RotaBreakRule_TakesOffTheShiftsBreak_AndNothingWithoutAShift()
+    {
+        BreakDeductionPolicy rota = new(BreakDeductionRule.RotaBreak, 0, 0);
+
+        TimesheetExport export = TimesheetExportBuilder.Build(View(Person("Amy Clark",
+            Line(Entry(Local(Monday, 9), Local(Monday, 17), shift: ShiftOn(Monday, 9, 17, 30))),
+            Line(Entry(Local(Monday.AddDays(1), 9), Local(Monday.AddDays(1), 17))))), rota);
+
+        List<TimesheetExportRow> days = [.. export.Rows.Where(r => r.Type == TimesheetExportRowType.Day)];
+
+        Assert.AreEqual(30, days[0].BreakDeductedMinutes);
+        Assert.AreEqual(450, days[0].PaidMinutes);
+        Assert.AreEqual(0, days[1].BreakDeductedMinutes);
+        Assert.AreEqual(480, days[1].PaidMinutes);
+    }
+
+    [TestMethod]
+    public void Build_FixedRule_OnlyAppliesToDaysLongerThanTheThreshold()
+    {
+        TimesheetExport export = TimesheetExportBuilder.Build(View(Person("Amy Clark",
+            Line(Entry(Local(Monday, 9), Local(Monday, 15))),
+            Line(Entry(Local(Monday.AddDays(1), 9), Local(Monday.AddDays(1), 15, 1))))), TwentyOverSix);
+
+        List<TimesheetExportRow> days = [.. export.Rows.Where(r => r.Type == TimesheetExportRowType.Day)];
+
+        Assert.AreEqual(0, days[0].BreakDeductedMinutes, "Exactly six hours is not more than six hours.");
+        Assert.AreEqual(360, days[0].PaidMinutes);
+        Assert.AreEqual(20, days[1].BreakDeductedMinutes);
+        Assert.AreEqual(341, days[1].PaidMinutes);
+    }
+
+    [TestMethod]
+    public void Build_FixedRule_IsPerDay_SoSplitShiftsOnOneDayCountTogether()
+    {
+        TimesheetExport export = TimesheetExportBuilder.Build(View(Person("Amy Clark",
+            Line(Entry(Local(Monday, 9), Local(Monday, 13))),
+            Line(Entry(Local(Monday, 14), Local(Monday, 17))))), TwentyOverSix);
+
+        TimesheetExportRow day = export.Rows.Single(r => r.Type == TimesheetExportRowType.Day);
+
+        Assert.AreEqual(420, day.Minutes);
+        Assert.AreEqual(20, day.BreakDeductedMinutes);
+    }
+
+    [TestMethod]
+    public void BreakToDeduct_NeverTakesOffMoreThanTheDay()
+    {
+        BreakDeductionPolicy rota = new(BreakDeductionRule.RotaBreak, 0, 0);
+
+        Assert.AreEqual(10, TimesheetExportBuilder.BreakToDeduct(rota, 10, 30));
+        Assert.AreEqual(0, TimesheetExportBuilder.BreakToDeduct(rota, 0, 30));
+        Assert.AreEqual(5, TimesheetExportBuilder.BreakToDeduct(new BreakDeductionPolicy(BreakDeductionRule.FixedOverThreshold, 20, 1), 5, null));
+    }
+
+    [TestMethod]
+    public void ToCsv_Totals_SumPaidMinutes_AndPaidHoursComeFromTotalPaidMinutes()
+    {
+        TimesheetExport export = TimesheetExportBuilder.Build(View(Person("Amy Clark",
+            Line(Entry(Local(Monday, 9), Local(Monday, 16, 7))),
+            Line(Entry(Local(Monday.AddDays(1), 9), Local(Monday.AddDays(1), 16, 7))))), TwentyOverSix);
+
+        string[] lines = Csv(export).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.AreEqual("Day,Amy Clark,2026-10-05,09:00,16:07,1,427,7.12,,20,407,6.78,Approved", lines[1]);
+        Assert.AreEqual("Total,Amy Clark,,,,2,854,14.23,,40,814,13.57,", lines[3]);
+        Assert.AreEqual(40, export.Summary.BreakDeductedMinutes);
+        Assert.AreEqual(814, export.Summary.PaidMinutes);
+    }
+
+    [TestMethod]
+    public void BreakDeductionPolicy_From_ConvertsHoursToMinutes()
+    {
+        CompanySchedulingSettings settings = new()
+        {
+            CompanyId = 1, BreakDeduction = BreakDeductionRule.FixedOverThreshold, BreakDeductionMinutes = 30, BreakDeductionAfterHours = 7.5m
+        };
+
+        BreakDeductionPolicy policy = BreakDeductionPolicy.From(settings);
+
+        Assert.AreEqual(new BreakDeductionPolicy(BreakDeductionRule.FixedOverThreshold, 30, 450), policy);
+        Assert.AreEqual("30 min is taken off paid time on any day over 7.5 h.", policy.Describe());
+        Assert.AreEqual(BreakDeductionPolicy.None, BreakDeductionPolicy.From(new CompanySchedulingSettings { CompanyId = 1 }));
     }
 }

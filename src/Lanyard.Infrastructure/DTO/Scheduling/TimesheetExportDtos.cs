@@ -1,3 +1,6 @@
+using Lanyard.Infrastructure.Enum;
+using Lanyard.Infrastructure.Models;
+
 namespace Lanyard.Infrastructure.DTO.Scheduling;
 
 public enum TimesheetExportRowType
@@ -20,7 +23,8 @@ public enum TimesheetExclusionReason
 }
 
 // One row of the payroll export. Minutes are the source of truth: hours are derived from them when
-// the file is written, so the day rows always add up to the total exactly.
+// the file is written, so the day rows always add up to the total exactly. Minutes is clocked
+// time; PaidMinutes is clocked time less BreakDeductedMinutes under the company's break rule.
 public record TimesheetExportRow(
     TimesheetExportRowType Type,
     string Employee,
@@ -30,7 +34,41 @@ public record TimesheetExportRow(
     int Entries,
     int? Minutes,
     int? RotaBreakMinutes,
-    TimesheetExclusionReason? ExclusionReason);
+    TimesheetExclusionReason? ExclusionReason,
+    int? BreakDeductedMinutes = null,
+    int? PaidMinutes = null);
+
+// The company's break rule as the export applies it - built once from CompanySchedulingSettings so
+// the export rules don't depend on the settings entity.
+public record BreakDeductionPolicy(BreakDeductionRule Rule, int Minutes, int AfterMinutes)
+{
+    public static readonly BreakDeductionPolicy None = new(BreakDeductionRule.None, 0, 0);
+
+    public static BreakDeductionPolicy From(CompanySchedulingSettings settings) => settings.BreakDeduction switch
+    {
+        BreakDeductionRule.RotaBreak => new(BreakDeductionRule.RotaBreak, 0, 0),
+        BreakDeductionRule.FixedOverThreshold => new(
+            BreakDeductionRule.FixedOverThreshold,
+            settings.BreakDeductionMinutes,
+            (int)Math.Round(settings.BreakDeductionAfterHours * 60m, MidpointRounding.AwayFromZero)),
+        _ => None
+    };
+
+    // "20 min is taken off any day over 6 h", for the export dialog.
+    public string Describe() => Rule switch
+    {
+        BreakDeductionRule.RotaBreak => "The rota break of each shift is taken off paid time.",
+        BreakDeductionRule.FixedOverThreshold =>
+            $"{Minutes} min is taken off paid time on any day over {(AfterMinutes / 60m).ToString("0.##", System.Globalization.CultureInfo.GetCultureInfo("en-GB"))} h.",
+        _ => "Breaks aren't taken off - paid time is the time on the clock."
+    };
+}
+
+public record PayPeriod(DateOnly From, DateOnly To);
+
+// The pay periods the export dialog offers in one click. IsConfigured is false for a weekly-based
+// frequency with no anchor date yet, when the periods are only a guess.
+public record PayPeriodPresets(PayPeriod Current, PayPeriod Previous, string Description, bool IsConfigured, BreakDeductionPolicy Breaks);
 
 public record TimesheetExportSummary(
     string LocationName,
@@ -41,7 +79,9 @@ public record TimesheetExportSummary(
     int ApprovedMinutes,
     int AwaitingApproval,
     int NeedsReview,
-    int StillClockedIn)
+    int StillClockedIn,
+    int BreakDeductedMinutes = 0,
+    int PaidMinutes = 0)
 {
     public int ExcludedCount => AwaitingApproval + NeedsReview + StillClockedIn;
 }

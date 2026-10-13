@@ -17,15 +17,19 @@ namespace Lanyard.Application.Services.Scheduling;
 // - Each entry is rounded to the nearest whole minute of real elapsed time (taken from UTC, so a
 //   shift across a clock change is paid for the hours actually worked). Hours are only derived
 //   from minutes when the file is written.
-// - No break is deducted: the rota break of the matched shift is shown so payroll can decide.
+// - Clocked time never has a break taken off. The company's break rule (BreakDeductionPolicy) is
+//   applied per person per day to give separate paid columns, and the rota break of the matched
+//   shift is always shown so payroll can see the working.
 public static partial class TimesheetExportBuilder
 {
     public const string ContentType = "text/csv";
 
     public static readonly IReadOnlyList<string> Header =
-        ["Row type", "Employee", "Date", "First in", "Last out", "Entries", "Minutes", "Hours", "Rota break (min)", "Status"];
+        ["Row type", "Employee", "Date", "First in", "Last out", "Entries", "Minutes", "Hours", "Rota break (min)", "Break deducted (min)", "Paid minutes", "Paid hours", "Status"];
 
-    public static TimesheetExport Build(TimesheetView view)
+    public static TimesheetExport Build(TimesheetView view) => Build(view, BreakDeductionPolicy.None);
+
+    public static TimesheetExport Build(TimesheetView view, BreakDeductionPolicy breaks)
     {
         List<TimesheetExportRow> rows = [];
         int people = 0;
@@ -34,6 +38,8 @@ public static partial class TimesheetExportBuilder
         int awaitingApproval = 0;
         int needsReview = 0;
         int stillClockedIn = 0;
+        int deductedMinutes = 0;
+        int paidMinutes = 0;
 
         foreach (TimesheetPerson person in view.People)
         {
@@ -49,11 +55,14 @@ public static partial class TimesheetExportBuilder
 
             List<TimesheetLine> included = [.. clocked.Where(l => ExclusionFor(l.Entry!) is null)];
             int personMinutes = 0;
+            int personDeducted = 0;
 
             foreach (IGrouping<DateOnly, TimesheetLine> day in included.GroupBy(l => l.Date).OrderBy(g => g.Key))
             {
                 List<TimeEntry> entries = [.. day.Select(l => l.Entry!)];
                 int minutes = entries.Sum(RoundedMinutes);
+                int? rotaBreak = RotaBreakMinutes(day);
+                int deducted = BreakToDeduct(breaks, minutes, rotaBreak);
 
                 rows.Add(new TimesheetExportRow(
                     TimesheetExportRowType.Day,
@@ -63,10 +72,13 @@ public static partial class TimesheetExportBuilder
                     RotaTime.LocalTime(entries.Max(e => e.ClockOutUtc!.Value)),
                     entries.Count,
                     minutes,
-                    RotaBreakMinutes(day),
-                    null));
+                    rotaBreak,
+                    null,
+                    deducted,
+                    minutes - deducted));
 
                 personMinutes += minutes;
+                personDeducted += deducted;
                 dayRows++;
             }
 
@@ -103,14 +115,33 @@ public static partial class TimesheetExportBuilder
                 included.Count,
                 personMinutes,
                 RotaBreakMinutes(included),
-                null));
+                null,
+                personDeducted,
+                personMinutes - personDeducted));
 
             approvedMinutes += personMinutes;
+            deductedMinutes += personDeducted;
+            paidMinutes += personMinutes - personDeducted;
         }
 
-        TimesheetExportSummary summary = new(view.LocationName, view.From, view.To, people, dayRows, approvedMinutes, awaitingApproval, needsReview, stillClockedIn);
+        TimesheetExportSummary summary = new(view.LocationName, view.From, view.To, people, dayRows, approvedMinutes, awaitingApproval, needsReview, stillClockedIn, deductedMinutes, paidMinutes);
 
         return new TimesheetExport(summary, rows);
+    }
+
+    // The unpaid break for one person's day under the company's rule, never more than the day.
+    // The fixed rule applies only when the day is strictly longer than the threshold, so a day of
+    // exactly 6 hours keeps its full pay under "20 minutes over 6 hours".
+    public static int BreakToDeduct(BreakDeductionPolicy breaks, int clockedMinutes, int? rotaBreakMinutes)
+    {
+        int deduct = breaks.Rule switch
+        {
+            BreakDeductionRule.RotaBreak => rotaBreakMinutes ?? 0,
+            BreakDeductionRule.FixedOverThreshold when clockedMinutes > breaks.AfterMinutes => breaks.Minutes,
+            _ => 0
+        };
+
+        return Math.Clamp(deduct, 0, Math.Max(0, clockedMinutes));
     }
 
     public static TimesheetExclusionReason? ExclusionFor(TimeEntry entry)
@@ -168,6 +199,9 @@ public static partial class TimesheetExportBuilder
                 CsvWriter.Number(row.Minutes),
                 CsvWriter.Number(row.Minutes is int minutes ? HoursFromMinutes(minutes) : null, "0.00"),
                 CsvWriter.Number(row.RotaBreakMinutes),
+                CsvWriter.Number(row.BreakDeductedMinutes),
+                CsvWriter.Number(row.PaidMinutes),
+                CsvWriter.Number(row.PaidMinutes is int paid ? HoursFromMinutes(paid) : null, "0.00"),
                 CsvWriter.Text(StatusText(row))
             ]);
         }

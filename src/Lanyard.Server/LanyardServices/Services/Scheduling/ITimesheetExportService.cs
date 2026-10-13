@@ -13,4 +13,8 @@ public interface ITimesheetExportService
 
     // The CSV itself, built in memory. Nothing is stored and no names are logged.
     Task<Result<TimesheetExportFile>> ExportCsvAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to, string actingUserId);
+
+    // The company's current and previous pay periods (from its rota settings) around a
+    // venue-local day, and its break rule, for the dialog's one-click dates and wording.
+    Task<Result<PayPeriodPresets>> GetPayPeriodPresetsAsync(int companyId, DateOnly today);
 }

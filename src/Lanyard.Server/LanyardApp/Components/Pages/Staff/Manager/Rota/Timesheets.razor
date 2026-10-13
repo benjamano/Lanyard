@@ -302,6 +302,7 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ExportTimesheetDialog.LocationId), location);
             options.Parameters.Add(nameof(ExportTimesheetDialog.LocationName), view.LocationName);
+            options.Parameters.Add(nameof(ExportTimesheetDialog.CompanyId), view.CompanyId);
             options.Parameters.Add(nameof(ExportTimesheetDialog.DefaultFrom), weekStart);
             options.Parameters.Add(nameof(ExportTimesheetDialog.DefaultTo), weekStart.AddDays(6));
         });
