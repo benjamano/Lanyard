@@ -219,8 +219,17 @@
 
         Guid? primary = Guid.TryParse(primaryPositionId, out Guid parsed) && selectedPositionIds.Contains(parsed) ? parsed : null;
 
-        Result<List<UserPosition>> result = await _staffPositionService.SetUserPositionsAsync(
-            scopeResult.Data, UserId, selectedPositionIds.ToList(), primary);
+        Result<string> actingUser = await _securityService.GetCurrentUserIdAsync();
+
+        if (!actingUser.IsSuccess || string.IsNullOrEmpty(actingUser.Data))
+        {
+            isSavingPositions = false;
+            _toastService.ShowError($"Failed to identify you: {actingUser.Error}");
+            return;
+        }
+
+        Result<UserPositionsSaved> result = await _staffPositionService.SetUserPositionsAsync(
+            scopeResult.Data, UserId, selectedPositionIds.ToList(), primary, actingUser.Data);
 
         isSavingPositions = false;
 
@@ -230,12 +239,12 @@
             return;
         }
 
-        userPositions = result.Data ?? [];
+        userPositions = result.Data?.Positions ?? [];
         selectedPositionIds = userPositions.Select(x => x.StaffPositionId).ToHashSet();
         primaryPositionId = SavedPrimaryPositionId?.ToString();
 
         await LoadBalancesAsync();
 
-        _toastService.ShowSuccess("Positions saved.");
+        _toastService.ShowSuccess(result.Data?.Training.Summary() is string training ? $"Positions saved. {training}" : "Positions saved.");
     }
 }

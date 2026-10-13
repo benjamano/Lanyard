@@ -129,6 +129,7 @@ builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IComplianceService, ComplianceService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
+builder.Services.AddScoped<IRequiredTrainingService, RequiredTrainingService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
 builder.Services.AddScoped<IStaffBulkUpdateService, StaffBulkUpdateService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();

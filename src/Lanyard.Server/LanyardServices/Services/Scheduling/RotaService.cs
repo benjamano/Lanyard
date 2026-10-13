@@ -145,6 +145,11 @@ public class RotaService(
                 .ThenBy(x => x.Name)
                 .ToListAsync();
 
+            // Upcoming assigned shifts whose person is missing the position's required training -
+            // badged on the rota, not blocked. Two queries at most for the whole range.
+            Dictionary<Guid, List<TrainingGap>> trainingGaps = await TrainingGapsAsync(ctx,
+                locationShifts.Where(x => x.IsActive && x.UserId is not null && x.EndUtc > DateTime.UtcNow).ToList());
+
             // Grouped once up front - each shift's venue-local week is worked out a single time,
             // instead of once per (person, week) pair inside the loops below.
             ILookup<(string UserId, DateOnly Week), Shift> companyShiftsByUserWeek =
@@ -241,7 +246,8 @@ public class RotaService(
                 pendingUserIds.Where(x => x is not null).Distinct().Count())
             {
                 OpenShifts = locationShifts.Where(x => x.UserId is null && x.IsActive).ToList(),
-                UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null)
+                UnpublishedOpenShiftCount = pendingUserIds.Count(x => x is null),
+                TrainingGapsByShift = trainingGaps
             });
         }
         catch (Exception ex)
@@ -783,7 +789,10 @@ public class RotaService(
 
             await ctx.SaveChangesAsync();
 
-            PublishResult result = new(changes) { OpenedShifts = opened };
+            Dictionary<Guid, List<TrainingGap>> trainingGaps = await TrainingGapsAsync(ctx,
+                changes.SelectMany(x => x.New.Concat(x.Changed)).Where(x => x.EndUtc > now).ToList());
+
+            PublishResult result = new(changes) { OpenedShifts = opened, ShiftsMissingTraining = trainingGaps.Count };
 
             // One email per person, listing only their own shifts that changed - so a last-minute
             // edit reaches just the people it touches. Queued, so the publish never waits on it.
@@ -887,9 +896,39 @@ public class RotaService(
             && ((x.IsActive && (x.PublishedDateUtc == null || x.UpdateDate > x.PublishedDateUtc))
                 || (!x.IsActive && x.RemovalPending)));
 
+    // The required training each of these (assigned) shifts' people is missing, keyed by shift;
+    // shifts with no gap are left out.
+    private static async Task<Dictionary<Guid, List<TrainingGap>>> TrainingGapsAsync(ApplicationDbContext ctx, IReadOnlyCollection<Shift> shifts)
+    {
+        List<Shift> positioned = shifts.Where(x => x.UserId is not null && x.StaffPositionId is not null).ToList();
+
+        if (positioned.Count == 0)
+        {
+            return [];
+        }
+
+        ShiftClaimRules.TrainingSnapshot training = await ShiftClaimRules.LoadTrainingAsync(ctx,
+            positioned.Select(x => x.UserId!).ToList(),
+            positioned.Select(x => x.StaffPositionId!.Value).ToList());
+
+        Dictionary<Guid, List<TrainingGap>> gaps = [];
+
+        foreach (Shift shift in positioned)
+        {
+            List<TrainingGap> missing = training.GapsFor(shift.UserId!, shift);
+
+            if (missing.Count > 0)
+            {
+                gaps[shift.Id] = missing;
+            }
+        }
+
+        return gaps;
+    }
+
     // "This person hasn't done Fire Safety training." / "This person's Fire Safety training runs
     // out before this shift."
-    internal static string TrainingWarning(IReadOnlyList<TrainingGap> gaps)
+    public static string TrainingWarning(IReadOnlyList<TrainingGap> gaps)
     {
         List<TrainingGap> missing = gaps.Where(x => !x.Lapsed).ToList();
         List<TrainingGap> lapsed = gaps.Where(x => x.Lapsed).ToList();
