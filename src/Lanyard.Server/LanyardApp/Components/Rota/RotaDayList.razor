@@ -87,7 +87,7 @@
                         }
                         @foreach (Shift shift in row.Shifts.Where(s => s.LocalDate() == selectedDate))
                         {
-                            <ShiftChip Shift="@shift" OnClick="@OnEdit" />
+                            <ShiftChip Shift="@shift" OnClick="@OnEdit" TrainingGaps="@View.TrainingGapsFor(shift)" ShowTrainingText="true" />
                         }
                     </div>
                 </div>

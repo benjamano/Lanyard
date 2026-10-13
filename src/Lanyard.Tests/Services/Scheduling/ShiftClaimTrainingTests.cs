@@ -590,4 +590,64 @@ public class ShiftClaimTrainingTests
         Assert.IsTrue(result.IsSuccess, result.Error);
         Assert.AreEqual("This person doesn't normally work as Marshal.", result.Data!.Warnings.Single());
     }
+
+    // ---- Rota badges and the publish warning -----------------------------------------------
+
+    [TestMethod]
+    public async Task RotaView_BadgesUpcomingShiftsOfPeopleMissingTheTraining()
+    {
+        World w = await SeedAsync();
+        Course arena = await CourseAsync(w, "Laser Arena Safety");
+        await RequireAsync(w, arena);
+        await AssignAsync(w, arena, w.Tom.Id, Now.AddDays(-30));
+
+        Shift amys = await ShiftAsync(w, w.Amy.Id);
+        Shift toms = await ShiftAsync(w, w.Tom.Id, dayOffset: 1);
+        Shift amysPast = await ShiftAsync(w, w.Amy.Id, dayOffset: -20);
+        Shift open = await ShiftAsync(w, null, dayOffset: 2);
+
+        DateOnly from = RotaTime.LocalDate(Day.AddDays(-21));
+        DateOnly to = RotaTime.LocalDate(Day.AddDays(3));
+        Result<RotaRangeView> view = await Rota(w).GetRangeViewAsync(w.ManagerScope, w.Location.Id, from, to);
+
+        Assert.IsTrue(view.IsSuccess, view.Error);
+        Assert.AreEqual("Laser Arena Safety", view.Data!.TrainingGapsFor(amys).Single().CourseName);
+        Assert.AreEqual(0, view.Data.TrainingGapsFor(toms).Count, "Tom has passed it");
+        Assert.AreEqual(0, view.Data.TrainingGapsFor(amysPast).Count, "Past shifts aren't badged");
+        Assert.AreEqual(0, view.Data.TrainingGapsFor(open).Count, "Nobody on it");
+        Assert.AreEqual(1, view.Data.TrainingGapsByShift.Count);
+    }
+
+    [TestMethod]
+    public async Task RotaView_NoBadgesWhenNothingIsRequired()
+    {
+        World w = await SeedAsync();
+        await ShiftAsync(w, w.Amy.Id);
+
+        DateOnly day = RotaTime.LocalDate(Day.AddHours(9));
+        Result<RotaRangeView> view = await Rota(w).GetRangeViewAsync(w.ManagerScope, w.Location.Id, day, day);
+
+        Assert.IsTrue(view.IsSuccess, view.Error);
+        Assert.AreEqual(0, view.Data!.TrainingGapsByShift.Count);
+    }
+
+    [TestMethod]
+    public async Task Publish_CountsShiftsForPeopleMissingTheTraining()
+    {
+        World w = await SeedAsync();
+        Course arena = await CourseAsync(w, "Laser Arena Safety");
+        await RequireAsync(w, arena);
+        await AssignAsync(w, arena, w.Tom.Id, Now.AddDays(-30));
+
+        await ShiftAsync(w, w.Amy.Id, published: false);
+        await ShiftAsync(w, w.Priya.Id, startHour: 12, published: false);
+        await ShiftAsync(w, w.Tom.Id, startHour: 14, published: false);
+
+        DateOnly day = RotaTime.LocalDate(Day.AddHours(9));
+        Result<PublishResult> published = await Rota(w).PublishRangeAsync(w.ManagerScope, w.Location.Id, day, day, w.Manager.Id);
+
+        Assert.IsTrue(published.IsSuccess, published.Error);
+        Assert.AreEqual(3, published.Data!.ShiftCount, "Published regardless");
+        Assert.AreEqual(2, published.Data.ShiftsMissingTraining, "Amy and Priya");
+    }
 }

@@ -15,8 +15,9 @@ public interface IStaffPositionService
 
     // Replaces the user's whole set of positions. primaryPositionId must be one of positionIds;
     // when null and the set is non-empty the first position becomes primary, so a user with
-    // any positions always has exactly one primary.
-    Task<Result<List<UserPosition>>> SetUserPositionsAsync(LocationScope scope, string userId, List<Guid> positionIds, Guid? primaryPositionId);
+    // any positions always has exactly one primary. Any new position's required training they
+    // haven't done is then assigned to them (IRequiredTrainingService); that never fails the save.
+    Task<Result<UserPositionsSaved>> SetUserPositionsAsync(LocationScope scope, string userId, List<Guid> positionIds, Guid? primaryPositionId, string actingUserId);
 
     // The training a position needs before someone can pick up its shifts, with each Course (and
     // its Location) loaded. Includes archived courses, which are kept but no longer enforced.
@@ -27,8 +28,10 @@ public interface IStaffPositionService
     Task<Result<Dictionary<Guid, List<string>>>> GetRequiredCourseNamesAsync(LocationScope scope, int companyId);
 
     // Sets which courses the position requires. Only courses the caller can see are added or
-    // removed - a Manager leaves another location's (unshared) requirements as they are.
-    Task<Result<bool>> SetRequiredCoursesAsync(LocationScope scope, Guid positionId, List<Guid> courseIds, string actingUserId);
+    // removed - a Manager leaves another location's (unshared) requirements as they are. A newly
+    // required course is assigned to the position's holders who haven't done it; that never
+    // fails the save.
+    Task<Result<RequiredTrainingAssignResult>> SetRequiredCoursesAsync(LocationScope scope, Guid positionId, List<Guid> courseIds, string actingUserId);
 
     // How many of the position's holders are up to date on these courses today - courseIds is
     // what's ticked, saved or not. A Manager sees their own location's staff.
