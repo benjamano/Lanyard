@@ -63,7 +63,7 @@ public class DmxFixtureDefinitionServiceTests
 
         Mock<IOflCatalogueService> catalogue = new();
         catalogue.Setup(c => c.GetFixture("cameo/flat-pro-18"))
-            .Returns(() => parser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(fixtureJson)), "cameo/flat-pro-18", "Cameo"));
+            .Returns(() => parser.ParseAsync(new MemoryStream(Encoding.UTF8.GetBytes(fixtureJson)), "cameo/flat-pro-18", "Cameo").GetAwaiter().GetResult());
         catalogue.Setup(c => c.GetFixture(It.Is<string>(k => k != "cameo/flat-pro-18")))
             .Returns(Result<OflParsedFixture>.Fail("That fixture isn't in the library."));
 

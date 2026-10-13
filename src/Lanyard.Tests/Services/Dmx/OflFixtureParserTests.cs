@@ -3,6 +3,7 @@ using Lanyard.Application.Services.Dmx.Ofl;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Dmx;
 
@@ -97,7 +98,7 @@ public class OflFixtureParserTests
     """;
 
     private static Result<OflParsedFixture> Parse(string json, string? key = "test/fixture", string? manufacturer = "Test Co") =>
-        new OflFixtureParser().Parse(new MemoryStream(Encoding.UTF8.GetBytes(json)), key, manufacturer);
+        new OflFixtureParser().ParseAsync(new MemoryStream(Encoding.UTF8.GetBytes(json)), key, manufacturer).GetAwaiter().GetResult();
 
     [TestMethod]
     public void Parse_RgbwaPar_MapsModesAndColourRoles()
@@ -332,5 +333,87 @@ public class OflFixtureParserTests
         OflParsedChannel shutter = Parse(json).Data!.Modes[0].Channels[0];
 
         Assert.AreEqual(new OflParsedColorRange(0, 19, "#000000"), shutter.ColorRanges[0]);
+    }
+
+    // Blazor Server's browser file stream throws on synchronous reads.
+    private sealed class AsyncOnlyStream(byte[] data) : Stream
+    {
+        private int _position;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => data.Length;
+        public override long Position { get => _position; set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("Synchronous reads are not supported.");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int count = Math.Min(buffer.Length, data.Length - _position);
+            data.AsSpan(_position, count).CopyTo(buffer.Span);
+            _position += count;
+            return ValueTask.FromResult(count);
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [TestMethod]
+    public async Task ParseAsync_StreamThatOnlyAllowsAsyncReads_Works()
+    {
+        Result<OflParsedFixture> result = await new OflFixtureParser().ParseAsync(new AsyncOnlyStream(Encoding.UTF8.GetBytes(FlatPro18)), null, "Cameo");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+    }
+
+    [TestMethod]
+    public async Task ParseAsync_StreamThatFailsToRead_FailsInsteadOfThrowing()
+    {
+        Mock<Stream> broken = new();
+        broken.Setup(s => s.ReadAsync(It.IsAny<Memory<byte>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Connection lost"));
+
+        Result<OflParsedFixture> result = await new OflFixtureParser().ParseAsync(broken.Object, null, "Cameo");
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public void Parse_ChannelListedTwiceInAMode_MakesThatModeUnsupported()
+    {
+        string json = """{ "name": "X", "availableChannels": { "D": { "capability": { "type": "Intensity" } } }, "modes": [ { "name": "twice", "channels": ["D", "D"] } ] }""";
+
+        OflParsedMode mode = Parse(json).Data!.Modes[0];
+
+        Assert.IsFalse(mode.IsSupported);
+        StringAssert.Contains(mode.UnsupportedReason, "more than once");
+    }
+
+    [TestMethod]
+    public void Parse_TooManyColourRangesAcrossModes_Fails()
+    {
+        // One small channel with 1,000 colour presets, used in 10 modes = 10,000 ranges.
+        string capabilities = string.Join(",", Enumerable.Range(0, 1000).Select(i => $"{{\"dmxRange\":[{i / 4},{i / 4}],\"type\":\"ColorPreset\",\"colors\":[\"#ff0000\"]}}"));
+        string modes = string.Join(",", Enumerable.Range(0, 10).Select(i => $"{{\"name\":\"m{i}\",\"channels\":[\"C\"]}}"));
+        string json = $"{{\"name\":\"X\",\"availableChannels\":{{\"C\":{{\"capabilities\":[{capabilities}]}}}},\"modes\":[{modes}]}}";
+
+        Result<OflParsedFixture> result = Parse(json);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "too large");
+    }
+
+    [TestMethod]
+    public void Parse_TooManyChannelsAcrossModes_Fails()
+    {
+        string channels = string.Join(",", Enumerable.Range(0, 300).Select(i => $"\"c{i}\":{{\"capability\":{{\"type\":\"Generic\"}}}}"));
+        string modeChannels = string.Join(",", Enumerable.Range(0, 300).Select(i => $"\"c{i}\""));
+        string modes = string.Join(",", Enumerable.Range(0, 14).Select(i => $"{{\"name\":\"m{i}\",\"channels\":[{modeChannels}]}}"));
+        string json = $"{{\"name\":\"X\",\"availableChannels\":{{{channels}}},\"modes\":[{modes}]}}";
+
+        Assert.IsFalse(Parse(json).IsSuccess, "14 modes x 300 channels is over the 4,096 total.");
     }
 }

@@ -21,6 +21,12 @@ public partial class OflFixtureParser : IOflFixtureParser
     public const int MaxAvailableChannels = 512;
     public const int MaxCapabilitiesPerChannel = 1024;
     public const int MaxNameLength = 100;
+
+    // Totals across every mode, so a small file can't fan out into millions of rows (one channel
+    // with a thousand ranges, listed hundreds of times in hundreds of modes). The largest real
+    // fixtures use about 800 mode channels and 2,300 ranges.
+    public const int MaxTotalModeChannels = 4096;
+    public const int MaxTotalColorRanges = 8192;
     private const int UniverseSize = 512;
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -50,7 +56,9 @@ public partial class OflFixtureParser : IOflFixtureParser
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex HexColor();
 
-    public Result<OflParsedFixture> Parse(Stream json, string? oflKey, string? manufacturerName)
+    // Async because an upload on Blazor Server is the browser's file stream, which refuses
+    // synchronous reads.
+    public async Task<Result<OflParsedFixture>> ParseAsync(Stream json, string? oflKey, string? manufacturerName, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -58,7 +66,7 @@ public partial class OflFixtureParser : IOflFixtureParser
             byte[] chunk = new byte[16 * 1024];
             int read;
 
-            while ((read = json.Read(chunk, 0, chunk.Length)) > 0)
+            while ((read = await json.ReadAsync(chunk, cancellationToken)) > 0)
             {
                 if (buffer.Length + read > MaxFileBytes)
                 {
@@ -76,6 +84,10 @@ public partial class OflFixtureParser : IOflFixtureParser
         {
             return Result<OflParsedFixture>.Fail("That file isn't a valid Open Fixture Library fixture (it isn't readable JSON).");
         }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or InvalidOperationException)
+        {
+            return Result<OflParsedFixture>.Fail("That file couldn't be read. Try uploading it again.");
+        }
     }
 
     public Result<OflParsedFixture> Parse(JsonElement fixture, string? oflKey, string? manufacturerName)
@@ -84,7 +96,7 @@ public partial class OflFixtureParser : IOflFixtureParser
         {
             return ParseFixture(fixture, oflKey, manufacturerName);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException)
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or RegexMatchTimeoutException or ArgumentException)
         {
             // TryGet* everywhere below; this only catches a shape we didn't anticipate.
             return Result<OflParsedFixture>.Fail("That file isn't a valid Open Fixture Library fixture.");
@@ -203,6 +215,12 @@ public partial class OflFixtureParser : IOflFixtureParser
             modes.Add(ReadMode(mode, channels, aliases, templates));
         }
 
+        if (modes.Sum(m => m.Channels.Count) > MaxTotalModeChannels
+            || modes.Sum(m => m.Channels.Sum(c => c.ColorRanges.Count)) > MaxTotalColorRanges)
+        {
+            return Result<OflParsedFixture>.Fail("That fixture is too large to use (too many channels across its modes).");
+        }
+
         string? revision = fixture.TryGetProperty("meta", out JsonElement meta) && meta.ValueKind == JsonValueKind.Object
             ? ReadString(meta, "lastModifyDate", 50)
             : null;
@@ -262,9 +280,10 @@ public partial class OflFixtureParser : IOflFixtureParser
         Dictionary<string, int> offsetByKey = new(StringComparer.Ordinal);
         foreach ((string? key, int position) in entries)
         {
-            if (key != null)
+            // A channel can only sit at one address in a mode.
+            if (key != null && !offsetByKey.TryAdd(key, position))
             {
-                offsetByKey.TryAdd(key, position);
+                return Unsupported(name, shortName, count, $"This mode lists the channel \"{Clean(key, 40)}\" more than once.");
             }
         }
 
