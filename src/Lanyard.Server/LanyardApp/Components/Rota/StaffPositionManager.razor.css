@@ -53,6 +53,14 @@
     font-size: 0.85rem;
 }
 
+.position-list-training {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground2);
+}
+
 .position-list-actions {
     display: flex;
     gap: 4px;

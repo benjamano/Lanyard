@@ -2,8 +2,10 @@ using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Scheduling;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Services.Scheduling;
@@ -12,7 +14,7 @@ namespace Lanyard.Tests.Services.Scheduling;
 public class StaffPositionServiceTests
 {
     private static StaffPositionService GetService(DbContextOptions<ApplicationDbContext> options) =>
-        new(SchedulingTestHelpers.GetFactory(options));
+        new(SchedulingTestHelpers.GetFactory(options), NullLogger<StaffPositionService>.Instance);
 
     [TestMethod]
     public async Task GetPositionsAsync_ReturnsOnlyActivePositionsForCompanyInSortOrder()
@@ -414,5 +416,328 @@ public class StaffPositionServiceTests
             SchedulingTestHelpers.StaffScopeFor(location), user.Id, [csa.Id], null);
 
         Assert.IsFalse(result.IsSuccess);
+    }
+
+    // ---- Required training -----------------------------------------------------------------
+
+    private static async Task<Course> SeedCourseAsync(DbContextOptions<ApplicationDbContext> options, Company company, string name,
+        int? locationId, bool isShared = false, bool isActive = true, int? recurrenceMonths = null)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Course course = new()
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = company.Id,
+            Name = name,
+            LocationId = locationId,
+            IsShared = isShared,
+            IsActive = isActive,
+            RecurrenceMonths = recurrenceMonths
+        };
+
+        ctx.Courses.Add(course);
+        await ctx.SaveChangesAsync();
+
+        return course;
+    }
+
+    private static async Task<List<Guid>> RequiredCourseIdsAsync(DbContextOptions<ApplicationDbContext> options, StaffPosition position)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        return await ctx.StaffPositionRequiredCourses.Where(x => x.StaffPositionId == position.Id).Select(x => x.CourseId).ToListAsync();
+    }
+
+    private static async Task<Location> AddLocationAsync(DbContextOptions<ApplicationDbContext> options, Company company, string name)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Location location = new() { CompanyId = company.Id, Name = name, IsActive = true };
+        ctx.Locations.Add(location);
+        await ctx.SaveChangesAsync();
+
+        return location;
+    }
+
+    private static async Task GivePositionAsync(DbContextOptions<ApplicationDbContext> options, UserProfile user, StaffPosition position)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ctx.UserPositions.Add(new UserPosition { Id = Guid.NewGuid(), UserId = user.Id, StaffPositionId = position.Id, IsPrimary = true, CreateDate = DateTime.UtcNow });
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task CompleteAsync(DbContextOptions<ApplicationDbContext> options, Course course, UserProfile user, DateTime completedUtc)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ctx.CourseAssignments.Add(new CourseAssignment
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            UserId = user.Id,
+            AssignedDate = completedUtc.AddDays(-7),
+            CompletedDate = completedUtc,
+            IsActive = true
+        });
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_AddsAndRemovesRequirements()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        Course firstAid = await SeedCourseAsync(options, company, "First Aid", location.Id);
+        StaffPositionService service = GetService(options);
+
+        Result<bool> first = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id], "admin");
+        Result<bool> second = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [firstAid.Id], "admin");
+        Result<List<StaffPositionRequiredCourse>> loaded = await service.GetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id);
+
+        Assert.IsTrue(first.IsSuccess, first.Error);
+        Assert.IsTrue(second.IsSuccess, second.Error);
+        Assert.IsTrue(loaded.IsSuccess, loaded.Error);
+        Assert.AreEqual("First Aid", loaded.Data!.Single().Course!.Name);
+        CollectionAssert.AreEquivalent(new[] { firstAid.Id }, await RequiredCourseIdsAsync(options, marshal));
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_RejectsAnotherCompanysCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, _) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (Company otherCompany, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course theirs = await SeedCourseAsync(options, otherCompany, "Their Secret Course", otherLocation.Id, isShared: true);
+
+        Result<bool> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [theirs.Id], "admin");
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsFalse(result.Error!.Contains("Their Secret Course"), "Doesn't echo another company's course name");
+        Assert.AreEqual(0, (await RequiredCourseIdsAsync(options, marshal)).Count);
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_RejectsAnArchivedCourse()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course old = await SeedCourseAsync(options, company, "Old Course", location.Id, isActive: false);
+
+        Result<bool> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [old.Id], "admin");
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "archived");
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_RejectsAnArchivedPosition()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        StaffPositionService service = GetService(options);
+        await service.DeactivatePositionAsync(SchedulingTestHelpers.AdminScope, marshal.Id);
+
+        Result<bool> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_RejectsAManagerFromAnotherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        (_, Location otherLocation) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Other Co", "Elsewhere");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        StaffPositionService service = GetService(options);
+        LocationScope outsider = SchedulingTestHelpers.ManagerScopeFor(otherLocation);
+
+        Result<bool> set = await service.SetRequiredCoursesAsync(outsider, marshal.Id, [arena.Id], "outsider");
+        Result<List<StaffPositionRequiredCourse>> get = await service.GetRequiredCoursesAsync(outsider, marshal.Id);
+        Result<TrainingCoverage> coverage = await service.GetTrainingCoverageAsync(outsider, marshal.Id, [arena.Id]);
+
+        Assert.IsFalse(set.IsSuccess);
+        Assert.IsFalse(get.IsSuccess);
+        Assert.IsFalse(coverage.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_ManagerCanUseOwnAndSharedCoursesOnly()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location riverside) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Play2Day", "Riverside");
+        Location harbourside = await AddLocationAsync(options, company, "Harbourside");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course own = await SeedCourseAsync(options, company, "Riverside Arena", riverside.Id);
+        Course shared = await SeedCourseAsync(options, company, "Fire Safety", harbourside.Id, isShared: true);
+        Course harbourOnly = await SeedCourseAsync(options, company, "Harbourside Arena", harbourside.Id);
+        StaffPositionService service = GetService(options);
+        LocationScope riversideManager = SchedulingTestHelpers.ManagerScopeFor(riverside);
+
+        Result<bool> allowed = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id], "manager");
+        Result<bool> refused = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id, harbourOnly.Id], "manager");
+
+        Assert.IsTrue(allowed.IsSuccess, allowed.Error);
+        Assert.IsFalse(refused.IsSuccess);
+        StringAssert.Contains(refused.Error, "another location");
+        CollectionAssert.AreEquivalent(new[] { own.Id, shared.Id }, await RequiredCourseIdsAsync(options, marshal));
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_ManagerLeavesAnotherLocationsRequirementAlone()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location riverside) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Play2Day", "Riverside");
+        Location harbourside = await AddLocationAsync(options, company, "Harbourside");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course own = await SeedCourseAsync(options, company, "Riverside Arena", riverside.Id);
+        Course harbourOnly = await SeedCourseAsync(options, company, "Harbourside Arena", harbourside.Id);
+        StaffPositionService service = GetService(options);
+
+        await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [own.Id, harbourOnly.Id], "admin");
+
+        // The Riverside manager's list doesn't show Harbourside's own course, so unticking
+        // everything they can see mustn't remove it.
+        Result<bool> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.ManagerScopeFor(riverside), marshal.Id, [], "manager");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEquivalent(new[] { harbourOnly.Id }, await RequiredCourseIdsAsync(options, marshal));
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_CanRemoveACourseArchivedSinceItWasRequired()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        StaffPositionService service = GetService(options);
+        await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.Courses.SingleAsync(x => x.Id == arena.Id)).IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<bool> keep = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+        Result<bool> remove = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [], "admin");
+
+        Assert.IsTrue(keep.IsSuccess, "Keeping an existing link isn't adding an archived course");
+        Assert.IsTrue(remove.IsSuccess, remove.Error);
+        Assert.AreEqual(0, (await RequiredCourseIdsAsync(options, marshal)).Count);
+    }
+
+    [TestMethod]
+    public async Task GetTrainingCoverageAsync_CountsWhoIsUpToDateOnTheTickedCourses()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        Course firstAid = await SeedCourseAsync(options, company, "First Aid", location.Id, recurrenceMonths: 12);
+
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        UserProfile tom = await SchedulingTestHelpers.SeedUserAsync(options, location, "Tom");
+        UserProfile priya = await SchedulingTestHelpers.SeedUserAsync(options, location, "Priya");
+
+        foreach (UserProfile user in new[] { amy, tom, priya })
+        {
+            await GivePositionAsync(options, user, marshal);
+        }
+
+        await CompleteAsync(options, arena, amy, DateTime.UtcNow.AddDays(-10));
+        await CompleteAsync(options, firstAid, amy, DateTime.UtcNow.AddDays(-10));
+        await CompleteAsync(options, arena, tom, DateTime.UtcNow.AddDays(-10));
+        await CompleteAsync(options, firstAid, tom, DateTime.UtcNow.AddMonths(-13)); // run out
+
+        StaffPositionService service = GetService(options);
+
+        // Nothing is saved yet: coverage is for what's ticked.
+        Result<TrainingCoverage> arenaOnly = await service.GetTrainingCoverageAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id]);
+        Result<TrainingCoverage> both = await service.GetTrainingCoverageAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id]);
+        Result<TrainingCoverage> none = await service.GetTrainingCoverageAsync(SchedulingTestHelpers.AdminScope, marshal.Id, []);
+
+        Assert.AreEqual(new TrainingCoverage(3, 2, null), arenaOnly.Data);
+        Assert.AreEqual(new TrainingCoverage(3, 1, null), both.Data);
+        Assert.AreEqual(new TrainingCoverage(3, 3, null), none.Data);
+    }
+
+    [TestMethod]
+    public async Task GetTrainingCoverageAsync_ManagerCountsTheirOwnLocation()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location riverside) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Play2Day", "Riverside");
+        Location harbourside = await AddLocationAsync(options, company, "Harbourside");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", riverside.Id);
+
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, riverside, "Amy");
+        UserProfile aisha = await SchedulingTestHelpers.SeedUserAsync(options, harbourside, "Aisha");
+        await GivePositionAsync(options, amy, marshal);
+        await GivePositionAsync(options, aisha, marshal);
+
+        Result<TrainingCoverage> result = await GetService(options).GetTrainingCoverageAsync(
+            SchedulingTestHelpers.ManagerScopeFor(riverside), marshal.Id, [arena.Id]);
+
+        Assert.AreEqual(new TrainingCoverage(1, 0, "Riverside"), result.Data);
+    }
+
+    [TestMethod]
+    public async Task GetRequiredCourseNamesAsync_ListsActiveCoursesPerPosition()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        StaffPosition desk = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Front desk");
+        Course arena = await SeedCourseAsync(options, company, "Laser Arena Safety", location.Id);
+        Course firstAid = await SeedCourseAsync(options, company, "First Aid", location.Id);
+        StaffPositionService service = GetService(options);
+        await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id], "admin");
+
+        await using (ApplicationDbContext ctx = new(options))
+        {
+            (await ctx.Courses.SingleAsync(x => x.Id == firstAid.Id)).IsActive = false;
+            await ctx.SaveChangesAsync();
+        }
+
+        Result<Dictionary<Guid, List<string>>> result = await service.GetRequiredCourseNamesAsync(SchedulingTestHelpers.AdminScope, company.Id);
+        Result<Dictionary<Guid, List<string>>> outsider = await service.GetRequiredCourseNamesAsync(
+            SchedulingTestHelpers.ManagerScopeFor(location) with { CompanyId = company.Id + 1 }, company.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        CollectionAssert.AreEqual(new[] { "Laser Arena Safety" }, result.Data![marshal.Id]);
+        Assert.IsFalse(result.Data.ContainsKey(desk.Id));
+        Assert.IsFalse(outsider.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task GetTrainingCoverageAsync_AdminJudgesEachPersonWhereTheyWork()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location riverside) = await SchedulingTestHelpers.SeedCompanyAsync(options, "Play2Day", "Riverside");
+        Location harbourside = await AddLocationAsync(options, company, "Harbourside");
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await SeedCourseAsync(options, company, "Riverside Arena", riverside.Id);
+
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, riverside, "Amy");
+        UserProfile aisha = await SchedulingTestHelpers.SeedUserAsync(options, harbourside, "Aisha");
+        await GivePositionAsync(options, amy, marshal);
+        await GivePositionAsync(options, aisha, marshal);
+
+        Result<TrainingCoverage> result = await GetService(options).GetTrainingCoverageAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id]);
+
+        // Riverside's own course doesn't gate Aisha's Harbourside shifts, so she counts as up to date.
+        Assert.AreEqual(new TrainingCoverage(2, 1, null), result.Data);
     }
 }

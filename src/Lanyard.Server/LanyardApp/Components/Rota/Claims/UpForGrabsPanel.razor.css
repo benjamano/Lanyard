@@ -53,6 +53,29 @@
     font-style: italic;
 }
 
+/* The required training standing between someone and a shift, one course per row: the name, then
+   the link (or what to do instead), wrapping under the name on a phone. */
+.grab-training {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.grab-training-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+
+.grab-training-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
 .grab-actions {
     display: flex;
     align-items: center;

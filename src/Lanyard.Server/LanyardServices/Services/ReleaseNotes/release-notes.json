@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, require training before staff can pick up a position's shifts, check each kiosk's health and recent log, and choose which kiosk software version each PC runs.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -632,7 +632,13 @@
       "Manage > Clients has a new Diagnostics button. It fetches the last 500 lines the kiosk has logged, so you can see what went wrong without walking to the PC.",
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
-      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list."
+      "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
+      "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
+      "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
+      "Up for grabs still shows those shifts, with the reason and a button that goes straight to the course.",
+      "Managers can still put anyone on the rota. Saving a shift for someone who is missing the training shows a warning instead of stopping you.",
+      "Open-shift and swap notifications only go to people who have the training. A pending request from someone without it can't be approved until they've done the course.",
+      "Before you save, the position shows how many of its staff are already up to date. Anyone who isn't will be stopped from picking up its shifts straight away, so assign the course first if you need to. Courses from one location only apply to shifts at that location, and archived courses are no longer enforced."
     ]
   }
 ]

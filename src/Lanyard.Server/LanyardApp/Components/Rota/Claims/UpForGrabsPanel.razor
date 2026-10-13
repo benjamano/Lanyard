@@ -109,6 +109,36 @@ else
                     else if (open.NotEligibleReason is string reason)
                     {
                         <div class="grab-meta">@reason</div>
+
+                        @if (open.MissingTraining.Count > 0)
+                        {
+                            <div class="grab-training">
+                                @foreach (TrainingGap gap in open.MissingTraining)
+                                {
+                                    <div class="grab-training-row">
+                                        <span class="grab-training-name">
+                                            <FluentIcon Value="@(new Icons.Regular.Size16.HatGraduation())" />
+                                            @gap.CourseName
+                                        </span>
+                                        @if (gap.OpenAssignmentId is Guid assignmentId)
+                                        {
+                                            <FluentAnchorButton Href="@($"/training/{assignmentId}")" Appearance="ButtonAppearance.Outline"
+                                                                IconStart="@(new Icons.Regular.Size16.Open())">
+                                                @(gap.Lapsed ? "Retake course" : "Go to course")
+                                            </FluentAnchorButton>
+                                        }
+                                        else if (gap.Lapsed)
+                                        {
+                                            <span class="grab-meta">Your retake will appear in My Training shortly.</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="grab-meta">Ask your manager to assign this course to you.</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
                     else
                     {
