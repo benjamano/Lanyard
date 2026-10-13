@@ -1,15 +1,22 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Scheduling;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Lanyard.Application.Services.Scheduling;
 
-public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factory) : IStaffPositionService
+public class StaffPositionService(
+    IDbContextFactory<ApplicationDbContext> factory,
+    IRequiredTrainingService requiredTrainingService,
+    ILogger<StaffPositionService> logger) : IStaffPositionService
 {
     private readonly IDbContextFactory<ApplicationDbContext> _factory = factory;
+    private readonly IRequiredTrainingService _requiredTrainingService = requiredTrainingService;
+    private readonly ILogger<StaffPositionService> _logger = logger;
 
     public async Task<Result<List<StaffPosition>>> GetPositionsAsync(int companyId, bool includeInactive = false)
     {
@@ -179,6 +186,304 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
         }
     }
 
+    public async Task<Result<List<StaffPositionRequiredCourse>>> GetRequiredCoursesAsync(LocationScope scope, Guid positionId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            StaffPosition? position = await ctx.StaffPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == positionId);
+
+            if (position is null)
+            {
+                return Result<List<StaffPositionRequiredCourse>>.Fail("Position not found.");
+            }
+
+            if (!SchedulingAccess.CanManageCompany(scope, position.CompanyId))
+            {
+                return Result<List<StaffPositionRequiredCourse>>.Fail("You can only manage positions for your own company.");
+            }
+
+            List<StaffPositionRequiredCourse> required = await ctx.StaffPositionRequiredCourses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Include(x => x.Course).ThenInclude(x => x!.Location)
+                .Where(x => x.StaffPositionId == positionId)
+                .OrderBy(x => x.Course!.Name)
+                .ToListAsync();
+
+            return Result<List<StaffPositionRequiredCourse>>.Ok(required);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<StaffPositionRequiredCourse>>.Fail($"Failed to load the position's required training: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<Dictionary<Guid, List<string>>>> GetRequiredCourseNamesAsync(LocationScope scope, int companyId)
+    {
+        try
+        {
+            if (!SchedulingAccess.CanManageCompany(scope, companyId))
+            {
+                return Result<Dictionary<Guid, List<string>>>.Fail("You can only manage positions for your own company.");
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            var rows = await ctx.StaffPositionRequiredCourses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.StaffPosition!.CompanyId == companyId && x.Course!.IsActive)
+                .OrderBy(x => x.Course!.Name)
+                .Select(x => new { x.StaffPositionId, CourseName = x.Course!.Name })
+                .ToListAsync();
+
+            Dictionary<Guid, List<string>> names = rows
+                .GroupBy(x => x.StaffPositionId)
+                .ToDictionary(x => x.Key, x => x.Select(r => r.CourseName).ToList());
+
+            return Result<Dictionary<Guid, List<string>>>.Ok(names);
+        }
+        catch (Exception ex)
+        {
+            return Result<Dictionary<Guid, List<string>>>.Fail($"Failed to load the positions' required training: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<RequiredTrainingAssignResult>> SetRequiredCoursesAsync(LocationScope scope, Guid positionId, List<Guid> courseIds, string actingUserId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            StaffPosition? position = await ctx.StaffPositions.FirstOrDefaultAsync(x => x.Id == positionId);
+
+            if (position is null)
+            {
+                return Result<RequiredTrainingAssignResult>.Fail("Position not found.");
+            }
+
+            if (!SchedulingAccess.CanManageCompany(scope, position.CompanyId))
+            {
+                return Result<RequiredTrainingAssignResult>.Fail("You can only manage positions for your own company.");
+            }
+
+            if (!position.IsActive)
+            {
+                return Result<RequiredTrainingAssignResult>.Fail("That position has been archived.");
+            }
+
+            List<Guid> wanted = courseIds.Distinct().ToList();
+
+            List<Course> chosen = await ctx.Courses
+                .Include(x => x.Location)
+                .Where(x => wanted.Contains(x.Id))
+                .ToListAsync();
+
+            // The link rows aren't ICompanyOwned, so the save-time tenant check doesn't cover
+            // them: without this a position could be tied to another company's course, and its
+            // name would then show up in this company's claim reasons.
+            if (chosen.Count != wanted.Count || chosen.Any(x => x.CompanyId != position.CompanyId))
+            {
+                return Result<RequiredTrainingAssignResult>.Fail("One of those courses doesn't exist for this company.");
+            }
+
+            List<StaffPositionRequiredCourse> existing = await ctx.StaffPositionRequiredCourses
+                .Include(x => x.Course).ThenInclude(x => x!.Location)
+                .Where(x => x.StaffPositionId == positionId)
+                .ToListAsync();
+
+            HashSet<Guid> existingIds = existing.Select(x => x.CourseId).ToHashSet();
+
+            foreach (Course course in chosen.Where(x => !existingIds.Contains(x.Id)))
+            {
+                if (!CanSeeCourse(scope, course))
+                {
+                    return Result<RequiredTrainingAssignResult>.Fail($"{course.Name} belongs to another location, so you can't require it.");
+                }
+
+                if (!course.IsActive)
+                {
+                    return Result<RequiredTrainingAssignResult>.Fail($"{course.Name} has been archived, so it can't be required.");
+                }
+            }
+
+            // Unticked means removed, but only for courses this person can see - a Manager's list
+            // doesn't show another location's own courses, so not having ticked them says nothing.
+            List<StaffPositionRequiredCourse> removed = existing
+                .Where(x => !wanted.Contains(x.CourseId) && CanSeeCourse(scope, x.Course!))
+                .ToList();
+
+            List<StaffPositionRequiredCourse> added = chosen
+                .Where(x => !existingIds.Contains(x.Id))
+                .Select(x => new StaffPositionRequiredCourse
+                {
+                    Id = Guid.NewGuid(),
+                    StaffPositionId = positionId,
+                    CourseId = x.Id,
+                    CreatedByUserId = actingUserId,
+                    CreateDate = DateTime.UtcNow
+                })
+                .ToList();
+
+            if (removed.Count == 0 && added.Count == 0)
+            {
+                return Result<RequiredTrainingAssignResult>.Ok(RequiredTrainingAssignResult.Empty);
+            }
+
+            ctx.StaffPositionRequiredCourses.RemoveRange(removed);
+            ctx.StaffPositionRequiredCourses.AddRange(added);
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("{UserId} changed the training required for position {PositionId}: {Added} added, {Removed} removed",
+                actingUserId, positionId, added.Count, removed.Count);
+
+            if (added.Count == 0)
+            {
+                return Result<RequiredTrainingAssignResult>.Ok(RequiredTrainingAssignResult.Empty);
+            }
+
+            // Everyone already in the position gets the new course, so they can do it before it
+            // stops them picking up shifts.
+            List<string> holders = await ctx.UserPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.StaffPositionId == positionId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            RequiredTrainingAssignResult training = await AssignRequiredTrainingAsync(scope, actingUserId,
+                holders.Select(x => (x, positionId)).ToList(), added.Select(x => x.CourseId).ToList());
+
+            return Result<RequiredTrainingAssignResult>.Ok(training);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Result<RequiredTrainingAssignResult>.Fail("Someone else has just changed this position's training. Reload and try again.");
+        }
+        catch (Exception ex)
+        {
+            return Result<RequiredTrainingAssignResult>.Fail($"Failed to save the position's required training: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<TrainingCoverage>> GetTrainingCoverageAsync(LocationScope scope, Guid positionId, List<Guid> courseIds)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            StaffPosition? position = await ctx.StaffPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .FirstOrDefaultAsync(x => x.Id == positionId);
+
+            if (position is null)
+            {
+                return Result<TrainingCoverage>.Fail("Position not found.");
+            }
+
+            if (!SchedulingAccess.CanManageCompany(scope, position.CompanyId))
+            {
+                return Result<TrainingCoverage>.Fail("You can only manage positions for your own company.");
+            }
+
+            // A Manager sees their own location's staff; an Admin sees everyone. Either way each
+            // person is judged at the locations they work, since a location's own course only
+            // gates shifts there.
+            int? locationId = scope.IsAdmin ? null : scope.LocationId;
+
+            IQueryable<string> holderQuery = ctx.UserPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.StaffPositionId == positionId && x.UserId != ApplicationDbContext.SystemDeletedUserPlaceholderId)
+                .Select(x => x.UserId);
+
+            if (locationId is int only)
+            {
+                holderQuery = holderQuery.Where(userId => ctx.UserLocationMemberships.Any(m => m.UserId == userId && m.LocationId == only));
+            }
+
+            List<string> holders = await holderQuery.Distinct().ToListAsync();
+            string? locationName = locationId is null ? null : scope.LocationDisplayName;
+
+            List<Guid> wanted = courseIds.Distinct().ToList();
+
+            List<ShiftClaimRules.RequiredCourse> courses = await ctx.Courses
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => wanted.Contains(x.Id) && x.IsActive && x.CompanyId == position.CompanyId)
+                .Select(x => new ShiftClaimRules.RequiredCourse(positionId, x.Id, x.Name, x.RecurrenceMonths, x.LocationId, x.IsShared))
+                .ToListAsync();
+
+            if (holders.Count == 0 || courses.Count == 0)
+            {
+                return Result<TrainingCoverage>.Ok(new TrainingCoverage(holders.Count, holders.Count, locationName));
+            }
+
+            Dictionary<string, Dictionary<Guid, ShiftClaimRules.TrainingRecord>> records =
+                await ShiftClaimRules.LoadTrainingRecordsAsync(ctx, holders, courses.Select(x => x.CourseId).ToList());
+
+            var memberships = await ctx.UserLocationMemberships
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => holders.Contains(x.UserId))
+                .Select(x => new { x.UserId, x.LocationId })
+                .ToListAsync();
+
+            DateTime now = DateTime.UtcNow;
+
+            int upToDate = holders.Count(holder =>
+            {
+                Dictionary<Guid, ShiftClaimRules.TrainingRecord> record = records.GetValueOrDefault(holder) ?? [];
+                List<int?> workAt = locationId is int only
+                    ? [only]
+                    : memberships.Where(x => x.UserId == holder).Select(x => (int?)x.LocationId).DefaultIfEmpty(null).ToList();
+
+                return workAt.All(at => ShiftClaimRules.CourseGaps(courses, record, at, now).Count == 0);
+            });
+
+            return Result<TrainingCoverage>.Ok(new TrainingCoverage(holders.Count, upToDate, locationName));
+        }
+        catch (Exception ex)
+        {
+            return Result<TrainingCoverage>.Fail($"Failed to check who is up to date: {ex.Message}");
+        }
+    }
+
+    // The position change has already been saved, so a failure here is logged rather than
+    // returned - it mustn't look as though the positions didn't save.
+    private async Task<RequiredTrainingAssignResult> AssignRequiredTrainingAsync(LocationScope scope, string actingUserId,
+        IReadOnlyCollection<(string UserId, Guid PositionId)> holdings, IReadOnlyCollection<Guid>? onlyCourseIds)
+    {
+        if (holdings.Count == 0)
+        {
+            return RequiredTrainingAssignResult.Empty;
+        }
+
+        Result<RequiredTrainingAssignResult> result = await _requiredTrainingService.AssignMissingAsync(scope, actingUserId, holdings, onlyCourseIds);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _logger.LogWarning("Positions saved, but assigning their required training failed: {Error}", result.Error);
+            return RequiredTrainingAssignResult.Empty;
+        }
+
+        return result.Data;
+    }
+
+    // The same visibility rule as CourseService.GetCoursesAsync: an Admin sees every course, a
+    // Manager their own location's and any shared one in their company.
+    private static bool CanSeeCourse(LocationScope scope, Course course) =>
+        scope.IsAdmin
+        || course.LocationId == scope.LocationId
+        || (course.IsShared && course.Location is not null && course.Location.CompanyId == scope.CompanyId);
+
     public async Task<Result<List<UserPosition>>> GetUserPositionsAsync(string userId)
     {
         try
@@ -202,7 +507,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
         }
     }
 
-    public async Task<Result<List<UserPosition>>> SetUserPositionsAsync(LocationScope scope, string userId, List<Guid> positionIds, Guid? primaryPositionId)
+    public async Task<Result<UserPositionsSaved>> SetUserPositionsAsync(LocationScope scope, string userId, List<Guid> positionIds, Guid? primaryPositionId, string actingUserId)
     {
         try
         {
@@ -210,7 +515,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
 
             if (primaryPositionId is Guid primary && !distinctIds.Contains(primary))
             {
-                return Result<List<UserPosition>>.Fail("The primary position must be one of the selected positions.");
+                return Result<UserPositionsSaved>.Fail("The primary position must be one of the selected positions.");
             }
 
             await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -219,7 +524,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
             // positions") must be authorised just as strictly as adding one.
             if (!await SchedulingAccess.CanManageUserAsync(ctx, scope, userId))
             {
-                return Result<List<UserPosition>>.Fail("You can only manage positions for staff in your own company.");
+                return Result<UserPositionsSaved>.Fail("You can only manage positions for staff in your own company.");
             }
 
             List<StaffPosition> positions = await ctx.StaffPositions
@@ -229,19 +534,19 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
 
             if (positions.Count != distinctIds.Count)
             {
-                return Result<List<UserPosition>>.Fail("One or more of the selected positions no longer exists.");
+                return Result<UserPositionsSaved>.Fail("One or more of the selected positions no longer exists.");
             }
 
             List<int> companyIds = positions.Select(x => x.CompanyId).Distinct().ToList();
 
             if (companyIds.Count > 1)
             {
-                return Result<List<UserPosition>>.Fail("Positions from different companies cannot be combined.");
+                return Result<UserPositionsSaved>.Fail("Positions from different companies cannot be combined.");
             }
 
             if (companyIds.Count == 1 && !SchedulingAccess.CanManageCompany(scope, companyIds[0]))
             {
-                return Result<List<UserPosition>>.Fail("You can only assign positions from your own company.");
+                return Result<UserPositionsSaved>.Fail("You can only assign positions from your own company.");
             }
 
             List<UserPosition> existing = await ctx.UserPositions
@@ -249,6 +554,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
                 .ToListAsync();
 
             Guid? effectivePrimary = primaryPositionId ?? distinctIds.FirstOrDefault();
+            List<Guid> newPositionIds = [];
 
             foreach (UserPosition row in existing.Where(x => !distinctIds.Contains(x.StaffPositionId)).ToList())
             {
@@ -272,6 +578,7 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
 
                     ctx.UserPositions.Add(row);
                     existing.Add(row);
+                    newPositionIds.Add(positionId);
                 }
 
                 row.IsPrimary = positionId == effectivePrimary;
@@ -279,11 +586,18 @@ public class StaffPositionService(IDbContextFactory<ApplicationDbContext> factor
 
             await ctx.SaveChangesAsync();
 
-            return await GetUserPositionsAsync(userId);
+            RequiredTrainingAssignResult training = await AssignRequiredTrainingAsync(scope, actingUserId,
+                newPositionIds.Select(x => (userId, x)).ToList(), null);
+
+            Result<List<UserPosition>> saved = await GetUserPositionsAsync(userId);
+
+            return saved.IsSuccess && saved.Data is not null
+                ? Result<UserPositionsSaved>.Ok(new UserPositionsSaved(saved.Data, training))
+                : Result<UserPositionsSaved>.Fail(saved.Error ?? "Failed to reload the user's positions.");
         }
         catch (Exception ex)
         {
-            return Result<List<UserPosition>>.Fail($"Failed to save the user's positions: {ex.Message}");
+            return Result<UserPositionsSaved>.Fail($"Failed to save the user's positions: {ex.Message}");
         }
     }
 

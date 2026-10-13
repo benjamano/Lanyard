@@ -1,0 +1,89 @@
+.ofl-picker {
+    width: 100%;
+}
+
+.ofl-picker ::deep .ofl-search-input,
+.ofl-picker ::deep .ofl-search-input fluent-text-input,
+.ofl-picker ::deep .ofl-mode-select {
+    width: 100%;
+    max-width: none;
+}
+
+.ofl-picker ::deep .ofl-muted {
+    color: var(--colorNeutralForeground3);
+}
+
+.ofl-picker a {
+    color: var(--colorBrandForegroundLink);
+}
+
+.ofl-results {
+    width: 100%;
+    box-sizing: border-box;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+}
+
+.ofl-results li + li {
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+/* A full-width button per result, so the whole row is the tap target on a phone. */
+.ofl-result {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    color: var(--colorNeutralForeground1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ofl-result:hover:not(:disabled),
+.ofl-result:focus-visible {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.ofl-result:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: -2px;
+}
+
+.ofl-result:disabled {
+    cursor: not-allowed;
+    color: var(--colorNeutralForegroundDisabled);
+}
+
+.ofl-result-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.ofl-result-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+}
+
+.ofl-selected {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.ofl-selected-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}

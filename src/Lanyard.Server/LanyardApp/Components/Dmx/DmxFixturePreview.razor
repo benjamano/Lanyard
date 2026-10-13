@@ -11,6 +11,8 @@
         {
             DmxFixtureColorMapper.FixtureColor color = DmxFixtureColorMapper.GetColor(fixture, ChannelValues);
             string fillColor = ToCssColor(color);
+            DmxFixtureColorMapper.FixturePosition position = DmxFixtureColorMapper.GetPosition(fixture, ChannelValues);
+            bool isStrobing = DmxFixtureColorMapper.IsStrobing(fixture, ChannelValues);
 
             <FluentCard @key="fixture.Id" Appearance="CardAppearance.Subtle" Padding="@Padding.All2">
                 <FluentStack Orientation="Orientation.Vertical" HorizontalAlignment="HorizontalAlignment.Center" VerticalGap="4">
@@ -18,6 +20,14 @@
                         <circle cx="24" cy="24" r="20" fill="@fillColor" />
                     </svg>
                     <FluentText Size="TextSize.Size300">@fixture.Name</FluentText>
+                    @if (position.PanPercent != null || position.TiltPercent != null)
+                    {
+                        <span class="fixture-readout">@PositionText(position)</span>
+                    }
+                    @if (isStrobing)
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Warning">Strobe</FluentBadge>
+                    }
                 </FluentStack>
             </FluentCard>
         }
@@ -30,6 +40,24 @@
 
     [Parameter]
     public required IReadOnlyDictionary<int, byte> ChannelValues { get; set; }
+
+    // Lanyard doesn't know how a moving head is hung, so position is a readout, not a drawing.
+    private static string PositionText(DmxFixtureColorMapper.FixturePosition position)
+    {
+        List<string> parts = [];
+
+        if (position.PanPercent != null)
+        {
+            parts.Add($"Pan {position.PanPercent:0}%");
+        }
+
+        if (position.TiltPercent != null)
+        {
+            parts.Add($"Tilt {position.TiltPercent:0}%");
+        }
+
+        return string.Join(" · ", parts);
+    }
 
     // Brightness scales the fixture's own color rather than being drawn as a
     // separate value, so a dimmed-down RGB fixture visibly darkens like a real light.

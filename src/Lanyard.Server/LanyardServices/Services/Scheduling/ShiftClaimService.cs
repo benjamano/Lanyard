@@ -94,7 +94,14 @@ public class ShiftClaimService(
                 ShiftClaim? mine = myOpenClaims.FirstOrDefault(x => x.Kind == ShiftClaimKind.Pickup && x.ShiftId == shift.Id);
                 string? reason = mine is null ? ShiftClaimRules.WhyCantWork(me, shift, null, aboutViewer: true) : null;
 
-                openViews.Add(new OpenShiftView(shift, approvalByLocation.GetValueOrDefault(shift.LocationId, true), mine, reason));
+                // Shown rather than hidden: they hold the position, so the training is the one
+                // thing between them and the shift, and the card links to it.
+                List<TrainingGap> missingTraining = mine is null ? ShiftClaimRules.TrainingGaps(me, shift) : [];
+
+                openViews.Add(new OpenShiftView(shift, approvalByLocation.GetValueOrDefault(shift.LocationId, true), mine, reason)
+                {
+                    MissingTraining = missingTraining
+                });
             }
 
             // Colleagues' swap requests the person could answer.

@@ -26,6 +26,28 @@ namespace Lanyard.Infrastructure.Models
         public int SortOrder { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        public List<StaffPositionRequiredCourse> RequiredCourses { get; set; } = [];
+    }
+
+    // Training someone must have done, and kept in date, before they can pick up a shift as this
+    // position (ShiftClaimRules.TrainingGaps). Company-scoped through the position; the course is
+    // checked to be the same company's when the link is made, since child rows get no write-time
+    // tenant check. A link row is configuration, not history, so unticking a course removes it -
+    // the same as UserPosition.
+    public class StaffPositionRequiredCourse
+    {
+        public Guid Id { get; set; }
+
+        public required Guid StaffPositionId { get; set; }
+        public StaffPosition? StaffPosition { get; set; }
+
+        public required Guid CourseId { get; set; }
+        public Course? Course { get; set; }
+
+        public string? CreatedByUserId { get; set; }
+
+        public DateTime CreateDate { get; set; }
     }
 
     // A user may hold several positions (a supervisor who also covers the front desk); exactly

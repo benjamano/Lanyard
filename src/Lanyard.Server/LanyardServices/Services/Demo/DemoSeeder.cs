@@ -216,7 +216,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
         SeedRota(ctx, locations, positions, random);
         SeedTimeOff(ctx, companyId, locations);
-        SeedTraining(ctx, locations);
+        SeedTraining(ctx, locations, positions);
         SeedAnnouncements(ctx, locations);
         SeedStaffDocumentTypes(ctx, companyId);
         SeedOnboarding(ctx, companyId);
@@ -449,7 +449,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         };
     }
 
-    private void SeedTraining(ApplicationDbContext ctx, Dictionary<string, Location> locations)
+    private void SeedTraining(ApplicationDbContext ctx, Dictionary<string, Location> locations, Dictionary<string, StaffPosition> positions)
     {
         Course fire = NewCourse("Fire Safety Essentials", "What to do if the alarm goes off, and how to keep the building safe every day.", null, isShared: true, recurrenceMonths: 12,
             [
@@ -484,6 +484,18 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
         DateTime now = Now;
 
+        // Marshals need the marshalling course before they can pick up a Riverside marshal shift.
+        // Sam and Ben have done it (Sam's pending pickup stays valid); the demo staff account
+        // hasn't finished it yet, so Up for grabs shows the open marshal shift with its link.
+        ctx.StaffPositionRequiredCourses.Add(new StaffPositionRequiredCourse
+        {
+            Id = Guid.NewGuid(),
+            StaffPositionId = positions["Marshal"].Id,
+            CourseId = marshalling.Id,
+            CreatedByUserId = DemoAccounts.ManagerUserId,
+            CreateDate = now.AddDays(-30),
+        });
+
         foreach (Person person in People.Where(p => p.Locations.Contains(Riverside)))
         {
             int n = Array.IndexOf(People, person);
@@ -499,7 +511,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
             if (person.Position is "Marshal" || person.Id == DemoAccounts.StaffUserId)
             {
-                Assign(ctx, marshalling, person.Id, locations[Riverside].Id, n % 2 == 0 ? AssignmentState.InProgress : AssignmentState.NotStarted, now);
+                Assign(ctx, marshalling, person.Id, locations[Riverside].Id, person.Id == DemoAccounts.StaffUserId ? AssignmentState.InProgress : AssignmentState.Completed, now);
             }
 
             if (person.Position is "Café" or "Party host")
@@ -745,7 +757,7 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
     {
         for (int i = 0; i < 4; i++)
         {
-            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureType = DmxFixtureType.Rgb, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
+            ctx.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), ClientId = arena.Id, Name = $"Arena par {i + 1}", StartChannel = 1 + (i * 3), FixtureModeId = BuiltInDmxFixtureDefinitions.RgbModeId, IsActive = true, CreateDate = Now, CreateByUserId = DemoAccounts.AdminUserId });
         }
 
         DmxScene standby = NewScene(arena, "Arena standby", loop: false, bpmSync: false, [[(0, 40, 120)]]);
