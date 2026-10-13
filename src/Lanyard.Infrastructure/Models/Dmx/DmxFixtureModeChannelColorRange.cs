@@ -1,6 +1,7 @@
 namespace Lanyard.Infrastructure.Models.Dmx;
 
-// A DMX value range on a colour wheel or colour macro channel and the colour it produces.
+// A DMX value range on a colour wheel, colour macro or shutter channel and the colour it produces
+// (a closed shutter is black, an open one white).
 public class DmxFixtureModeChannelColorRange
 {
     public Guid Id { get; set; }

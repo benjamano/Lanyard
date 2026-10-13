@@ -300,4 +300,29 @@ public class DmxFixtureColorMapperTests
         Assert.IsFalse(DmxFixtureColorMapper.IsStrobing(fixture, new Dictionary<int, byte> { [1] = 255 }));
         Assert.IsTrue(DmxFixtureColorMapper.IsStrobing(fixture, new Dictionary<int, byte> { [2] = 10 }));
     }
+
+    [TestMethod]
+    public void GetColor_ClosedShutter_IsBlack_OpenShutterLeavesTheColour()
+    {
+        DmxFixture fixture = MakeFixture(1,
+            Wheel(0, DmxChannelRole.Strobe, (0, 19, "#000000"), (20, 24, "#FFFFFF")),
+            Channel(1, DmxChannelRole.Intensity),
+            Channel(2, DmxChannelRole.Red));
+
+        DmxFixtureColorMapper.FixtureColor closed = DmxFixtureColorMapper.GetColor(fixture, new Dictionary<int, byte> { [1] = 0, [2] = 255, [3] = 255 });
+        DmxFixtureColorMapper.FixtureColor open = DmxFixtureColorMapper.GetColor(fixture, new Dictionary<int, byte> { [1] = 22, [2] = 255, [3] = 255 });
+
+        Assert.AreEqual(new DmxFixtureColorMapper.FixtureColor(0, 0, 0, 255), closed);
+        Assert.AreEqual(new DmxFixtureColorMapper.FixtureColor(255, 0, 0, 255), open);
+    }
+
+    [TestMethod]
+    public void IsStrobing_ShutterWithRanges_OnlyOutsideTheOpenAndClosedRanges()
+    {
+        DmxFixture fixture = MakeFixture(1, Wheel(0, DmxChannelRole.Strobe, (0, 19, "#000000"), (20, 24, "#FFFFFF")));
+
+        Assert.IsFalse(DmxFixtureColorMapper.IsStrobing(fixture, new Dictionary<int, byte> { [1] = 10 }), "Closed.");
+        Assert.IsFalse(DmxFixtureColorMapper.IsStrobing(fixture, new Dictionary<int, byte> { [1] = 22 }), "Open.");
+        Assert.IsTrue(DmxFixtureColorMapper.IsStrobing(fixture, new Dictionary<int, byte> { [1] = 100 }));
+    }
 }

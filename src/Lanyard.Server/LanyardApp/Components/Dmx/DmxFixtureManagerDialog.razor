@@ -1,8 +1,10 @@
 @using Lanyard.App.Components.Dialogs
+@using Lanyard.Application.Services.Dmx
 @using Lanyard.Infrastructure.DTO.Dmx
 @using Lanyard.Infrastructure.Models.Dmx
 
 @inject IDmxFixtureService _dmxFixtureService
+@inject IDmxFixtureDefinitionService _definitionService
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -15,7 +17,7 @@
         <div class="fixture-manager">
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="18px">
                 <FluentText Size="TextSize.Size300">
-                    Fixtures map a starting channel to a kind of light, so the preview can show it as a coloured light and Lanyard knows which channels it uses.
+                    Fixtures map a starting channel to a kind of light, so the preview can show it as a coloured light and Lanyard knows which channels it uses. Pick a generic type, or find your exact light in the Open Fixture Library.
                 </FluentText>
 
                 <FluentCard Appearance="CardAppearance.Subtle" Padding="@Padding.All3" Class="fixture-add-card">
@@ -23,24 +25,99 @@
                         <div class="fixture-form-row">
                             <FluentTextInput Label="Name" Value="@newName" ValueChanged="@(v => newName = v)" Class="fixture-name-input" />
                             <FluentNumberInput TValue="int" Label="Start Channel" Value="@newStartChannel" ValueChanged="@(v => newStartChannel = v)" Min="1" Max="512" Width="120px" />
-                            <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="newModeId" Width="200px">
-                                @foreach (DmxFixtureMode mode in builtInModes)
-                                {
-                                    <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
-                                }
-                            </FluentSelect>
                         </div>
-                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
-                            <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
-                                          Appearance="ButtonAppearance.Primary"
-                                          Disabled="@(string.IsNullOrWhiteSpace(newName) || isSaving || RunsPastUniverse(newStartChannel, newModeId))"
-                                          OnClick="CreateFixture">
-                                Add Fixture
-                            </FluentButton>
-                            <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(newStartChannel, newModeId) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
-                                @FootprintHint(newStartChannel, newModeId)
-                            </FluentText>
-                        </FluentStack>
+
+                        <FluentRadioGroup TValue="FixtureSource" Label="Fixture type" Orientation="Orientation.Horizontal" @bind-Value="newSource" Class="fixture-source">
+                            <FluentRadio Value="FixtureSource.Saved" Label="Saved types" />
+                            <FluentRadio Value="FixtureSource.Library" Label="Open Fixture Library" />
+                            <FluentRadio Value="FixtureSource.File" Label="Import a file" />
+                            <FluentRadio Value="FixtureSource.Custom" Label="Build your own" />
+                        </FluentRadioGroup>
+
+                        @switch (newSource)
+                        {
+                            case FixtureSource.Saved:
+                                DmxFixtureMode? selectedSavedMode = FindMode(newModeId);
+
+                                <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="newModeId" Class="fixture-type-select">
+                                    @foreach (DmxFixtureMode mode in savedModes)
+                                    {
+                                        <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
+                                    }
+                                </FluentSelect>
+                                @if (selectedSavedMode != null)
+                                {
+                                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Wrap="true">
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size16.Copy())"
+                                                      OnClick="@(() => OpenCustomFixtureEditorAsync(selectedSavedMode))">
+                                            Copy and edit
+                                        </FluentButton>
+                                        @if (selectedSavedMode.Definition?.CompanyId != null)
+                                        {
+                                            <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size16.Delete())"
+                                                          OnClick="@(() => DeleteDefinitionAsync(selectedSavedMode.Definition))">
+                                                Delete type
+                                            </FluentButton>
+                                        }
+                                    </FluentStack>
+                                }
+                                break;
+
+                            case FixtureSource.Custom:
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                                    <FluentText Size="TextSize.Size200" Class="fixture-footprint-hint">
+                                        For a light that isn't in the library: list its channels from the manual and say what each one does. It's saved under Saved types for next time.
+                                    </FluentText>
+                                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Wrench())"
+                                                  OnClick="@(() => OpenCustomFixtureEditorAsync(null))">
+                                        Create a Fixture Type
+                                    </FluentButton>
+                                </FluentStack>
+                                break;
+
+                            case FixtureSource.Library:
+                                <OflFixturePicker SelectionChanged="@(selection => librarySelection = selection)" />
+                                break;
+
+                            case FixtureSource.File:
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                                    <FluentText Size="TextSize.Size200" Class="fixture-footprint-hint">
+                                        For a light that isn't in the list yet: download its fixture file (the "Open Fixture Library JSON" format) from open-fixture-library.org and add it here.
+                                    </FluentText>
+                                    <FluentTextInput Label="Manufacturer" Value="@uploadManufacturer" ValueChanged="@(v => uploadManufacturer = v)" Immediate="true" Class="fixture-name-input" />
+                                    <div class="fixture-upload">
+                                        <FluentInputFile Id="ofl-fixture-upload" Mode="InputFileMode.Stream" Multiple="false"
+                                                         MaximumFileCount="1" MaximumFileSize="@(OflFixtureParserMaxBytes)" Accept=".json,application/json"
+                                                         Disabled="@(string.IsNullOrWhiteSpace(uploadManufacturer) || isSaving)"
+                                                         OnFileUploaded="@OnFixtureFileUploadedAsync">
+                                            <ChildContent>
+                                                <label for="ofl-fixture-upload">
+                                                    @(string.IsNullOrWhiteSpace(uploadManufacturer) ? "Enter the manufacturer first." : "Choose a .json fixture file, or drag it here.")
+                                                </label>
+                                            </ChildContent>
+                                        </FluentInputFile>
+                                    </div>
+                                </FluentStack>
+                                break;
+                        }
+
+                        @if (newSource is FixtureSource.Saved or FixtureSource.Library)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+                                <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
+                                              Appearance="ButtonAppearance.Primary"
+                                              Disabled="@(string.IsNullOrWhiteSpace(newName) || isSaving || NewChannelCount == null || RunsPastUniverse(newStartChannel, NewChannelCount.Value))"
+                                              OnClick="CreateFixture">
+                                    Add Fixture
+                                </FluentButton>
+                                @if (NewChannelCount is int newCount)
+                                {
+                                    <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(newStartChannel, newCount) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
+                                        @FootprintHint(newStartChannel, newCount)
+                                    </FluentText>
+                                }
+                            </FluentStack>
+                        }
                     </FluentStack>
                 </FluentCard>
 
@@ -64,19 +141,19 @@
                                         <div class="fixture-form-row">
                                             <FluentTextInput Label="Name" Value="@editName" ValueChanged="@(v => editName = v)" Class="fixture-name-input" />
                                             <FluentNumberInput TValue="int" Label="Start Channel" Value="@editStartChannel" ValueChanged="@(v => editStartChannel = v)" Min="1" Max="512" Width="120px" />
-                                            <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="editModeId" Width="200px">
+                                            <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="editModeId" Class="fixture-type-select">
                                                 @foreach (DmxFixtureMode mode in ModeChoicesFor(fixture))
                                                 {
                                                     <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
                                                 }
                                             </FluentSelect>
                                         </div>
-                                        <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(editStartChannel, editModeId) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
-                                            @FootprintHint(editStartChannel, editModeId)
+                                        <FluentText Size="TextSize.Size200" Class="@(RunsPastUniverse(editStartChannel, EditChannelCount) ? "fixture-footprint-hint fixture-footprint-hint-error" : "fixture-footprint-hint")">
+                                            @FootprintHint(editStartChannel, EditChannelCount)
                                         </FluentText>
                                     </div>
                                     <div class="fixture-list-actions">
-                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Checkmark()" Title="Save" Tooltip="Save" Disabled="@(isSaving || (RunsPastUniverse(editStartChannel, editModeId) && PlacementChanged(fixture)))" OnClick="SaveEditingFixture" />
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Checkmark()" Title="Save" Tooltip="Save" Disabled="@(isSaving || (RunsPastUniverse(editStartChannel, EditChannelCount) && PlacementChanged(fixture)))" OnClick="SaveEditingFixture" />
                                         <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="new Icons.Regular.Size20.Dismiss()" Title="Cancel" Tooltip="Cancel" OnClick="@(() => editingFixtureId = null)" />
                                     </div>
                                 }
@@ -122,10 +199,25 @@
     public required Guid ClientId { get; set; }
 
     private const int UniverseSize = 512;
+    private const int OflFixtureParserMaxBytes = Lanyard.Application.Services.Dmx.Ofl.OflFixtureParser.MaxFileBytes;
 
-    private readonly List<DmxFixtureMode> builtInModes = BuiltInDmxFixtureDefinitions.Modes
+    private enum FixtureSource
+    {
+        Saved,
+        Library,
+        File,
+        Custom
+    }
+
+    // Built-in generic types first, then this company's imported/custom ones. Falls back to the
+    // built-ins alone if definitions fail to load, so the dialog stays usable.
+    private List<DmxFixtureMode> savedModes = BuiltInDmxFixtureDefinitions.Modes
         .Select(m => BuiltInDmxFixtureDefinitions.BuildMode(m.Id))
         .ToList();
+
+    private FixtureSource newSource = FixtureSource.Saved;
+    private OflPickerSelection? librarySelection;
+    private string uploadManufacturer = string.Empty;
 
     private List<DmxFixture> fixtures = [];
     private bool isLoading = true;
@@ -142,7 +234,38 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadSavedModes();
         await LoadFixtures();
+    }
+
+    private int? NewChannelCount => newSource switch
+    {
+        FixtureSource.Saved => FindMode(newModeId)?.ChannelCount ?? 1,
+        FixtureSource.Library => librarySelection?.ChannelCount,
+        _ => null
+    };
+
+    private int EditChannelCount => FindMode(editModeId)?.ChannelCount ?? 1;
+
+    private async Task LoadSavedModes()
+    {
+        Result<IReadOnlyList<DmxFixtureDefinition>> result = await _definitionService.GetDefinitionsAsync();
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Failed to load fixture types: {result.Error}");
+            return;
+        }
+
+        savedModes = result.Data
+            .SelectMany(definition => definition.Modes
+                .OrderBy(m => m.SortOrder)
+                .Select(mode =>
+                {
+                    mode.Definition = definition;
+                    return mode;
+                }))
+            .ToList();
     }
 
     private async Task LoadFixtures()
@@ -176,16 +299,28 @@
 
         try
         {
-            int channelCount = FindMode(newModeId)?.ChannelCount ?? 1;
+            int? channelCount = NewChannelCount;
 
-            bool? allowOverlap = await ConfirmOverlapsAsync(newStartChannel, channelCount, null);
+            if (channelCount == null)
+            {
+                return;
+            }
+
+            bool? allowOverlap = await ConfirmOverlapsAsync(newStartChannel, channelCount.Value, null);
 
             if (allowOverlap is null)
             {
                 return;
             }
 
-            Result<DmxFixture> result = await _dmxFixtureService.CreateFixtureAsync(ClientId, newName, newStartChannel, newModeId, allowOverlap.Value);
+            Guid? modeId = await ResolveNewModeIdAsync();
+
+            if (modeId == null)
+            {
+                return;
+            }
+
+            Result<DmxFixture> result = await _dmxFixtureService.CreateFixtureAsync(ClientId, newName, newStartChannel, modeId.Value, allowOverlap.Value);
 
             if (result.IsSuccess && result.Data != null)
             {
@@ -193,7 +328,7 @@
                 fixtures = fixtures.OrderBy(f => f.StartChannel).ToList();
 
                 newName = string.Empty;
-                newStartChannel = FirstFreeChannel(result.Data.StartChannel + channelCount, channelCount);
+                newStartChannel = FirstFreeChannel(result.Data.StartChannel + channelCount.Value, channelCount.Value);
 
                 _toastService.ShowSuccess("Fixture added successfully.");
             }
@@ -206,6 +341,132 @@
         {
             isSaving = false;
         }
+    }
+
+    // A library fixture is copied into the company only now, when it's actually being patched.
+    private async Task<Guid?> ResolveNewModeIdAsync()
+    {
+        if (newSource == FixtureSource.Saved)
+        {
+            return newModeId;
+        }
+
+        if (librarySelection == null)
+        {
+            return null;
+        }
+
+        Result<DmxFixtureDefinition> imported = await _definitionService.ImportFromLibraryAsync(librarySelection.OflKey);
+
+        if (!imported.IsSuccess || imported.Data == null)
+        {
+            _toastService.ShowError($"Failed to add {librarySelection.Manufacturer} {librarySelection.Model}: {imported.Error}");
+            return null;
+        }
+
+        DmxFixtureMode? mode = imported.Data.Modes.FirstOrDefault(m => m.Name == librarySelection.ModeName);
+
+        if (mode == null)
+        {
+            _toastService.ShowError($"The {librarySelection.ModeName} mode couldn't be found.");
+            return null;
+        }
+
+        // So it shows up under Saved types (and in the edit list) from now on.
+        await LoadSavedModes();
+
+        return mode.Id;
+    }
+
+    private async Task OnFixtureFileUploadedAsync(FluentInputFileEventArgs file)
+    {
+        if (file.Stream == null || file.ErrorMessage != null)
+        {
+            _toastService.ShowError($"Couldn't read {file.Name}: {file.ErrorMessage ?? "the file was empty."}");
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            Result<DmxFixtureDefinition> imported = await _definitionService.ImportFromFileAsync(file.Stream, uploadManufacturer);
+
+            if (!imported.IsSuccess || imported.Data == null)
+            {
+                _toastService.ShowError($"Couldn't add {file.Name}: {imported.Error}");
+                return;
+            }
+
+            await LoadSavedModes();
+
+            DmxFixtureMode? firstMode = imported.Data.Modes.OrderBy(m => m.SortOrder).FirstOrDefault();
+            newModeId = firstMode?.Id ?? newModeId;
+            newSource = FixtureSource.Saved;
+
+            _toastService.ShowSuccess($"{imported.Data.Manufacturer} {imported.Data.Model} is now one of your saved types. Choose its mode, then add the fixture.");
+        }
+        catch (Exception)
+        {
+            // The service already turns bad files into a Fail; this is the browser connection dropping mid-upload.
+            _toastService.ShowError($"Couldn't read {file.Name}. Try uploading it again.");
+        }
+        finally
+        {
+            await file.Stream.DisposeAsync();
+            isSaving = false;
+        }
+    }
+
+    private async Task OpenCustomFixtureEditorAsync(DmxFixtureMode? startFrom)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<DmxCustomFixtureDialog>(options =>
+        {
+            options.Width = "min(860px, 100vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DmxCustomFixtureDialog.StartFrom), startFrom);
+        });
+
+        if (result.Cancelled || result.Value is not DmxFixtureDefinition saved)
+        {
+            return;
+        }
+
+        await LoadSavedModes();
+
+        DmxFixtureMode? firstMode = saved.Modes.OrderBy(m => m.SortOrder).FirstOrDefault();
+        newModeId = firstMode?.Id ?? newModeId;
+        newSource = FixtureSource.Saved;
+    }
+
+    private async Task DeleteDefinitionAsync(DmxFixtureDefinition definition)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete Fixture Type";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete {definition.Manufacturer} {definition.Model} from your saved types? Fixtures already using it must be changed first.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> result = await _definitionService.DeleteDefinitionAsync(definition.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The fixture type couldn't be deleted.");
+            return;
+        }
+
+        await LoadSavedModes();
+        newModeId = BuiltInDmxFixtureDefinitions.RgbModeId;
+
+        _toastService.ShowSuccess($"{definition.Manufacturer} {definition.Model} deleted.");
     }
 
     private void StartEditing(DmxFixture fixture)
@@ -236,8 +497,7 @@
 
             if (placementChanged)
             {
-                int channelCount = FindMode(editModeId)?.ChannelCount ?? 1;
-                bool? confirmed = await ConfirmOverlapsAsync(editStartChannel, channelCount, fixture.Id);
+                bool? confirmed = await ConfirmOverlapsAsync(editStartChannel, EditChannelCount, fixture.Id);
 
                 if (confirmed is null)
                 {
@@ -323,23 +583,28 @@
         }
     }
 
-    // The fixture's own mode stays selectable even when it isn't one of the generic ones.
+    // The fixture's own mode stays selectable even if its definition was since removed.
     private IEnumerable<DmxFixtureMode> ModeChoicesFor(DmxFixture fixture) =>
-        fixture.FixtureMode != null && builtInModes.All(m => m.Id != fixture.FixtureModeId)
-            ? builtInModes.Prepend(fixture.FixtureMode)
-            : builtInModes;
+        fixture.FixtureMode != null && savedModes.All(m => m.Id != fixture.FixtureModeId)
+            ? savedModes.Prepend(fixture.FixtureMode)
+            : savedModes;
 
     private DmxFixtureMode? FindMode(Guid modeId) =>
-        builtInModes.FirstOrDefault(m => m.Id == modeId)
+        savedModes.FirstOrDefault(m => m.Id == modeId)
         ?? fixtures.Select(f => f.FixtureMode).FirstOrDefault(m => m?.Id == modeId);
 
+    // "RGB (3 ch)" for the generic types, "Cameo Flat Pro 18 · 5-channel (5 ch)" otherwise.
     private static string ModeLabel(DmxFixtureMode mode)
     {
-        string model = mode.Definition?.Model
-            ?? BuiltInDmxFixtureDefinitions.Definitions.FirstOrDefault(d => d.Id == mode.DefinitionId)?.Model
-            ?? mode.Name;
+        DmxFixtureDefinition? definition = mode.Definition
+            ?? BuiltInDmxFixtureDefinitions.Definitions.FirstOrDefault(d => d.Id == mode.DefinitionId);
 
-        return $"{model} ({mode.ChannelCount} ch)";
+        if (definition == null || definition.Source == DmxFixtureDefinitionSource.BuiltIn)
+        {
+            return $"{definition?.Model ?? mode.Name} ({mode.ChannelCount} ch)";
+        }
+
+        return $"{definition.Manufacturer} {definition.Model} · {mode.Name} ({mode.ChannelCount} ch)";
     }
 
     private static string FixtureDescription(DmxFixture fixture)
@@ -368,16 +633,15 @@
         return last == fixture.StartChannel ? $"Ch {fixture.StartChannel}" : $"Ch {fixture.StartChannel}-{last}";
     }
 
-    private bool RunsPastUniverse(int startChannel, Guid modeId) =>
-        startChannel + (FindMode(modeId)?.ChannelCount ?? 1) - 1 > UniverseSize;
+    private static bool RunsPastUniverse(int startChannel, int channelCount) =>
+        startChannel + channelCount - 1 > UniverseSize;
 
     // Renaming a fixture that was saved before these checks existed is still allowed.
     private bool PlacementChanged(DmxFixture fixture) =>
         fixture.StartChannel != editStartChannel || fixture.FixtureModeId != editModeId;
 
-    private string FootprintHint(int startChannel, Guid modeId)
+    private static string FootprintHint(int startChannel, int channelCount)
     {
-        int channelCount = FindMode(modeId)?.ChannelCount ?? 1;
         int last = startChannel + channelCount - 1;
 
         if (last > UniverseSize)

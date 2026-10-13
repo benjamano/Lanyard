@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs, and see which DMX channels each lighting fixture uses.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, choose which kiosk software version each PC runs, and add lighting fixtures by make and model from the Open Fixture Library.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -637,7 +637,16 @@
       "Lanyard no longer lets you add a fixture whose channels would run past channel 512.",
       "If a new fixture would use channels another fixture already uses, Lanyard asks before saving. Choose \"Patch anyway\" if you're double-patching on purpose.",
       "Fixtures that already overlap or run past channel 512 are left exactly as they are, with a warning in the list. Renaming them still works.",
-      "Manage Fixtures now fits on a phone screen."
+      "Manage Fixtures now fits on a phone screen.",
+      "When adding a fixture in Manage Fixtures, choose \"Open Fixture Library\" to search over 650 lights by manufacturer or model, then pick the mode your light is set to. Lanyard then knows how many channels it uses and what each one does.",
+      "Lights that use red, green, blue, white, amber, UV, colour mixing (cyan, magenta, yellow), a colour wheel or a shutter now show the right colour in Fixture Preview. Moving heads also show where they're pointing (pan and tilt), and a Strobe badge appears while a light is strobing.",
+      "If a light isn't in the library yet, choose \"Import a file\" and add the fixture file downloaded from open-fixture-library.org.",
+      "Pixel modes, where each LED segment has its own channels, aren't supported yet. They're shown greyed out, and the light's other modes can still be used.",
+      "Lights you've added from the library appear under \"Saved types\" next time.",
+      "On the DMX desk, every slider now says what it controls, such as R, G, B, Dim, Pan or Str. Hover over it to see which fixture it belongs to. A channel used by two fixtures is marked 2× in amber.",
+      "A new Group by Fixture button lays the sliders out under each fixture's name, with the channels no fixture uses at the end.",
+      "For a light that isn't in the Open Fixture Library, choose \"Build your own\" in Manage Fixtures and list its channels from the manual. You can say which values pick which colour on a colour wheel, and which close the shutter.",
+      "\"Copy and edit\" starts a new fixture type from any saved one. Your own and imported types can be deleted once no fixture uses them."
     ]
   }
 ]
