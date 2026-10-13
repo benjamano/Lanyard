@@ -1,0 +1,61 @@
+@* One desk channel: the fader, its value, what it controls on which fixture, and a zero button. *@
+<div class="dmx-channel">
+    <FluentCard Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1" Class="dmx-channel-card">
+        <FluentStack Orientation="Orientation.Vertical"
+                     HorizontalAlignment="HorizontalAlignment.Center"
+                     VerticalGap="2"
+                     VerticalAlignment="VerticalAlignment.Center">
+            <span class="@(Patches.Count > 1 ? "dmx-channel-tag dmx-channel-tag-clash" : Patches.Count == 1 ? "dmx-channel-tag" : "dmx-channel-tag dmx-channel-tag-empty")"
+                  title="@TagTitle">
+                @TagText
+            </span>
+            <FluentSlider Label="@Channel.ToString()"
+                          Message="@Value.ToString()"
+                          Orientation="Orientation.Vertical"
+                          Disabled="@Disabled"
+                          TValue="@int"
+                          Value="@Value"
+                          Min="0"
+                          Max="255"
+                          ValueChanged="@((int newValue) => OnValueChanged.InvokeAsync(newValue))"
+                          ImmediateDelay="20"
+                          Class="d-flex flex-column gap-3 dmx-channel-slider">
+            </FluentSlider>
+            <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                          Appearance="ButtonAppearance.Default"
+                          OnClick="@(() => OnValueChanged.InvokeAsync(0))"
+                          Disabled="@Disabled"
+                          Title="@($"Set channel {Channel} to 0")"
+                          Class="mt-2" />
+        </FluentStack>
+    </FluentCard>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int Channel { get; set; }
+
+    [Parameter]
+    public int Value { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    // Every fixture patched on this channel (usually one; more when double-patched).
+    [Parameter]
+    public IReadOnlyList<DmxChannelPatch> Patches { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<int> OnValueChanged { get; set; }
+
+    private string TagText => Patches.Count switch
+    {
+        0 => "·",
+        1 => DmxChannelRoleText.Tag(Patches[0].Role) + (Patches[0].IsFine ? "·f" : string.Empty),
+        _ => "2×",
+    };
+
+    private string TagTitle => Patches.Count == 0
+        ? $"Channel {Channel}: no fixture"
+        : $"Channel {Channel}: " + string.Join("; ", Patches.Select(p => $"{p.FixtureName} · {p.Label}"));
+}

@@ -24,6 +24,8 @@ using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
+using Lanyard.Application.Services.Dmx;
+using Lanyard.Application.Services.Dmx.Ofl;
 using Lanyard.Infrastructure.Models;
 using Lanyard.Shared.Contracts;
 using Lanyard.Shared.DTO;
@@ -129,6 +131,7 @@ builder.Services.AddScoped<IStaffDocumentService, StaffDocumentService>();
 builder.Services.AddScoped<IComplianceService, ComplianceService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
+builder.Services.AddScoped<IRequiredTrainingService, RequiredTrainingService>();
 builder.Services.AddScoped<IContractRequirementService, ContractRequirementService>();
 builder.Services.AddScoped<IStaffBulkUpdateService, StaffBulkUpdateService>();
 builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
@@ -178,6 +181,10 @@ builder.Services.AddScoped<ISignalRProjectionControlHub, SignalRControlHub>();
 builder.Services.AddScoped<ITimeService, TimeService>();
 builder.Services.AddScoped<IDmxSceneService, DmxSceneService>();
 builder.Services.AddScoped<IDmxFixtureService, DmxFixtureService>();
+builder.Services.AddScoped<IDmxFixtureDefinitionService, DmxFixtureDefinitionService>();
+// The Open Fixture Library snapshot is read-only and the same for everyone: load and index it once.
+builder.Services.AddSingleton<IOflFixtureParser, OflFixtureParser>();
+builder.Services.AddSingleton<IOflCatalogueService, OflCatalogueService>();
 
 builder.Services.AddSingleton<ILaserGameStatusStore, LaserGameStatusStore>();
 builder.Services.AddSingleton<IClientDiagnosticsStore, ClientDiagnosticsStore>();

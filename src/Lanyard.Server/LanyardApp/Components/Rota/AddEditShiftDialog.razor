@@ -42,6 +42,13 @@
                 </FluentMessageBar>
             }
 
+            @if (ExistingTrainingGaps.Count > 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    @RotaService.TrainingWarning(ExistingTrainingGaps) Staff can't pick up shifts like this one without it, but you can still put them on it.
+                </FluentMessageBar>
+            }
+
             <FluentSelect TOption="StaffOption" TValue="string" Items="@staffOptions" OptionText="@(x => x.Name)" OptionValue="@(x => x.UserId)"
                           Value="@userId" ValueChanged="@OnStaffChanged" Label="Staff member" Width="100%" />
 
@@ -123,6 +130,13 @@
 
     [Parameter]
     public Shift? Existing { get; set; }
+
+    // The rota's missing-training note for this shift - only while it's still the same person in
+    // the same position, since a different choice would need checking afresh (the save does that).
+    private IReadOnlyList<TrainingGap> ExistingTrainingGaps =>
+        Existing is not null && userId == Existing.UserId && positionId == (Existing.StaffPositionId?.ToString() ?? string.Empty)
+            ? View.TrainingGapsFor(Existing)
+            : [];
 
     [Parameter]
     public DateOnly DefaultDate { get; set; }

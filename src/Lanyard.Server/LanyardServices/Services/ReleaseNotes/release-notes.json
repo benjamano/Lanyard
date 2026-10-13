@@ -605,7 +605,7 @@
   {
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
-    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, choose which kiosk software version each PC runs, and export approved timesheet hours for payroll.",
+    "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, choose which kiosk software version each PC runs, and add lighting fixtures by make and model from the Open Fixture Library.",
     "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
@@ -633,10 +633,40 @@
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
       "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
+      "Manage Fixtures on the DMX desk now shows the channels each fixture uses, for example \"Ch 1-3\", and a hint as you add one says which channels it will take.",
+      "Lanyard no longer lets you add a fixture whose channels would run past channel 512.",
+      "If a new fixture would use channels another fixture already uses, Lanyard asks before saving. Choose \"Patch anyway\" if you're double-patching on purpose.",
+      "Fixtures that already overlap or run past channel 512 are left exactly as they are, with a warning in the list. Renaming them still works.",
+      "Manage Fixtures now fits on a phone screen.",
+      "When adding a fixture in Manage Fixtures, choose \"Open Fixture Library\" to search over 650 lights by manufacturer or model, then pick the mode your light is set to. Lanyard then knows how many channels it uses and what each one does.",
+      "Lights that use red, green, blue, white, amber, UV, colour mixing (cyan, magenta, yellow), a colour wheel or a shutter now show the right colour in Fixture Preview. Moving heads also show where they're pointing (pan and tilt), and a Strobe badge appears while a light is strobing.",
+      "If a light isn't in the library yet, choose \"Import a file\" and add the fixture file downloaded from open-fixture-library.org.",
+      "Pixel modes, where each LED segment has its own channels, aren't supported yet. They're shown greyed out, and the light's other modes can still be used.",
+      "Lights you've added from the library appear under \"Saved types\" next time.",
+      "On the DMX desk, every slider now says what it controls, such as R, G, B, Dim, Pan or Str. Hover over it to see which fixture it belongs to. A channel used by two fixtures is marked 2× in amber.",
+      "A new Group by Fixture button lays the sliders out under each fixture's name, with the channels no fixture uses at the end.",
+      "For a light that isn't in the Open Fixture Library, choose \"Build your own\" in Manage Fixtures and list its channels from the manual. You can say which values pick which colour on a colour wheel, and which close the shutter.",
+      "\"Copy and edit\" starts a new fixture type from any saved one. Your own and imported types can be deleted once no fixture uses them."
+    ]
+  },
+  {
+    "version": "1.4.16",
+    "releaseDate": "2026-10-13",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, assign it automatically, and export approved timesheet hours for payroll.",
+    "details": [
+      "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
+      "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
+      "Up for grabs still shows those shifts, with the reason and a button that goes straight to the course.",
+      "Open-shift and swap notifications only go to people who have the training. A pending request from someone without it can't be approved until they've done the course.",
+      "Managers can still put anyone on the rota. Saving a shift for someone who is missing the training shows a warning instead of stopping you.",
+      "The rota builder marks upcoming shifts whose person is missing the position's training with a graduation-cap icon. Hover over it, or on a phone read the line under the shift, to see which course. Opening the shift explains it too.",
+      "After publishing, the rota tells you how many of the published shifts are for staff missing the training. The rota still publishes.",
+      "Giving someone a position, on their profile or in bulk on the Staff page, now assigns them its required courses that they haven't done, and emails them as usual. Ticking a new course on a position assigns it to everyone already in that position. People who have already passed it, or are part way through it, are left alone.",
+      "Managers can only assign courses to staff at their own location, so the message after saving says if any couldn't be assigned. Courses from one location only apply to shifts there, and archived courses are no longer enforced.",
       "Manage > Rota > Timesheets has a new Export button that downloads approved hours as a CSV file for payroll: one row per person per day, and a total for each person.",
       "Choose any date range up to 93 days, or pick This week, Last week or Last month. Times are UK local time, and a shift that runs past midnight counts on the day it started.",
       "Only approved, finished time counts towards the hours. Time still waiting for approval, flagged for review, or still on the clock is listed in the file as Excluded, and you're warned before you download.",
-      "Hours are rounded to the nearest minute, with a Minutes column and an Hours column to two decimal places. Breaks aren't taken off; the rota break is shown so payroll can decide.",
+      "Hours are rounded to the nearest minute, with a Minutes column and an Hours column to two decimal places. The rota break of each shift is shown alongside.",
       "Managers can export their own location. Admins can export any location."
     ]
   }

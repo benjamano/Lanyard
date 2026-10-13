@@ -18,7 +18,8 @@ internal static class DemoDataWiper
 
         await EnsureIsDemoCompanyAsync(ctx, demoCompanyId, ct);
 
-        // Training
+        // Training (the position requirements point at courses, so they go first)
+        await ctx.StaffPositionRequiredCourses.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttemptAnswers.ExecuteDeleteAsync(ct);
         await ctx.CourseQuizAttempts.ExecuteDeleteAsync(ct);
         await ctx.CourseSectionProgresses.ExecuteDeleteAsync(ct);
@@ -71,6 +72,11 @@ internal static class DemoDataWiper
         await ctx.DmxSceneSteps.ExecuteDeleteAsync(ct);
         await ctx.DmxScenes.ExecuteDeleteAsync(ct);
         await ctx.DmxFixtures.ExecuteDeleteAsync(ct);
+        // This context can also see the shared built-in definitions, so only delete the company's own.
+        await ctx.DmxFixtureModeChannelColorRanges.Where(x => x.ModeChannel!.Mode!.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureModeChannels.Where(x => x.Mode!.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureModes.Where(x => x.Definition!.CompanyId != null).ExecuteDeleteAsync(ct);
+        await ctx.DmxFixtureDefinitions.Where(x => x.CompanyId != null).ExecuteDeleteAsync(ct);
         await ctx.GameResultPlayerScores.ExecuteDeleteAsync(ct);
         await ctx.GameResults.ExecuteDeleteAsync(ct);
         await ctx.ClientProjectionSettings.ExecuteDeleteAsync(ct);
