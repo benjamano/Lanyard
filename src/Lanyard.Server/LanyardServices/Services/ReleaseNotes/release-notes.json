@@ -606,6 +606,7 @@
     "version": "1.4.15",
     "releaseDate": "2026-10-12",
     "summary": "Email announcements to staff, see who is behind on training or documents at a glance, check each kiosk's health and recent log, and choose which kiosk software version each PC runs, and give automation rules \"only if\" conditions.",
+    "details": [
       "Added a \"Compliance at a Glance\" dashboard widget. It counts overdue training, staff documents that have expired, and documents expiring soon, and lists the people behind each count.",
       "Managers see the location they signed in to. Admins can pick one location or all of them in the widget's settings, along with how many days ahead to look for expiring documents (30 by default).",
       "The widget only shows anything to Admins and Managers. Other staff, and screens nobody is signed in to, just see \"Shown to managers\".",
@@ -635,7 +636,7 @@
       "Automation rules can now have conditions. A rule only runs if every condition is true when it's triggered: the time of day is between two times (a window like 22:00 to 02:00 runs past midnight), it's one of the days you pick, or another kiosk is or isn't in a game.",
       "Conditions use UK venue time, so they're right in summer as well as winter.",
       "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
-      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on."
+      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
       "Up for grabs still shows those shifts, with the reason and a button that goes straight to the course.",
