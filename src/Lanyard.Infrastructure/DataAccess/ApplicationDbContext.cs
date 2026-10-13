@@ -110,6 +110,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanyOnboardingStandingAttachment> CompanyOnboardingStandingAttachments { get; set; }
         public DbSet<StaffPosition> StaffPositions { get; set; }
         public DbSet<UserPosition> UserPositions { get; set; }
+        public DbSet<StaffPositionRequiredCourse> StaffPositionRequiredCourses { get; set; }
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
@@ -382,6 +383,23 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserPosition>()
                 .HasIndex(x => new { x.UserId, x.StaffPositionId })
                 .IsUnique();
+
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasIndex(x => new { x.StaffPositionId, x.CourseId })
+                .IsUnique();
+
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasOne(x => x.StaffPosition)
+                .WithMany(x => x.RequiredCourses)
+                .HasForeignKey(x => x.StaffPositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Courses are only ever deactivated, so a requirement never needs to follow a deleted one.
+            modelBuilder.Entity<StaffPositionRequiredCourse>()
+                .HasOne(x => x.Course)
+                .WithMany()
+                .HasForeignKey(x => x.CourseId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // "Exactly one primary position per user" is what the tier resolution relies on;
             // enforce it in the database rather than trusting every writer to keep it.
@@ -860,6 +878,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<StaffPositionRequiredCourse>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMember>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ChatMessage>().HasQueryFilter(x => TenantFilterDisabled || x.Conversation!.CompanyId == TenantCompanyId);
         }

@@ -331,6 +331,18 @@ public class RotaService(
                 {
                     warnings.Add($"This person doesn't normally work as {position.Name}.");
                 }
+                else if (shift.UserId is string assigneeId && position.IsActive)
+                {
+                    // Only a warning here: staff can't pick the shift up themselves without the
+                    // training, but a manager rostering them directly is making that call.
+                    ShiftClaimRules.TrainingSnapshot training = await ShiftClaimRules.LoadTrainingAsync(ctx, [assigneeId], [positionId]);
+                    List<TrainingGap> gaps = training.GapsFor(assigneeId, shift);
+
+                    if (gaps.Count > 0)
+                    {
+                        warnings.Add(TrainingWarning(gaps));
+                    }
+                }
             }
 
             // Reassigning a published shift is really "take it off one person, give it to
@@ -874,6 +886,30 @@ public class RotaService(
                 || (x.PublishedStartUtc != null && x.PublishedStartUtc >= startUtc && x.PublishedStartUtc < endUtc))
             && ((x.IsActive && (x.PublishedDateUtc == null || x.UpdateDate > x.PublishedDateUtc))
                 || (!x.IsActive && x.RemovalPending)));
+
+    // "This person hasn't done Fire Safety training." / "This person's Fire Safety training runs
+    // out before this shift."
+    internal static string TrainingWarning(IReadOnlyList<TrainingGap> gaps)
+    {
+        List<TrainingGap> missing = gaps.Where(x => !x.Lapsed).ToList();
+        List<TrainingGap> lapsed = gaps.Where(x => x.Lapsed).ToList();
+        List<string> parts = [];
+
+        if (missing.Count > 0)
+        {
+            parts.Add($"This person hasn't done {JoinCourseNames(missing)} training.");
+        }
+
+        if (lapsed.Count > 0)
+        {
+            parts.Add($"{(missing.Count > 0 ? "Their" : "This person's")} {JoinCourseNames(lapsed)} training runs out before this shift.");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private static string JoinCourseNames(List<TrainingGap> gaps) =>
+        gaps.Count == 1 ? gaps[0].CourseName : $"{string.Join(", ", gaps.Take(gaps.Count - 1).Select(x => x.CourseName))} and {gaps[^1].CourseName}";
 
     private static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
     {

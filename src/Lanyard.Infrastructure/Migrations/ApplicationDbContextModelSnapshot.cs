@@ -2611,6 +2611,34 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("StaffPositions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPositionRequiredCourse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("StaffPositionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("StaffPositionId", "CourseId")
+                        .IsUnique();
+
+                    b.ToTable("StaffPositionRequiredCourses");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4541,6 +4569,25 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPositionRequiredCourse", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.StaffPosition", "StaffPosition")
+                        .WithMany("RequiredCourses")
+                        .HasForeignKey("StaffPositionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("StaffPosition");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.TimeEntry", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.ClockInTerminal", "ClockInTerminal")
@@ -4896,6 +4943,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ProjectionProgramStepTemplate", b =>
                 {
                     b.Navigation("Parameters");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.StaffPosition", b =>
+                {
+                    b.Navigation("RequiredCourses");
                 });
 #pragma warning restore 612, 618
         }

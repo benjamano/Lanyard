@@ -106,6 +106,16 @@ public class DemoResetServiceTests
         Assert.AreEqual(2, await demo.Locations.CountAsync(x => x.CompanyId == demoId));
         Assert.IsTrue(await demo.Shifts.AnyAsync(x => x.PublishedDateUtc != null && x.UserId == DemoAccounts.StaffUserId));
         Assert.IsTrue(await demo.Courses.AnyAsync());
+
+        // Marshals need the marshalling course. Sam (whose pending pickup is a Marshal shift) has
+        // passed it; the demo staff account hasn't, so it sees the open Marshal shift as blocked.
+        StaffPositionRequiredCourse marshalTraining = await demo.StaffPositionRequiredCourses
+            .Include(x => x.StaffPosition)
+            .SingleAsync();
+        Assert.AreEqual("Marshal", marshalTraining.StaffPosition!.Name);
+        Assert.IsTrue(await demo.CourseAssignments.AnyAsync(x => x.CourseId == marshalTraining.CourseId && x.UserId == "lanyard-demo-sam" && x.CompletedDate != null));
+        Assert.IsFalse(await demo.CourseAssignments.AnyAsync(x => x.CourseId == marshalTraining.CourseId && x.UserId == DemoAccounts.StaffUserId && x.CompletedDate != null));
+
         Assert.IsTrue(await demo.ChatMessages.AnyAsync());
         Assert.IsTrue(await demo.Dashboards.AnyAsync());
         Assert.IsTrue(await demo.AppSettings.AnyAsync(x => x.Key == "Dashboard.OrganisationDefaultDashboardId"));
