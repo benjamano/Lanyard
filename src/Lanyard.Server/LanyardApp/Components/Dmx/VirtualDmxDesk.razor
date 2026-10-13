@@ -34,40 +34,54 @@
     }
     else
     {
-        <FluentStack Orientation="Orientation.Vertical" VerticalGap="0">
-            <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="4" HorizontalAlignment="HorizontalAlignment.Left"
-                            Style="overflow-x: auto; scrollbar-width: auto;"
-                            Class="p-4 ps-0 pt-0">
-                @foreach (KeyValuePair<int, int> channel in channelValues)
+        <div class="dmx-desk-scroll">
+            @if (GroupByFixture && fixtures.Count > 0)
+            {
+                @foreach (DmxFixture fixture in fixtures)
                 {
-                    <FluentCard @key="channel.Key" Height="auto" Appearance="CardAppearance.Subtle" Padding="@Padding.All1">
-                        <FluentStack Orientation="Orientation.Vertical"
-                                    HorizontalAlignment="HorizontalAlignment.Center"
-                                    VerticalGap="2"
-                                    VerticalAlignment="VerticalAlignment.Center">
-                            <FluentSlider Label="@channel.Key.ToString()"
-                                            Message="@channel.Value.ToString()"
-                                            Orientation="Orientation.Vertical"
-                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                            TValue="@int"
-                                            Value="@(channel.Value)"
-                                            Min="0"
-                                            Max="255"
-                                            ValueChanged="(int newValue) => UpdateChannelValue(newValue, channel.Key)"
-                                            Style="height: 300px; Width: 40px;"
-                                            ImmediateDelay="20"
-                                            Class="d-flex flex-column gap-3">
-                            </FluentSlider>
-                            <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
-                                            Appearance="ButtonAppearance.Default"
-                                            OnClick="() => UpdateChannelValue(0, channel.Key)"
-                                            Disabled="@(ClientId == null || !IsEditModeEnabled)"
-                                            Class="mt-2" />
-                        </FluentStack>
-                    </FluentCard>
+                    <section class="dmx-desk-group" @key="fixture.Id" aria-label="@fixture.Name">
+                        <header class="dmx-desk-group-header" title="@FixtureSummary(fixture)">
+                            <span class="dmx-desk-group-name">@fixture.Name</span>
+                            <span class="dmx-desk-group-meta">@FixtureSummary(fixture)</span>
+                        </header>
+                        <div class="dmx-desk-row">
+                            @foreach (int channel in ChannelsOf(fixture))
+                            {
+                                <DmxChannelSlider @key="channel" Channel="@channel" Value="@channelValues.GetValueOrDefault(channel)"
+                                                  Disabled="@SlidersDisabled" Patches="@PatchesFor(channel)"
+                                                  OnValueChanged="@((int value) => UpdateChannelValue(value, channel))" />
+                            }
+                        </div>
+                    </section>
                 }
-            </FluentStack>
-        </FluentStack>
+
+                <section class="dmx-desk-group" aria-label="Unpatched channels">
+                    <header class="dmx-desk-group-header">
+                        <span class="dmx-desk-group-name">Unpatched</span>
+                        <span class="dmx-desk-group-meta">Channels no fixture uses</span>
+                    </header>
+                    <div class="dmx-desk-row">
+                        @foreach (KeyValuePair<int, int> channel in channelValues.Where(c => !channelPatches.ContainsKey(c.Key)))
+                        {
+                            <DmxChannelSlider @key="channel.Key" Channel="@channel.Key" Value="@channel.Value"
+                                              Disabled="@SlidersDisabled"
+                                              OnValueChanged="@((int value) => UpdateChannelValue(value, channel.Key))" />
+                        }
+                    </div>
+                </section>
+            }
+            else
+            {
+                <div class="dmx-desk-row">
+                    @foreach (KeyValuePair<int, int> channel in channelValues)
+                    {
+                        <DmxChannelSlider @key="channel.Key" Channel="@channel.Key" Value="@channel.Value"
+                                          Disabled="@SlidersDisabled" Patches="@PatchesFor(channel.Key)"
+                                          OnValueChanged="@((int value) => UpdateChannelValue(value, channel.Key))" />
+                    }
+                </div>
+            }
+        </div>
     }
 </FluentCard>
 
@@ -99,6 +113,37 @@
 
     [Parameter]
     public bool PreviewSceneLoop { get; set; } = true;
+
+    // Sliders grouped under each fixture (then the unpatched channels) instead of 1-512 in order.
+    [Parameter]
+    public bool GroupByFixture { get; set; } = false;
+
+    // Channel number -> what each fixture patched there uses it for. Rebuilt with the fixtures.
+    private Dictionary<int, List<DmxChannelPatch>> channelPatches = [];
+
+    private bool SlidersDisabled => ClientId == null || !IsEditModeEnabled;
+
+    private IReadOnlyList<DmxChannelPatch> PatchesFor(int channel) =>
+        channelPatches.TryGetValue(channel, out List<DmxChannelPatch>? patches) ? patches : [];
+
+    private static IEnumerable<int> ChannelsOf(DmxFixture fixture)
+    {
+        int first = Math.Max(fixture.StartChannel, 1);
+        int last = Math.Min(fixture.StartChannel + (fixture.FixtureMode?.ChannelCount ?? 1) - 1, 512);
+
+        return first <= last ? Enumerable.Range(first, last - first + 1) : [];
+    }
+
+    private static string FixtureSummary(DmxFixture fixture)
+    {
+        int last = fixture.StartChannel + (fixture.FixtureMode?.ChannelCount ?? 1) - 1;
+        DmxFixtureDefinition? definition = fixture.FixtureMode?.Definition;
+        string type = definition == null ? string.Empty
+            : definition.Source == DmxFixtureDefinitionSource.BuiltIn ? $" · {definition.Model}"
+            : $" · {definition.Manufacturer} {definition.Model}";
+
+        return (last == fixture.StartChannel ? $"Ch {fixture.StartChannel}" : $"Ch {fixture.StartChannel}-{last}") + type;
+    }
 
     // Key: Channel number (1â€“512), Value: Channel value (0â€“255)
     private Dictionary<int, int> channelValues = new();
@@ -251,6 +296,7 @@
         if (ClientId == null)
         {
             fixtures = [];
+            channelPatches = [];
 
             return;
         }
@@ -258,6 +304,7 @@
         Result<IEnumerable<DmxFixture>> result = await _dmxFixtureService.GetFixturesForClientAsync(ClientId.Value);
 
         fixtures = result.IsSuccess && result.Data != null ? result.Data.ToList() : [];
+        channelPatches = DmxChannelPatch.Build(fixtures);
     }
 
     // Client-side only: walks PreviewingSceneSteps and paints scenePreviewChannelValues, never

@@ -1700,7 +1700,10 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("FixtureType")
+                    b.Property<Guid>("FixtureModeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("FixtureType")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")
@@ -1727,9 +1730,294 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.HasIndex("CreateByUserId");
 
+                    b.HasIndex("FixtureModeId");
+
                     b.HasIndex("UpdateByUserId");
 
                     b.ToTable("DmxFixtures");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Manufacturer")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OflKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OflRevision")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreateByUserId");
+
+                    b.HasIndex("CompanyId", "OflKey", "OflRevision");
+
+                    b.ToTable("DmxFixtureDefinitions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000001"),
+                            CreateDate = new DateTime(2026, 10, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Manufacturer = "Generic",
+                            Model = "Dimmer",
+                            Source = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000002"),
+                            CreateDate = new DateTime(2026, 10, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Manufacturer = "Generic",
+                            Model = "RGB",
+                            Source = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000003"),
+                            CreateDate = new DateTime(2026, 10, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            Manufacturer = "Generic",
+                            Model = "RGB + Dimmer",
+                            Source = 0
+                        });
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureMode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ChannelCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("DefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ShortName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefinitionId");
+
+                    b.ToTable("DmxFixtureModes");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000101"),
+                            ChannelCount = 1,
+                            DefinitionId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000001"),
+                            Name = "1-channel",
+                            ShortName = "1ch",
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000102"),
+                            ChannelCount = 3,
+                            DefinitionId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000002"),
+                            Name = "3-channel",
+                            ShortName = "3ch",
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000103"),
+                            ChannelCount = 4,
+                            DefinitionId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000003"),
+                            Name = "4-channel",
+                            ShortName = "4ch",
+                            SortOrder = 0
+                        });
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CoarseOffset")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("DefaultValue")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("FineLevel")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ModeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Offset")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModeId", "Offset")
+                        .IsUnique();
+
+                    b.ToTable("DmxFixtureModeChannels");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001001"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Dimmer",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000101"),
+                            Offset = 0,
+                            Role = 2
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001002"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Red",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000102"),
+                            Offset = 0,
+                            Role = 10
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001003"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Green",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000102"),
+                            Offset = 1,
+                            Role = 11
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001004"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Blue",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000102"),
+                            Offset = 2,
+                            Role = 12
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001005"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Red",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000103"),
+                            Offset = 0,
+                            Role = 10
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001006"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Green",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000103"),
+                            Offset = 1,
+                            Role = 11
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001007"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Blue",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000103"),
+                            Offset = 2,
+                            Role = 12
+                        },
+                        new
+                        {
+                            Id = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000001008"),
+                            DefaultValue = (byte)0,
+                            FineLevel = (byte)0,
+                            Label = "Dimmer",
+                            ModeId = new Guid("6f1d6a8e-1c1b-4c55-9a0e-000000000103"),
+                            Offset = 3,
+                            Role = 2
+                        });
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannelColorRange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ColorHex")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<byte>("DmxEnd")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte>("DmxStart")
+                        .HasColumnType("smallint");
+
+                    b.Property<Guid>("ModeChannelId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModeChannelId");
+
+                    b.ToTable("DmxFixtureModeChannelColorRanges");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxScene", b =>
@@ -4147,6 +4435,12 @@ namespace Lanyard.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Lanyard.Infrastructure.Models.Dmx.DmxFixtureMode", "FixtureMode")
+                        .WithMany()
+                        .HasForeignKey("FixtureModeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "UpdateByUser")
                         .WithMany()
                         .HasForeignKey("UpdateByUserId");
@@ -4155,7 +4449,55 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Navigation("CreateByUser");
 
+                    b.Navigation("FixtureMode");
+
                     b.Navigation("UpdateByUser");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureDefinition", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", null)
+                        .WithMany()
+                        .HasForeignKey("CreateByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureMode", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Dmx.DmxFixtureDefinition", "Definition")
+                        .WithMany("Modes")
+                        .HasForeignKey("DefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Definition");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannel", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Dmx.DmxFixtureMode", "Mode")
+                        .WithMany("Channels")
+                        .HasForeignKey("ModeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Mode");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannelColorRange", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannel", "ModeChannel")
+                        .WithMany("ColorRanges")
+                        .HasForeignKey("ModeChannelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ModeChannel");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxScene", b =>
@@ -4896,6 +5238,21 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dashboard", b =>
                 {
                     b.Navigation("Widgets");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureDefinition", b =>
+                {
+                    b.Navigation("Modes");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureMode", b =>
+                {
+                    b.Navigation("Channels");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxFixtureModeChannel", b =>
+                {
+                    b.Navigation("ColorRanges");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Dmx.DmxScene", b =>

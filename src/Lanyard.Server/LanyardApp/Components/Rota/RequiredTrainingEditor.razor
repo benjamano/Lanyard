@@ -14,7 +14,8 @@
     <div class="training-editor-hint">
         Staff can only pick up a @PositionName shift, or take one in a swap, once they've passed these courses. For a
         course that has to be renewed, their pass must still be in date on the day of the shift. You can still put
-        anyone on the rota yourself - you'll just get a warning.
+        anyone on the rota yourself - you'll just get a warning. Saving assigns a newly ticked course to anyone in
+        this position who hasn't done it yet, and emails them.
     </div>
 
     @if (isLoading)
@@ -253,7 +254,7 @@
                 return;
             }
 
-            Result<bool> result = await _staffPositionService.SetRequiredCoursesAsync(scope, PositionId, selectedCourseIds.ToList(), userResult.Data);
+            Result<RequiredTrainingAssignResult> result = await _staffPositionService.SetRequiredCoursesAsync(scope, PositionId, selectedCourseIds.ToList(), userResult.Data);
 
             if (!result.IsSuccess)
             {
@@ -261,7 +262,9 @@
                 return;
             }
 
-            _toastService.ShowSuccess($"Training for {PositionName} saved.");
+            _toastService.ShowSuccess(result.Data?.Summary() is string assigned
+                ? $"Training for {PositionName} saved. {assigned}"
+                : $"Training for {PositionName} saved.");
             await LoadAsync();
             await OnSaved.InvokeAsync();
         }

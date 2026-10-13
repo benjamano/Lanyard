@@ -7,14 +7,15 @@ using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 
 namespace Lanyard.Tests.Services.Scheduling;
 
 [TestClass]
 public class StaffPositionServiceTests
 {
-    private static StaffPositionService GetService(DbContextOptions<ApplicationDbContext> options) =>
-        new(SchedulingTestHelpers.GetFactory(options), NullLogger<StaffPositionService>.Instance);
+    private static StaffPositionService GetService(DbContextOptions<ApplicationDbContext> options, IRequiredTrainingService? requiredTraining = null) =>
+        new(SchedulingTestHelpers.GetFactory(options), requiredTraining ?? SchedulingTestHelpers.NoRequiredTraining(), NullLogger<StaffPositionService>.Instance);
 
     [TestMethod]
     public async Task GetPositionsAsync_ReturnsOnlyActivePositionsForCompanyInSortOrder()
@@ -161,13 +162,13 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], null);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], null, "admin");
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(2, result.Data!.Count);
-        Assert.AreEqual(1, result.Data.Count(x => x.IsPrimary));
-        Assert.AreEqual(csa.Id, result.Data.Single(x => x.IsPrimary).StaffPositionId);
+        Assert.AreEqual(2, result.Data!.Positions.Count);
+        Assert.AreEqual(1, result.Data!.Positions.Count(x => x.IsPrimary));
+        Assert.AreEqual(csa.Id, result.Data!.Positions.Single(x => x.IsPrimary).StaffPositionId);
     }
 
     [TestMethod]
@@ -181,14 +182,14 @@ public class StaffPositionServiceTests
         StaffPosition manager = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Manager");
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], csa.Id);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], csa.Id, "admin");
 
-        Result<List<UserPosition>> result = await service.SetUserPositionsAsync(
-            SchedulingTestHelpers.AdminScope, user.Id, [supervisor.Id, manager.Id], manager.Id);
+        Result<UserPositionsSaved> result = await service.SetUserPositionsAsync(
+            SchedulingTestHelpers.AdminScope, user.Id, [supervisor.Id, manager.Id], manager.Id, "admin");
 
         Assert.IsTrue(result.IsSuccess);
-        CollectionAssert.AreEquivalent(new[] { supervisor.Id, manager.Id }, result.Data!.Select(x => x.StaffPositionId).ToArray());
-        Assert.AreEqual(manager.Id, result.Data.Single(x => x.IsPrimary).StaffPositionId);
+        CollectionAssert.AreEquivalent(new[] { supervisor.Id, manager.Id }, result.Data!.Positions.Select(x => x.StaffPositionId).ToArray());
+        Assert.AreEqual(manager.Id, result.Data!.Positions.Single(x => x.IsPrimary).StaffPositionId);
 
         await using ApplicationDbContext ctx = new(options);
         Assert.AreEqual(2, await ctx.UserPositions.CountAsync(x => x.UserId == user.Id));
@@ -203,8 +204,8 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], supervisor.Id);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], supervisor.Id, "admin");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -219,8 +220,8 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
         StaffPosition foreign = await SchedulingTestHelpers.SeedPositionAsync(options, otherCompany, "Foreign");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, foreign.Id], null);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, foreign.Id], null, "admin");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -234,8 +235,8 @@ public class StaffPositionServiceTests
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id, [csa.Id], null);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id, [csa.Id], null, "admin");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -249,12 +250,12 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], null);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], null, "admin");
 
-        Result<List<UserPosition>> result = await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [], null);
+        Result<UserPositionsSaved> result = await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [], null, "admin");
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(0, result.Data!.Count);
+        Assert.AreEqual(0, result.Data!.Positions.Count);
     }
 
     [TestMethod]
@@ -267,7 +268,7 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, withPosition.Id, [csa.Id], csa.Id);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, withPosition.Id, [csa.Id], csa.Id, "admin");
 
         Result<Dictionary<string, UserPosition?>> result = await service.GetPrimaryPositionsForUsersAsync([withPosition.Id, without.Id]);
 
@@ -324,7 +325,7 @@ public class StaffPositionServiceTests
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor", sortOrder: 2);
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], supervisor.Id);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id, supervisor.Id], supervisor.Id, "admin");
 
         Result<bool> result = await service.DeactivatePositionAsync(SchedulingTestHelpers.AdminScope, supervisor.Id);
 
@@ -348,7 +349,7 @@ public class StaffPositionServiceTests
         StaffPosition supervisor = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Supervisor");
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [supervisor.Id], supervisor.Id);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [supervisor.Id], supervisor.Id, "admin");
 
         await service.DeactivatePositionAsync(SchedulingTestHelpers.AdminScope, supervisor.Id);
 
@@ -366,10 +367,10 @@ public class StaffPositionServiceTests
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
         StaffPositionService service = GetService(options);
-        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], null);
+        await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [csa.Id], null, "admin");
 
-        Result<List<UserPosition>> result = await service.SetUserPositionsAsync(
-            SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id, [], null);
+        Result<UserPositionsSaved> result = await service.SetUserPositionsAsync(
+            SchedulingTestHelpers.ManagerScopeFor(otherLocation), user.Id, [], null, "admin");
 
         Assert.IsFalse(result.IsSuccess);
 
@@ -385,11 +386,11 @@ public class StaffPositionServiceTests
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.ManagerScopeFor(location), user.Id, [csa.Id], null);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.ManagerScopeFor(location), user.Id, [csa.Id], null, "admin");
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(1, result.Data!.Count);
+        Assert.AreEqual(1, result.Data!.Positions.Count);
     }
 
     [TestMethod]
@@ -412,8 +413,8 @@ public class StaffPositionServiceTests
         UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
         StaffPosition csa = await SchedulingTestHelpers.SeedPositionAsync(options, company, "CSA");
 
-        Result<List<UserPosition>> result = await GetService(options).SetUserPositionsAsync(
-            SchedulingTestHelpers.StaffScopeFor(location), user.Id, [csa.Id], null);
+        Result<UserPositionsSaved> result = await GetService(options).SetUserPositionsAsync(
+            SchedulingTestHelpers.StaffScopeFor(location), user.Id, [csa.Id], null, "admin");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -495,8 +496,8 @@ public class StaffPositionServiceTests
         Course firstAid = await SeedCourseAsync(options, company, "First Aid", location.Id);
         StaffPositionService service = GetService(options);
 
-        Result<bool> first = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id], "admin");
-        Result<bool> second = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [firstAid.Id], "admin");
+        Result<RequiredTrainingAssignResult> first = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id], "admin");
+        Result<RequiredTrainingAssignResult> second = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [firstAid.Id], "admin");
         Result<List<StaffPositionRequiredCourse>> loaded = await service.GetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id);
 
         Assert.IsTrue(first.IsSuccess, first.Error);
@@ -515,7 +516,7 @@ public class StaffPositionServiceTests
         StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
         Course theirs = await SeedCourseAsync(options, otherCompany, "Their Secret Course", otherLocation.Id, isShared: true);
 
-        Result<bool> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [theirs.Id], "admin");
+        Result<RequiredTrainingAssignResult> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [theirs.Id], "admin");
 
         Assert.IsFalse(result.IsSuccess);
         Assert.IsFalse(result.Error!.Contains("Their Secret Course"), "Doesn't echo another company's course name");
@@ -530,7 +531,7 @@ public class StaffPositionServiceTests
         StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
         Course old = await SeedCourseAsync(options, company, "Old Course", location.Id, isActive: false);
 
-        Result<bool> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [old.Id], "admin");
+        Result<RequiredTrainingAssignResult> result = await GetService(options).SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [old.Id], "admin");
 
         Assert.IsFalse(result.IsSuccess);
         StringAssert.Contains(result.Error, "archived");
@@ -546,7 +547,7 @@ public class StaffPositionServiceTests
         StaffPositionService service = GetService(options);
         await service.DeactivatePositionAsync(SchedulingTestHelpers.AdminScope, marshal.Id);
 
-        Result<bool> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+        Result<RequiredTrainingAssignResult> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
 
         Assert.IsFalse(result.IsSuccess);
     }
@@ -562,7 +563,7 @@ public class StaffPositionServiceTests
         StaffPositionService service = GetService(options);
         LocationScope outsider = SchedulingTestHelpers.ManagerScopeFor(otherLocation);
 
-        Result<bool> set = await service.SetRequiredCoursesAsync(outsider, marshal.Id, [arena.Id], "outsider");
+        Result<RequiredTrainingAssignResult> set = await service.SetRequiredCoursesAsync(outsider, marshal.Id, [arena.Id], "outsider");
         Result<List<StaffPositionRequiredCourse>> get = await service.GetRequiredCoursesAsync(outsider, marshal.Id);
         Result<TrainingCoverage> coverage = await service.GetTrainingCoverageAsync(outsider, marshal.Id, [arena.Id]);
 
@@ -584,8 +585,8 @@ public class StaffPositionServiceTests
         StaffPositionService service = GetService(options);
         LocationScope riversideManager = SchedulingTestHelpers.ManagerScopeFor(riverside);
 
-        Result<bool> allowed = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id], "manager");
-        Result<bool> refused = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id, harbourOnly.Id], "manager");
+        Result<RequiredTrainingAssignResult> allowed = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id], "manager");
+        Result<RequiredTrainingAssignResult> refused = await service.SetRequiredCoursesAsync(riversideManager, marshal.Id, [own.Id, shared.Id, harbourOnly.Id], "manager");
 
         Assert.IsTrue(allowed.IsSuccess, allowed.Error);
         Assert.IsFalse(refused.IsSuccess);
@@ -608,7 +609,7 @@ public class StaffPositionServiceTests
 
         // The Riverside manager's list doesn't show Harbourside's own course, so unticking
         // everything they can see mustn't remove it.
-        Result<bool> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.ManagerScopeFor(riverside), marshal.Id, [], "manager");
+        Result<RequiredTrainingAssignResult> result = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.ManagerScopeFor(riverside), marshal.Id, [], "manager");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
         CollectionAssert.AreEquivalent(new[] { harbourOnly.Id }, await RequiredCourseIdsAsync(options, marshal));
@@ -630,8 +631,8 @@ public class StaffPositionServiceTests
             await ctx.SaveChangesAsync();
         }
 
-        Result<bool> keep = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
-        Result<bool> remove = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [], "admin");
+        Result<RequiredTrainingAssignResult> keep = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+        Result<RequiredTrainingAssignResult> remove = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [], "admin");
 
         Assert.IsTrue(keep.IsSuccess, "Keeping an existing link isn't adding an archived course");
         Assert.IsTrue(remove.IsSuccess, remove.Error);
@@ -739,5 +740,74 @@ public class StaffPositionServiceTests
 
         // Riverside's own course doesn't gate Aisha's Harbourside shifts, so she counts as up to date.
         Assert.AreEqual(new TrainingCoverage(2, 1, null), result.Data);
+    }
+
+    // ---- Auto-assigning required training --------------------------------------------------
+
+    [TestMethod]
+    public async Task SetUserPositionsAsync_AssignsTheNewPositionsTraining()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        StaffPosition desk = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Front desk");
+        Course arena = await RequiredTrainingTestHelpers.CourseAsync(options, company, "Laser Arena Safety", location.Id);
+        Course till = await RequiredTrainingTestHelpers.CourseAsync(options, company, "Till Training", location.Id);
+        await RequiredTrainingTestHelpers.RequireAsync(options, marshal, arena);
+        await RequiredTrainingTestHelpers.RequireAsync(options, desk, till);
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+        await RequiredTrainingTestHelpers.GivePositionAsync(options, user, desk);
+        StaffPositionService service = GetService(options, RequiredTrainingTestHelpers.Build(options));
+
+        Result<UserPositionsSaved> result = await service.SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [desk.Id, marshal.Id], desk.Id, "admin");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(2, result.Data!.Positions.Count);
+        Assert.AreEqual("Laser Arena Safety", result.Data.Training.Courses.Single().Name, "Only the new position's course");
+        Assert.AreEqual(0, (await RequiredTrainingTestHelpers.AssignmentsAsync(options, till, user)).Count, "Front desk was already held");
+    }
+
+    [TestMethod]
+    public async Task SetUserPositionsAsync_StillSavesWhenAssigningTrainingFails()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        UserProfile user = await SchedulingTestHelpers.SeedUserAsync(options, location);
+
+        Mock<IRequiredTrainingService> failing = new();
+        failing.Setup(x => x.AssignMissingAsync(It.IsAny<LocationScope>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<(string UserId, Guid PositionId)>>(), It.IsAny<IReadOnlyCollection<Guid>?>()))
+            .ReturnsAsync(Result<RequiredTrainingAssignResult>.Fail("Email service down"));
+
+        Result<UserPositionsSaved> result = await GetService(options, failing.Object)
+            .SetUserPositionsAsync(SchedulingTestHelpers.AdminScope, user.Id, [marshal.Id], null, "admin");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(marshal.Id, result.Data!.Positions.Single().StaffPositionId);
+        Assert.AreSame(RequiredTrainingAssignResult.Empty, result.Data.Training);
+    }
+
+    [TestMethod]
+    public async Task SetRequiredCoursesAsync_AssignsANewlyRequiredCourseToHolders()
+    {
+        DbContextOptions<ApplicationDbContext> options = SchedulingTestHelpers.GetInMemoryOptions();
+        (Company company, Location location) = await SchedulingTestHelpers.SeedCompanyAsync(options);
+        StaffPosition marshal = await SchedulingTestHelpers.SeedPositionAsync(options, company, "Marshal");
+        Course arena = await RequiredTrainingTestHelpers.CourseAsync(options, company, "Laser Arena Safety", location.Id);
+        Course firstAid = await RequiredTrainingTestHelpers.CourseAsync(options, company, "First Aid", location.Id);
+        UserProfile amy = await SchedulingTestHelpers.SeedUserAsync(options, location, "Amy");
+        UserProfile tom = await SchedulingTestHelpers.SeedUserAsync(options, location, "Tom");
+        await RequiredTrainingTestHelpers.GivePositionAsync(options, amy, marshal);
+        await RequiredTrainingTestHelpers.GivePositionAsync(options, tom, marshal);
+        await RequiredTrainingTestHelpers.AssignAsync(options, arena, tom, DateTime.UtcNow.AddDays(-10));
+        StaffPositionService service = GetService(options, RequiredTrainingTestHelpers.Build(options));
+
+        Result<RequiredTrainingAssignResult> first = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id], "admin");
+        Result<RequiredTrainingAssignResult> second = await service.SetRequiredCoursesAsync(SchedulingTestHelpers.AdminScope, marshal.Id, [arena.Id, firstAid.Id], "admin");
+
+        Assert.AreEqual("Assigned Laser Arena Safety to 1 person.", first.Data!.Summary(), "Tom had already passed it");
+        Assert.AreEqual("Assigned First Aid to 2 people.", second.Data!.Summary(), "Only the newly ticked course");
+        Assert.AreEqual(1, (await RequiredTrainingTestHelpers.AssignmentsAsync(options, arena, amy)).Count, "Not given Laser Arena Safety twice");
     }
 }
