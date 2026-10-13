@@ -1241,6 +1241,9 @@ public class ShiftClaimService(
                     .SetProperty(x => x.PublishedDateUtc, now)
                     .SetProperty(x => x.PublishedByUserId, actingUserId)
                     .SetProperty(x => x.PublishedStartUtc, x => x.StartUtc)
+                    .SetProperty(x => x.PublishedEndUtc, x => x.EndUtc)
+                    .SetProperty(x => x.PublishedStaffPositionId, x => x.StaffPositionId)
+                    .SetProperty(x => x.PublishedBreakMinutes, x => x.BreakMinutes)
                     .SetProperty(x => x.ReminderSentForStartUtc, (DateTime?)null));
 
             return updated == 1;

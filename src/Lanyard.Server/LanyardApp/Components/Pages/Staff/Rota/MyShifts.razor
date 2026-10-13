@@ -7,6 +7,7 @@
 @using Lanyard.App.Components.Rota
 @using Lanyard.App.Components.Rota.TimeOff
 @using Lanyard.App.Components.Rota.Claims
+@using Lanyard.App.Components.Rota.CalendarFeed
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
 
@@ -14,7 +15,12 @@
 
 <div class="p-2 my-shifts-page">
     <FluentStack Orientation="Orientation.Vertical" VerticalGap="16px">
-        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
+        <div class="my-shifts-header">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size700">My Shifts</FluentText>
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.CalendarAdd())" OnClick="OpenCalendarFeedAsync">
+                Add to calendar
+            </FluentButton>
+        </div>
         <FluentTabs @bind-ActiveTabId="activeTabId">
             <FluentTab Id="shifts" Header="Upcoming shifts" IconStart="@(new Icons.Regular.Size20.CalendarLtr())">
                 <div class="pt-3">
@@ -72,6 +78,16 @@
         return path.EndsWith("/time-off", StringComparison.OrdinalIgnoreCase) ? "time-off"
             : path.EndsWith("/open", StringComparison.OrdinalIgnoreCase) ? "open"
             : "shifts";
+    }
+
+    private async Task OpenCalendarFeedAsync()
+    {
+        await _dialogService.ShowDialogAsync<CalendarFeedDialog>(options =>
+        {
+            options.Header.Title = "Add your shifts to your calendar";
+            options.Width = "520px";
+            options.Modal = true;
+        });
     }
 
     public void Dispose() => _navigationManager.LocationChanged -= OnLocationChanged;

@@ -377,9 +377,7 @@ internal static class ShiftClaimRules
 
         if (wasPublished)
         {
-            shift.PublishedDateUtc = nowUtc;
-            shift.PublishedByUserId = actingUserId;
-            shift.PublishedStartUtc = shift.StartUtc;
+            shift.MarkPublished(nowUtc, actingUserId);
         }
     }
 
