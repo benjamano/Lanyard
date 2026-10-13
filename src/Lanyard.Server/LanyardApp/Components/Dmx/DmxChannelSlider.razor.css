@@ -1,0 +1,29 @@
+.dmx-channel ::deep .dmx-channel-slider {
+    height: 300px;
+    width: 40px;
+}
+
+.dmx-channel-tag {
+    display: inline-block;
+    min-width: 32px;
+    padding: 1px 4px;
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorBrandBackground2);
+    color: var(--colorBrandForeground2);
+    font-size: var(--fontSizeBase100);
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.dmx-channel-tag-empty {
+    background: transparent;
+    color: var(--colorNeutralForeground4);
+}
+
+/* Double-patched: two fixtures answer to this channel. */
+.dmx-channel-tag-clash {
+    background: var(--colorStatusWarningBackground2);
+    color: var(--colorStatusWarningForeground2);
+}

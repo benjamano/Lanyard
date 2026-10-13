@@ -31,17 +31,48 @@
                             <FluentRadio Value="FixtureSource.Saved" Label="Saved types" />
                             <FluentRadio Value="FixtureSource.Library" Label="Open Fixture Library" />
                             <FluentRadio Value="FixtureSource.File" Label="Import a file" />
+                            <FluentRadio Value="FixtureSource.Custom" Label="Build your own" />
                         </FluentRadioGroup>
 
                         @switch (newSource)
                         {
                             case FixtureSource.Saved:
+                                DmxFixtureMode? selectedSavedMode = FindMode(newModeId);
+
                                 <FluentSelect TOption="Guid" TValue="Guid" Label="Type" @bind-Value="newModeId" Class="fixture-type-select">
                                     @foreach (DmxFixtureMode mode in savedModes)
                                     {
                                         <FluentOption Value="@mode.Id">@ModeLabel(mode)</FluentOption>
                                     }
                                 </FluentSelect>
+                                @if (selectedSavedMode != null)
+                                {
+                                    <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" Wrap="true">
+                                        <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size16.Copy())"
+                                                      OnClick="@(() => OpenCustomFixtureEditorAsync(selectedSavedMode))">
+                                            Copy and edit
+                                        </FluentButton>
+                                        @if (selectedSavedMode.Definition?.CompanyId != null)
+                                        {
+                                            <FluentButton Appearance="ButtonAppearance.Transparent" IconStart="@(new Icons.Regular.Size16.Delete())"
+                                                          OnClick="@(() => DeleteDefinitionAsync(selectedSavedMode.Definition))">
+                                                Delete type
+                                            </FluentButton>
+                                        }
+                                    </FluentStack>
+                                }
+                                break;
+
+                            case FixtureSource.Custom:
+                                <FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+                                    <FluentText Size="TextSize.Size200" Class="fixture-footprint-hint">
+                                        For a light that isn't in the library: list its channels from the manual and say what each one does. It's saved under Saved types for next time.
+                                    </FluentText>
+                                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Wrench())"
+                                                  OnClick="@(() => OpenCustomFixtureEditorAsync(null))">
+                                        Create a Fixture Type
+                                    </FluentButton>
+                                </FluentStack>
                                 break;
 
                             case FixtureSource.Library:
@@ -70,7 +101,7 @@
                                 break;
                         }
 
-                        @if (newSource != FixtureSource.File)
+                        @if (newSource is FixtureSource.Saved or FixtureSource.Library)
                         {
                             <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8px" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
                                 <FluentButton IconStart="new Icons.Regular.Size20.AddCircle()"
@@ -174,7 +205,8 @@
     {
         Saved,
         Library,
-        File
+        File,
+        Custom
     }
 
     // Built-in generic types first, then this company's imported/custom ones. Falls back to the
@@ -384,6 +416,57 @@
             await file.Stream.DisposeAsync();
             isSaving = false;
         }
+    }
+
+    private async Task OpenCustomFixtureEditorAsync(DmxFixtureMode? startFrom)
+    {
+        DialogResult result = await _dialogService.ShowDialogAsync<DmxCustomFixtureDialog>(options =>
+        {
+            options.Width = "min(860px, 100vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(DmxCustomFixtureDialog.StartFrom), startFrom);
+        });
+
+        if (result.Cancelled || result.Value is not DmxFixtureDefinition saved)
+        {
+            return;
+        }
+
+        await LoadSavedModes();
+
+        DmxFixtureMode? firstMode = saved.Modes.OrderBy(m => m.SortOrder).FirstOrDefault();
+        newModeId = firstMode?.Id ?? newModeId;
+        newSource = FixtureSource.Saved;
+    }
+
+    private async Task DeleteDefinitionAsync(DmxFixtureDefinition definition)
+    {
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete Fixture Type";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete {definition.Manufacturer} {definition.Model} from your saved types? Fixtures already using it must be changed first.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Cancelled || confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> result = await _definitionService.DeleteDefinitionAsync(definition.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The fixture type couldn't be deleted.");
+            return;
+        }
+
+        await LoadSavedModes();
+        newModeId = BuiltInDmxFixtureDefinitions.RgbModeId;
+
+        _toastService.ShowSuccess($"{definition.Manufacturer} {definition.Model} deleted.");
     }
 
     private void StartEditing(DmxFixture fixture)

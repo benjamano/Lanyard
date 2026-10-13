@@ -5,6 +5,7 @@ using Lanyard.Application.Services.Dmx.Ofl;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
+using Lanyard.Infrastructure.DTO.Dmx;
 using Lanyard.Infrastructure.Models.Dmx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -199,5 +200,129 @@ public class DmxFixtureDefinitionServiceTests
         List<string> models = result.Data!.Select(d => d.Model).ToList();
         CollectionAssert.AreEqual(new[] { "Dimmer", "RGB", "RGB + Dimmer", "Own Par" }, models);
         Assert.IsTrue(result.Data.All(d => d.Modes.All(m => m.Channels.Count == m.ChannelCount)));
+    }
+
+    private static CustomFixtureChannelInput Ch(string label, DmxChannelRole role, bool isFine = false, params CustomFixtureColorRangeInput[] ranges) =>
+        new(label, role, isFine, ranges);
+
+    private static CustomFixtureInput MovingHead(string model = "Spot 60") => new("Acme", model,
+    [
+        new CustomFixtureModeInput("Standard",
+        [
+            Ch("Pan", DmxChannelRole.Pan),
+            Ch("Pan fine", DmxChannelRole.Generic, isFine: true),
+            Ch("Tilt", DmxChannelRole.Tilt),
+            Ch("Colour", DmxChannelRole.ColorWheel, false, new CustomFixtureColorRangeInput(0, 9, "#ffffff"), new CustomFixtureColorRangeInput(10, 19, "#ff0000")),
+            Ch("Dimmer", DmxChannelRole.Intensity, false, new CustomFixtureColorRangeInput(0, 10, "#000000")),
+        ])
+    ]);
+
+    [TestMethod]
+    public async Task CreateCustomAsync_SavesModesChannelsFineLinksAndRanges()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+
+        Result<DmxFixtureDefinition> result = await BuildService(options, 1).CreateCustomAsync(MovingHead());
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(DmxFixtureDefinitionSource.Custom, result.Data!.Source);
+        Assert.AreEqual(1, result.Data.CompanyId);
+
+        await using ApplicationDbContext verify = new(options);
+        DmxFixtureMode mode = await verify.DmxFixtureModes
+            .Include(m => m.Channels).ThenInclude(c => c.ColorRanges)
+            .SingleAsync(m => m.DefinitionId == result.Data.Id);
+        List<DmxFixtureModeChannel> channels = mode.Channels.OrderBy(c => c.Offset).ToList();
+
+        Assert.AreEqual(5, mode.ChannelCount);
+        Assert.AreEqual(DmxChannelRole.Pan, channels[1].Role, "A fine channel takes its coarse channel's role.");
+        Assert.AreEqual(0, channels[1].CoarseOffset);
+        Assert.AreEqual((byte)1, channels[1].FineLevel);
+        Assert.AreEqual(2, channels[3].ColorRanges.Count);
+        Assert.AreEqual("#FF0000", channels[3].ColorRanges.Single(r => r.DmxStart == 10).ColorHex);
+        Assert.AreEqual(0, channels[4].ColorRanges.Count, "Ranges are only kept on colour wheel, macro and strobe channels.");
+    }
+
+    [TestMethod]
+    public async Task CreateCustomAsync_InvalidInput_Fails()
+    {
+        DmxFixtureDefinitionService service = BuildService(GetInMemoryOptions(), 1);
+        CustomFixtureModeInput okMode = new("Standard", [Ch("Dimmer", DmxChannelRole.Intensity)]);
+
+        CustomFixtureInput[] invalid =
+        [
+            new(" ", "Model", [okMode]),
+            new("Acme", "", [okMode]),
+            new("Acme", new string('x', 101), [okMode]),
+            new("Acme", "Model", []),
+            new("Acme", "Model", [okMode, okMode]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [])]),
+            new("Acme", "Model", [new CustomFixtureModeInput(" ", [Ch("Dimmer", DmxChannelRole.Intensity)])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [Ch("", DmxChannelRole.Intensity)])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [Ch("Fine first", DmxChannelRole.Pan, isFine: true)])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [Ch("Wheel", DmxChannelRole.ColorWheel, false, new CustomFixtureColorRangeInput(20, 10, "#ffffff"))])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [Ch("Wheel", DmxChannelRole.ColorWheel, false, new CustomFixtureColorRangeInput(0, 10, "red"))])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", [Ch("Odd", (DmxChannelRole)999)])]),
+            new("Acme", "Model", [new CustomFixtureModeInput("Standard", Enumerable.Range(0, 513).Select(i => Ch($"C{i}", DmxChannelRole.Generic)).ToList())]),
+        ];
+
+        foreach (CustomFixtureInput input in invalid)
+        {
+            Result<DmxFixtureDefinition> result = await service.CreateCustomAsync(input);
+            Assert.IsFalse(result.IsSuccess, $"Expected failure for {input.Manufacturer}/{input.Model}/{input.Modes.Count} modes");
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteDefinitionAsync_Unused_SoftDeletes()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DmxFixtureDefinitionService service = BuildService(options, 1);
+        DmxFixtureDefinition created = (await service.CreateCustomAsync(MovingHead())).Data!;
+
+        Result<bool> result = await service.DeleteDefinitionAsync(created.Id);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        await using ApplicationDbContext verify = new(options);
+        Assert.IsFalse((await verify.DmxFixtureDefinitions.SingleAsync(d => d.Id == created.Id)).IsActive);
+        Assert.IsFalse((await service.GetDefinitionsAsync()).Data!.Any(d => d.Id == created.Id));
+    }
+
+    [TestMethod]
+    public async Task DeleteDefinitionAsync_InUse_FailsNamingTheFixture()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DmxFixtureDefinitionService service = BuildService(options, 1);
+        DmxFixtureDefinition created = (await service.CreateCustomAsync(MovingHead())).Data!;
+
+        await using (ApplicationDbContext context = new(options))
+        {
+            context.DmxFixtures.Add(new DmxFixture { Id = Guid.NewGuid(), CompanyId = 1, ClientId = Guid.NewGuid(), Name = "Stage spot", StartChannel = 1, FixtureModeId = created.Modes.Single().Id, IsActive = true, CreateByUserId = TestUserId });
+            await context.SaveChangesAsync();
+        }
+
+        Result<bool> result = await service.DeleteDefinitionAsync(created.Id);
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "Stage spot");
+    }
+
+    [TestMethod]
+    public async Task DeleteDefinitionAsync_BuiltIn_Fails()
+    {
+        Result<bool> result = await BuildService(GetInMemoryOptions(), 1).DeleteDefinitionAsync(BuiltInDmxFixtureDefinitions.RgbDefinitionId);
+
+        Assert.IsFalse(result.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task DeleteDefinitionAsync_AnotherCompanysType_IsNotFound()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        DmxFixtureDefinition companyB = (await BuildService(options, 2).CreateCustomAsync(MovingHead())).Data!;
+
+        Result<bool> result = await BuildService(options, 1).DeleteDefinitionAsync(companyB.Id);
+
+        Assert.IsFalse(result.IsSuccess);
     }
 }
