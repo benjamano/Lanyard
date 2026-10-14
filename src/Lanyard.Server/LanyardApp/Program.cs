@@ -152,6 +152,7 @@ builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
+builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
 builder.Services.AddScoped<ITimeOffService, TimeOffService>();
@@ -463,6 +464,18 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 5,
             Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+    });
+
+    // Per feed, not per address: Google and Apple poll every subscriber's calendar from a shared
+    // pool of addresses. A real calendar app polls at most a few times an hour.
+    options.AddPolicy(Lanyard.API.Controllers.CalendarFeedController.RateLimitPolicy, httpContext =>
+    {
+        return RateLimitPartition.GetFixedWindowLimiter(Lanyard.API.Controllers.CalendarFeedController.PartitionKey(httpContext), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromHours(1),
             QueueLimit = 0
         });
     });

@@ -404,6 +404,10 @@ public class GdprService : IGdprService
             ctx.NotificationPreferences.RemoveRange(await ctx.NotificationPreferences.Where(x => x.UserId == userId).ToListAsync());
             ctx.AppInstallations.RemoveRange(await ctx.AppInstallations.Where(x => x.UserId == userId).ToListAsync());
 
+            // Calendar feed URLs are credentials for their shifts. Every company's, not just the
+            // eraser's - the whole account is going.
+            ctx.CalendarFeedTokens.RemoveRange(await ctx.CalendarFeedTokens.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
+
             await ctx.SaveChangesAsync();
 
             return Result<bool>.Ok(true);

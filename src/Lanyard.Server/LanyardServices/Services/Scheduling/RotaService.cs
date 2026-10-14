@@ -752,9 +752,7 @@ public class RotaService(
             foreach (Shift shift in pending.Where(x => x.UserId is null))
             {
                 shift.RemovalPending = false;
-                shift.PublishedDateUtc = now;
-                shift.PublishedByUserId = actingUserId;
-                shift.PublishedStartUtc = shift.StartUtc;
+                shift.MarkPublished(now, actingUserId);
             }
 
             foreach (IGrouping<string, Shift> group in pending.Where(x => x.UserId is not null).GroupBy(x => x.UserId!))
@@ -779,9 +777,7 @@ public class RotaService(
                             break;
                     }
 
-                    shift.PublishedDateUtc = now;
-                    shift.PublishedByUserId = actingUserId;
-                    shift.PublishedStartUtc = shift.StartUtc;
+                    shift.MarkPublished(now, actingUserId);
                 }
 
                 changes.Add(new PublishedChange(group.Key, added, changed, removed));

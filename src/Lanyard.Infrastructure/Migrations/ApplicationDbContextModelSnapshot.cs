@@ -386,6 +386,56 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AutomationRuleExecutions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastAccessUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedDateUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TokenHint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "CompanyId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\"");
+
+                    b.ToTable("CalendarFeedTokens");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ChatBlock", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2596,11 +2646,20 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<int?>("PublishedBreakMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PublishedByUserId")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("PublishedDateUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedEndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedStaffPositionId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("PublishedStartUtc")
                         .HasColumnType("timestamp with time zone");
@@ -3919,6 +3978,25 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AutomationRule");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.CalendarFeedToken", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ChatBlock", b =>

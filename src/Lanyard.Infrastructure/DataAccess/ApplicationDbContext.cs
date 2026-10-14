@@ -119,6 +119,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
+        public DbSet<CalendarFeedToken> CalendarFeedTokens { get; set; }
         public DbSet<TimeEntry> TimeEntries { get; set; }
         public DbSet<TimeOffType> TimeOffTypes { get; set; }
         public DbSet<TimeOffAllowance> TimeOffAllowances { get; set; }
@@ -475,6 +476,22 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasIndex(x => x.LocationId);
+
+            // A calendar feed is found by the hash of the token in its URL on every poll.
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => new { x.UserId, x.CompanyId })
+                .IsUnique()
+                .HasFilter("\"IsActive\"");
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasOne(x => x.Location)

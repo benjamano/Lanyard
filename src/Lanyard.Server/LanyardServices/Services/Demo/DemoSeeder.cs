@@ -402,6 +402,9 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
             PublishedDateUtc = published ? Now.AddDays(-7) : null,
             PublishedByUserId = published ? DemoAccounts.ManagerUserId : null,
             PublishedStartUtc = published ? startUtc : null,
+            PublishedEndUtc = published ? RotaTime.ToUtc(date, end) : null,
+            PublishedStaffPositionId = published ? position.Id : null,
+            PublishedBreakMinutes = published ? 0 : null,
         };
     }
 
