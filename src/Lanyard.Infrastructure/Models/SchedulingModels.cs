@@ -160,6 +160,20 @@ namespace Lanyard.Infrastructure.Models
         // added by a manager on the Timesheets page instead.
         public int ClockInWindowMinutes { get; set; } = 60;
 
+        // The company's pay period, used by the timesheet export's "last pay period" preset.
+        // Monthly runs from PayPeriodStartDay to the day before it the next month (1 = calendar
+        // month, capped at 28 so every month has the day). The weekly-based frequencies count
+        // whole periods from PayPeriodAnchorDate, the first day of any one period.
+        public PayPeriodFrequency PayPeriod { get; set; } = PayPeriodFrequency.Monthly;
+        public int PayPeriodStartDay { get; set; } = 1;
+        public DateOnly? PayPeriodAnchorDate { get; set; }
+
+        // How the payroll export turns clocked time into paid time. Clocked hours on the
+        // timesheet are never changed by this - only the export's paid columns.
+        public BreakDeductionRule BreakDeduction { get; set; } = BreakDeductionRule.None;
+        public int BreakDeductionMinutes { get; set; } = 20;
+        public decimal BreakDeductionAfterHours { get; set; } = 6;
+
         public DateTime UpdateDate { get; set; }
     }
 

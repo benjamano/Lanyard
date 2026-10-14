@@ -16,13 +16,32 @@
         <div class="export-dialog">
             <FluentText Class="export-hint">
                 Approved hours at @LocationName as a CSV file: one row per person per day, and a total for each person.
-                Breaks aren't taken off - the rota break is shown so payroll can decide.
+                @(presets?.Breaks.Describe() ?? BreakDeductionPolicy.None.Describe())
             </FluentText>
+
+            @if (presets is not null && !presets.IsConfigured)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    Set your pay period in Rota settings to pick it here in one click.
+                </FluentMessageBar>
+            }
+
+            @if (presets is { IsConfigured: true } configured)
+            {
+                <div class="export-presets">
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePeriodAsync(configured.Previous))">
+                        Last pay period
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePeriodAsync(configured.Current))">
+                        This pay period
+                    </FluentButton>
+                </div>
+                <FluentText Class="export-hint">@configured.Description · last period @RotaDisplayExtensions.RangeLabel(configured.Previous.From, configured.Previous.To)</FluentText>
+            }
 
             <div class="export-presets">
                 <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePresetAsync(Preset.ThisWeek))">This week</FluentButton>
                 <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePresetAsync(Preset.LastWeek))">Last week</FluentButton>
-                <FluentButton Appearance="ButtonAppearance.Outline" Disabled="@isBusy" OnClick="@(() => UsePresetAsync(Preset.LastMonth))">Last month</FluentButton>
             </div>
 
             <div class="export-dates">
@@ -51,9 +70,16 @@
                     else
                     {
                         <FluentText Weight="TextWeight.Semibold">
-                            @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.ApprovedMinutes)) approved
+                            @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.PaidMinutes)) paid
                             for @summary.People @(summary.People == 1 ? "person" : "people")
                         </FluentText>
+                        @if (summary.BreakDeductedMinutes > 0)
+                        {
+                            <FluentText Class="export-hint">
+                                @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.ApprovedMinutes)) clocked,
+                                less @RotaFormat.Hours(TimesheetExportBuilder.HoursFromMinutes(summary.BreakDeductedMinutes)) of breaks
+                            </FluentText>
+                        }
                     }
                 </div>
 
@@ -88,13 +114,18 @@
     [Parameter, EditorRequired]
     public required string LocationName { get; set; }
 
+    [Parameter, EditorRequired]
+    public required int CompanyId { get; set; }
+
     [Parameter]
     public DateOnly DefaultFrom { get; set; }
 
     [Parameter]
     public DateOnly DefaultTo { get; set; }
 
-    private enum Preset { ThisWeek, LastWeek, LastMonth }
+    private enum Preset { ThisWeek, LastWeek }
+
+    private PayPeriodPresets? presets;
 
     private LocationScope? scope;
     private DateTime? fromDate;
@@ -121,6 +152,18 @@
         }
 
         scope = scopeResult.Data;
+
+        // Payroll runs after a period ends, so the last complete pay period is the useful default.
+        // Without the setting (or if it can't load) the week on screen is kept.
+        Result<PayPeriodPresets> presetResult = await _timesheetExportService.GetPayPeriodPresetsAsync(CompanyId, RotaTime.Today(DateTime.UtcNow));
+        presets = presetResult.IsSuccess ? presetResult.Data : null;
+
+        if (presets is { IsConfigured: true })
+        {
+            fromDate = presets.Previous.From.ToDateTime(TimeOnly.MinValue);
+            toDate = presets.Previous.To.ToDateTime(TimeOnly.MinValue);
+        }
+
         await RefreshPreviewAsync();
     }
 
@@ -128,17 +171,15 @@
     {
         DateOnly today = RotaTime.Today(DateTime.UtcNow);
         DateOnly thisWeek = RotaTime.GetWeekStart(today);
-        DateOnly firstOfThisMonth = new(today.Year, today.Month, 1);
+        DateOnly from = preset == Preset.ThisWeek ? thisWeek : thisWeek.AddDays(-7);
 
-        (DateOnly from, DateOnly to) = preset switch
-        {
-            Preset.ThisWeek => (thisWeek, thisWeek.AddDays(6)),
-            Preset.LastWeek => (thisWeek.AddDays(-7), thisWeek.AddDays(-1)),
-            _ => (firstOfThisMonth.AddMonths(-1), firstOfThisMonth.AddDays(-1))
-        };
+        await UsePeriodAsync(new PayPeriod(from, from.AddDays(6)));
+    }
 
-        fromDate = from.ToDateTime(TimeOnly.MinValue);
-        toDate = to.ToDateTime(TimeOnly.MinValue);
+    private async Task UsePeriodAsync(PayPeriod period)
+    {
+        fromDate = period.From.ToDateTime(TimeOnly.MinValue);
+        toDate = period.To.ToDateTime(TimeOnly.MinValue);
         await RefreshPreviewAsync();
     }
 

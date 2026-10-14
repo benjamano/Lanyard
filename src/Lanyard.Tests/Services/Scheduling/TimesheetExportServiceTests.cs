@@ -66,7 +66,7 @@ public class TimesheetExportServiceTests
         return new Fixture
         {
             Options = options,
-            Service = new TimesheetExportService(timeEntries, logger),
+            Service = new TimesheetExportService(timeEntries, new SchedulingSettingsService(factory), logger),
             Logger = logger,
             Location = location,
             OtherLocation = other,
@@ -106,7 +106,7 @@ public class TimesheetExportServiceTests
         Assert.IsTrue(result.IsSuccess, result.Error);
         Assert.AreEqual("timesheet-ipswich-2026-10-05-to-2026-10-11.csv", result.Data!.FileName);
         Assert.AreEqual("text/csv", result.Data.ContentType);
-        StringAssert.Contains(CsvText(result.Data), "Day,Amy Tester,2026-10-05,09:00,17:00,1,480,8.00,,Approved");
+        StringAssert.Contains(CsvText(result.Data), "Day,Amy Tester,2026-10-05,09:00,17:00,1,480,8.00,,0,480,8.00,Approved");
         Assert.AreEqual(480, result.Data.Summary.ApprovedMinutes);
     }
 
@@ -181,7 +181,7 @@ public class TimesheetExportServiceTests
         Result<TimesheetExportFile> result = await f.Service.ExportCsvAsync(SchedulingTestHelpers.AdminScope, f.Location.Id, Monday, Monday.AddDays(6), "admin");
 
         Assert.IsTrue(result.IsSuccess, result.Error);
-        Assert.AreEqual("Row type,Employee,Date,First in,Last out,Entries,Minutes,Hours,Rota break (min),Status\r\n", CsvText(result.Data!));
+        Assert.AreEqual("Row type,Employee,Date,First in,Last out,Entries,Minutes,Hours,Rota break (min),Break deducted (min),Paid minutes,Paid hours,Status\r\n", CsvText(result.Data!));
         Assert.AreEqual(0, result.Data!.Summary.People);
     }
 
@@ -226,6 +226,87 @@ public class TimesheetExportServiceTests
 
         Assert.HasCount(2, f.Logger.Messages);
         Assert.IsTrue(f.Logger.Messages.All(m => !m.Contains("Amy") && !m.Contains("Tester")), string.Join("\n", f.Logger.Messages));
+    }
+
+    private static async Task SeedSettingsAsync(DbContextOptions<ApplicationDbContext> options, int companyId, Action<CompanySchedulingSettings> configure)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        CompanySchedulingSettings settings = new() { Id = Guid.NewGuid(), CompanyId = companyId };
+        configure(settings);
+        ctx.CompanySchedulingSettings.Add(settings);
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task ExportCsvAsync_AppliesTheCompanysBreakRule()
+    {
+        Fixture f = await CreateAsync();
+        await SeedSettingsAsync(f.Options, f.Location.CompanyId, s =>
+        {
+            s.BreakDeduction = BreakDeductionRule.FixedOverThreshold;
+            s.BreakDeductionMinutes = 20;
+            s.BreakDeductionAfterHours = 6;
+        });
+        await SeedEntryAsync(f, Monday, 9, 17);
+        await SeedEntryAsync(f, Monday.AddDays(1), 9, 13);
+
+        Result<TimesheetExportFile> result = await f.Service.ExportCsvAsync(SchedulingTestHelpers.AdminScope, f.Location.Id, Monday, Monday.AddDays(6), "admin");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        string csv = CsvText(result.Data!);
+        StringAssert.Contains(csv, "Day,Amy Tester,2026-10-05,09:00,17:00,1,480,8.00,,20,460,7.67,Approved");
+        StringAssert.Contains(csv, "Day,Amy Tester,2026-10-06,09:00,13:00,1,240,4.00,,0,240,4.00,Approved");
+        Assert.AreEqual(700, result.Data!.Summary.PaidMinutes);
+        Assert.AreEqual(20, result.Data.Summary.BreakDeductedMinutes);
+    }
+
+    [TestMethod]
+    public async Task ExportCsvAsync_NeverUsesAnotherCompanysBreakRule()
+    {
+        Fixture f = await CreateAsync();
+        (Company otherCompany, _) = await SchedulingTestHelpers.SeedCompanyAsync(f.Options, "Other Co", "Elsewhere");
+        await SeedSettingsAsync(f.Options, otherCompany.Id, s => s.BreakDeduction = BreakDeductionRule.FixedOverThreshold);
+        await SeedEntryAsync(f, Monday, 9, 17);
+
+        Result<TimesheetExportFile> result = await f.Service.ExportCsvAsync(SchedulingTestHelpers.AdminScope, f.Location.Id, Monday, Monday.AddDays(6), "admin");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(0, result.Data!.Summary.BreakDeductedMinutes);
+        Assert.AreEqual(480, result.Data.Summary.PaidMinutes);
+    }
+
+    [TestMethod]
+    public async Task GetPayPeriodPresetsAsync_ReturnsTheCurrentAndLastPeriods()
+    {
+        Fixture f = await CreateAsync();
+        await SeedSettingsAsync(f.Options, f.Location.CompanyId, s =>
+        {
+            s.PayPeriod = PayPeriodFrequency.Monthly;
+            s.PayPeriodStartDay = 26;
+            s.BreakDeduction = BreakDeductionRule.RotaBreak;
+        });
+
+        Result<PayPeriodPresets> result = await f.Service.GetPayPeriodPresetsAsync(f.Location.CompanyId, new DateOnly(2026, 10, 13));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(new PayPeriod(new DateOnly(2026, 9, 26), new DateOnly(2026, 10, 25)), result.Data!.Current);
+        Assert.AreEqual(new PayPeriod(new DateOnly(2026, 8, 26), new DateOnly(2026, 9, 25)), result.Data.Previous);
+        Assert.AreEqual("Monthly, 26th to 25th", result.Data.Description);
+        Assert.IsTrue(result.Data.IsConfigured);
+        Assert.AreEqual(BreakDeductionRule.RotaBreak, result.Data.Breaks.Rule);
+    }
+
+    [TestMethod]
+    public async Task GetPayPeriodPresetsAsync_WithNoSettings_IsTheCalendarMonth()
+    {
+        Fixture f = await CreateAsync();
+
+        Result<PayPeriodPresets> result = await f.Service.GetPayPeriodPresetsAsync(f.Location.CompanyId, new DateOnly(2026, 10, 13));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(new PayPeriod(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)), result.Data!.Previous);
+        Assert.AreEqual(BreakDeductionPolicy.None, result.Data.Breaks);
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

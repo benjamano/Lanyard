@@ -29,6 +29,9 @@
 }
 
 .export-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     padding: 10px 12px;
     border: 1px solid var(--colorNeutralStroke2);
     border-radius: 6px;

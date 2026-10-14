@@ -1,12 +1,14 @@
 using Lanyard.Application.Services.Locations;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Scheduling;
+using Lanyard.Infrastructure.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Lanyard.Application.Services.Scheduling;
 
 public class TimesheetExportService(
     ITimeEntryService timeEntryService,
+    ISchedulingSettingsService settingsService,
     ILogger<TimesheetExportService> logger) : ITimesheetExportService
 {
     // Long enough for a monthly or quarterly pay run, short enough that one export can't pull a
@@ -14,6 +16,7 @@ public class TimesheetExportService(
     public const int MaxRangeDays = 93;
 
     private readonly ITimeEntryService _timeEntryService = timeEntryService;
+    private readonly ISchedulingSettingsService _settingsService = settingsService;
     private readonly ILogger<TimesheetExportService> _logger = logger;
 
     public async Task<Result<TimesheetExportSummary>> PreviewAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to)
@@ -66,6 +69,30 @@ public class TimesheetExportService(
         }
     }
 
+    public async Task<Result<PayPeriodPresets>> GetPayPeriodPresetsAsync(int companyId, DateOnly today)
+    {
+        try
+        {
+            Result<CompanySchedulingSettings> settings = await _settingsService.GetSettingsAsync(companyId);
+
+            if (!settings.IsSuccess || settings.Data is null)
+            {
+                return Result<PayPeriodPresets>.Fail(settings.Error ?? "Couldn't load the pay period.");
+            }
+
+            return Result<PayPeriodPresets>.Ok(new PayPeriodPresets(
+                PayPeriodCalculator.Containing(settings.Data, today),
+                PayPeriodCalculator.Previous(settings.Data, today),
+                PayPeriodCalculator.Describe(settings.Data),
+                PayPeriodCalculator.IsConfigured(settings.Data),
+                BreakDeductionPolicy.From(settings.Data)));
+        }
+        catch (Exception ex)
+        {
+            return Result<PayPeriodPresets>.Fail($"Couldn't load the pay period: {ex.Message}");
+        }
+    }
+
     private async Task<Result<TimesheetExport>> BuildAsync(LocationScope scope, int locationId, DateOnly from, DateOnly to)
     {
         if (to < from)
@@ -86,6 +113,16 @@ public class TimesheetExportService(
             return Result<TimesheetExport>.Fail(view.Error ?? "Couldn't load the timesheet.");
         }
 
-        return Result<TimesheetExport>.Ok(TimesheetExportBuilder.Build(view.Data));
+        // The break rule is the company's, and the company is the location's - never the caller's,
+        // so an admin exporting another company's site gets that company's rule. If it can't be
+        // read the export fails: a wrong paid figure is worse than no file.
+        Result<CompanySchedulingSettings> settings = await _settingsService.GetSettingsAsync(view.Data.CompanyId);
+
+        if (!settings.IsSuccess || settings.Data is null)
+        {
+            return Result<TimesheetExport>.Fail(settings.Error ?? "Couldn't load the rota settings for this location.");
+        }
+
+        return Result<TimesheetExport>.Ok(TimesheetExportBuilder.Build(view.Data, BreakDeductionPolicy.From(settings.Data)));
     }
 }
