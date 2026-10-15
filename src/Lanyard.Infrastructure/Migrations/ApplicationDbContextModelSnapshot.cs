@@ -1313,6 +1313,15 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BreakDeduction")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("BreakDeductionAfterHours")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("BreakDeductionMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ClockInWindowMinutes")
                         .HasColumnType("integer");
 
@@ -1327,6 +1336,15 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<decimal>("HoursPerDay")
                         .HasColumnType("numeric");
+
+                    b.Property<int>("PayPeriod")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("PayPeriodAnchorDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PayPeriodStartDay")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("SendShiftReminders")
                         .HasColumnType("boolean");

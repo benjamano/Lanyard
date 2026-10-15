@@ -525,7 +525,7 @@ public class TimeEntryService(
                 .OrderBy(x => x.DisplayName)
                 .ToList();
 
-            return Result<TimesheetView>.Ok(new TimesheetView(locationId, location.Name, from, to, people));
+            return Result<TimesheetView>.Ok(new TimesheetView(locationId, location.Name, from, to, people, location.CompanyId));
         }
         catch (Exception ex)
         {
