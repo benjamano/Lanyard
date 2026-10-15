@@ -26,6 +26,13 @@ public class Client : ICompanyOwned
 
     public int MusicCacheLimitMb { get; set; } = 500;
 
+    // Offline fallback: when the kiosk can't reach the server for OfflineAfterSeconds, its screens
+    // play their last-known program from a local cache of up to ProjectionCacheLimitMb.
+    // Defaults match KioskOfflineLimits (Lanyard.Shared); the migration seeds existing rows the same.
+    public bool OfflineFallbackEnabled { get; set; } = true;
+    public int OfflineAfterSeconds { get; set; } = 30;
+    public int ProjectionCacheLimitMb { get; set; } = 2048;
+
     public bool AutoRestartEnabled { get; set; } = false;
     public RestartIntervalUnit AutoRestartIntervalUnit { get; set; } = RestartIntervalUnit.Day;
     public int AutoRestartIntervalCount { get; set; } = 1;

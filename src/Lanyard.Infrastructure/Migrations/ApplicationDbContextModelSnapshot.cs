@@ -780,6 +780,12 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("OfflineAfterSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("OfflineFallbackEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("PinnedClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -789,6 +795,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("PreferredAudioDeviceName")
                         .HasColumnType("text");
+
+                    b.Property<int>("ProjectionCacheLimitMb")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ReportedClientVersion")
                         .HasMaxLength(32)

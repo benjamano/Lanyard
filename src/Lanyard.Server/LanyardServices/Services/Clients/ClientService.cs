@@ -151,6 +151,11 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             entry.Property(x => x.UpdateRing).IsModified = false;
             entry.Property(x => x.PinnedClientVersion).IsModified = false;
 
+            // Same for the offline fallback settings, owned by UpdateOfflineFallbackSettingsAsync.
+            entry.Property(x => x.OfflineFallbackEnabled).IsModified = false;
+            entry.Property(x => x.OfflineAfterSeconds).IsModified = false;
+            entry.Property(x => x.ProjectionCacheLimitMb).IsModified = false;
+
             await ctx.SaveChangesAsync();
 
             // Keep both cached connection-ID lookups in sync immediately, otherwise a
@@ -621,6 +626,75 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    // Re-sends a kiosk its ambient programs. The kiosk leaves windows already showing the same
+    // program alone, so this doesn't restart anything; it also prompts the kiosk to refetch its
+    // offline manifest.
+    private async Task SendProjectionProgramsToClientAsync(Client client)
+    {
+        if (string.IsNullOrEmpty(client.MostRecentConnectionId))
+        {
+            return;
+        }
+
+        Result<IEnumerable<ClientProjectionSettings>> result = await GetClientProjectionSettingsAsync(client.Id);
+
+        if (!result.IsSuccess)
+        {
+            return;
+        }
+
+        Result<IEnumerable<ClientProjectionSettingsDTO>> resultDto = ConvertIntoClientProjectionSettingsDTO(result.Data!);
+
+        if (!resultDto.IsSuccess || resultDto.Data == null)
+        {
+            return;
+        }
+
+        await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveProjectionPrograms", resultDto.Data);
+    }
+
+    public async Task<Result<bool>> UpdateOfflineFallbackSettingsAsync(Guid clientId, bool enabled, int offlineAfterSeconds, int cacheLimitMb)
+    {
+        if (offlineAfterSeconds < KioskOfflineLimits.MinOfflineAfterSeconds || offlineAfterSeconds > KioskOfflineLimits.MaxOfflineAfterSeconds)
+        {
+            return Result<bool>.Fail($"Switch to offline after must be between {KioskOfflineLimits.MinOfflineAfterSeconds} and {KioskOfflineLimits.MaxOfflineAfterSeconds} seconds.");
+        }
+
+        if (cacheLimitMb < KioskOfflineLimits.MinCacheLimitMb)
+        {
+            return Result<bool>.Fail($"Cache limit must be at least {KioskOfflineLimits.MinCacheLimitMb} MB.");
+        }
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found.");
+            }
+
+            client.OfflineFallbackEnabled = enabled;
+            client.OfflineAfterSeconds = offlineAfterSeconds;
+            client.ProjectionCacheLimitMb = cacheLimitMb;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Updated offline fallback for client {ClientId}: enabled {Enabled}, after {OfflineAfterSeconds}s, cache {CacheLimitMb}MB", clientId, enabled, offlineAfterSeconds, cacheLimitMb);
+
+            await SendProjectionProgramsToClientAsync(client);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating offline fallback settings for client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null)
     {
         try
@@ -701,26 +775,7 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             foreach (Client client in clients)
             {
-                Result<IEnumerable<ClientProjectionSettings>> result = await GetClientProjectionSettingsAsync(client.Id);
-
-                if (!result.IsSuccess)
-                {
-                    continue;
-                }
-
-                Result<IEnumerable<ClientProjectionSettingsDTO>> resultDto = ConvertIntoClientProjectionSettingsDTO(result.Data!);
-
-                if (!resultDto.IsSuccess || resultDto.Data == null)
-                {
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(client.MostRecentConnectionId)) 
-                {
-                    continue;
-                }
-
-                await _hubContext.Clients.Client(client.MostRecentConnectionId).SendAsync("ReceiveProjectionPrograms", resultDto.Data);
+                await SendProjectionProgramsToClientAsync(client);
             }
 
             return Result<bool>.Ok(true);

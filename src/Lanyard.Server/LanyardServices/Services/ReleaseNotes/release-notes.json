@@ -669,7 +669,9 @@
       "Your calendar stops showing shifts if you leave the location, your account is locked, or shift management is turned off for the company.",
       "Kiosks are more reliable when the server or internet goes down. A kiosk that starts up while it can't reach the server no longer closes itself; it keeps trying, waiting a little longer between attempts up to a minute. A kiosk whose shared secret is rejected keeps trying every 5 minutes too, so fixing the secret on the server brings it back without a restart.",
       "A kiosk screen that fails to load its page now tries again by itself instead of staying on the \"can't reach this page\" error. A screen whose browser crashes reloads or reopens.",
-      "Deleting a step from a projection program, or deleting the program, now stops it showing on kiosks. Before, a deleted step could keep playing."
+      "Deleting a step from a projection program, or deleting the program, now stops it showing on kiosks. Before, a deleted step could keep playing.",
+      "Kiosk settings have a new Offline tab (Manage > Clients, then a kiosk's settings). It's where you choose whether a kiosk's screens keep playing when it can't reach the server, how long it waits before switching over (30 seconds to start with), and how much disk space it can use for videos (2 GB to start with). It's on for every kiosk.",
+      "The Offline tab also lists what each screen would play while offline. Text, videos and pauses keep running. Dashboards and live capture need the server, so they're skipped, and a screen with nothing it can play shows a \"back shortly\" screen. It warns you if the videos need more space than the limit."
     ]
   }
 ]
