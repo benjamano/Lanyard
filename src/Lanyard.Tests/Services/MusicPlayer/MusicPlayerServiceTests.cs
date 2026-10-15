@@ -228,4 +228,69 @@ public class MusicPlayerServiceTests
             p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [TestMethod]
+    public async Task HandleSongEnded_SwitchesToAQueuedPlaylistInsteadOfTheNextSong()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid current = Guid.NewGuid();
+        Guid queued = Guid.NewGuid();
+        Guid queuedSong = Guid.NewGuid();
+
+        await SeedPlaylistAsync(options, current, (Guid.NewGuid(), true), (Guid.NewGuid(), true));
+        await SeedPlaylistAsync(options, queued, (queuedSong, true));
+
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetConnectedPlayer(options, clientId);
+        await player.Play(clientId, current);
+        proxy.Invocations.Clear();
+
+        player.SetPendingPlaylist(clientId, queued);
+        await player.HandleSongEndedAsync(clientId);
+
+        Assert.AreEqual(queued, player.GetCurrentPlaylist(clientId)?.Id);
+        Assert.AreEqual(queuedSong, player.GetCurrentSong(clientId)?.Id);
+        Assert.IsNull(player.GetPendingPlaylist(clientId), "The switch is used up.");
+        proxy.Verify(p => p.SendCoreAsync("LoadPlaylist", It.IsAny<object?[]>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task HandleSongEnded_CarriesOnWithTheQueueWhenTheQueuedPlaylistIsEmpty()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid current = Guid.NewGuid();
+        Guid empty = Guid.NewGuid();
+
+        await SeedPlaylistAsync(options, current, (Guid.NewGuid(), true), (Guid.NewGuid(), true));
+        await SeedPlaylistAsync(options, empty);
+
+        (MusicPlayerService player, Mock<ISingleClientProxy> proxy) = GetConnectedPlayer(options, clientId);
+        await player.Play(clientId, current);
+        proxy.Invocations.Clear();
+
+        player.SetPendingPlaylist(clientId, empty);
+        await player.HandleSongEndedAsync(clientId);
+
+        Assert.AreEqual(current, player.GetCurrentPlaylist(clientId)?.Id);
+        proxy.Verify(p => p.SendCoreAsync("Load", It.IsAny<object?[]>(), It.IsAny<CancellationToken>()), Times.Once,
+            "It should move to the next song rather than fall silent.");
+    }
+
+    [TestMethod]
+    public async Task PlayingAPlaylistByHand_CancelsAQueuedSwitch()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid chosen = Guid.NewGuid();
+
+        await SeedPlaylistAsync(options, chosen, (Guid.NewGuid(), true));
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        player.SetPendingPlaylist(clientId, Guid.NewGuid());
+
+        await player.Play(clientId, chosen);
+
+        Assert.IsNull(player.GetPendingPlaylist(clientId));
+    }
 }

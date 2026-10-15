@@ -34,6 +34,10 @@ public interface IMusicPlayerService
     Task HandleSongEndedAsync(Guid clientId);
     void ReportVolumeFromClient(Guid clientId, int volume);
 
+    // Queues a playlist to start when the current song ends; null cancels.
+    void SetPendingPlaylist(Guid clientId, Guid? playlistId);
+    (Guid PlaylistId, DateTime SinceUtc)? GetPendingPlaylist(Guid clientId);
+
     // Commands sent to the client.
     Task<Result<bool>> LoadSongsIntoQueue(Guid clientId, Guid playlistId, Song? song = null);
     Task Play(Guid clientId);
