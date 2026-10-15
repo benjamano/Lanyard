@@ -922,11 +922,29 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("LastHeartbeatUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastOfflineEndedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastOfflineStartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<long>("MachineUptimeSeconds")
                         .HasColumnType("bigint");
 
                     b.Property<double?>("MemoryPercent")
                         .HasColumnType("double precision");
+
+                    b.Property<long?>("OfflineCacheBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("OfflineCacheSyncedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("OfflineFallbackReady")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("OfflineVideosNotCached")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("PacketCaptureConfigured")
                         .HasColumnType("boolean");

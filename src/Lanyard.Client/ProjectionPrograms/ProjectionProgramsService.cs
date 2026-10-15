@@ -1,4 +1,5 @@
-﻿using Lanyard.Client.SignalR;
+using Lanyard.Client.ProjectionPrograms.Offline;
+using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
@@ -24,6 +25,12 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
     // a timer thread, where a value one window stale is fine.
     public int RunningCount => _runningByDisplayKey.Count;
 
+    // Offline playback: one runner per display key, only touched on the dispatcher thread.
+    private readonly Dictionary<string, OfflineProjectionRunner> _offlineRunners = [];
+    private volatile bool _isOffline;
+
+    public bool IsOffline => _isOffline;
+
     public async Task StartProjectingAsync(IEnumerable<ClientProjectionSettingsDTO> projectionPrograms)
     {
         if (projectionPrograms == null || !projectionPrograms.Any())
@@ -34,6 +41,14 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         _logger.LogInformation("Found {programCount} programs to run", projectionPrograms.Count());
 
         loadedProjectionPrograms = [.. projectionPrograms];
+
+        if (_isOffline)
+        {
+            // The server pushes programs as soon as it reconnects, before the connection has proved
+            // stable. Keep them for the hand-back instead of replacing the offline screens now.
+            _logger.LogInformation("Offline: keeping the server's programs for when the screens hand back");
+            return;
+        }
 
         await StartProjectionLoopAsync();
     }
@@ -53,7 +68,8 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         Guid programId = projectionProgram.ProjectionProgram.Id;
 
         if (_runningByDisplayKey.TryGetValue(displayKey, out (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs) running)
-            && running.ProgramId == programId)
+            && running.ProgramId == programId
+            && !running.Window.IsOffline)
         {
             // This display is already showing the desired program - leave it running untouched.
             return;
@@ -120,6 +136,15 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
 
     public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted)
     {
+        if (_isOffline)
+        {
+            // Only reachable while reconnecting: the screens hand back to the server shortly, and
+            // reporting completion lets it restore the ambient program as usual.
+            _logger.LogInformation("Offline: ignoring triggered program {ProgramId} until the screens hand back to the server", projectionProgramId);
+            await onCompleted();
+            return;
+        }
+
         // A button/automation rule with no explicit target screen defaults to display 0,
         // rather than guessing from whichever program happened to load first.
         int resolvedDisplayIndex = displayIndex ?? 0;
@@ -153,6 +178,12 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
             // A short pause stops a browser that dies on launch from turning into a tight loop.
             await Task.Delay(TimeSpan.FromSeconds(5));
 
+            if (_isOffline)
+            {
+                // The offline player has taken the screen over; the hand-back reopens it.
+                return;
+            }
+
             ClientProjectionSettingsDTO? settings = loadedProjectionPrograms
                 .FirstOrDefault(x => x.DisplayIndex == displayIndex && x.ProjectionProgram.Id == projectionProgramId);
 
@@ -168,6 +199,124 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         {
             _logger.LogError(ex, "Failed to reopen projection program {ProgramId} on display {DisplayIndex} after a crash", projectionProgramId, displayIndex);
         }
+    }
+
+    public async Task EnterOfflineModeAsync(KioskOfflineManifestDTO manifest, IReadOnlySet<Guid> cachedVideoIds, string mediaFolder)
+    {
+        if (_isOffline)
+        {
+            return;
+        }
+
+        _isOffline = true;
+
+        _logger.LogWarning("Offline: the server is unreachable, switching {DisplayCount} screens to their cached programs", manifest.Displays.Count);
+
+        // Server pages (and any triggered program) can't run without the server, so every window
+        // is replaced, not just those with something cached.
+        foreach (string displayKey in _runningByDisplayKey.Keys.ToList())
+        {
+            await HideWindowAsync(displayKey);
+        }
+
+        foreach (KioskOfflineDisplayDTO display in manifest.Displays)
+        {
+            await ShowOfflineDisplayAsync(display, cachedVideoIds, mediaFolder);
+        }
+    }
+
+    public async Task ExitOfflineModeAsync()
+    {
+        if (!_isOffline)
+        {
+            return;
+        }
+
+        _isOffline = false;
+
+        _logger.LogInformation("Offline: the server is back, handing the screens back to it");
+
+        await System.Windows.Application.Current!.Dispatcher.InvokeAsync(() =>
+        {
+            foreach (OfflineProjectionRunner runner in _offlineRunners.Values)
+            {
+                runner.Dispose();
+            }
+
+            _offlineRunners.Clear();
+        });
+
+        foreach (string displayKey in _runningByDisplayKey.Keys.ToList())
+        {
+            await HideWindowAsync(displayKey);
+        }
+
+        // The server starts its own run from the first step when each page loads.
+        await StartProjectionLoopAsync();
+    }
+
+    private async Task ShowOfflineDisplayAsync(KioskOfflineDisplayDTO display, IReadOnlySet<Guid> cachedVideoIds, string mediaFolder)
+    {
+        Screen screen = ResolveScreen(display.DisplayIndex);
+        string displayKey = screen.DeviceName;
+
+        // Its own browser profile, so it never shares a cache with the server's pages.
+        string userDataDir = Path.Combine(Path.GetTempPath(), "LanyardKiosk", $"offline-{display.DisplayIndex}");
+        Directory.CreateDirectory(userDataDir);
+
+        await await System.Windows.Application.Current!.Dispatcher.InvokeAsync(async () =>
+        {
+            try
+            {
+                ProjectionWindow window = new();
+                window.ApplyLayout(screen, display.Width, display.Height, display.IsFullScreen, display.IsBorderless);
+
+                TaskCompletionSource closedTcs = new();
+
+                window.Closed += (_, _) =>
+                {
+                    _runningByDisplayKey.Remove(displayKey);
+
+                    if (_offlineRunners.Remove(displayKey, out OfflineProjectionRunner? runner))
+                    {
+                        runner.Dispose();
+                    }
+
+                    closedTcs.TrySetResult();
+
+                    if (window.ClosedBecauseBrowserProcessFailed && _isOffline)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(5));
+
+                            if (_isOffline)
+                            {
+                                await ShowOfflineDisplayAsync(display, cachedVideoIds, mediaFolder);
+                            }
+                        });
+                    }
+                };
+
+                _runningByDisplayKey[displayKey] = (display.ProgramId, window, closedTcs);
+
+                CoreWebView2EnvironmentOptions options = new("--no-first-run --disable-session-crashed-bubble --autoplay-policy=no-user-gesture-required");
+                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userDataDir, options);
+
+                // Show() before initialising, for the same reason as the online window.
+                window.Show();
+
+                await window.InitializeOfflineAsync(environment, mediaFolder, _logger);
+
+                OfflineProjectionRunner offlineRunner = new(window, display, cachedVideoIds, _logger);
+                _offlineRunners[displayKey] = offlineRunner;
+                offlineRunner.Start();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Offline: failed to open the offline player on display {DisplayIndex}", display.DisplayIndex);
+            }
+        });
     }
 
     private static Screen ResolveScreen(int displayIndex)

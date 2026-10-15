@@ -671,7 +671,12 @@
       "A kiosk screen that fails to load its page now tries again by itself instead of staying on the \"can't reach this page\" error. A screen whose browser crashes reloads or reopens.",
       "Deleting a step from a projection program, or deleting the program, now stops it showing on kiosks. Before, a deleted step could keep playing.",
       "Kiosk settings have a new Offline tab (Manage > Clients, then a kiosk's settings). It's where you choose whether a kiosk's screens keep playing when it can't reach the server, how long it waits before switching over (30 seconds to start with), and how much disk space it can use for videos (2 GB to start with). It's on for every kiosk.",
-      "The Offline tab also lists what each screen would play while offline. Text, videos and pauses keep running. Dashboards and live capture need the server, so they're skipped, and a screen with nothing it can play shows a \"back shortly\" screen. It warns you if the videos need more space than the limit."
+      "The Offline tab also lists what each screen would play while offline. Text, videos and pauses keep running. Dashboards and live capture need the server, so they're skipped, and a screen with nothing it can play shows a \"back shortly\" screen. It warns you if the videos need more space than the limit.",
+      "When a kiosk can't reach the server for that long, including when it's switched on while the server is down, its screens play the copy: text and videos for the same time as usual, in the same order and with the same repeats. Videos play from the kiosk's own disk. The copy is refreshed whenever you change a program, and at least every 15 minutes.",
+      "If music was playing when the connection dropped, it carries on, shuffling songs the kiosk already has saved. If it wasn't, the kiosk stays quiet.",
+      "When the server comes back and the connection stays up for 10 seconds, the screens go back to the server's programs from the first step, and music goes back to its playlist after the current song.",
+      "Kiosk health now shows each kiosk's offline fallback. The Health tab shows whether it's ready, how much video is cached, when the copy was last updated, and when the kiosk last played offline and for how long. A kiosk whose videos don't all fit the cache shows as Degraded, with how many are missing.",
+      "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy."
     ]
   }
 ]

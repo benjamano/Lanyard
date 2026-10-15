@@ -136,6 +136,18 @@ public class KioskHealthService(
         snapshot.PacketCaptureConfigured = report.PacketCaptureConfigured;
         snapshot.PacketCaptureRunning = report.PacketCaptureRunning;
         snapshot.ProjectionRunningCount = Math.Clamp(report.ProjectionRunningCount, 0, MaxProjectionCount);
+
+        snapshot.OfflineFallbackReady = report.OfflineFallbackReady;
+        snapshot.OfflineVideosNotCached = report.OfflineVideosNotCached is >= 0 ? report.OfflineVideosNotCached : null;
+        snapshot.OfflineCacheBytes = report.OfflineCacheBytes is >= 0 ? report.OfflineCacheBytes : null;
+        snapshot.OfflineCacheSyncedUtc = AsUtc(report.OfflineCacheSyncedUtc);
+        snapshot.LastOfflineStartedUtc = AsUtc(report.LastOfflineStartedUtc);
+        snapshot.LastOfflineEndedUtc = AsUtc(report.LastOfflineEndedUtc);
+    }
+
+    private static DateTime? AsUtc(DateTime? value)
+    {
+        return value is DateTime v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;
     }
 
     private static double? ClampPercent(double? value)

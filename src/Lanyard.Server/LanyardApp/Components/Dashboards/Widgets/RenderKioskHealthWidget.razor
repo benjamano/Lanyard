@@ -179,7 +179,10 @@
                 return string.Join(", ", health.Reasons);
             case KioskHealthStatus.Unresponsive:
             case KioskHealthStatus.Offline:
-                return $"{KioskHealthDisplay.Label(health.Status).ToLowerInvariant()}, last heartbeat {KioskHealthDisplay.Ago(health.SinceLastHeartbeat ?? TimeSpan.Zero)}";
+                string silent = $"{KioskHealthDisplay.Label(health.Status).ToLowerInvariant()}, last heartbeat {KioskHealthDisplay.Ago(health.SinceLastHeartbeat ?? TimeSpan.Zero)}";
+
+                // Tells staff whether the screens are likely still showing something.
+                return KioskHealthDisplay.ShouldBePlayingOffline(health) ? $"{silent}, screens should be playing their offline copy" : silent;
         }
 
         if (client.IsCurrentlyConnected)
