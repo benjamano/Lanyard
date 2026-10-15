@@ -591,7 +591,7 @@ public class SignalRControlHub(
             return;
         }
 
-        await _playerService.SetVolume(getClientResult.Data, volume);
+        _playerService.ReportVolumeFromClient(getClientResult.Data, volume);
     }
 
     public async Task PlaylistChanged(Guid playlistId)

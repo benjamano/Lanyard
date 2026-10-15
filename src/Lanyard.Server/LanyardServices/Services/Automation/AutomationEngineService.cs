@@ -305,9 +305,8 @@ public class AutomationEngineService(
     /// </summary>
     /// <remarks>
     /// Called on a timer by ScheduledTriggerHostedService, mirroring how ClientIdle is evaluated by
-    /// IdleTriggerHostedService. nowLocal is server-local wall-clock time, not UTC - this matches
-    /// HallOfFamePeriodExtensions.ToUtcLowerBound and Client.AutoRestartTimeOfDay, the two other
-    /// implicitly-server-local values in the app, since there is no venue timezone concept.
+    /// IdleTriggerHostedService. nowLocal is venue wall-clock time (RotaTime.ToVenueLocal), not UTC
+    /// and not the server's own zone.
     /// </remarks>
     public async Task ProcessScheduledRulesAsync(DateTime nowLocal, CancellationToken ct)
     {
@@ -418,7 +417,7 @@ public class AutomationEngineService(
 
             if (lastSuccess != null)
             {
-                DateOnly lastSuccessLocalDate = DateOnly.FromDateTime(lastSuccess.ExecutedAt.ToLocalTime());
+                DateOnly lastSuccessLocalDate = RotaTime.LocalDate(lastSuccess.ExecutedAt);
                 _scheduledFiredForLocalDate[ruleId] = lastSuccessLocalDate;
             }
 

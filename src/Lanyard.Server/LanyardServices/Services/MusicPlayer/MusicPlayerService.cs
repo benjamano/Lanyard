@@ -15,7 +15,7 @@ namespace Lanyard.Application.Services;
 /// Service for controlling music playback via SignalR.
 /// Sends commands to remote music players and maintains playback state.
 /// </summary>
-public class MusicPlayerService
+public class MusicPlayerService : IMusicPlayerService
 {
     private readonly IHubContext<SignalRControlHub> _hubContext;
     private readonly ISystemDbContextFactory _contextFactory;
@@ -481,7 +481,12 @@ public class MusicPlayerService
         return true;
     }
 
-    public async Task LoadSongsIntoQueue(Guid clientId, Guid playlistId, Song? song = null)
+    /// <summary>
+    /// Builds the queue for a playlist (optionally led by <paramref name="song"/>) and sends it to the client.
+    /// Fails without touching the client when there is nothing to play: the kiosk can't load an
+    /// empty queue, and older kiosks crash on one.
+    /// </summary>
+    public async Task<Result<bool>> LoadSongsIntoQueue(Guid clientId, Guid playlistId, Song? song = null)
     {
         List<Song> queueToSet;
 
@@ -507,9 +512,17 @@ public class MusicPlayerService
             queueToSet = [song, .. playlistSongs.Where(x => x.Id != song.Id)];
         }
 
+        if (queueToSet.Count == 0)
+        {
+            _logger.LogWarning("Not loading playlist {PlaylistId} on client {ClientId}: it has no active songs", playlistId, clientId);
+            return Result<bool>.Fail("This playlist has no songs to play.");
+        }
+
         await SetQueue(clientId, queueToSet, playlistId, 0);
 
         await SendToClientAsync(clientId, "LoadPlaylist", queueToSet.ToDictionary(x => x.Id, _ => playlistId));
+
+        return Result<bool>.Ok(true);
     }
 
     public async Task Play(Guid clientId)
@@ -523,17 +536,23 @@ public class MusicPlayerService
         await SendToClientAsync(clientId, "Play");
     }
 
-    public async Task Play(Guid clientId, Guid playlistId)
+    public async Task<Result<bool>> Play(Guid clientId, Guid playlistId)
     {
+        Result<bool> loadResult = await LoadSongsIntoQueue(clientId, playlistId);
+        if (!loadResult.IsSuccess)
+        {
+            return loadResult;
+        }
+
         ClientMusicState state = GetOrCreateState(clientId);
         lock (_lock)
         {
             state.LastPositionUpdateUtc = DateTime.UtcNow;
         }
 
-        await LoadSongsIntoQueue(clientId, playlistId);
-
         await SendToClientAsync(clientId, "Play");
+
+        return Result<bool>.Ok(true);
     }
 
 
@@ -786,6 +805,20 @@ public class MusicPlayerService
         }
 
         await SendToClientAsync(clientId, "SetVolume", normalizedVolume);
+    }
+
+    /// <summary>
+    /// Records a volume the client reported about itself. Unlike <see cref="SetVolume"/> this
+    /// doesn't send anything back, so a report can't echo into a second command.
+    /// </summary>
+    public void ReportVolumeFromClient(Guid clientId, int volume)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        lock (_lock)
+        {
+            state.CurrentVolume = Math.Clamp(volume, 0, 100);
+        }
     }
 
     public int GetCurrentVolume(Guid clientId)

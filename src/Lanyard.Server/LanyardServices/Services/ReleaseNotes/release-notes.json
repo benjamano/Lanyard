@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Scheduled automation rules now run at UK time, and playing an empty playlist no longer breaks the kiosk's music.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -666,7 +666,10 @@
       "You can now see your shifts in Google, Apple or Outlook calendar. On My Shifts, choose Add to calendar (or go to Account Management > Shift Calendar) and create your private calendar link.",
       "Your calendar keeps itself up to date as the rota changes, usually within an hour (Google Calendar can take up to a day). It only shows shifts your manager has published, with the position and location. Changes a manager hasn't published yet don't appear.",
       "The link is only shown once, and anyone who has it can see your shifts. If you lose it or think someone else has it, get a new one, which stops the old one working. You can also turn it off.",
-      "Your calendar stops showing shifts if you leave the location, your account is locked, or shift management is turned off for the company."
+      "Your calendar stops showing shifts if you leave the location, your account is locked, or shift management is turned off for the company.",
+      "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
+      "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
+      "Kiosk software 1.0.42 also copes with an empty playlist on its own."
     ]
   }
 ]

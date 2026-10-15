@@ -144,15 +144,23 @@ public class MusicControlHandler : IDisposable
         connection.On("LoadPlaylist", async (Dictionary<Guid, Guid> songList) =>
         {
             _logger.LogInformation("Received LOADPLAYLIST command");
-            Result<bool> result = await _musicPlayer.LoadPlaylist(songList);
 
-            if (result.IsSuccess)
+            try
             {
-                _logger.LogInformation("Playlist loaded successfully");
+                Result<bool> result = await _musicPlayer.LoadPlaylist(songList);
+
+                if (result.IsSuccess)
+                {
+                    _logger.LogInformation("Playlist loaded successfully");
+                }
+                else
+                {
+                    _logger.LogError("Failed to load playlist: {Error}", result.Error);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogError("Failed to load playlist: {Error}", result.Error);
+                _logger.LogError(ex, "Failed to load playlist");
             }
         });
 
