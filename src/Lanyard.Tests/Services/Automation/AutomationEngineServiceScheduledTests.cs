@@ -15,12 +15,14 @@ namespace Lanyard.Tests.Services.Automation;
 /// Scheduled-trigger behaviour. Mirrors AutomationEngineServiceIdleTests: the timer loop in
 /// ScheduledTriggerHostedService is deliberately left untested, since ProcessScheduledRulesAsync
 /// takes "now" as a parameter so the interesting behaviour can be driven at fixed instants instead.
-/// Engine-level tests use DateTime.Now-relative deltas rather than a hardcoded calendar date, so
-/// they don't depend on which timezone the machine running them is in.
+/// Engine-level tests use deltas relative to the venue clock (VenueNow) rather than a hardcoded
+/// calendar date, so they don't depend on which timezone the machine running them is in.
 /// </summary>
 [TestClass]
 public class AutomationEngineServiceScheduledTests
 {
+    private static DateTime VenueNow => RotaTime.ToVenueLocal(DateTime.UtcNow);
+
     private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
     {
         return new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -205,7 +207,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -223,7 +225,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal.AddHours(1)));
 
         RecordingActionExecutor executor = new();
@@ -241,7 +243,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -262,7 +264,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -282,7 +284,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         DayOfWeek tomorrow = nowLocal.AddDays(1).DayOfWeek;
 
         // Only tomorrow is listed, so today must not fire even though the time matches exactly.
@@ -303,7 +305,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         // Stands in for a kiosk that was offline when its scheduled action was due.
@@ -325,7 +327,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -346,7 +348,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, false);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -400,7 +402,7 @@ public class AutomationEngineServiceScheduledTests
         RecordingActionExecutor executor = new();
         AutomationEngineService engine = GetEngine(options, executor);
 
-        await engine.ProcessScheduledRulesAsync(DateTime.Now, CancellationToken.None);
+        await engine.ProcessScheduledRulesAsync(VenueNow, CancellationToken.None);
 
         Assert.AreEqual(0, executor.ExecutedActionIds.Count);
     }
@@ -412,7 +414,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(DateTime.Now));
+        await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(VenueNow));
 
         RecordingActionExecutor executor = new();
         AutomationEngineService engine = GetEngine(options, executor);
@@ -434,7 +436,7 @@ public class AutomationEngineServiceScheduledTests
 
         // The seeded scheduled rule carries TriggerEvent = NotStarted. Without the TriggerType
         // clause in ProcessTransitionAsync it would also fire on this transition.
-        await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(DateTime.Now));
+        await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(VenueNow));
 
         RecordingActionExecutor executor = new();
         AutomationEngineService engine = GetEngine(options, executor);
@@ -453,7 +455,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         RecordingActionExecutor executor = new();
@@ -477,7 +479,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         Guid ruleId = await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         // A prior successful execution earlier today, as if the rule already fired before a restart.
@@ -500,7 +502,7 @@ public class AutomationEngineServiceScheduledTests
         await SeedEngineEnabledAsync(options, true);
 
         Guid clientId = Guid.NewGuid();
-        DateTime nowLocal = DateTime.Now;
+        DateTime nowLocal = VenueNow;
         Guid ruleId = await SeedScheduledRuleAsync(options, clientId, TimeOnly.FromDateTime(nowLocal));
 
         await SeedExecutionAsync(options, ruleId, clientId, DateTime.UtcNow, overallSuccess: false);
@@ -512,5 +514,28 @@ public class AutomationEngineServiceScheduledTests
 
         Assert.AreEqual(1, executor.ExecutedActionIds.Count,
             "A restart after only a failed attempt should still allow the catch-up retry.");
+    }
+
+    [TestMethod]
+    public async Task ProcessScheduledRules_ReadsThePriorRunDateOnTheVenueClockNotTheServers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        await SeedEngineEnabledAsync(options, true);
+
+        Guid clientId = Guid.NewGuid();
+        Guid ruleId = await SeedScheduledRuleAsync(options, clientId, new TimeOnly(0, 30));
+
+        // 23:30 UTC on 1 July is 00:30 on 2 July in the UK (BST), so the rule has already run
+        // on the venue's 2 July even though the UTC date is still 1 July.
+        await SeedExecutionAsync(options, ruleId, clientId,
+            new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc), overallSuccess: true);
+
+        RecordingActionExecutor executor = new();
+        AutomationEngineService engine = GetEngine(options, executor);
+
+        await engine.ProcessScheduledRulesAsync(new DateTime(2026, 7, 2, 0, 32, 0), CancellationToken.None);
+
+        Assert.AreEqual(0, executor.ExecutedActionIds.Count,
+            "The run at 00:30 UK time on 2 July must count as that day's run after a restart.");
     }
 }

@@ -22,9 +22,8 @@ public class AutomationRule : ICompanyOwned
     // ClientIdle rule without one rather than letting a rule that can never fire be saved.
     public int? IdleThresholdMinutes { get; set; }
 
-    // Required when TriggerType is Scheduled, null otherwise. Server-local wall-clock time -
-    // matches HallOfFamePeriodExtensions/Client.AutoRestartTimeOfDay, since there is no venue
-    // timezone concept in this app and local is the basis staff actually experience.
+    // Required when TriggerType is Scheduled, null otherwise. Venue wall-clock time (UK, see
+    // RotaTime) - the basis staff actually experience, whatever zone the server runs in.
     public TimeOnly? ScheduledTimeOfDay { get; set; }
 
     // Meaningful only when TriggerType is Scheduled. CSV of System.DayOfWeek integer values

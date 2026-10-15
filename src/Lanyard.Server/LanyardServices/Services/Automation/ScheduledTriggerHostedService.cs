@@ -1,5 +1,6 @@
 #nullable enable
 
+using Lanyard.Infrastructure.Enum;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -12,9 +13,9 @@ namespace Lanyard.Application.Services;
 /// Same "no inbound event, needs a clock" reasoning as IdleTriggerHostedService, kept as its own
 /// hosted service rather than folded into that one: the name and doc on that class are specifically
 /// about idle detection, and per-tick exception isolation means a failing idle evaluation can't
-/// skip a scheduled evaluation in the same tick, or vice versa. DateTime.Now (not UtcNow) is
-/// intentional - scheduled rules fire on server-local wall-clock time, matching
-/// HallOfFamePeriodExtensions.ToUtcLowerBound and Client.AutoRestartTimeOfDay.
+/// skip a scheduled evaluation in the same tick, or vice versa. Rules fire on venue wall-clock
+/// time via RotaTime, not DateTime.Now: the container runs in UTC, so server-local time would
+/// fire every rule an hour late through British Summer Time.
 /// </remarks>
 public class ScheduledTriggerHostedService(
     AutomationEngineService engineService,
@@ -37,7 +38,7 @@ public class ScheduledTriggerHostedService(
             {
                 try
                 {
-                    await _engineService.ProcessScheduledRulesAsync(DateTime.Now, stoppingToken);
+                    await _engineService.ProcessScheduledRulesAsync(RotaTime.ToVenueLocal(DateTime.UtcNow), stoppingToken);
                 }
                 catch (Exception ex)
                 {
