@@ -780,6 +780,12 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("OfflineAfterSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("OfflineFallbackEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("PinnedClientVersion")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -789,6 +795,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("PreferredAudioDeviceName")
                         .HasColumnType("text");
+
+                    b.Property<int>("ProjectionCacheLimitMb")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ReportedClientVersion")
                         .HasMaxLength(32)
@@ -913,11 +922,29 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime>("LastHeartbeatUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastOfflineEndedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastOfflineStartedUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<long>("MachineUptimeSeconds")
                         .HasColumnType("bigint");
 
                     b.Property<double?>("MemoryPercent")
                         .HasColumnType("double precision");
+
+                    b.Property<long?>("OfflineCacheBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("OfflineCacheSyncedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("OfflineFallbackReady")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("OfflineVideosNotCached")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("PacketCaptureConfigured")
                         .HasColumnType("boolean");

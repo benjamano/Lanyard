@@ -672,6 +672,61 @@ namespace Lanyard.Tests.Services.Clients
         }
 
         [TestMethod]
+        public async Task UpdateOfflineFallbackSettingsAsync_SavesTheSettings()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 120, cacheLimitMb: 4096);
+
+            Assert.IsTrue(result.Success, result.Error);
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(120, saved.OfflineAfterSeconds);
+            Assert.AreEqual(4096, saved.ProjectionCacheLimitMb);
+        }
+
+        [TestMethod]
+        [DataRow(9, 2048)]
+        [DataRow(601, 2048)]
+        [DataRow(30, 255)]
+        public async Task UpdateOfflineFallbackSettingsAsync_RejectsOutOfRangeValues(int offlineAfterSeconds, int cacheLimitMb)
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: true, offlineAfterSeconds, cacheLimitMb);
+
+            Assert.IsFalse(result.Success);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_DoesNotOverwriteOfflineSettingsWithAStaleCopy()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            // Another settings tab loaded the client before the offline settings were changed.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+
+            await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 90, cacheLimitMb: 512);
+
+            stale.Notes = "Saved from another tab";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.AreEqual("Saved from another tab", saved.Notes);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(90, saved.OfflineAfterSeconds);
+            Assert.AreEqual(512, saved.ProjectionCacheLimitMb);
+        }
+
+        [TestMethod]
         public async Task SetClientAvailableScreensAsync_ShouldUpdateScreens()
         {
             var options = GetInMemoryOptions();

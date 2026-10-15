@@ -1,6 +1,8 @@
 using Lanyard.Shared.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Forms;
 
@@ -12,6 +14,18 @@ public partial class ProjectionWindow : Window
     private ILogger? _logger;
     private int _failedNavigations;
     private bool _isClosed;
+
+    // Offline player: the page may not have loaded when the runner posts its first step, so the
+    // latest theme and content message are held and re-sent once it has.
+    public const string OfflinePlayerHost = "lanyard-offline.local";
+    public const string OfflineMediaHost = "lanyard-media.local";
+    private static readonly JsonSerializerOptions MessageJsonOptions = new(JsonSerializerDefaults.Web);
+    private bool _pageLoaded;
+    private string? _pendingTheme;
+    private string? _pendingContent;
+
+    /// <summary>True when this window shows the offline player rather than the server's kiosk page.</summary>
+    public bool IsOffline { get; private set; }
 
     /// <summary>
     /// True when this window closed itself because the WebView2 browser process died, which
@@ -72,6 +86,64 @@ public partial class ProjectionWindow : Window
         WebView.CoreWebView2.Navigate(url);
     }
 
+    /// <summary>
+    /// Shows the offline player (bundled with the client) instead of the server's page. Videos are
+    /// served from the offline cache folder through a second virtual host, so they play from disk
+    /// with seeking, and nothing on the kiosk listens on a port.
+    /// </summary>
+    public async Task InitializeOfflineAsync(CoreWebView2Environment environment, string mediaFolder, ILogger logger)
+    {
+        IsOffline = true;
+        _logger = logger;
+        _url = $"https://{OfflinePlayerHost}/index.html";
+
+        await WebView.EnsureCoreWebView2Async(environment);
+
+        string playerFolder = Path.Combine(AppContext.BaseDirectory, "ProjectionPrograms", "Offline", "Player");
+
+        WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(OfflinePlayerHost, playerFolder, CoreWebView2HostResourceAccessKind.Allow);
+        WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(OfflineMediaHost, mediaFolder, CoreWebView2HostResourceAccessKind.Allow);
+
+        WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+        WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
+
+        WebView.CoreWebView2.Navigate(_url);
+    }
+
+    /// <summary>Sends a message to the offline player. Safe to call from any thread.</summary>
+    public void PostOfflineMessage(object message, bool isTheme = false)
+    {
+        string json = JsonSerializer.Serialize(message, MessageJsonOptions);
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (isTheme)
+            {
+                _pendingTheme = json;
+            }
+            else
+            {
+                _pendingContent = json;
+            }
+
+            if (_pageLoaded && !_isClosed)
+            {
+                WebView.CoreWebView2?.PostWebMessageAsJson(json);
+            }
+        });
+    }
+
+    private void SendPendingOfflineMessages()
+    {
+        foreach (string? json in new[] { _pendingTheme, _pendingContent })
+        {
+            if (json != null)
+            {
+                WebView.CoreWebView2?.PostWebMessageAsJson(json);
+            }
+        }
+    }
+
     // Without this, a kiosk that opens its window while the server is unreachable sits on
     // Chromium's "can't reach this page" until someone restarts it. Retries with the same
     // backoff as the SignalR connect loop. Runs on the dispatcher, so the await resumes there too.
@@ -80,6 +152,14 @@ public partial class ProjectionWindow : Window
         if (e.IsSuccess)
         {
             _failedNavigations = 0;
+
+            if (IsOffline)
+            {
+                // Also covers a reload after a renderer crash, which starts the page blank again.
+                _pageLoaded = true;
+                SendPendingOfflineMessages();
+            }
+
             return;
         }
 

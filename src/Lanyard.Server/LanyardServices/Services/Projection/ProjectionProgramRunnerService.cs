@@ -2,6 +2,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.Projection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -14,14 +15,9 @@ public class ProjectionProgramRunnerService(
     private readonly ISystemDbContextFactory _factory = factory;
     private readonly ILogger<ProjectionProgramRunnerService> _logger = logger;
 
-    // How often a held step re-checks for pause/skip/stop. Paused time doesn't count
-    // toward the step's hold, so a plain Task.Delay for the whole hold can't be used -
-    // it would have to be torn down and its remaining time recomputed on every pause.
-    private const int TickMilliseconds = 200;
-
-    // A step with no configured hold falls back to 5s, matching the behaviour the
-    // kiosk page's own loop had before playback moved server-side.
-    private const int DefaultHoldMilliseconds = 5000;
+    // Hold, tick and next-step rules live in ProjectionSequence (Lanyard.Shared), so the kiosk's
+    // offline player follows the same ones. Paused time doesn't count toward a step's hold, so a
+    // plain Task.Delay for the whole hold can't be used - the hold loop re-checks every tick.
 
     public event Action<Guid, int, Guid>? OnProgramStarted;
     public event Action<Guid, int, int>? OnProgramStepAdvanced;
@@ -169,22 +165,16 @@ public class ProjectionProgramRunnerService(
                     continue;
                 }
 
-                index++;
+                ProjectionStepPosition next = ProjectionSequence.Advance(index, run.Steps.Count, completedPasses, repeatInfinitely, repeatCount);
 
-                if (index < run.Steps.Count)
-                {
-                    continue;
-                }
-
-                index = 0;
-
-                if (!repeatInfinitely && completedPasses >= repeatCount)
+                if (next.Finished)
                 {
                     completedNaturally = true;
                     break;
                 }
 
-                completedPasses++;
+                index = next.Index;
+                completedPasses = next.CompletedPasses;
             }
         }
         catch (OperationCanceledException)
@@ -220,8 +210,7 @@ public class ProjectionProgramRunnerService(
 
     private async Task HoldStepAsync(RunningProgram run, ProjectionProgramStep step, CancellationToken token)
     {
-        int holdMilliseconds = step.HoldForMilliseconds == 0 ? DefaultHoldMilliseconds : step.HoldForMilliseconds;
-        TimeSpan hold = TimeSpan.FromMilliseconds(holdMilliseconds);
+        TimeSpan hold = ProjectionSequence.EffectiveHold(step.HoldForMilliseconds);
 
         // Played time comes from the run's PlayClock, which stops while paused. Paused time
         // therefore never counts toward the hold (resuming continues the step where it left
@@ -249,21 +238,10 @@ public class ProjectionProgramRunnerService(
         }
     }
 
-    /// <summary>
-    /// How long the hold loop sleeps before re-checking. The last delay of a hold is trimmed to
-    /// what remains so the step ends on time, but only while playing: paused, the remaining time
-    /// doesn't shrink, so trimming would spin every millisecond for as long as the pause lasts.
-    /// </summary>
+    /// <inheritdoc cref="ProjectionSequence.ComputeHoldDelayMilliseconds"/>
     public static int ComputeHoldDelayMilliseconds(TimeSpan hold, TimeSpan played, bool isPaused)
     {
-        if (isPaused)
-        {
-            return TickMilliseconds;
-        }
-
-        TimeSpan remaining = hold - played;
-
-        return (int)Math.Clamp(Math.Ceiling(remaining.TotalMilliseconds), 1, TickMilliseconds);
+        return ProjectionSequence.ComputeHoldDelayMilliseconds(hold, played, isPaused);
     }
 
     private TimeSpan GetPlayedTime(RunningProgram run)

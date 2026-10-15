@@ -20,8 +20,7 @@ namespace Lanyard.API.Controllers
     [Route("api/kiosk")]
     public class KioskMediaController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService) : ControllerBase
     {
-        // Mirrors KioskTemplateConstants.ParameterNames.Video in Lanyard.App, which this project can't reference.
-        public const string VideoParameterName = "Video File";
+        public const string VideoParameterName = Lanyard.Shared.Projection.ProjectionParameterNames.Video;
 
         [HttpGet("programs/{programId:guid}/steps/{stepId:guid}/video")]
         [AllowAnonymous]
