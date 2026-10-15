@@ -1,5 +1,6 @@
 using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
+using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,6 +69,10 @@ public partial class App : Application
             ISignalRClient signalRClient = provider.GetRequiredService<ISignalRClient>();
             ILaserGameStatePublisher laserGameStatePublisher = provider.GetRequiredService<ILaserGameStatePublisher>();
             laserGameStatePublisher.Register();
+
+            // Loads the offline cache from disk and starts counting from now, so a kiosk that boots
+            // while the server is down plays its cached programs after the usual delay.
+            provider.GetRequiredService<KioskConnectivityMonitor>().Start();
 
             // Skips each beat while disconnected, so it's safe to start before the first connect.
             provider.GetRequiredService<KioskHealthReporter>().Start();
