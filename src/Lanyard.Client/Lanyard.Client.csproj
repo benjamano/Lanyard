@@ -39,4 +39,9 @@
     <ProjectReference Include="..\Lanyard.Client.Watchdog\LanyardClient.Watchdog.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The offline player page: loaded from disk into the projection windows when the server is unreachable. -->
+    <Content Include="ProjectionPrograms\Offline\Player\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

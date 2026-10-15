@@ -4,6 +4,7 @@ using Lanyard.Client.Diagnostics;
 using Lanyard.Client.Health;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.RemoteRestart;
 using Lanyard.Client.RestartScheduler;
 using Lanyard.Client.SignalR;
@@ -63,6 +64,10 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<IGameStateService, GameStateService>();
         services.AddSingleton<ILaserGameStatePublisher, LaserGameStatePublisher>();
         services.AddSingleton<IProjectionProgramsService, ProjectionProgramsService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IKioskOfflineCache, KioskOfflineCache>();
+        services.AddSingleton<IOfflineMusicService, OfflineMusicService>();
+        services.AddSingleton<KioskConnectivityMonitor>();
         services.AddSingleton<DmxController, DmxController>();
         services.AddSingleton<OpenDmxDevice, OpenDmxDevice>();
         services.AddSingleton<ISignalRClient, SignalRClient>();

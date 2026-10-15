@@ -1,6 +1,7 @@
 using Lanyard.Client.AudioDevices;
 using Lanyard.Client.PacketSniffing;
 using Lanyard.Client.ProjectionPrograms;
+using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
 using Microsoft.AspNetCore.SignalR;
@@ -22,7 +23,9 @@ public class KioskHealthReporter(
     DmxController dmxController,
     IPacketSniffer packetSniffer,
     IAudioDeviceService audioDeviceService,
-    IProjectionProgramsService projectionProgramsService)
+    IProjectionProgramsService projectionProgramsService,
+    IKioskOfflineCache offlineCache,
+    KioskConnectivityMonitor connectivityMonitor)
 {
     // The server's Kiosks:Health:HeartbeatIntervalSeconds must match this.
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);
@@ -33,6 +36,8 @@ public class KioskHealthReporter(
     private readonly IPacketSniffer _packetSniffer = packetSniffer;
     private readonly IAudioDeviceService _audioDeviceService = audioDeviceService;
     private readonly IProjectionProgramsService _projectionProgramsService = projectionProgramsService;
+    private readonly IKioskOfflineCache _offlineCache = offlineCache;
+    private readonly KioskConnectivityMonitor _connectivityMonitor = connectivityMonitor;
 
     private readonly SystemMetrics _metrics = new();
     private readonly DateTime _processStartedUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
@@ -98,6 +103,7 @@ public class KioskHealthReporter(
     private KioskHealthReportDTO BuildReport()
     {
         (long? freeBytes, long? totalBytes) = SystemMetrics.SystemDrive();
+        KioskOfflineManifestDTO? manifest = _offlineCache.Manifest;
 
         return new KioskHealthReportDTO
         {
@@ -113,8 +119,26 @@ public class KioskHealthReporter(
             PreferredAudioDevicePresent = _audioDeviceService.PreferredDevicePresent,
             PacketCaptureConfigured = _packetSniffer.IsConfigured,
             PacketCaptureRunning = _packetSniffer.IsCapturing,
-            ProjectionRunningCount = _projectionProgramsService.RunningCount
+            ProjectionRunningCount = _projectionProgramsService.RunningCount,
+            OfflineFallbackReady = OfflineFallbackReady(manifest),
+            OfflineVideosNotCached = manifest is { OfflineFallbackEnabled: true } ? _offlineCache.VideosThatDoNotFit : null,
+            OfflineCacheBytes = manifest is { OfflineFallbackEnabled: true } ? _offlineCache.CachedBytes : null,
+            OfflineCacheSyncedUtc = manifest?.GeneratedUtc,
+            LastOfflineStartedUtc = _connectivityMonitor.LastOfflineStartedUtc,
+            LastOfflineEndedUtc = _connectivityMonitor.LastOfflineEndedUtc,
         };
+    }
+
+    // Null (rather than false) when there's nothing to be ready for: the fallback is off, no
+    // programs are assigned, or the kiosk hasn't synced a copy yet.
+    private bool? OfflineFallbackReady(KioskOfflineManifestDTO? manifest)
+    {
+        if (manifest is not { OfflineFallbackEnabled: true } || manifest.Displays.Count == 0)
+        {
+            return null;
+        }
+
+        return _offlineCache.VideosThatDoNotFit == 0;
     }
 
     // Velopack only knows the version when the app was installed through it; a dev build
