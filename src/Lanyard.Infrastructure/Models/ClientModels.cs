@@ -1,4 +1,4 @@
-﻿using Lanyard.Shared.Contracts;
+using Lanyard.Shared.Contracts;
 using Lanyard.Shared.Enum;
 using System.ComponentModel.DataAnnotations;
 
@@ -93,6 +93,13 @@ public class ClientHealthSnapshot
     public bool PacketCaptureRunning { get; set; }
 
     public int ProjectionRunningCount { get; set; }
+
+    public bool? OfflineFallbackReady { get; set; }
+    public int? OfflineVideosNotCached { get; set; }
+    public long? OfflineCacheBytes { get; set; }
+    public DateTime? OfflineCacheSyncedUtc { get; set; }
+    public DateTime? LastOfflineStartedUtc { get; set; }
+    public DateTime? LastOfflineEndedUtc { get; set; }
 }
 
 public class ClientProjectionSettings
