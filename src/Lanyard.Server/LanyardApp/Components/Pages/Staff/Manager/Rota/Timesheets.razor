@@ -30,6 +30,10 @@
         </div>
 
         <div class="timesheets-actions">
+            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                          Disabled="@(view is null)" OnClick="@OpenExportAsync">
+                Export
+            </FluentButton>
             <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Add())"
                           Disabled="@(view is null)" OnClick="@(() => OpenEditorAsync(null, null, null))">
                 Add time
@@ -283,6 +287,25 @@
         {
             await LoadAsync();
         }
+    }
+
+    private async Task OpenExportAsync()
+    {
+        if (locationId is not int location || view is null)
+        {
+            return;
+        }
+
+        await _dialogService.ShowDialogAsync<ExportTimesheetDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ExportTimesheetDialog.LocationId), location);
+            options.Parameters.Add(nameof(ExportTimesheetDialog.LocationName), view.LocationName);
+            options.Parameters.Add(nameof(ExportTimesheetDialog.CompanyId), view.CompanyId);
+            options.Parameters.Add(nameof(ExportTimesheetDialog.DefaultFrom), weekStart);
+            options.Parameters.Add(nameof(ExportTimesheetDialog.DefaultTo), weekStart.AddDays(6));
+        });
     }
 
     private async Task ApproveAsync(TimeEntry entry)

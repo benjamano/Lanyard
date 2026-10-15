@@ -1,0 +1,166 @@
+@using Lanyard.Application.Services.Locations
+
+@inject ILocationOpeningHoursService _openingHoursService
+@inject INotificationService _toastService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
+            <FluentIcon Value="@(new Icons.Regular.Size20.Clock())" />
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Opening hours</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="opening-hours">
+            <FluentText>
+                When @Content.Name is open, in UK time. Add more than one set of hours to a day if you close in between. Automation rules can use these to only run during, or outside, opening hours.
+            </FluentText>
+
+            @if (_days is null)
+            {
+                <div class="opening-hours-hint">Loading...</div>
+            }
+            else
+            {
+                @foreach (DayRow day in _days)
+                {
+                    DayRow capturedDay = day;
+
+                    <div class="opening-hours-day">
+                        <div class="opening-hours-day-header">
+                            <span class="opening-hours-day-name">@capturedDay.Day</span>
+                            @if (capturedDay.Windows.Count == 0)
+                            {
+                                <span class="opening-hours-closed">Closed</span>
+                            }
+                            <div class="opening-hours-add">
+                                <FluentButton Appearance="ButtonAppearance.Outline"
+                                              IconStart="@(new Icons.Regular.Size20.Add())"
+                                              OnClick="@(() => AddWindow(capturedDay))">
+                                    Add hours
+                                </FluentButton>
+                            </div>
+                        </div>
+
+                        @foreach (WindowRow window in capturedDay.Windows)
+                        {
+                            WindowRow capturedWindow = window;
+
+                            <div class="opening-hours-window">
+                                <AnyTimePicker TValue="TimeOnly" @bind-Value="capturedWindow.OpensAt" Label="Opens" />
+                                <AnyTimePicker TValue="TimeOnly" @bind-Value="capturedWindow.ClosesAt" Label="Closes" />
+                                <div class="opening-hours-remove">
+                                    <FluentButton IconStart="@(new Icons.Regular.Size20.Dismiss())"
+                                                  Title="Remove these hours"
+                                                  OnClick="@(() => capturedDay.Windows.Remove(capturedWindow))" />
+                                </div>
+                            </div>
+
+                            @if (capturedWindow.ClosesAt < capturedWindow.OpensAt)
+                            {
+                                <div class="opening-hours-hint">Closes after midnight, at @capturedWindow.ClosesAt.ToString("HH:mm") the next morning.</div>
+                            }
+                        }
+
+                        @if (Problem is { } problem && problem.Day == capturedDay.Day)
+                        {
+                            <FluentText Color="Color.Error">@problem.Message</FluentText>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </ChildContent>
+    <ActionTemplate>
+        <FluentButton Appearance="ButtonAppearance.Primary"
+                      Loading="@_isSaving"
+                      Disabled="@(_days is null || Problem is not null)"
+                      OnClick="SaveAsync">
+            Save
+        </FluentButton>
+        <FluentButton OnClick="@(() => Dialog.CancelAsync())">Cancel</FluentButton>
+    </ActionTemplate>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter]
+    public required Location Content { get; set; }
+
+    private sealed class WindowRow
+    {
+        public TimeOnly OpensAt { get; set; }
+        public TimeOnly ClosesAt { get; set; }
+    }
+
+    private sealed class DayRow
+    {
+        public DayOfWeek Day { get; init; }
+        public List<WindowRow> Windows { get; } = [];
+    }
+
+    private static readonly DayOfWeek[] MondayFirst =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+        DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+    ];
+
+    private List<DayRow>? _days;
+    private bool _isSaving;
+
+    private List<OpeningHoursWindow> ToWindows() =>
+        [.. (_days ?? []).SelectMany(d => d.Windows.Select(w => new OpeningHoursWindow(d.Day, w.OpensAt, w.ClosesAt)))];
+
+    // The same check SaveOpeningHoursAsync runs, shown under the day it's about before pressing Save.
+    private (DayOfWeek Day, string Message)? Problem => LocationOpeningHoursService.FindProblem(ToWindows());
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<List<OpeningHoursWindow>> result = await _openingHoursService.GetOpeningHoursAsync(Content.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "Failed to load opening hours.");
+            await Dialog.CancelAsync();
+            return;
+        }
+
+        _days = [.. MondayFirst.Select(day => new DayRow { Day = day })];
+
+        foreach (OpeningHoursWindow window in result.Data!)
+        {
+            _days.First(d => d.Day == window.DayOfWeek).Windows.Add(new WindowRow { OpensAt = window.OpensAt, ClosesAt = window.ClosesAt });
+        }
+    }
+
+    // A first window defaults to a full day; a further one starts an hour after the last closes,
+    // which is usually what a split day (lunch, then evening) looks like.
+    private static void AddWindow(DayRow day)
+    {
+        WindowRow? last = day.Windows.LastOrDefault();
+
+        day.Windows.Add(last is null
+            ? new WindowRow { OpensAt = new TimeOnly(10, 0), ClosesAt = new TimeOnly(22, 0) }
+            : new WindowRow { OpensAt = last.ClosesAt.AddHours(1), ClosesAt = last.ClosesAt.AddHours(4) });
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+
+        Result<bool> result = await _openingHoursService.SaveOpeningHoursAsync(Content.Id, ToWindows());
+
+        if (result.IsSuccess)
+        {
+            _toastService.ShowSuccess("Opening hours saved.");
+            await Dialog.CloseAsync(true);
+        }
+        else
+        {
+            _toastService.ShowError(result.Error ?? "Failed to save opening hours.");
+            _isSaving = false;
+        }
+    }
+}

@@ -401,4 +401,63 @@ public class AutomationEngineServiceConditionTests
 
         Assert.HasCount(1, executor.ExecutedActionIds, "A skip row must not be mistaken for today's successful run.");
     }
+
+    private static async Task<int> SeedLocationWithHoursAsync(Harness harness, bool isActive)
+    {
+        await using ApplicationDbContext ctx = new(harness.Options);
+
+        Location location = new() { CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId, Name = "Ipswich", IsActive = isActive, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
+        location.OpeningHours.Add(new LocationOpeningHours
+        {
+            LocationId = 0,
+            DayOfWeek = DayOfWeek.Wednesday,
+            OpensAt = new TimeOnly(10, 0),
+            ClosesAt = new TimeOnly(22, 0),
+            IsActive = true
+        });
+        ctx.Locations.Add(location);
+        await ctx.SaveChangesAsync();
+
+        return location.Id;
+    }
+
+    private static AutomationRuleCondition WhileOpen(int locationId)
+    {
+        return new AutomationRuleCondition
+        {
+            Id = Guid.NewGuid(),
+            ConditionType = AutomationConditionType.DuringOpeningHours,
+            ParametersJson = AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(locationId, true)),
+            IsActive = true
+        };
+    }
+
+    [TestMethod]
+    public async Task Transition_ReadsTheLocationsOpeningHours()
+    {
+        Harness harness = await CreateHarnessAsync();
+        Guid kioskId = Guid.NewGuid();
+        int locationId = await SeedLocationWithHoursAsync(harness, isActive: true);
+        await SeedRuleAsync(harness, kioskId, AutomationTriggerType.GameStatusTransition, WhileOpen(locationId));
+
+        // 16:00 on a Wednesday in London, inside 10:00-22:00.
+        await FireTransitionAsync(harness, kioskId);
+
+        Assert.HasCount(1, harness.Executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task Transition_RefusesADeactivatedLocation()
+    {
+        Harness harness = await CreateHarnessAsync();
+        Guid kioskId = Guid.NewGuid();
+        int locationId = await SeedLocationWithHoursAsync(harness, isActive: false);
+        await SeedRuleAsync(harness, kioskId, AutomationTriggerType.GameStatusTransition, WhileOpen(locationId));
+
+        await FireTransitionAsync(harness, kioskId);
+
+        Assert.IsEmpty(harness.Executor.ExecutedActionIds, "A deactivated location's old hours must not keep a rule running.");
+        StringAssert.Contains((await GetExecutionsAsync(harness)).Single().SkipReason, "no longer exists");
+    }
 }
+

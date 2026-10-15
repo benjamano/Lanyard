@@ -282,6 +282,15 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("TriggerEvent")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("TriggerScoreScope")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TriggerTeam")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TriggerThreshold")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TriggerType")
                         .HasColumnType("integer");
 
@@ -1321,6 +1330,15 @@ namespace Lanyard.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BreakDeduction")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("BreakDeductionAfterHours")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("BreakDeductionMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ClockInWindowMinutes")
                         .HasColumnType("integer");
 
@@ -1335,6 +1353,15 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<decimal>("HoursPerDay")
                         .HasColumnType("numeric");
+
+                    b.Property<int>("PayPeriod")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("PayPeriodAnchorDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PayPeriodStartDay")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("SendShiftReminders")
                         .HasColumnType("boolean");
@@ -2425,6 +2452,39 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Locations");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<TimeOnly>("ClosesAt")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("OpensAt")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId", "DayOfWeek");
+
+                    b.ToTable("LocationOpeningHours");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationSchedulingSettings", b =>
@@ -4851,6 +4911,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationOpeningHours", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany("OpeningHours")
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationSchedulingSettings", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
@@ -5510,6 +5581,8 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.Navigation("Memberships");
+
+                    b.Navigation("OpeningHours");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicSchedule", b =>

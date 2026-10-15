@@ -40,7 +40,42 @@ namespace Lanyard.Infrastructure.Models
 
         public virtual List<UserLocationMembership> Memberships { get; set; } = [];
 
+        public virtual List<LocationOpeningHours> OpeningHours { get; set; } = [];
+
         public string GetDisplayName() => $"{Company?.Name} {Name}".Trim();
+    }
+
+    /// <summary>
+    /// One opening window on one day of the week. A row per window rather than one open/close pair
+    /// per day, so a venue that shuts between lunch and dinner can say so.
+    /// </summary>
+    /// <remarks>
+    /// Same shape as the opening hours on the kitchen ordering branch (PR #113), so the two features
+    /// share one table: there, ordering is only allowed inside these windows. Two differences to
+    /// reconcile when that branch is revived: windows here may run past midnight (ClosesAt at or
+    /// before OpensAt), and removed windows are soft-deleted (IsActive) rather than deleted.
+    /// Times are venue-local (RotaTime.VenueZone). No rows for a day means closed that day.
+    /// </remarks>
+    public class LocationOpeningHours
+    {
+        public int Id { get; set; }
+
+        public required int LocationId { get; set; }
+        public Location? Location { get; set; }
+
+        public DayOfWeek DayOfWeek { get; set; }
+
+        public TimeOnly OpensAt { get; set; }
+
+        /// <summary>
+        /// Exclusive. At or before OpensAt means the window closes after midnight, so it runs on into
+        /// the next morning (18:00-02:00 on Saturday covers 00:00-02:00 on Sunday).
+        /// </summary>
+        public TimeOnly ClosesAt { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime CreateDate { get; set; }
     }
 
     public class UserLocationMembership

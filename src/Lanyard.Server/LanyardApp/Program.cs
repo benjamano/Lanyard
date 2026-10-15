@@ -127,6 +127,7 @@ builder.Services.AddScoped<ITrainingAnalyticsService, TrainingAnalyticsService>(
 builder.Services.AddScoped<ITrainingBrandingResolver, TrainingBrandingResolver>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICompanyLocationService, CompanyLocationService>();
+builder.Services.AddScoped<ILocationOpeningHoursService, LocationOpeningHoursService>();
 builder.Services.AddScoped<IAppIconService, AppIconService>();
 builder.Services.AddScoped<ICurrentLocationContext, CurrentLocationContextService>();
 builder.Services.AddScoped<ICompanyFeatureService, CompanyFeatureService>();
@@ -160,6 +161,7 @@ builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
 builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
+builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
 builder.Services.AddScoped<ITimeOffService, TimeOffService>();
 builder.Services.AddHostedService<CourseRecurrenceHostedService>();
@@ -223,6 +225,7 @@ builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExe
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.AddHostedService<GameDataTriggerHostedService>();
 builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();

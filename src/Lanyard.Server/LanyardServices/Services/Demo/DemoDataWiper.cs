@@ -42,6 +42,7 @@ internal static class DemoDataWiper
         await ctx.Shifts.ExecuteDeleteAsync(ct);
         await ctx.ClockInTerminals.ExecuteDeleteAsync(ct);
         await ctx.LocationSchedulingSettings.ExecuteDeleteAsync(ct);
+        await ctx.LocationOpeningHours.ExecuteDeleteAsync(ct);
         await ctx.TimeOffRequests.ExecuteDeleteAsync(ct);
         await ctx.TimeOffAllowances.ExecuteDeleteAsync(ct);
         await ctx.TimeOffTypes.ExecuteDeleteAsync(ct);
@@ -65,6 +66,7 @@ internal static class DemoDataWiper
         await ctx.AutomationRuleActionExecutions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRuleExecutions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRuleActions.ExecuteDeleteAsync(ct);
+        await ctx.AutomationRuleConditions.ExecuteDeleteAsync(ct);
         await ctx.AutomationRules.ExecuteDeleteAsync(ct);
 
         // DMX, game results, projection, kiosks

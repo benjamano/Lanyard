@@ -132,6 +132,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
         public DbSet<MusicSchedule> MusicSchedules { get; set; }
         public DbSet<MusicDaypart> MusicDayparts { get; set; }
+        public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -706,6 +707,9 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.PlaylistId)
                 .OnDelete(DeleteBehavior.Restrict);
+            // Read for one location at a time; several windows per day, so not unique.
+            modelBuilder.Entity<LocationOpeningHours>()
+                .HasIndex(x => new { x.LocationId, x.DayOfWeek });
 
             // ---- Chat ----
             // One direct conversation per pair of people.
@@ -1019,6 +1023,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<MusicSchedule>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<MusicDaypart>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.MusicSchedule!.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<LocationOpeningHours>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));
             modelBuilder.Entity<UserPosition>().HasQueryFilter(x => TenantFilterDisabled || x.StaffPosition!.CompanyId == TenantCompanyId);

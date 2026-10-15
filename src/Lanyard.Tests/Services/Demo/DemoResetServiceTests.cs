@@ -68,6 +68,7 @@ public class DemoResetServiceTests
         {
             ctx.Songs.Add(new Song { Id = Guid.NewGuid(), Name = "Real song", AlbumName = "Real", FilePath = "real.mp3", CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId, IsActive = true });
             ctx.Announcements.Add(new Announcement { Id = Guid.NewGuid(), CompanyId = ApplicationDbContext.SeedPlay2DayCompanyId, LocationId = ApplicationDbContext.SeedIpswichLocationId, Title = "Real announcement", Body = "Real", IsActive = true });
+            ctx.LocationOpeningHours.Add(new LocationOpeningHours { LocationId = ApplicationDbContext.SeedIpswichLocationId, DayOfWeek = DayOfWeek.Monday, OpensAt = new TimeOnly(9, 0), ClosesAt = new TimeOnly(17, 0), IsActive = true });
             await ctx.SaveChangesAsync();
         }
     }
@@ -165,6 +166,11 @@ public class DemoResetServiceTests
             Assert.IsTrue(await ctx.Users.AnyAsync(x => x.Id == ApplicationDbContext.SeedAdminUserId));
             Assert.AreEqual(2, await ctx.Locations.CountAsync(x => x.CompanyId == ApplicationDbContext.SeedPlay2DayCompanyId));
             Assert.AreEqual("Play2Day", (await ctx.Companies.SingleAsync(x => x.Id == ApplicationDbContext.SeedPlay2DayCompanyId)).Name);
+            Assert.AreEqual(1, await ctx.LocationOpeningHours.CountAsync(x => x.LocationId == ApplicationDbContext.SeedIpswichLocationId));
+
+            // The demo's own hours (one window a day) are wiped and reseeded each time, not added again on top.
+            List<int> demoLocationIds = await ctx.Locations.Where(x => x.CompanyId == demoId).Select(x => x.Id).ToListAsync();
+            Assert.AreEqual(7 * demoLocationIds.Count, await ctx.LocationOpeningHours.CountAsync(x => demoLocationIds.Contains(x.LocationId)));
         }
     }
 
