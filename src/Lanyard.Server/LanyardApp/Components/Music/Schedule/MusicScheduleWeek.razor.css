@@ -1,0 +1,110 @@
+/* Phone first: the days stack into one list. */
+.schedule-week {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    width: 100%;
+}
+
+.schedule-day {
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.schedule-day-header {
+    background: var(--colorNeutralBackground3);
+    font-weight: 600;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+    border-radius: 6px 6px 0 0;
+}
+
+.schedule-day-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    flex: 1;
+}
+
+.schedule-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 6px 8px 6px 11px;
+    border: none;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--colorBrandBackground) 9%, transparent);
+    box-shadow: inset 3px 0 0 var(--colorBrandBackground);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.schedule-block:hover {
+    background: color-mix(in srgb, var(--colorBrandBackground) 15%, transparent);
+}
+
+.schedule-block.is-off {
+    background: var(--colorNeutralBackground3);
+    box-shadow: inset 3px 0 0 var(--colorNeutralStroke1);
+}
+
+.schedule-block:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: 1px;
+}
+
+.schedule-block-time {
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground2);
+    font-variant-numeric: tabular-nums;
+}
+
+.schedule-block-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.schedule-block-detail {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground2);
+    overflow-wrap: anywhere;
+}
+
+.schedule-carry {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    color: var(--colorNeutralForeground3);
+    border: 1px dashed var(--colorNeutralStroke2);
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+.schedule-carry-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.schedule-empty {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}
+
+/* Wide screens: one column per day. Below about 1100px seven columns get too narrow to read. */
+@media (min-width: 1100px) {
+    .schedule-week {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .schedule-day-body {
+        min-height: 160px;
+    }
+}

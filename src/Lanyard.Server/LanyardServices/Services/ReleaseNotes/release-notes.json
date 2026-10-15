@@ -656,7 +656,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -683,7 +683,11 @@
       "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy.",
       "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
       "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
-      "Kiosk software 1.0.42 also copes with an empty playlist on its own."
+      "Kiosk software 1.0.42 also copes with an empty playlist on its own.",
+      "New Music Schedule page for managers (Management > Music Schedule). Plan what plays at your location, and how loud, at each time of day, for example a quieter playlist before opening and music off after closing, without an automation rule for every change.",
+      "Each part of the day has a name, the days it runs, a start and end time in UK time, a playlist (or Music off) and, if you like, a volume. One that ends after midnight carries on into the next morning, and parts of the day can't overlap. Times with nothing scheduled leave the music as it is.",
+      "The schedule starts switched off. Turn on \"Use this schedule\" when it's ready. Managers can change their own location's schedule; admins can pick any location.",
+      "Kiosks now have a location (Manage > Clients, a kiosk's settings, General tab). A kiosk follows the music schedule of the location it's set to."
     ]
   }
 ]

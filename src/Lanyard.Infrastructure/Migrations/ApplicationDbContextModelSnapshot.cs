@@ -795,6 +795,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<DateTime?>("LastUpdateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("MostRecentConnectionId")
                         .HasColumnType("text");
 
@@ -841,6 +844,8 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");
+
+                    b.HasIndex("LocationId");
 
                     b.ToTable("Clients");
                 });
@@ -2443,6 +2448,87 @@ namespace Lanyard.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("LocationSchedulingSettings");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicDaypart", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreateByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DaysOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MusicScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("PlaylistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Volume")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MusicScheduleId");
+
+                    b.HasIndex("PlaylistId");
+
+                    b.ToTable("MusicDayparts");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId")
+                        .IsUnique();
+
+                    b.ToTable("MusicSchedules");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.NotificationPreference", b =>
@@ -4203,6 +4289,13 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Location");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientAvailableAudioDevice", b =>
@@ -4756,6 +4849,35 @@ namespace Lanyard.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.LocationSchedulingSettings", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Location");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicDaypart", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.MusicSchedule", "MusicSchedule")
+                        .WithMany("Dayparts")
+                        .HasForeignKey("MusicScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Playlist", "Playlist")
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("MusicSchedule");
+
+                    b.Navigation("Playlist");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicSchedule", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
                         .WithMany()
@@ -5385,6 +5507,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Location", b =>
                 {
                     b.Navigation("Memberships");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.MusicSchedule", b =>
+                {
+                    b.Navigation("Dayparts");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Playlist", b =>

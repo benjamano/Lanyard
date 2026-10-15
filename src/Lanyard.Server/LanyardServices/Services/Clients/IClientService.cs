@@ -32,6 +32,10 @@ public interface IClientService
     // Saves a kiosk's offline fallback settings (validated against KioskOfflineLimits) and re-sends
     // its programs so it refetches its offline manifest straight away.
     Task<Result<bool>> UpdateOfflineFallbackSettingsAsync(Guid clientId, bool enabled, int offlineAfterSeconds, int cacheLimitMb);
+
+    // Puts a kiosk in one of its company's active locations (or none, with null) so it follows
+    // that location's music schedule. UpdateClientAsync never writes the location.
+    Task<Result<bool>> SetClientLocationAsync(Guid clientId, int? locationId);
     Task<Result<bool>> TriggerProjectionProgramOnClientAsync(Guid clientId, Guid projectionProgramId, int? displayIndex = null);
     Task<Result<bool>> CloseTemporaryProjectionWindowOnClientAsync(Guid clientId, int displayIndex);
     Task SetClientAvailableDmxDevicesAsync(Guid clientId, IEnumerable<string> dmxDevices);
