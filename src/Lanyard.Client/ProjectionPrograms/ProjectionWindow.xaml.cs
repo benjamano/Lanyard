@@ -1,3 +1,5 @@
+using Lanyard.Shared.Contracts;
+using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using System.Windows;
 using System.Windows.Forms;
@@ -6,11 +8,27 @@ namespace Lanyard.Client.ProjectionPrograms;
 
 public partial class ProjectionWindow : Window
 {
+    private string _url = string.Empty;
+    private ILogger? _logger;
+    private int _failedNavigations;
+    private bool _isClosed;
+
+    /// <summary>
+    /// True when this window closed itself because the WebView2 browser process died, which
+    /// leaves the control unusable. The owner reopens the program instead of treating the
+    /// close as the program finishing.
+    /// </summary>
+    public bool ClosedBecauseBrowserProcessFailed { get; private set; }
+
     public ProjectionWindow()
     {
         InitializeComponent();
 
-        Closed += (_, _) => WebView.Dispose();
+        Closed += (_, _) =>
+        {
+            _isClosed = true;
+            WebView.Dispose();
+        };
     }
 
     // Mirrors the previous Edge-process window placement: positioned at the target monitor's
@@ -39,14 +57,93 @@ public partial class ProjectionWindow : Window
         }
     }
 
-    public async Task InitializeAsync(CoreWebView2Environment environment, string url)
+    public async Task InitializeAsync(CoreWebView2Environment environment, string url, ILogger logger)
     {
+        _url = url;
+        _logger = logger;
+
         await WebView.EnsureCoreWebView2Async(environment);
 
         WebView.CoreWebView2.PermissionRequested += OnPermissionRequested;
         WebView.CoreWebView2.WindowCloseRequested += OnWindowCloseRequested;
+        WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+        WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
 
         WebView.CoreWebView2.Navigate(url);
+    }
+
+    // Without this, a kiosk that opens its window while the server is unreachable sits on
+    // Chromium's "can't reach this page" until someone restarts it. Retries with the same
+    // backoff as the SignalR connect loop. Runs on the dispatcher, so the await resumes there too.
+    private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (e.IsSuccess)
+        {
+            _failedNavigations = 0;
+            return;
+        }
+
+        // Cancelled means something else (a newer Navigate, or the window closing) replaced
+        // this navigation, so there's nothing to retry.
+        if (e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled)
+        {
+            return;
+        }
+
+        _failedNavigations++;
+        TimeSpan delay = ConnectRetryDelay.For(_failedNavigations, unauthorized: false);
+
+        _logger?.LogWarning("Projection page failed to load ({WebErrorStatus}); retrying in {DelaySeconds} seconds (attempt {Attempt})",
+            e.WebErrorStatus, delay.TotalSeconds, _failedNavigations);
+
+        await Task.Delay(delay);
+
+        if (_isClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            WebView.CoreWebView2?.Navigate(_url);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Retrying the projection page failed");
+        }
+    }
+
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+        {
+            // The whole WebView2 is dead and can't be reused; close so the owner reopens it.
+            _logger?.LogError("WebView2 browser process exited ({Reason}); reopening the projection window", e.Reason);
+
+            ClosedBecauseBrowserProcessFailed = true;
+            Close();
+            return;
+        }
+
+        if (e.ProcessFailedKind is CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+        {
+            // The browser survives a renderer crash or hang; reloading starts a fresh renderer.
+            _logger?.LogWarning("WebView2 render process failed ({Kind}, {Reason}); reloading the projection page", e.ProcessFailedKind, e.Reason);
+
+            try
+            {
+                WebView.CoreWebView2?.Reload();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Reloading the projection page failed");
+            }
+        }
     }
 
     // Each program gets a fresh user-data-dir (see CoreWebView2Environment creation), so

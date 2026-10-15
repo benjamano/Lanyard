@@ -146,6 +146,30 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         await onCompleted();
     }
 
+    private async Task ReopenAfterCrashAsync(Guid projectionProgramId, int displayIndex)
+    {
+        try
+        {
+            // A short pause stops a browser that dies on launch from turning into a tight loop.
+            await Task.Delay(TimeSpan.FromSeconds(5));
+
+            ClientProjectionSettingsDTO? settings = loadedProjectionPrograms
+                .FirstOrDefault(x => x.DisplayIndex == displayIndex && x.ProjectionProgram.Id == projectionProgramId);
+
+            if (settings is null)
+            {
+                // The server has since assigned something else; its own push will open that.
+                return;
+            }
+
+            await StartProjectionProgramAsync(settings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reopen projection program {ProgramId} on display {DisplayIndex} after a crash", projectionProgramId, displayIndex);
+        }
+    }
+
     private static Screen ResolveScreen(int displayIndex)
     {
         Screen[] screens = Screen.AllScreens;
@@ -231,6 +255,16 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
                 window.Closed += (_, _) =>
                 {
                     _runningByDisplayKey.Remove(displayKey);
+
+                    if (window.ClosedBecauseBrowserProcessFailed && !isTemporaryTrigger)
+                    {
+                        // An ambient program never ends by itself, so reopen it rather than leave
+                        // the screen dark until the server next sends settings. A crashed temporary
+                        // window is allowed to complete, which hands back to the ambient program.
+                        _ = Task.Run(() => ReopenAfterCrashAsync(projectionProgramId, displayIndex));
+                        return;
+                    }
+
                     closedTcs.TrySetResult();
                 };
 
@@ -244,7 +278,7 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
                 // hosting setup, otherwise EnsureCoreWebView2Async hangs indefinitely.
                 window.Show();
 
-                await window.InitializeAsync(environment, url);
+                await window.InitializeAsync(environment, url, _logger);
             }
             catch (Exception ex)
             {

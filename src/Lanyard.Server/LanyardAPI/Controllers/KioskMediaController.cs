@@ -33,6 +33,8 @@ namespace Lanyard.API.Controllers
                 .AsNoTracking()
                 .TagWithCallSite()
                 .Where(s => s.Id == stepId && s.ProjectionProgramId == programId)
+                // A deleted step or program stops serving its video, so a stale kiosk page can't keep playing it.
+                .Where(s => s.IsActive && s.ProjectionProgram != null && s.ProjectionProgram.IsActive)
                 .SelectMany(s => s.ParameterValues)
                 .Where(pv => pv.Parameter != null && pv.Parameter.Name == VideoParameterName)
                 .Select(pv => pv.Value)

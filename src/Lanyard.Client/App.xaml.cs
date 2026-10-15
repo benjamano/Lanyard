@@ -69,10 +69,13 @@ public partial class App : Application
             ILaserGameStatePublisher laserGameStatePublisher = provider.GetRequiredService<ILaserGameStatePublisher>();
             laserGameStatePublisher.Register();
 
-            await signalRClient.Connect(registrations);
-            await laserGameStatePublisher.PublishAsync();
-
+            // Skips each beat while disconnected, so it's safe to start before the first connect.
             provider.GetRequiredService<KioskHealthReporter>().Start();
+
+            // Not awaited: Connect retries until the server answers, which can be hours if the
+            // server or the internet is down. Nothing after this point may wait on it, so the
+            // kiosk keeps running (DMX, packet capture, and later offline playback) meanwhile.
+            _ = Task.Run(() => ConnectAndPublishAsync(signalRClient, registrations, laserGameStatePublisher));
         }
         catch (Exception ex)
         {
@@ -80,6 +83,21 @@ public partial class App : Application
             // the Watchdog's crash-loop guard sees a real exit, matching the original console app.
             Console.WriteLine($"Fatal startup error: {ex}");
             Environment.Exit(1);
+        }
+    }
+
+    private static async Task ConnectAndPublishAsync(ISignalRClient signalRClient, List<Action<HubConnection>> registrations, ILaserGameStatePublisher laserGameStatePublisher)
+    {
+        try
+        {
+            await signalRClient.Connect(registrations);
+            await laserGameStatePublisher.PublishAsync();
+        }
+        catch (Exception ex)
+        {
+            // Connect is written not to throw; this only guards against a regression turning an
+            // unreachable server back into a dead kiosk. Losing the connection is not fatal.
+            Console.WriteLine($"SignalR connect task failed: {ex}");
         }
     }
 }

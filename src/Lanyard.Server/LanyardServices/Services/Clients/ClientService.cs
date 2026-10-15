@@ -295,10 +295,12 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             IEnumerable<ClientProjectionSettings> projectionSettings = await ctx.ClientProjectionSettings
                 .AsNoTracking()
+                .TagWithCallSite()
                 .Where(x=> x.ClientId == clientId)
                 .Where(x => x.IsActive)
                 .Include(x=> x.ProjectionProgram)
-                    .ThenInclude(x=> x!.ProjectionProgramSteps)
+                    // Soft-deleted steps must not reach kiosks, or a removed step keeps playing.
+                    .ThenInclude(x=> x!.ProjectionProgramSteps.Where(s => s.IsActive))
                         .ThenInclude(x=> x.ParameterValues)
                             .ThenInclude(x=> x.Parameter)
                 .ToListAsync();
@@ -540,7 +542,8 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
 
             foreach (ClientProjectionSettings setting in settings)
             {
-                if (setting.ProjectionProgram == null)
+                // A deleted program's assignment row can outlive it; don't send it to the kiosk.
+                if (setting.ProjectionProgram == null || !setting.ProjectionProgram.IsActive)
                 {
                     continue;
                 }
