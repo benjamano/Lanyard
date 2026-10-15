@@ -1,0 +1,207 @@
+@using Lanyard.Shared.Contracts
+@using Lanyard.Shared.DTO
+
+@inject IClientService _clientService
+@inject IKioskOfflineManifestService _manifestService
+
+@if (client != null)
+{
+    <EditForm Model="@client" OnValidSubmit="SaveAsync" class="mt-2">
+        <FluentStack Orientation="Orientation.Vertical">
+            <div>
+                <FluentSwitch @bind-Value="_enabled" Label="Keep screens playing when the server can't be reached" />
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                    The kiosk keeps a copy of its projection programs and their videos. If it loses the server or the internet, its screens play that copy until the connection comes back.
+                </FluentText>
+            </div>
+
+            <div>
+                <FluentTextInput Value="@_offlineAfterStr"
+                                 ValueChanged="@(v => _offlineAfterStr = v)"
+                                 TextInputType="TextInputType.Number"
+                                 Disabled="!_enabled"
+                                 Label="Switch to offline after (seconds)" />
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                    Between @KioskOfflineLimits.MinOfflineAfterSeconds and @KioskOfflineLimits.MaxOfflineAfterSeconds. A short gap, like a server restart, doesn't switch the screens over.
+                </FluentText>
+            </div>
+
+            <div>
+                <FluentTextInput Value="@_cacheLimitStr"
+                                 ValueChanged="@(v => _cacheLimitStr = v)"
+                                 TextInputType="TextInputType.Number"
+                                 Disabled="!_enabled"
+                                 Label="Video cache limit (MB)" />
+                <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                    At least @KioskOfflineLimits.MinCacheLimitMb MB. Videos that don't fit are skipped while offline.
+                </FluentText>
+            </div>
+
+            <FluentButton class="ms-auto me-0" Type="ButtonType.Submit" Appearance="ButtonAppearance.Outline" IconStart="new Icons.Regular.Size20.Save()">
+                Save
+            </FluentButton>
+
+            <FluentDivider Style="margin: 8px 0;" />
+
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">What plays offline</FluentText>
+
+            @if (!_enabled)
+            {
+                <FluentText>Nothing. Offline fallback is off, so if this kiosk loses the server its screens show a connection error until it's back.</FluentText>
+            }
+            else if (_manifest == null)
+            {
+                <FluentText>@(_manifestError ?? "Loading...")</FluentText>
+            }
+            else if (_manifest.Displays.Count == 0)
+            {
+                <FluentText>No projection programs are assigned to this kiosk, so there's nothing to play offline.</FluentText>
+            }
+            else
+            {
+                @foreach (KioskOfflineDisplayDTO display in _manifest.Displays)
+                {
+                    <div style="margin-bottom: 8px;">
+                        <FluentText Weight="TextWeight.Semibold">Screen @(display.DisplayIndex + 1): @display.ProgramName</FluentText>
+                        <FluentText Style="display: block;">@DescribeDisplay(display)</FluentText>
+                        @if (display.SkippedStepCount > 0 && display.Steps.Count > 0)
+                        {
+                            <FluentText Style="display: block; color: var(--neutral-foreground-hint);">
+                                @StepCount(display.SkippedStepCount) skipped while offline. Dashboards and live capture need the server, and a video step needs its video.
+                            </FluentText>
+                        }
+                    </div>
+                }
+
+                @if (_videoBytes > (long)_savedCacheLimitMb * 1024 * 1024)
+                {
+                    <FluentText Style="display: block; color: var(--colorPaletteRedForeground1);">
+                        These videos need @FormatMb(_videoBytes), more than the @_savedCacheLimitMb MB cache limit, so some won't play offline.
+                    </FluentText>
+                }
+            }
+        </FluentStack>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid? ClientId { get; set; }
+
+    private Client? client;
+
+    private bool _enabled;
+    private string _offlineAfterStr = KioskOfflineLimits.DefaultOfflineAfterSeconds.ToString();
+    private string _cacheLimitStr = KioskOfflineLimits.DefaultCacheLimitMb.ToString();
+    private int _savedCacheLimitMb = KioskOfflineLimits.DefaultCacheLimitMb;
+
+    private KioskOfflineManifestDTO? _manifest;
+    private string? _manifestError;
+    private long _videoBytes;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ClientId != null)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<Client?> result = await _clientService.GetClientFromIdAsync(ClientId!.Value);
+
+        if (!result.IsSuccess || result.Data == null)
+        {
+            _toastService.ShowError($"Failed to load offline settings, {result.Error}");
+            return;
+        }
+
+        client = result.Data;
+        _enabled = client.OfflineFallbackEnabled;
+        _offlineAfterStr = client.OfflineAfterSeconds.ToString();
+        _cacheLimitStr = client.ProjectionCacheLimitMb.ToString();
+        _savedCacheLimitMb = client.ProjectionCacheLimitMb;
+
+        await LoadManifestAsync();
+    }
+
+    private async Task LoadManifestAsync()
+    {
+        Result<KioskOfflineManifestDTO> manifest = await _manifestService.BuildManifestAsync(ClientId!.Value);
+
+        if (!manifest.IsSuccess)
+        {
+            _manifest = null;
+            _manifestError = $"Couldn't work out what plays offline: {manifest.Error}";
+            return;
+        }
+
+        _manifest = manifest.Data!;
+        _manifestError = null;
+
+        // A video used by several steps or screens is only downloaded once.
+        _videoBytes = _manifest.Displays
+            .SelectMany(x => x.Steps)
+            .Where(x => x.VideoFileId != null)
+            .DistinctBy(x => x.VideoFileId)
+            .Sum(x => x.VideoSizeBytes ?? 0);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!int.TryParse(_offlineAfterStr, out int offlineAfterSeconds))
+        {
+            _toastService.ShowError("Enter a whole number of seconds.");
+            return;
+        }
+
+        if (!int.TryParse(_cacheLimitStr, out int cacheLimitMb))
+        {
+            _toastService.ShowError("Enter the cache limit as a whole number of MB.");
+            return;
+        }
+
+        Result<bool> result = await _clientService.UpdateOfflineFallbackSettingsAsync(ClientId!.Value, _enabled, offlineAfterSeconds, cacheLimitMb);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Failed to save offline settings, {result.Error}");
+            return;
+        }
+
+        _savedCacheLimitMb = cacheLimitMb;
+        _toastService.ShowSuccess("Offline settings saved. A connected kiosk picks them up straight away.");
+
+        await LoadManifestAsync();
+    }
+
+    private static string DescribeDisplay(KioskOfflineDisplayDTO display)
+    {
+        if (display.Steps.Count == 0)
+        {
+            return "Nothing on this screen can play offline (dashboards and live capture need the server), so it shows a \"back shortly\" screen instead.";
+        }
+
+        List<KioskOfflineStepDTO> videos = [.. display.Steps.Where(x => x.VideoFileId != null).DistinctBy(x => x.VideoFileId)];
+
+        if (videos.Count == 0)
+        {
+            return $"{StepCount(display.Steps.Count)} play offline.";
+        }
+
+        return $"{StepCount(display.Steps.Count)} play offline, including {videos.Count} {(videos.Count == 1 ? "video" : "videos")} ({FormatMb(videos.Sum(x => x.VideoSizeBytes ?? 0))}).";
+    }
+
+    private static string StepCount(int count)
+    {
+        return count == 1 ? "1 step" : $"{count} steps";
+    }
+
+    private static string FormatMb(long bytes)
+    {
+        double mb = bytes / 1024d / 1024d;
+
+        return mb < 10 ? $"{mb:0.#} MB" : $"{mb:0} MB";
+    }
+}

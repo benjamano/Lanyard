@@ -656,7 +656,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Scheduled automation rules now run at UK time, and playing an empty playlist no longer breaks the kiosk's music.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -671,6 +671,16 @@
       "Your calendar keeps itself up to date as the rota changes, usually within an hour (Google Calendar can take up to a day). It only shows shifts your manager has published, with the position and location. Changes a manager hasn't published yet don't appear.",
       "The link is only shown once, and anyone who has it can see your shifts. If you lose it or think someone else has it, get a new one, which stops the old one working. You can also turn it off.",
       "Your calendar stops showing shifts if you leave the location, your account is locked, or shift management is turned off for the company.",
+      "Kiosks are more reliable when the server or internet goes down. A kiosk that starts up while it can't reach the server no longer closes itself; it keeps trying, waiting a little longer between attempts up to a minute. A kiosk whose shared secret is rejected keeps trying every 5 minutes too, so fixing the secret on the server brings it back without a restart.",
+      "A kiosk screen that fails to load its page now tries again by itself instead of staying on the \"can't reach this page\" error. A screen whose browser crashes reloads or reopens.",
+      "Deleting a step from a projection program, or deleting the program, now stops it showing on kiosks. Before, a deleted step could keep playing.",
+      "Kiosk settings have a new Offline tab (Manage > Clients, then a kiosk's settings). It's where you choose whether a kiosk's screens keep playing when it can't reach the server, how long it waits before switching over (30 seconds to start with), and how much disk space it can use for videos (2 GB to start with). It's on for every kiosk.",
+      "The Offline tab also lists what each screen would play while offline. Text, videos and pauses keep running. Dashboards and live capture need the server, so they're skipped, and a screen with nothing it can play shows a \"back shortly\" screen. It warns you if the videos need more space than the limit.",
+      "When a kiosk can't reach the server for that long, including when it's switched on while the server is down, its screens play the copy: text and videos for the same time as usual, in the same order and with the same repeats. Videos play from the kiosk's own disk. The copy is refreshed whenever you change a program, and at least every 15 minutes.",
+      "If music was playing when the connection dropped, it carries on, shuffling songs the kiosk already has saved. If it wasn't, the kiosk stays quiet.",
+      "When the server comes back and the connection stays up for 10 seconds, the screens go back to the server's programs from the first step, and music goes back to its playlist after the current song.",
+      "Kiosk health now shows each kiosk's offline fallback. The Health tab shows whether it's ready, how much video is cached, when the copy was last updated, and when the kiosk last played offline and for how long. A kiosk whose videos don't all fit the cache shows as Degraded, with how many are missing.",
+      "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy.",
       "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
       "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
       "Kiosk software 1.0.42 also copes with an empty playlist on its own."

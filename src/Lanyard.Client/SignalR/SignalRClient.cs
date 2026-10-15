@@ -56,10 +56,17 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
             _logger.LogWarning("LANYARD_CLIENT_ALLOW_INSECURE_SSL is enabled. TLS certificate validation is disabled for the SignalR connection.");
         }
 
-        await Task.Delay(5000);
+        await Task.Delay(ConnectRetryDelay.Initial);
+
+        // Never throws: a kiosk that can't reach the server must keep running (and keep trying),
+        // not fall through to App's fatal-startup Environment.Exit. Previously only
+        // HttpRequestException was caught, so a negotiate timeout or WebSocket fault killed the process.
+        int failedAttempts = 0;
 
         while (_isConnected == false)
         {
+            bool unauthorized = false;
+
             try
             {
                 HubConnection? previous = _connection;
@@ -75,35 +82,63 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
                 await _connection.StartAsync();
 
-                _isConnected = true;
+                SetConnected(true);
 
                 await SendStatus();
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                // The server rejects an invalid/missing shared secret with 401 at the negotiate
-                // stage. This is a configuration problem that retrying cannot fix, so stop entirely
-                // (log once) instead of spamming reconnect attempts. Restart the client after fixing
-                // LANYARD_CLIENT_SHARED_SECRET to match the server's Clients:SharedSecret.
-                if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    _logger.LogError("SignalR connection refused (401 Unauthorized): the server rejected this "
-                        + "client's shared secret. Ensure LANYARD_CLIENT_SHARED_SECRET matches the server's "
-                        + "Clients:SharedSecret, then restart the client. Not retrying.");
-                    return;
-                }
+                // The server rejects an invalid/missing shared secret with 401 at the negotiate stage.
+                // Keep retrying slowly rather than stopping, so fixing the server's Clients:SharedSecret
+                // recovers the kiosk without anyone visiting it.
+                unauthorized = true;
 
-                _logger.LogError("Error initializing SignalR connection: {Message}", ex.Message);
+                _logger.LogError("SignalR connection refused (401 Unauthorized): the server rejected this "
+                    + "client's shared secret. Ensure LANYARD_CLIENT_SHARED_SECRET matches the server's "
+                    + "Clients:SharedSecret.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Error initializing SignalR connection: {ExceptionType}: {Message}", ex.GetType().Name, ex.Message);
 
                 if (ex.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
                     ex.Message.Contains("certificate", StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogWarning("TLS certificate validation failed. For LAN/dev testing, either set LANYARD_SERVER_URL to http://<server-ip>:5096 or set LANYARD_CLIENT_ALLOW_INSECURE_SSL=true on trusted networks.");
                 }
-
-                _logger.LogInformation("Retrying in 5 seconds...");
-                await Task.Delay(5000);
             }
+
+            if (_isConnected)
+            {
+                break;
+            }
+
+            failedAttempts++;
+            TimeSpan delay = ConnectRetryDelay.For(failedAttempts, unauthorized);
+
+            _logger.LogInformation("Retrying SignalR connection in {DelaySeconds} seconds (attempt {Attempt})", delay.TotalSeconds, failedAttempts);
+            await Task.Delay(delay);
+        }
+    }
+
+    public event Action<bool>? ConnectionStateChanged;
+
+    private void SetConnected(bool connected)
+    {
+        if (_isConnected == connected)
+        {
+            return;
+        }
+
+        _isConnected = connected;
+
+        try
+        {
+            ConnectionStateChanged?.Invoke(connected);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "A ConnectionStateChanged handler threw");
         }
     }
 
@@ -137,7 +172,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
         connection.Reconnecting += (error) =>
         {
-            _isConnected = false;
+            SetConnected(false);
             _logger.LogWarning("SignalR connection lost. Attempting to reconnect...");
 
             return Task.CompletedTask;
@@ -146,6 +181,8 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
         connection.Reconnected += async (connectionId) =>
         {
             _logger.LogInformation("SignalR connection reestablished. Connection ID: {ConnectionId}", connectionId);
+
+            SetConnected(true);
 
             await SendStatus();
         };
@@ -167,7 +204,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
     /// </summary>
     private async Task HandleClosedAsync(Exception? error, string url, bool allowInsecureSsl, List<Action<HubConnection>> registrations)
     {
-        _isConnected = false;
+        SetConnected(false);
         _logger.LogWarning(error, "SignalR connection closed unexpectedly outside automatic reconnect. Rebuilding connection.");
 
         while (_isConnected == false)
@@ -185,7 +222,7 @@ public class SignalRClient(ILogger<ISignalRClient> logger, DmxController dmxCont
 
                 await _connection.StartAsync();
 
-                _isConnected = true;
+                SetConnected(true);
 
                 _logger.LogInformation("Reconnected to SignalR server successfully after an unexpected close.");
 
