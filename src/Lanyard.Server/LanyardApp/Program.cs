@@ -113,6 +113,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();

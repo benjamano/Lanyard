@@ -28,6 +28,9 @@
             <FluentTab Header="Projection" IconStart="@(new Icons.Regular.Size16.ProjectionScreenText())" DeferredLoading="true">
                 <ClientProjectionCapabilities ClientId="@ClientId" />
             </FluentTab>
+            <FluentTab Header="Offline" IconStart="@(new Icons.Regular.Size16.CloudOff())" DeferredLoading="true">
+                <ClientOfflineFallback ClientId="@ClientId" />
+            </FluentTab>
             <FluentTab Header="Music" IconStart="@(new Icons.Regular.Size16.MusicNote2())" DeferredLoading="true">
                 <ClientMusicCapabilities ClientId="@ClientId" />
             </FluentTab>
