@@ -195,6 +195,8 @@ builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
 builder.Services.AddSingleton<MusicPlayerService>();
+// Same instance either way - playback state lives in the singleton, so the interface must not get its own.
+builder.Services.AddSingleton<IMusicPlayerService>(sp => sp.GetRequiredService<MusicPlayerService>());
 builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
 builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
 builder.Services.AddSingleton<IBeatClockService, BeatClockService>();

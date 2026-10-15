@@ -84,6 +84,13 @@ public class MusicPlayer : IMusicPlayer, IDisposable
 
     public async Task<Result<bool>> LoadPlaylist(Dictionary<Guid, Guid> songList)
     {
+        // An empty playlist has nothing to load; keep whatever is queued now rather than
+        // swapping in an empty queue and looking up a song that isn't there.
+        if (songList.Count == 0)
+        {
+            return Result<bool>.Fail("Playlist has no songs");
+        }
+
         SongAndPlaylistQueue = songList;
         QueueIndex = songList.Keys.FirstOrDefault();
 

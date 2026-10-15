@@ -676,7 +676,10 @@
       "If music was playing when the connection dropped, it carries on, shuffling songs the kiosk already has saved. If it wasn't, the kiosk stays quiet.",
       "When the server comes back and the connection stays up for 10 seconds, the screens go back to the server's programs from the first step, and music goes back to its playlist after the current song.",
       "Kiosk health now shows each kiosk's offline fallback. The Health tab shows whether it's ready, how much video is cached, when the copy was last updated, and when the kiosk last played offline and for how long. A kiosk whose videos don't all fit the cache shows as Degraded, with how many are missing.",
-      "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy."
+      "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy.",
+      "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
+      "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
+      "Kiosk software 1.0.42 also copes with an empty playlist on its own."
     ]
   }
 ]

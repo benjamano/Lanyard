@@ -3,7 +3,7 @@
 @implements IDisposable
 
 @inject IPlaylistService PlaylistService
-@inject MusicPlayerService _player
+@inject IMusicPlayerService _player
 
 <FluentCard Height="100%">
     @if (Widget.ClientId == null || Widget.ClientId == Guid.Empty)
@@ -146,7 +146,11 @@
 
         try
         {
-            await _player.Play(clientId, playlistId);
+            Result<bool> playResult = await _player.Play(clientId, playlistId);
+            if (!playResult.IsSuccess)
+            {
+                _toastService.ShowWarning(playResult.Error ?? "Couldn't play that playlist.");
+            }
         }
         finally
         {
