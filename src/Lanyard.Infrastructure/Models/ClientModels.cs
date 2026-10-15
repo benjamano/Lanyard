@@ -26,6 +26,17 @@ public class Client : ICompanyOwned
 
     public int MusicCacheLimitMb { get; set; } = 500;
 
+    // Which venue the kiosk is in, so it follows that location's music schedule. Null until an
+    // Admin assigns one. Only ClientService.SetClientLocationAsync writes it.
+    public int? LocationId { get; set; }
+    public Location? Location { get; set; }
+
+    // Set when someone changes the music by hand while the location's schedule is on: the
+    // schedule leaves this kiosk alone until then (the start of its next part of the day). Kept in
+    // the database so a server restart doesn't undo a manager's choice. Only MusicScheduleEngine
+    // writes it.
+    public DateTime? MusicScheduleOverrideUntilUtc { get; set; }
+
     // Offline fallback: when the kiosk can't reach the server for OfflineAfterSeconds, its screens
     // play their last-known program from a local cache of up to ProjectionCacheLimitMb.
     // Defaults match KioskOfflineLimits (Lanyard.Shared); the migration seeds existing rows the same.

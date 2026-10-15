@@ -1608,5 +1608,71 @@ namespace Lanyard.Tests.Services.Clients
             Assert.AreEqual(Lanyard.Shared.Enum.ClientUpdateRing.Pinned, after.UpdateRing);
             Assert.AreEqual("1.0.40", after.PinnedClientVersion);
         }
+
+        private static async Task<(int OwnLocationId, int OtherCompanyLocationId, Guid ClientId)> SeedClientWithLocationsAsync(DbContextOptions<ApplicationDbContext> options)
+        {
+            await using var ctx = new ApplicationDbContext(options);
+
+            var own = new Company { Name = "Play2Day" };
+            var other = new Company { Name = "Partyman" };
+            ctx.Companies.AddRange(own, other);
+            await ctx.SaveChangesAsync();
+
+            var ownLocation = new Location { CompanyId = own.Id, Name = "Ipswich" };
+            var otherLocation = new Location { CompanyId = other.Id, Name = "Colchester" };
+            ctx.Locations.AddRange(ownLocation, otherLocation);
+
+            var client = new Client { Id = Guid.NewGuid(), CompanyId = own.Id, Name = "Lobby kiosk" };
+            ctx.Clients.Add(client);
+            await ctx.SaveChangesAsync();
+
+            return (ownLocation.Id, otherLocation.Id, client.Id);
+        }
+
+        [TestMethod]
+        public async Task SetClientLocationAsync_PutsTheKioskInOneOfItsCompanysLocations()
+        {
+            var options = GetInMemoryOptions();
+            (int ownLocationId, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+
+            Result<bool> result = await GetService(options).SetClientLocationAsync(clientId, ownLocationId);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            await using var ctx = new ApplicationDbContext(options);
+            Assert.AreEqual(ownLocationId, (await ctx.Clients.SingleAsync()).LocationId);
+        }
+
+        [TestMethod]
+        public async Task SetClientLocationAsync_RefusesAnotherCompanysLocation()
+        {
+            var options = GetInMemoryOptions();
+            (_, int otherCompanyLocationId, Guid clientId) = await SeedClientWithLocationsAsync(options);
+
+            Result<bool> result = await GetService(options).SetClientLocationAsync(clientId, otherCompanyLocationId);
+
+            Assert.IsFalse(result.IsSuccess);
+            await using var ctx = new ApplicationDbContext(options);
+            Assert.IsNull((await ctx.Clients.SingleAsync()).LocationId);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_LeavesTheLocationAlone()
+        {
+            var options = GetInMemoryOptions();
+            (int ownLocationId, _, Guid clientId) = await SeedClientWithLocationsAsync(options);
+            ClientService service = GetService(options);
+
+            // A copy loaded before the location was set, as the hub holds on connect.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+            await service.SetClientLocationAsync(clientId, ownLocationId);
+
+            stale.Name = "Renamed";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync();
+            Assert.AreEqual("Renamed", saved.Name);
+            Assert.AreEqual(ownLocationId, saved.LocationId, "A stale copy must not wipe the location.");
+        }
     }
 }

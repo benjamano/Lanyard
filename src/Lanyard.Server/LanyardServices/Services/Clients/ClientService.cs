@@ -156,6 +156,11 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             entry.Property(x => x.OfflineAfterSeconds).IsModified = false;
             entry.Property(x => x.ProjectionCacheLimitMb).IsModified = false;
 
+            // And the location, owned by SetClientLocationAsync, and the music schedule override,
+            // owned by MusicScheduleEngine.
+            entry.Property(x => x.LocationId).IsModified = false;
+            entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
+
             await ctx.SaveChangesAsync();
 
             // Keep both cached connection-ID lookups in sync immediately, otherwise a
@@ -691,6 +696,48 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating offline fallback settings for client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<bool>> SetClientLocationAsync(Guid clientId, int? locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null)
+            {
+                return Result<bool>.Fail("Client not found.");
+            }
+
+            // Locations have no tenant filter, so the company has to be checked here.
+            if (locationId is int id)
+            {
+                bool isOwnLocation = await ctx.Locations
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .AnyAsync(x => x.Id == id && x.CompanyId == client.CompanyId && x.IsActive);
+
+                if (!isOwnLocation)
+                {
+                    return Result<bool>.Fail("That location isn't one of this company's active locations.");
+                }
+            }
+
+            client.LocationId = locationId;
+
+            await ctx.SaveChangesAsync();
+
+            _logger.LogInformation("Set location of client {ClientId} to {LocationId}", clientId, locationId);
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting the location of client {ClientId}", clientId);
             return Result<bool>.Fail(ex.Message);
         }
     }

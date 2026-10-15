@@ -93,7 +93,9 @@ internal static class DemoDataWiper
         await ctx.ZoneScoreboardSettings.ExecuteDeleteAsync(ct);
         await ctx.Clients.ExecuteDeleteAsync(ct);
 
-        // Music
+        // Music (dayparts point at playlists, so they go first)
+        await ctx.MusicDayparts.ExecuteDeleteAsync(ct);
+        await ctx.MusicSchedules.ExecuteDeleteAsync(ct);
         await ctx.PlaylistSongMembers.ExecuteDeleteAsync(ct);
         await ctx.Playlists.ExecuteDeleteAsync(ct);
         await ctx.Songs.ExecuteDeleteAsync(ct);

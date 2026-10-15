@@ -1,0 +1,46 @@
+.music-schedule {
+    padding: 8px;
+}
+
+.music-schedule-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.music-schedule-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.music-schedule-heading > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 720px;
+}
+
+.music-schedule-setting {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.music-schedule-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 32px 12px;
+    border: 1px dashed var(--colorNeutralStroke2);
+    border-radius: 6px;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.music-schedule ::deep .music-schedule-muted {
+    color: var(--colorNeutralForeground3);
+}

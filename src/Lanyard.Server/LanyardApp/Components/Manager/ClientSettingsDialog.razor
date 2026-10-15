@@ -15,9 +15,27 @@
     <ChildContent>
         <FluentTabs Orientation="Orientation.Horizontal" Size="TabsSize.Small" Height="min(600px, 70dvh)">
             <FluentTab Header="General" IconStart="@(new Icons.Regular.Size16.Person())">
-                <EditForm Model="_updateClientModel" OnValidSubmit="SaveNewClientNameAsync">
+                <EditForm Model="_updateClientModel" OnValidSubmit="SaveGeneralAsync">
                     <FluentTextInput @bind-Value="_updateClientModel.Name" class="w-100" Label="Client Name"
                                      Placeholder="Enter new client name..." />
+                    @* Rendered once the locations are in: the dropdown doesn't reselect its value
+                       when options arrive after it, so it would show "Not set" for a set kiosk. *@
+                    @if (_locationsLoaded)
+                    {
+                        <FluentSelect TOption="string" TValue="string" @bind-Value="_updateClientModel.LocationValue"
+                                      Label="Location" Class="mt-2 w-100">
+                            <FluentOption Value="@NoLocationValue">Not set</FluentOption>
+                            @foreach (Location location in _locations)
+                            {
+                                <FluentOption Value="@location.Id.ToString()">@location.Name</FluentOption>
+                            }
+                        </FluentSelect>
+                    }
+                    <div class="mt-1">
+                        <FluentText Color="Color.Info" Size="TextSize.Size200">
+                            The kiosk plays that location's music schedule.
+                        </FluentText>
+                    </div>
                     <FluentButton Class="mt-2" Appearance="ButtonAppearance.Primary" Type="ButtonType.Submit"
                                   IconStart="@(new Icons.Regular.Size20.Save())">Save</FluentButton>
                 </EditForm>
@@ -60,12 +78,18 @@
     [Parameter]
     public Guid ClientId { get; set; }
 
+    private const string NoLocationValue = "none";
+
     private UpdateClientModel _updateClientModel = new();
     private string? _clientName;
+    private int? _savedLocationId;
+    private List<Location> _locations = [];
+    private bool _locationsLoaded;
 
     private class UpdateClientModel
     {
         public string Name { get; set; } = string.Empty;
+        public string LocationValue { get; set; } = NoLocationValue;
     }
 
     protected override async Task OnInitializedAsync()
@@ -76,11 +100,39 @@
         {
             _updateClientModel.Name = result.Data.Name;
             _clientName = result.Data.Name;
+            _savedLocationId = result.Data.LocationId;
+
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(result.Data.CompanyId);
+            _locations = locations.IsSuccess ? (locations.Data ?? []).Where(x => x.IsActive).OrderBy(x => x.Name).ToList() : [];
+
+            _updateClientModel.LocationValue = result.Data.LocationId?.ToString() ?? NoLocationValue;
+            _locationsLoaded = true;
         }
         else
         {
             _toastService.ShowError($"Failed to load client, {result.Error}");
         }
+    }
+
+    private async Task SaveGeneralAsync()
+    {
+        int? locationId = int.TryParse(_updateClientModel.LocationValue, out int parsed) ? parsed : null;
+
+        // Without the list there's no picker on screen, so the value hasn't been chosen.
+        if (_locationsLoaded && locationId != _savedLocationId)
+        {
+            Result<bool> locationResult = await _clientService.SetClientLocationAsync(ClientId, locationId);
+
+            if (!locationResult.IsSuccess)
+            {
+                _toastService.ShowError($"Couldn't change the location: {locationResult.Error}");
+                return;
+            }
+
+            _savedLocationId = locationId;
+        }
+
+        await SaveNewClientNameAsync();
     }
 
     private async Task SaveNewClientNameAsync()
@@ -100,7 +152,7 @@
 
         if (updateResult.IsSuccess)
         {
-            _toastService.ShowSuccess("Name updated!");
+            _toastService.ShowSuccess("Saved!");
             _clientName = _updateClientModel.Name;
         }
         else

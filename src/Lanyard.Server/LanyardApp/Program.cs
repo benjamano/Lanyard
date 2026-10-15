@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
+using Lanyard.Application.Services.MusicScheduling;
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
 using Lanyard.Application.Services.Authentication;
@@ -105,6 +106,10 @@ if (!builder.Environment.IsDevelopment())
 }
 builder.Services.AddScoped<ApplicationRolesService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
+// Singleton: it remembers what it last applied to each kiosk between ticks.
+builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
+builder.Services.AddHostedService<MusicScheduleHostedService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddHttpClient<IGitHubClientReleaseSource, GitHubClientReleaseSource>(client => client.Timeout = TimeSpan.FromSeconds(20));

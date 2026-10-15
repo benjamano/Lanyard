@@ -1,0 +1,76 @@
+@using Lanyard.Application.Services.MusicScheduling
+
+@* The week Monday to Sunday. Seven columns on a wide screen; on a phone the same days stack into
+   one list (see the CSS), so a long name wraps instead of being cut off in a narrow column. A
+   part of the day that runs past midnight also shows, faded, at the top of the next day. *@
+<div class="schedule-week">
+    @foreach (DayOfWeek day in MusicDaypartRules.WeekOrder)
+    {
+        List<MusicDaypart> starting = StartingOn(day);
+        List<MusicDaypart> carriedOver = CarriedOverInto(day);
+
+        <section class="schedule-day" aria-label="@day">
+            <div class="schedule-day-header">@day</div>
+            <div class="schedule-day-body">
+                @foreach (MusicDaypart daypart in carriedOver)
+                {
+                    <div class="schedule-carry">
+                        <span class="schedule-carry-name">@daypart.Name</span>
+                        <span>continues until @MusicDaypartRules.FormatTime(daypart.EndTime)</span>
+                    </div>
+                }
+
+                @foreach (MusicDaypart daypart in starting)
+                {
+                    MusicDaypart captured = daypart;
+                    <button type="button" class="schedule-block @(daypart.PlaylistId is null ? "is-off" : null)"
+                            @onclick="@(() => OnEdit.InvokeAsync(captured))" title="Edit @daypart.Name">
+                        <span class="schedule-block-time">@MusicDaypartRules.DescribeTimes(daypart)</span>
+                        <span class="schedule-block-name">@daypart.Name</span>
+                        <span class="schedule-block-detail">@Detail(daypart)</span>
+                    </button>
+                }
+
+                @if (starting.Count == 0 && carriedOver.Count == 0)
+                {
+                    <div class="schedule-empty">Nothing scheduled</div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required IReadOnlyList<MusicDaypart> Dayparts { get; set; }
+
+    [Parameter]
+    public EventCallback<MusicDaypart> OnEdit { get; set; }
+
+    private List<MusicDaypart> StartingOn(DayOfWeek day) => Dayparts
+        .Where(x => AutomationScheduleDays.Matches(x.DaysOfWeek, day))
+        .OrderBy(x => x.StartTime)
+        .ToList();
+
+    private List<MusicDaypart> CarriedOverInto(DayOfWeek day)
+    {
+        DayOfWeek previous = (DayOfWeek)(((int)day + 6) % 7);
+
+        return Dayparts
+            .Where(x => x.EndsNextDay && x.EndTime != TimeOnly.MinValue && AutomationScheduleDays.Matches(x.DaysOfWeek, previous))
+            .OrderBy(x => x.EndTime)
+            .ToList();
+    }
+
+    private static string Detail(MusicDaypart daypart)
+    {
+        string playlist = daypart switch
+        {
+            { PlaylistId: null } => "Music off",
+            { Playlist: { DeleteDate: null } p } => p.Name,
+            _ => "Playlist deleted"
+        };
+
+        return daypart.Volume is int volume ? $"{playlist} · {volume}%" : playlist;
+    }
+}

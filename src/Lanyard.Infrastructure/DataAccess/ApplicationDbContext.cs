@@ -130,6 +130,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<AppInstallation> AppInstallations { get; set; }
         public DbSet<ShiftClaim> ShiftClaims { get; set; }
         public DbSet<LocationSchedulingSettings> LocationSchedulingSettings { get; set; }
+        public DbSet<MusicSchedule> MusicSchedules { get; set; }
+        public DbSet<MusicDaypart> MusicDayparts { get; set; }
         public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
@@ -679,6 +681,32 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasIndex(x => x.LocationId)
                 .IsUnique();
 
+            // ---- Music schedule ----
+            // Locations are only ever deactivated, never deleted, so these never actually cascade
+            // or null out in practice; SetNull just keeps a kiosk from blocking a location's removal.
+            modelBuilder.Entity<Client>()
+                .HasOne(x => x.Location)
+                .WithMany()
+                .HasForeignKey(x => x.LocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MusicSchedule>()
+                .HasIndex(x => x.LocationId)
+                .IsUnique();
+
+            modelBuilder.Entity<MusicSchedule>()
+                .HasMany(x => x.Dayparts)
+                .WithOne(x => x.MusicSchedule)
+                .HasForeignKey(x => x.MusicScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Playlists are soft-deleted, so a daypart can outlive its playlist's DeleteDate; the
+            // engine and the editor treat that as "playlist missing".
+            modelBuilder.Entity<MusicDaypart>()
+                .HasOne(x => x.Playlist)
+                .WithMany()
+                .HasForeignKey(x => x.PlaylistId)
+                .OnDelete(DeleteBehavior.Restrict);
             // Read for one location at a time; several windows per day, so not unique.
             modelBuilder.Entity<LocationOpeningHours>()
                 .HasIndex(x => new { x.LocationId, x.DayOfWeek });
@@ -993,6 +1021,8 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<TimeEntry>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<TimeOffRequest>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<LocationSchedulingSettings>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<MusicSchedule>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
+            modelBuilder.Entity<MusicDaypart>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.MusicSchedule!.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<LocationOpeningHours>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ChatReport>().HasQueryFilter(x => TenantFilterDisabled || Locations.Any(l => l.Id == x.LocationId && l.CompanyId == TenantCompanyId));
             modelBuilder.Entity<ShiftClaim>().HasQueryFilter(x => TenantFilterDisabled || Shifts.Any(sh => sh.Id == x.ShiftId && Locations.Any(l => l.Id == sh.LocationId && l.CompanyId == TenantCompanyId)));

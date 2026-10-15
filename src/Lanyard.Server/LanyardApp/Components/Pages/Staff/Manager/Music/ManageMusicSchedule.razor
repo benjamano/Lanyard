@@ -1,0 +1,282 @@
+@page "/manage/music-schedule"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Music.Schedule
+@using Lanyard.Application.Services.MusicScheduling
+
+@inject IMusicScheduleService _musicScheduleService
+@inject IPlaylistService _playlistService
+
+<PageTitle>Music Schedule</PageTitle>
+
+<div class="music-schedule">
+    <FluentCard Height="auto">
+        <div class="music-schedule-body">
+            <div class="music-schedule-heading">
+                <div>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Music schedule</FluentText>
+                    <FluentText Class="music-schedule-muted">
+                        Choose what plays, and how loud, at each time of day. The kiosks at this location switch on their own,
+                        at the end of the song that's playing. Times are UK time.
+                    </FluentText>
+                </div>
+                @if (schedule is not null)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                                  OnClick="@AddDaypartAsync">
+                        Add part of the day
+                    </FluentButton>
+                }
+            </div>
+
+            @if (locationOptions.Count > 1)
+            {
+                <FluentSelect TOption="Location" TValue="string" Items="@locationOptions" OptionText="@(x => x.Name)"
+                              OptionValue="@(x => x.Id.ToString())" Value="@locationId?.ToString()" ValueChanged="@OnLocationChangedAsync"
+                              Label="Location" Width="320px" />
+            }
+
+            @if (loadError is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+            }
+            else if (schedule is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else
+            {
+                <div class="music-schedule-setting">
+                    <FluentSwitch Value="@schedule.IsEnabled" ValueChanged="@SetEnabledAsync" Label="Use this schedule" />
+                    <FluentText Class="music-schedule-muted">
+                        @(schedule.IsEnabled
+                            ? "The kiosks below follow the schedule. Changing the music by hand lasts until the next part of the day starts."
+                            : "Off: nothing changes the music on its own. Turn it on when the schedule is ready.")
+                    </FluentText>
+                </div>
+
+                @if (kiosks.Count == 0)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        No kiosks are set to this location yet, so the schedule has nothing to control.
+                        @(isAdmin ? "Set a kiosk's location in Clients, under Settings > General." : "Ask an admin to set the kiosks' location in Clients.")
+                    </FluentMessageBar>
+                }
+                else
+                {
+                    <FluentText Class="music-schedule-muted">
+                        Plays on: @string.Join(", ", kiosks.Select(x => x.Name))
+                    </FluentText>
+                }
+
+                @if (conflictingRules.Count > 0)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                        @(conflictingRules.Count == 1 ? "The automation rule" : "The automation rules")
+                        @string.Join(", ", conflictingRules.Select(x => $"\"{x}\"")) also
+                        @(conflictingRules.Count == 1 ? "changes" : "change") the music on a kiosk here. When one runs, it counts as a change by hand.
+                    </FluentMessageBar>
+                }
+
+                @if (schedule.Dayparts.Count == 0)
+                {
+                    <div class="music-schedule-empty">
+                        <FluentIcon Value="@(new Icons.Regular.Size24.MusicNote2())" Color="Color.Disabled" />
+                        <FluentText Weight="TextWeight.Semibold">No parts of the day yet</FluentText>
+                        <FluentText Class="music-schedule-muted">
+                            Add one, such as a quieter playlist before opening or music off after closing.
+                        </FluentText>
+                    </div>
+                }
+                else
+                {
+                    <FluentText Class="music-schedule-muted">
+                        Times with nothing scheduled leave the music as it is.
+                    </FluentText>
+                    <MusicScheduleWeek Dayparts="@schedule.Dayparts" OnEdit="@EditDaypartAsync" />
+                }
+            }
+        </div>
+    </FluentCard>
+</div>
+
+@code {
+    private LocationScope? scope;
+    private string? currentUserId;
+    private bool isAdmin;
+    private List<Location> locationOptions = [];
+    private int? locationId;
+
+    private MusicSchedule? schedule;
+    private List<MusicScheduleKiosk> kiosks = [];
+    private List<string> conflictingRules = [];
+    private List<Playlist> playlists = [];
+    private Dictionary<Guid, int> songCounts = [];
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null || !userResult.IsSuccess)
+        {
+            loadError = "Couldn't work out your location. Refresh the page and sign in again.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+        currentUserId = userResult.Data;
+        isAdmin = scope.IsAdmin;
+
+        // Starts on the location signed in at. A Manager only has that one; an Admin can switch
+        // to any active location of the company.
+        if (scope.IsAdmin && scope.CompanyId is int companyId)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(companyId);
+            locationOptions = locations.IsSuccess ? (locations.Data ?? []).Where(x => x.IsActive).ToList() : [];
+        }
+        else if (scope.LocationId is int own)
+        {
+            locationOptions = [new Location { Id = own, CompanyId = scope.CompanyId ?? 0, Name = scope.LocationDisplayName ?? "Your location" }];
+        }
+
+        locationId = scope.LocationId is int signedIn && locationOptions.Any(x => x.Id == signedIn)
+            ? signedIn
+            : locationOptions.FirstOrDefault()?.Id;
+
+        Result<IEnumerable<Playlist>> playlistResult = await _playlistService.GetActivePlaylistSummariesAsync();
+        playlists = playlistResult.IsSuccess ? (playlistResult.Data ?? []).OrderBy(x => x.Name).ToList() : [];
+
+        Result<Dictionary<Guid, int>> countResult = await _musicScheduleService.GetPlaylistSongCountsAsync();
+        songCounts = countResult.IsSuccess ? countResult.Data ?? [] : [];
+
+        await LoadAsync();
+    }
+
+    private async Task OnLocationChangedAsync(string? value)
+    {
+        if (!int.TryParse(value, out int picked) || picked == locationId)
+        {
+            return;
+        }
+
+        locationId = picked;
+        schedule = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+
+        if (scope is null || locationId is not int location)
+        {
+            loadError = "You don't have a location to manage.";
+            return;
+        }
+
+        Result<MusicSchedule> scheduleResult = await _musicScheduleService.GetScheduleAsync(scope, location);
+
+        if (!scheduleResult.IsSuccess || scheduleResult.Data is null)
+        {
+            loadError = $"Couldn't load the schedule: {scheduleResult.Error}";
+            return;
+        }
+
+        Result<List<MusicScheduleKiosk>> kioskResult = await _musicScheduleService.GetLocationKiosksAsync(scope, location);
+        kiosks = kioskResult.IsSuccess ? kioskResult.Data ?? [] : [];
+
+        Result<List<string>> ruleResult = await _musicScheduleService.GetConflictingAutomationRulesAsync(scope, location);
+        conflictingRules = ruleResult.IsSuccess ? ruleResult.Data ?? [] : [];
+
+        schedule = scheduleResult.Data;
+    }
+
+    private async Task SetEnabledAsync(bool isEnabled)
+    {
+        if (scope is null || locationId is not int location || currentUserId is null || schedule is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _musicScheduleService.SetEnabledAsync(scope, location, isEnabled, currentUserId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't save: {result.Error}");
+            return;
+        }
+
+        schedule.IsEnabled = isEnabled;
+        _toastService.ShowSuccess(isEnabled ? "The schedule is on." : "The schedule is off.");
+    }
+
+    private Task AddDaypartAsync() => OpenDaypartDialogAsync(null);
+
+    private Task EditDaypartAsync(MusicDaypart daypart) => OpenDaypartDialogAsync(daypart);
+
+    private async Task OpenDaypartDialogAsync(MusicDaypart? daypart)
+    {
+        if (locationId is not int location)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditMusicDaypartDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditMusicDaypartDialog.LocationId), location);
+            options.Parameters.Add(nameof(AddEditMusicDaypartDialog.Daypart), daypart);
+            options.Parameters.Add(nameof(AddEditMusicDaypartDialog.Playlists), playlists);
+            options.Parameters.Add(nameof(AddEditMusicDaypartDialog.PlaylistSongCounts), songCounts);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+        else if (daypart is not null && result.Value as string == AddEditMusicDaypartDialog.DeleteRequested)
+        {
+            await DeleteDaypartAsync(daypart);
+        }
+    }
+
+    private async Task DeleteDaypartAsync(MusicDaypart daypart)
+    {
+        if (scope is null || locationId is not int location || currentUserId is null)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete part of the day";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete \"{daypart.Name}\" from the schedule? Its times will leave the music as it is.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> result = await _musicScheduleService.DeleteDaypartAsync(scope, location, daypart.Id, currentUserId);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't delete: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Deleted \"{daypart.Name}\".");
+        await LoadAsync();
+    }
+}
