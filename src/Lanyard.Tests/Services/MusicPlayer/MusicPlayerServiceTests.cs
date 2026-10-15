@@ -293,4 +293,43 @@ public class MusicPlayerServiceTests
 
         Assert.IsNull(player.GetPendingPlaylist(clientId));
     }
+
+    [TestMethod]
+    public async Task ManualCommands_RaiseOnManualMusicChange_ScheduleCommandsDoNot()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        List<Guid> manual = [];
+        player.OnManualMusicChange += manual.Add;
+
+        await player.Pause(clientId, MusicCommandSource.Schedule);
+        await player.SetVolume(clientId, 40, MusicCommandSource.Schedule);
+        Assert.AreEqual(0, manual.Count);
+
+        await player.Pause(clientId);
+        await player.SetVolume(clientId, 40);
+        Assert.AreEqual(2, manual.Count);
+    }
+
+    [TestMethod]
+    public async Task SkippingASong_IsNotAChangeByHand()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = Guid.NewGuid();
+        Guid playlistId = Guid.NewGuid();
+        await SeedPlaylistAsync(options, playlistId, (Guid.NewGuid(), true), (Guid.NewGuid(), true));
+
+        (MusicPlayerService player, _) = GetConnectedPlayer(options, clientId);
+        await player.Play(clientId, playlistId, MusicCommandSource.Schedule);
+
+        List<Guid> manual = [];
+        player.OnManualMusicChange += manual.Add;
+
+        await player.Next(clientId);
+        await player.Seek(clientId, 10);
+
+        Assert.AreEqual(0, manual.Count);
+    }
 }
