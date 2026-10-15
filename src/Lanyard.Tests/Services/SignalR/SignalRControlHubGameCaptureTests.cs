@@ -52,6 +52,15 @@ public class SignalRControlHubGameCaptureTests
         Mock<IGameResultService> gameResultServiceMock,
         out ILaserGameStatusStore statusStore)
     {
+        return BuildHub(clientId, gameResultServiceMock, out statusStore, out _);
+    }
+
+    private static SignalRControlHub BuildHub(
+        Guid clientId,
+        Mock<IGameResultService> gameResultServiceMock,
+        out ILaserGameStatusStore statusStore,
+        out AutomationEngineService automationEngine)
+    {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         ISystemDbContextFactory factory = GetFactory(options);
 
@@ -69,6 +78,7 @@ public class SignalRControlHubGameCaptureTests
 
         AutomationEngineService automationEngineService = new(
             factory, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        automationEngine = automationEngineService;
 
         SignalRProjectionControlHubEvents hubEvents = new(Mock.Of<IServiceScopeFactory>());
 
@@ -210,4 +220,44 @@ public class SignalRControlHubGameCaptureTests
             x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()),
             Times.Exactly(2));
     }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_HandsTheEngineTheGameData_ForScoreAndTimeRules()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _, out AutomationEngineService engine);
+
+        LaserGameStatusDTO status = BuildStatus(GameStatus.InGame);
+        status.TimeRemainingSeconds = 240;
+
+        await hub.UpdateLaserGameStatus(status);
+
+        // The engine hasn't loaded its rules yet, so it queues the snapshot for the consumer to judge.
+        Assert.IsTrue(engine.GameDataReader.TryRead(out GameDataEvent? ev));
+        Assert.AreEqual(clientId, ev!.ClientId);
+    }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_GivesTheEngineTheFinalScores_WhenAGameEnds()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _, out AutomationEngineService engine);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        Assert.IsTrue(engine.Reader.TryRead(out GameStatusTransitionEvent? started));
+        Assert.IsNull(started!.FinalSnapshot, "Only the edge that ends a game carries scores.");
+
+        Assert.IsTrue(engine.Reader.TryRead(out GameStatusTransitionEvent? ended));
+        Assert.IsNotNull(ended!.FinalSnapshot);
+        Assert.AreEqual(500, ended.FinalSnapshot.Players.Single().Score);
+        Assert.AreEqual(Team.Red, ended.FinalSnapshot.Players.Single().Team);
+    }
 }
+

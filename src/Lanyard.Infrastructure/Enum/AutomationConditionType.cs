@@ -19,5 +19,10 @@ public enum AutomationConditionType
     /// <summary>
     /// Only if a given kiosk is (or isn't) in a game right now.
     /// </summary>
-    ClientGameStatus = 2
+    ClientGameStatus = 2,
+
+    /// <summary>
+    /// Only during (or outside) a location's opening hours, as set on Companies &amp; Locations.
+    /// </summary>
+    DuringOpeningHours = 3
 }

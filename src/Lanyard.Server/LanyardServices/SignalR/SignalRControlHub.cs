@@ -359,7 +359,10 @@ public class SignalRControlHub(
         bool gameJustEnded = previousStatus?.Status == GameStatus.InGame && status.Status == GameStatus.NotStarted;
 
         _laserGameStatusStore.UpdateStatus(clientId, status);
-        _automationEngineService.EnqueueTransition(clientId, status.Status);
+        _automationEngineService.EnqueueTransition(clientId, status.Status, status);
+
+        // After EnqueueTransition, so a publish that starts a game is counted as that new game.
+        _automationEngineService.EnqueueGameData(clientId, status);
 
         if (gameJustEnded)
         {

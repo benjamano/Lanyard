@@ -1,0 +1,59 @@
+/* Mobile first: each day is a header line (name, Closed, Add hours) with its windows underneath.
+   A window's two times and its remove button share one row - two time pickers fit a phone width,
+   as in the shift dialog. */
+.opening-hours {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.opening-hours-day {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+}
+
+.opening-hours-day:last-of-type {
+    border-bottom: none;
+}
+
+.opening-hours-day-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.opening-hours-day-name {
+    font-weight: 600;
+}
+
+.opening-hours-closed {
+    color: var(--colorNeutralForeground3);
+}
+
+/* Pushes Add hours to the right-hand end of the header. */
+.opening-hours-add {
+    margin-left: auto;
+}
+
+.opening-hours-window {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: end;
+    gap: 12px;
+}
+
+/* The time pickers' fluent-field keeps an empty message line under each input; lift the button by
+   the same amount so it lines up with the inputs, as on the automation conditions step. */
+.opening-hours-remove {
+    margin-bottom: 14px;
+}
+
+.opening-hours-hint {
+    font-size: 0.85rem;
+    color: var(--colorNeutralForeground3);
+}

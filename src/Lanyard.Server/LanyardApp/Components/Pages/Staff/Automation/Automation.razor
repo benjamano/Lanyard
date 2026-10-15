@@ -206,6 +206,22 @@
                 string dayList = string.Join(", ", days.OrderBy(d => (int)d).Select(d => d.ToString()[..3]));
                 return $"{dayList} at {time}";
 
+            case AutomationTriggerType.TimeRemainingBelow:
+                return $"Time left drops below {rule.TriggerThreshold}s";
+
+            case AutomationTriggerType.ScoreThreshold:
+                string who = (rule.TriggerScoreScope, rule.TriggerTeam) switch
+                {
+                    (AutomationScoreScope.Team, null) => "A team",
+                    (AutomationScoreScope.Team, Team team) => $"{team} team",
+                    (_, null) => "A player",
+                    (_, Team team) => $"A {team.ToString().ToLowerInvariant()} player"
+                };
+                return $"{who} reaches {rule.TriggerThreshold}";
+
+            case AutomationTriggerType.GameEnded:
+                return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
+
             default:
                 return $"Game status: {rule.TriggerEvent}";
         }

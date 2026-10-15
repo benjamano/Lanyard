@@ -143,6 +143,9 @@ public class AutomationRuleService(
             existing.IdleThresholdMinutes = rule.IdleThresholdMinutes;
             existing.ScheduledTimeOfDay = rule.ScheduledTimeOfDay;
             existing.ScheduledDaysOfWeek = rule.ScheduledDaysOfWeek;
+            existing.TriggerThreshold = rule.TriggerThreshold;
+            existing.TriggerScoreScope = rule.TriggerScoreScope;
+            existing.TriggerTeam = rule.TriggerTeam;
             existing.LastUpdateDate = DateTime.UtcNow;
 
             SyncActions(ctx, existing, rule.Actions);
@@ -280,7 +283,7 @@ public class AutomationRuleService(
     // reject it at the point of saving instead.
     private static async Task<string?> ValidateRuleAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
     {
-        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek);
+        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope);
 
         if (triggerError != null)
         {
@@ -300,29 +303,54 @@ public class AutomationRuleService(
             .Distinct()
             .ToList();
 
-        if (conditionClientIds.Count == 0)
+        if (conditionClientIds.Count > 0)
         {
-            return null;
+            // The context is tenant-filtered for signed-in callers, so a kiosk in another company
+            // is simply not found. The explicit company check covers an existing rule edited
+            // through an unfiltered (system) context.
+            int foundCount = await ctx.Clients
+                .Where(c => conditionClientIds.Contains(c.Id) && (ruleCompanyId == null || c.CompanyId == ruleCompanyId))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .CountAsync();
+
+            if (foundCount != conditionClientIds.Count)
+            {
+                return "A game status condition refers to a kiosk that doesn't exist.";
+            }
         }
 
-        // The context is tenant-filtered for signed-in callers, so a kiosk in another company is
-        // simply not found. The explicit company check covers an existing rule edited through an
-        // unfiltered (system) context.
-        int foundCount = await ctx.Clients
-            .Where(c => conditionClientIds.Contains(c.Id) && (ruleCompanyId == null || c.CompanyId == ruleCompanyId))
-            .AsNoTracking()
-            .TagWithCallSite()
-            .CountAsync();
+        List<int> conditionLocationIds = rule.Conditions
+            .Where(c => c.IsActive && c.ConditionType == AutomationConditionType.DuringOpeningHours)
+            .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+            .Distinct()
+            .ToList();
 
-        return foundCount == conditionClientIds.Count
-            ? null
-            : "A game status condition refers to a kiosk that doesn't exist.";
+        if (conditionLocationIds.Count > 0)
+        {
+            // Locations aren't tenant-filtered rows (login has to list them), so the company check
+            // has to be explicit. A new rule takes the signed-in caller's company.
+            int? companyId = ruleCompanyId ?? (ctx.TenantFilterDisabled ? null : ctx.TenantCompanyId);
+
+            int foundCount = await ctx.Locations
+                .Where(l => conditionLocationIds.Contains(l.Id) && l.IsActive && (companyId == null || l.CompanyId == companyId))
+                .AsNoTracking()
+                .TagWithCallSite()
+                .CountAsync();
+
+            if (foundCount != conditionLocationIds.Count)
+            {
+                return "An opening hours condition refers to a location that doesn't exist.";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
     /// Public so AddEditAutomationRuleDialog can gate its conditions step against the same rule
-    /// CreateRuleAsync/UpdateRuleAsync will apply. Doesn't check that kiosks exist - that needs
-    /// the database.
+    /// CreateRuleAsync/UpdateRuleAsync will apply. Doesn't check that kiosks or locations exist -
+    /// that needs the database.
     /// </summary>
     public static string? ValidateConditions(IEnumerable<AutomationRuleCondition> conditions)
     {
@@ -347,10 +375,33 @@ public class AutomationRuleService(
         AutomationTriggerType triggerType,
         int? idleThresholdMinutes,
         TimeOnly? scheduledTimeOfDay,
-        string? scheduledDaysOfWeek)
+        string? scheduledDaysOfWeek,
+        int? triggerThreshold = null,
+        AutomationScoreScope? triggerScoreScope = null)
     {
         switch (triggerType)
         {
+            case AutomationTriggerType.TimeRemainingBelow:
+                if (!triggerThreshold.HasValue || triggerThreshold.Value <= 0)
+                {
+                    return "A time remaining rule needs a number of seconds greater than zero.";
+                }
+
+                return null;
+
+            case AutomationTriggerType.ScoreThreshold:
+                if (!triggerThreshold.HasValue || triggerThreshold.Value <= 0)
+                {
+                    return "A score rule needs a score greater than zero.";
+                }
+
+                if (!triggerScoreScope.HasValue || !System.Enum.IsDefined(triggerScoreScope.Value))
+                {
+                    return "A score rule needs to say whose score counts.";
+                }
+
+                return null;
+
             case AutomationTriggerType.ClientIdle:
                 if (!idleThresholdMinutes.HasValue)
                 {

@@ -633,10 +633,6 @@
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
       "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
-      "Automation rules can now have conditions. A rule only runs if every condition is true when it's triggered: the time of day is between two times (a window like 22:00 to 02:00 runs past midnight), it's one of the days you pick, or another kiosk is or isn't in a game.",
-      "Conditions use UK venue time, so they're right in summer as well as winter.",
-      "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
-      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
       "Manage Fixtures on the DMX desk now shows the channels each fixture uses, for example \"Ch 1-3\", and a hint as you add one says which channels it will take.",
       "Lanyard no longer lets you add a fixture whose channels would run past channel 512.",
       "If a new fixture would use channels another fixture already uses, Lanyard asks before saving. Choose \"Patch anyway\" if you're double-patching on purpose.",
@@ -656,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Automation rules can have \"only if\" conditions, including your locations' opening hours, and can run when a game's time or a score reaches a set point, or when a team wins.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -691,7 +687,17 @@
       "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy.",
       "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
       "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
-      "Kiosk software 1.0.42 also copes with an empty playlist on its own."
+      "Kiosk software 1.0.42 also copes with an empty playlist on its own.",
+      "Automation rules can now have conditions. A rule only runs if every condition is true when it's triggered: the time of day is between two times (a window like 22:00 to 02:00 runs past midnight), it's one of the days you pick, or another kiosk is or isn't in a game.",
+      "Conditions use UK venue time, so they're right in summer as well as winter.",
+      "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
+      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
+      "Locations can now have opening hours. On Manage > Companies & Locations, press the clock next to a location to set the hours for each day of the week. Hours that run past midnight, like 18:00 to 02:00, are fine.",
+      "Automation rules have a new condition: a location is open or closed. Use it to only run a rule while you're open, or only after closing. A location with no hours set counts as closed.",
+      "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
+      "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
+      "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
     ]
   }
 ]

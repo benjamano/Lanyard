@@ -31,6 +31,27 @@ public class AutomationEngineService(
 
     private readonly ConcurrentDictionary<Guid, GameStatus> _lastKnownStatus = new();
 
+    // Game data (time remaining, scores) has its own channel and consumer. The kiosk publishes on
+    // every score packet and countdown tick, so it's coalesced: only the latest snapshot per kiosk
+    // is kept, and at most one event per kiosk waits in the channel however fast it publishes.
+    private readonly Channel<GameDataEvent> _gameDataChannel = Channel.CreateUnbounded<GameDataEvent>();
+    private readonly ConcurrentDictionary<Guid, GameSnapshot> _latestGameData = new();
+    private readonly ConcurrentDictionary<Guid, byte> _gameDataPending = new();
+
+    // Counts each kiosk's games (bumped on every move into InGame). A snapshot carries the number
+    // current when it was enqueued, which is what makes "once per game" independent of the order
+    // the two channels are drained in.
+    private readonly ConcurrentDictionary<Guid, int> _gameNumber = new();
+
+    // Per-rule game-data state, touched only by the single game-data consumer.
+    private readonly Dictionary<Guid, int> _gameDataFiredForGame = [];
+    private readonly Dictionary<Guid, (int GameNumber, int Seconds)> _timeRemainingObserved = [];
+
+    // Whether any active rule uses a game-data trigger, set on every rule cache reload. While false
+    // (and the cache is current) EnqueueGameData does nothing, so venues without these rules see no
+    // extra work at all.
+    private volatile bool _hasGameDataRules;
+
     // When each client last changed status. Written in EnqueueTransition alongside
     // _lastKnownStatus so the two can never drift out of step.
     private readonly ConcurrentDictionary<Guid, DateTime> _lastTransitionUtc = new();
@@ -75,6 +96,10 @@ public class AutomationEngineService(
     // Kiosks named by ClientGameStatus conditions, loaded with the rule cache. Includes each one's
     // CompanyId because the engine's context is unfiltered and must enforce that itself.
     private Dictionary<Guid, AutomationClientInfo> _conditionClients = [];
+
+    // Locations named by DuringOpeningHours conditions, with their active opening hours. Reloaded
+    // with the rule cache; LocationOpeningHoursService invalidates it when hours are saved.
+    private Dictionary<int, AutomationLocationInfo> _conditionLocations = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
     // The one-time read of the enabled flag, shared by every caller. Cleared again if the read
     // fails so a transient DB error at startup is retried on the next tick instead of leaving
@@ -82,6 +107,7 @@ public class AutomationEngineService(
     private Task<bool>? _initTask;
 
     public ChannelReader<GameStatusTransitionEvent> Reader => _transitionChannel.Reader;
+    public ChannelReader<GameDataEvent> GameDataReader => _gameDataChannel.Reader;
     public bool IsEnabled => _isEnabled;
 
     public event Action<Guid, bool>? OnRuleEnabledChanged;
@@ -102,7 +128,11 @@ public class AutomationEngineService(
         OnRuleEnabledChanged?.Invoke(ruleId, isEnabled);
     }
 
-    public void EnqueueTransition(Guid clientId, GameStatus newStatus)
+    /// <param name="status">
+    /// The full publish, when the caller has it (the hub does). Only used on the edge that ends a
+    /// game, to give GameEnded rules the final scores from that same publish.
+    /// </param>
+    public void EnqueueTransition(Guid clientId, GameStatus newStatus, LaserGameStatusDTO? status = null)
     {
         // Start the idle clock the first time a client is ever seen, before the edge check below.
         // A kiosk that comes up idle and stays idle never produces a transition, so without this
@@ -121,8 +151,44 @@ public class AutomationEngineService(
         // makes an already-fired rule eligible again.
         _lastTransitionUtc[clientId] = DateTime.UtcNow;
 
-        GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus);
+        if (newStatus == GameStatus.InGame)
+        {
+            _gameNumber.AddOrUpdate(clientId, 1, (_, n) => n + 1);
+        }
+
+        // The kiosk publishes the ended status before clearing anything, and keeps its scores until
+        // the next game starts, so this publish carries the finished game's final scores.
+        GameSnapshot? finalSnapshot = previousStatus == GameStatus.InGame && newStatus == GameStatus.NotStarted && status != null
+            ? GameSnapshot.From(clientId, _gameNumber.GetValueOrDefault(clientId), status)
+            : null;
+
+        GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus, finalSnapshot);
         _transitionChannel.Writer.TryWrite(ev);
+    }
+
+    /// <summary>
+    /// Hands the engine a kiosk's latest game state for TimeRemainingBelow and ScoreThreshold rules.
+    /// Called by the hub on every status publish, after EnqueueTransition for the same publish.
+    /// </summary>
+    /// <remarks>
+    /// Security Issue 9.1: any kiosk can claim any client ID, so these triggers can be spoofed by a
+    /// rogue kiosk publishing made-up scores. Not addressed here.
+    /// </remarks>
+    public void EnqueueGameData(Guid clientId, LaserGameStatusDTO status)
+    {
+        // A dirty cache hasn't been read yet (or just changed), so it can't say there are no
+        // game-data rules; let the consumer reload it and decide.
+        if (!_hasGameDataRules && !_ruleCacheDirty)
+        {
+            return;
+        }
+
+        _latestGameData[clientId] = GameSnapshot.From(clientId, _gameNumber.GetValueOrDefault(clientId), status);
+
+        if (_gameDataPending.TryAdd(clientId, 0))
+        {
+            _gameDataChannel.Writer.TryWrite(new GameDataEvent(clientId));
+        }
     }
 
     /// <returns>True when the setting was read; false when the read failed and should be retried.</returns>
@@ -178,8 +244,34 @@ public class AutomationEngineService(
                     .TagWithCallSite()
                     .ToDictionaryAsync(c => c.Id, c => new AutomationClientInfo(c.CompanyId, c.Name), ct);
 
-            // Clients first, so a rule is never visible without the kiosks its conditions name.
+            List<int> conditionLocationIds = rules
+                .SelectMany(r => r.Conditions)
+                .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
+                .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            // A deactivated location is left out, so its conditions fail closed as "no longer exists".
+            Dictionary<int, AutomationLocationInfo> conditionLocations = conditionLocationIds.Count == 0
+                ? []
+                : await ctx.Locations
+                    .Where(l => conditionLocationIds.Contains(l.Id) && l.IsActive)
+                    .Select(l => new
+                    {
+                        l.Id,
+                        l.CompanyId,
+                        l.Name,
+                        Hours = l.OpeningHours.Where(h => h.IsActive).ToList()
+                    })
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .ToDictionaryAsync(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours), ct);
+
+            // Kiosks and locations first, so a rule is never visible without what its conditions name.
             _conditionClients = conditionClients;
+            _conditionLocations = conditionLocations;
+            _hasGameDataRules = rules.Any(r => IsGameDataTrigger(r.TriggerType));
             _ruleCache = rules;
             _ruleCacheDirty = false;
             _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
@@ -222,11 +314,24 @@ public class AutomationEngineService(
         // Filter rules matching this transition
         // The TriggerType clause matters: an idle rule keeps whatever stale TriggerEvent it was
         // saved with, and without this it would also fire on a matching transition.
-        List<AutomationRule> matchingRules = _ruleCache
+        List<(AutomationRule Rule, string Label)> matchingRules = _ruleCache
             .Where(r => r.TriggerType == AutomationTriggerType.GameStatusTransition
                 && r.TriggerClientId == ev.ClientId
                 && r.TriggerEvent == ev.NewStatus)
+            .Select(r => (r, ev.NewStatus.ToString()))
             .ToList();
+
+        // A game that ended with one team ahead also fires GameEnded rules for that team (or any).
+        if (ev.FinalSnapshot is GameSnapshot final && GameWinner.Determine(final.Players) is Team winner)
+        {
+            string label = $"{nameof(AutomationTriggerType.GameEnded)} ({winner} won)";
+
+            matchingRules.AddRange(_ruleCache
+                .Where(r => r.TriggerType == AutomationTriggerType.GameEnded
+                    && r.TriggerClientId == ev.ClientId
+                    && (r.TriggerTeam == null || r.TriggerTeam == winner))
+                .Select(r => (r, label)));
+        }
 
         if (matchingRules.Count == 0)
         {
@@ -234,19 +339,132 @@ public class AutomationEngineService(
         }
 
         // Process each matching rule
-        foreach (AutomationRule rule in matchingRules)
+        foreach ((AutomationRule rule, string label) in matchingRules)
         {
             // A status edge happens once, so a skip consumes it - the rule waits for the next edge.
             AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
 
             if (!check.Passed)
             {
-                await WriteSkippedExecutionAsync(rule, ev.ClientId, ev.NewStatus.ToString(), check, ct);
+                await WriteSkippedExecutionAsync(rule, ev.ClientId, label, check, ct);
                 continue;
             }
 
-            await ExecuteRuleAsync(rule, ev.ClientId, ev.NewStatus.ToString(), ct);
+            await ExecuteRuleAsync(rule, ev.ClientId, label, ct);
         }
+    }
+
+    private static bool IsGameDataTrigger(AutomationTriggerType triggerType) =>
+        triggerType is AutomationTriggerType.TimeRemainingBelow or AutomationTriggerType.ScoreThreshold;
+
+    /// <summary>
+    /// Fires TimeRemainingBelow and ScoreThreshold rules for the kiosk's latest snapshot, each at
+    /// most once per game.
+    /// </summary>
+    /// <remarks>
+    /// Called by GameDataTriggerHostedService, the only consumer of the game-data channel, so the
+    /// per-rule dictionaries need no locking.
+    /// </remarks>
+    public async Task ProcessGameDataAsync(GameDataEvent ev, CancellationToken ct)
+    {
+        // Cleared before reading, so a publish that lands while this runs queues another event.
+        _gameDataPending.TryRemove(ev.ClientId, out _);
+
+        if (!_latestGameData.TryGetValue(ev.ClientId, out GameSnapshot? snapshot))
+        {
+            return;
+        }
+
+        await EnsureEnabledInitializedAsync(ct);
+
+        if (!_isEnabled)
+        {
+            return;
+        }
+
+        if (_ruleCacheDirty)
+        {
+            await ReloadRuleCacheAsync(ct);
+        }
+
+        // Only a game in progress counts: after a game the kiosk zeroes the countdown and keeps
+        // republishing the finished scores, neither of which is a new crossing.
+        if (snapshot.Status != GameStatus.InGame || snapshot.GameNumber == 0)
+        {
+            return;
+        }
+
+        List<AutomationRule> rules = _ruleCache
+            .Where(r => IsGameDataTrigger(r.TriggerType)
+                && r.TriggerClientId == snapshot.ClientId
+                && r.TriggerThreshold.HasValue)
+            .ToList();
+
+        foreach (AutomationRule rule in rules)
+        {
+            bool crossed = rule.TriggerType == AutomationTriggerType.TimeRemainingBelow
+                ? HasTimeRemainingCrossed(rule, snapshot)
+                : IsScoreThresholdReached(rule.TriggerScoreScope ?? AutomationScoreScope.AnyPlayer, rule.TriggerTeam, rule.TriggerThreshold!.Value, snapshot.Players);
+
+            if (!crossed)
+            {
+                continue;
+            }
+
+            if (_gameDataFiredForGame.TryGetValue(rule.Id, out int firedForGame) && firedForGame == snapshot.GameNumber)
+            {
+                continue;
+            }
+
+            // Marked before running: a moment in a game happens once, so neither a skip nor a
+            // failed action is retried on the next publish.
+            _gameDataFiredForGame[rule.Id] = snapshot.GameNumber;
+
+            string label = rule.TriggerType.ToString();
+            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+
+            if (!check.Passed)
+            {
+                await WriteSkippedExecutionAsync(rule, snapshot.ClientId, label, check, ct);
+                continue;
+            }
+
+            _logger.LogInformation("Rule {RuleId} {TriggerType} reached on client {ClientId} in game {GameNumber} - firing", rule.Id, rule.TriggerType, snapshot.ClientId, snapshot.GameNumber);
+
+            await ExecuteRuleAsync(rule, snapshot.ClientId, label, ct);
+        }
+    }
+
+    // Needs a reading above the threshold earlier in the same game: a kiosk reports 0 before its
+    // first countdown packet, and without this every rule would fire the moment a game starts.
+    private bool HasTimeRemainingCrossed(AutomationRule rule, GameSnapshot snapshot)
+    {
+        int threshold = rule.TriggerThreshold!.Value;
+        int? previous = _timeRemainingObserved.TryGetValue(rule.Id, out (int GameNumber, int Seconds) observed) && observed.GameNumber == snapshot.GameNumber
+            ? observed.Seconds
+            : null;
+
+        _timeRemainingObserved[rule.Id] = (snapshot.GameNumber, snapshot.TimeRemainingSeconds);
+
+        return previous > threshold && snapshot.TimeRemainingSeconds <= threshold;
+    }
+
+    /// <summary>
+    /// Pure so the scoring rules can be unit tested without the engine. Scores only go up during a
+    /// game, so a coalesced (skipped) publish can't hide a crossing.
+    /// </summary>
+    public static bool IsScoreThresholdReached(AutomationScoreScope scope, Team? team, int threshold, IReadOnlyList<PlayerScoreSnapshot> players)
+    {
+        if (scope == AutomationScoreScope.AnyPlayer)
+        {
+            return players.Any(p => (team == null || p.Team == team) && p.Score >= threshold);
+        }
+
+        // A team's total is the sum of its players' scores; players with no team don't count.
+        return players
+            .Where(p => p.Team != null && (team == null || p.Team == team))
+            .GroupBy(p => p.Team)
+            .Any(g => g.Sum(p => p.Score) >= threshold);
     }
 
     /// <summary>
@@ -516,13 +734,15 @@ public class AutomationEngineService(
         }
 
         Dictionary<Guid, AutomationClientInfo> clients = _conditionClients;
+        Dictionary<int, AutomationLocationInfo> locations = _conditionLocations;
 
         return AutomationConditionEvaluator.Evaluate(
             rule.Conditions,
             rule.CompanyId,
             nowUtc,
             clientId => clients.GetValueOrDefault(clientId),
-            IsClientInGame);
+            IsClientInGame,
+            locationId => locations.GetValueOrDefault(locationId));
     }
 
     // The status store, not _lastKnownStatus: the hub clears the store when a kiosk disconnects,

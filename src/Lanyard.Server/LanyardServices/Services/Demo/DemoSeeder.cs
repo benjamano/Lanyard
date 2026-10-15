@@ -257,9 +257,34 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
         foreach (Location location in locations.Values)
         {
             ctx.LocationSchedulingSettings.Add(new LocationSchedulingSettings { Id = Guid.NewGuid(), LocationId = location.Id, ClaimsNeedApproval = true, UpdateDate = Now });
+            SeedOpeningHours(ctx, location);
         }
 
         ctx.ContractRequirements.Add(new ContractRequirement { Id = Guid.NewGuid(), CompanyId = companyId, MinHoursPerWeek = 8, MaxHoursPerWeek = 40, UpdateDate = Now });
+    }
+
+    // A typical family entertainment centre week: late on Friday and Saturday, early on Sunday.
+    private void SeedOpeningHours(ApplicationDbContext ctx, Location location)
+    {
+        foreach (DayOfWeek day in Enum.GetValues<DayOfWeek>())
+        {
+            (TimeOnly open, TimeOnly close) = day switch
+            {
+                DayOfWeek.Friday or DayOfWeek.Saturday => (new TimeOnly(10, 0), new TimeOnly(23, 0)),
+                DayOfWeek.Sunday => (new TimeOnly(10, 0), new TimeOnly(18, 0)),
+                _ => (new TimeOnly(10, 0), new TimeOnly(21, 0))
+            };
+
+            ctx.LocationOpeningHours.Add(new LocationOpeningHours
+            {
+                LocationId = location.Id,
+                DayOfWeek = day,
+                OpensAt = open,
+                ClosesAt = close,
+                IsActive = true,
+                CreateDate = Now
+            });
+        }
     }
 
     // Two published weeks (this and next), a draft week after that for the Publish button, a

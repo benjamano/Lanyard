@@ -45,19 +45,48 @@ public class AutomationConditionEvaluatorTests
         return Condition(AutomationConditionType.ClientGameStatus, AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(clientId, inGame)));
     }
 
+    private const int LocationId = 7;
+
     private static AutomationConditionCheck Evaluate(
         DateTime nowUtc,
         IEnumerable<AutomationRuleCondition> conditions,
         bool kioskInGame = false,
         int kioskCompanyId = RuleCompanyId,
-        bool kioskExists = true)
+        bool kioskExists = true,
+        AutomationLocationInfo? location = null)
     {
         return AutomationConditionEvaluator.Evaluate(
             conditions,
             RuleCompanyId,
             nowUtc,
             id => kioskExists && id == KioskId ? new AutomationClientInfo(kioskCompanyId, "Arena") : null,
-            id => kioskInGame && id == KioskId);
+            id => kioskInGame && id == KioskId,
+            id => id == LocationId ? location : null);
+    }
+
+    private static AutomationRuleCondition DuringOpeningHours(bool open)
+    {
+        return Condition(AutomationConditionType.DuringOpeningHours, AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(LocationId, open)));
+    }
+
+    // Wednesday hours of 10:00-17:00 venue time.
+    private static AutomationLocationInfo Ipswich(int companyId = RuleCompanyId, bool withHours = true)
+    {
+        List<LocationOpeningHours> hours = withHours
+            ?
+            [
+                new LocationOpeningHours
+                {
+                    LocationId = LocationId,
+                    DayOfWeek = DayOfWeek.Wednesday,
+                    OpensAt = new TimeOnly(10, 0),
+                    ClosesAt = new TimeOnly(17, 0),
+                    IsActive = true
+                }
+            ]
+            : [];
+
+        return new AutomationLocationInfo(companyId, "Ipswich", hours);
     }
 
     [TestMethod]
@@ -239,5 +268,67 @@ public class AutomationConditionEvaluatorTests
     public void Validate_RejectsAKioskConditionWithNoKiosk()
     {
         Assert.IsNotNull(AutomationConditionParameters.Validate(AutomationConditionType.ClientGameStatus, KioskInGame(Guid.Empty, true).ParametersJson));
+    }
+
+    [TestMethod]
+    public void OpeningHours_UsesVenueTime()
+    {
+        // 15:00 UTC on a July Wednesday is 16:00 in London, inside 10:00-17:00. 16:30 UTC is
+        // 17:30 in London, after closing, even though it's still before 17:00 UTC.
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: Ipswich()).Passed);
+
+        AutomationConditionCheck afterClosing = Evaluate(SummerAfternoonUtc.AddMinutes(90), [DuringOpeningHours(open: true)], location: Ipswich());
+        Assert.IsFalse(afterClosing.Passed);
+        Assert.IsFalse(afterClosing.IsMisconfigured);
+        StringAssert.Contains(afterClosing.Reason, "Ipswich is closed");
+    }
+
+    [TestMethod]
+    public void OpeningHours_OutsideHoursPassesWhenClosed()
+    {
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc.AddHours(4), [DuringOpeningHours(open: false)], location: Ipswich()).Passed);
+
+        AutomationConditionCheck whileOpen = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: false)], location: Ipswich());
+        Assert.IsFalse(whileOpen.Passed);
+        Assert.AreEqual("Ipswich is open", whileOpen.Reason);
+    }
+
+    [TestMethod]
+    public void OpeningHours_ALocationWithNoHoursCountsAsClosed()
+    {
+        AutomationConditionCheck during = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: Ipswich(withHours: false));
+
+        Assert.IsFalse(during.Passed);
+        Assert.IsFalse(during.IsMisconfigured, "No hours yet is a normal state for a new location, not a broken rule.");
+        Assert.AreEqual("Ipswich has no opening hours set", during.Reason);
+        Assert.IsTrue(Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: false)], location: Ipswich(withHours: false)).Passed);
+    }
+
+    [TestMethod]
+    public void OpeningHours_FailsClosed_ForALocationInAnotherCompany()
+    {
+        AutomationConditionCheck check = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: true)], location: Ipswich(companyId: 2));
+
+        Assert.IsFalse(check.Passed);
+        Assert.IsTrue(check.IsMisconfigured);
+        StringAssert.Contains(check.Reason, "another company");
+    }
+
+    [TestMethod]
+    public void OpeningHours_FailsClosed_ForALocationThatNoLongerExists()
+    {
+        AutomationConditionCheck check = Evaluate(SummerAfternoonUtc, [DuringOpeningHours(open: false)], location: null);
+
+        Assert.IsFalse(check.Passed);
+        Assert.IsTrue(check.IsMisconfigured);
+    }
+
+    [TestMethod]
+    public void Validate_RejectsAnOpeningHoursConditionWithNoLocation()
+    {
+        string json = AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(0, true));
+
+        Assert.IsNotNull(AutomationConditionParameters.Validate(AutomationConditionType.DuringOpeningHours, json));
+        Assert.IsNull(AutomationConditionParameters.Validate(AutomationConditionType.DuringOpeningHours, DuringOpeningHours(true).ParametersJson));
     }
 }

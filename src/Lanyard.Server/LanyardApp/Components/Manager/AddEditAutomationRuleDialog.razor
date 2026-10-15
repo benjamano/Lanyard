@@ -14,6 +14,7 @@
 @inject IProjectionProgramService _projectionProgramService
 @inject IDmxSceneService _dmxSceneService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
+@inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -56,6 +57,9 @@
                     <FluentOption Value="@AutomationTriggerType.GameStatusTransition.ToString()">Game Status Change</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.ClientIdle.ToString()">Client Idle</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.Scheduled.ToString()">Scheduled</FluentOption>
+                    <FluentOption Value="@AutomationTriggerType.TimeRemainingBelow.ToString()">Time remaining drops below</FluentOption>
+                    <FluentOption Value="@AutomationTriggerType.ScoreThreshold.ToString()">Score reaches</FluentOption>
+                    <FluentOption Value="@AutomationTriggerType.GameEnded.ToString()">Game ends with a winner</FluentOption>
                 </FluentSelect>
 
                 @if (_triggerTypeString == AutomationTriggerType.ClientIdle.ToString())
@@ -86,6 +90,64 @@
                                             Label="@(capturedDay.ToString()[..3])" />
                         }
                     </FluentStack>
+                }
+                else if (_triggerTypeString == AutomationTriggerType.TimeRemainingBelow.ToString())
+                {
+                    <FluentNumberInput TValue="int?"
+                                       Label="Seconds remaining"
+                                       Min="1"
+                                       Width="100%"
+                                       Value="@_timeRemainingSeconds"
+                                       ValueChanged="@((int? seconds) => _timeRemainingSeconds = seconds)" />
+                    <div class="condition-hint">
+                        Runs once per game, when the trigger client's countdown passes this point. A game shorter than this never runs it.
+                    </div>
+                }
+                else if (_triggerTypeString == AutomationTriggerType.ScoreThreshold.ToString())
+                {
+                    <FluentNumberInput TValue="int?"
+                                       Label="Score"
+                                       Min="1"
+                                       Width="100%"
+                                       Value="@_scoreThreshold"
+                                       ValueChanged="@((int? score) => _scoreThreshold = score)" />
+                    <div class="condition-fields">
+                        <FluentSelect TOption="string"
+                                      TValue="string"
+                                      Label="Whose score"
+                                      Width="100%"
+                                      @bind-Value="_scoreScopeString">
+                            <FluentOption Value="@AutomationScoreScope.AnyPlayer.ToString()">Any one player</FluentOption>
+                            <FluentOption Value="@AutomationScoreScope.Team.ToString()">A team's total</FluentOption>
+                        </FluentSelect>
+                        <FluentSelect TOption="string"
+                                      TValue="string"
+                                      Label="Team"
+                                      Width="100%"
+                                      @bind-Value="_scoreTeamString">
+                            <FluentOption Value="@("any")">Any team</FluentOption>
+                            <FluentOption Value="@Team.Red.ToString()">Red</FluentOption>
+                            <FluentOption Value="@Team.Green.ToString()">Green</FluentOption>
+                        </FluentSelect>
+                    </div>
+                    <div class="condition-hint">
+                        Runs once per game, the first time the score is reached on the trigger client.
+                    </div>
+                }
+                else if (_triggerTypeString == AutomationTriggerType.GameEnded.ToString())
+                {
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="Winning team"
+                                  Width="100%"
+                                  @bind-Value="_winningTeamString">
+                        <FluentOption Value="@("any")">Any team</FluentOption>
+                        <FluentOption Value="@Team.Red.ToString()">Red</FluentOption>
+                        <FluentOption Value="@Team.Green.ToString()">Green</FluentOption>
+                    </FluentSelect>
+                    <div class="condition-hint">
+                        Runs when a team game on the trigger client ends with one team ahead on total score. A draw, or a game without teams, doesn't run it. Make one rule per team to give each its own scene.
+                    </div>
                 }
                 else
                 {
@@ -129,6 +191,7 @@
                                     <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
+                                    <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
                                 </FluentSelect>
                             </div>
                             <div class="condition-remove">
@@ -160,6 +223,30 @@
                                                     Label="@(capturedDay.ToString()[..3])" />
                                 }
                             </div>
+                        }
+                        else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
+                        {
+                            <div class="condition-fields">
+                                <FluentSelect TOption="Location"
+                                              TValue="string"
+                                              Label="Location"
+                                              Placeholder="Select location"
+                                              Width="100%"
+                                              Items="@_locations"
+                                              OptionText="@(l => l?.Name ?? string.Empty)"
+                                              OptionValue="@(l => l?.Id.ToString())"
+                                              @bind-Value="row.LocationIdString" />
+                                <FluentSelect TOption="string"
+                                              TValue="string"
+                                              Label="State"
+                                              Width="100%"
+                                              Value="@(row.Open ? "open" : "closed")"
+                                              ValueChanged="@((string? state) => row.Open = state != "closed")">
+                                    <FluentOption Value="@("open")">is open</FluentOption>
+                                    <FluentOption Value="@("closed")">is closed</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
                         }
                         else
                         {
@@ -507,7 +594,11 @@
         public HashSet<DayOfWeek> Days { get; set; } = [];
         public string ClientIdString { get; set; } = string.Empty;
         public bool InGame { get; set; }
+        public string LocationIdString { get; set; } = string.Empty;
+        public bool Open { get; set; } = true;
     }
+
+    private IEnumerable<Location> _locations = [];
 
     private List<ConditionRow> _conditionRows = [];
 
@@ -544,6 +635,9 @@
             {
                 AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
                 AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
+                AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
+                    int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
+                    row.Open)),
                 _ => AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(
                     Guid.TryParse(row.ClientIdString, out Guid clientId) ? clientId : Guid.Empty,
                     row.InGame))
@@ -587,6 +681,11 @@
                 row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
                 row.InGame = kiosk.InGame;
                 break;
+
+            case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(condition.ParametersJson, out OpeningHoursConditionParameters? hours):
+                row.LocationIdString = hours.LocationId > 0 ? hours.LocationId.ToString() : string.Empty;
+                row.Open = hours.Open;
+                break;
         }
 
         return row;
@@ -604,7 +703,15 @@
             Enum.Parse<AutomationTriggerType>(_triggerTypeString),
             _idleThresholdMinutes,
             _scheduledTimeOfDay,
-            AutomationScheduleDays.Serialize(_scheduledDays)) is null;
+            AutomationScheduleDays.Serialize(_scheduledDays),
+            Enum.Parse<AutomationTriggerType>(_triggerTypeString) == AutomationTriggerType.ScoreThreshold ? _scoreThreshold : _timeRemainingSeconds,
+            Enum.Parse<AutomationScoreScope>(_scoreScopeString)) is null;
+
+    private int? _timeRemainingSeconds = 60;
+    private int? _scoreThreshold = 1000;
+    private string _scoreScopeString = AutomationScoreScope.AnyPlayer.ToString();
+    private string _scoreTeamString = "any";
+    private string _winningTeamString = "any";
 
     private int? _idleThresholdMinutes = 30;
     private static readonly List<DayOfWeek> _allDaysOfWeek = [DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday];
@@ -629,26 +736,54 @@
     private IEnumerable<Playlist> _playlists { get; set; } = [];
     private IEnumerable<ProjectionProgram> _programs { get; set; } = [];
 
+    // Runs before OnInitializedAsync's first await, so the first render already shows the saved
+    // rule. The static-option selects (trigger type, trigger event) don't pick up a value that
+    // changes after they've rendered, so setting these after loading the kiosk list left an
+    // edited rule's Trigger Type showing "Game Status Change" whatever it really was.
+    private void ApplySavedRule(AutomationRule saved)
+    {
+        _ruleName = saved.Name;
+        _triggerClientIdString = saved.TriggerClientId.ToString();
+        _triggerEventString = saved.TriggerEvent.ToString();
+        _triggerTypeString = saved.TriggerType.ToString();
+        _idleThresholdMinutes = saved.IdleThresholdMinutes ?? 30;
+        _scheduledTimeOfDay = saved.ScheduledTimeOfDay ?? new TimeOnly(9, 0);
+        if (saved.TriggerType == AutomationTriggerType.TimeRemainingBelow)
+        {
+            _timeRemainingSeconds = saved.TriggerThreshold ?? 60;
+        }
+        else if (saved.TriggerType == AutomationTriggerType.ScoreThreshold)
+        {
+            _scoreThreshold = saved.TriggerThreshold ?? 1000;
+        }
+        _scoreScopeString = (saved.TriggerScoreScope ?? AutomationScoreScope.AnyPlayer).ToString();
+        _scoreTeamString = saved.TriggerTeam?.ToString() ?? "any";
+        _winningTeamString = saved.TriggerTeam?.ToString() ?? "any";
+        AutomationScheduleDays.TryParse(saved.ScheduledDaysOfWeek, out List<DayOfWeek> parsedDays);
+        _scheduledDays = saved.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(saved.ScheduledDaysOfWeek)
+            ? [.. parsedDays]
+            : [];
+
+        _conditionRows = [.. saved.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        if (Content != null)
+        {
+            ApplySavedRule(Content);
+        }
+
         Result<IEnumerable<ClientConnectedDTO>> clientResult = await _clientService.GetClientsAsync();
         _clients = clientResult.Data ?? [];
 
+        // The signed-in company's locations only: a platform admin would otherwise see every
+        // company's, and a rule can only use its own company's (AutomationRuleService checks).
+        Result<List<Location>> locationResult = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
+        _locations = locationResult.Data ?? [];
+
         if (Content != null)
         {
-            _ruleName = Content.Name;
-            _triggerClientIdString = Content.TriggerClientId.ToString();
-            _triggerEventString = Content.TriggerEvent.ToString();
-            _triggerTypeString = Content.TriggerType.ToString();
-            _idleThresholdMinutes = Content.IdleThresholdMinutes ?? 30;
-            _scheduledTimeOfDay = Content.ScheduledTimeOfDay ?? new TimeOnly(9, 0);
-            AutomationScheduleDays.TryParse(Content.ScheduledDaysOfWeek, out List<DayOfWeek> parsedDays);
-            _scheduledDays = Content.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(Content.ScheduledDaysOfWeek)
-                ? [.. parsedDays]
-                : [];
-
-            _conditionRows = [.. Content.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
-
             foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
             {
                 JsonDocument doc = JsonDocument.Parse(action.ParametersJson);
@@ -920,6 +1055,19 @@
         int? idleThresholdMinutes = triggerType == AutomationTriggerType.ClientIdle ? _idleThresholdMinutes : null;
         TimeOnly? scheduledTimeOfDay = triggerType == AutomationTriggerType.Scheduled ? _scheduledTimeOfDay : null;
         string? scheduledDaysOfWeek = triggerType == AutomationTriggerType.Scheduled ? AutomationScheduleDays.Serialize(_scheduledDays) : null;
+        int? triggerThreshold = triggerType switch
+        {
+            AutomationTriggerType.TimeRemainingBelow => _timeRemainingSeconds,
+            AutomationTriggerType.ScoreThreshold => _scoreThreshold,
+            _ => null
+        };
+        AutomationScoreScope? triggerScoreScope = triggerType == AutomationTriggerType.ScoreThreshold ? Enum.Parse<AutomationScoreScope>(_scoreScopeString) : null;
+        Team? triggerTeam = triggerType switch
+        {
+            AutomationTriggerType.ScoreThreshold when Enum.TryParse(_scoreTeamString, out Team scoreTeam) => scoreTeam,
+            AutomationTriggerType.GameEnded when Enum.TryParse(_winningTeamString, out Team winningTeam) => winningTeam,
+            _ => null
+        };
 
         List<AutomationRuleAction> newActions = [];
         for (int i = 0; i < _actionRows.Count; i++)
@@ -1007,6 +1155,9 @@
                 IdleThresholdMinutes = idleThresholdMinutes,
                 ScheduledTimeOfDay = scheduledTimeOfDay,
                 ScheduledDaysOfWeek = scheduledDaysOfWeek,
+                TriggerThreshold = triggerThreshold,
+                TriggerScoreScope = triggerScoreScope,
+                TriggerTeam = triggerTeam,
                 IsActive = true,
                 CreateDate = Content.CreateDate,
                 Actions = newActions,
@@ -1030,6 +1181,9 @@
                 IdleThresholdMinutes = idleThresholdMinutes,
                 ScheduledTimeOfDay = scheduledTimeOfDay,
                 ScheduledDaysOfWeek = scheduledDaysOfWeek,
+                TriggerThreshold = triggerThreshold,
+                TriggerScoreScope = triggerScoreScope,
+                TriggerTeam = triggerTeam,
                 Actions = newActions,
                 Conditions = newConditions
             };
