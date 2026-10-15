@@ -37,8 +37,8 @@ public class AutomationRule : ICompanyOwned
     // ScoreThreshold only: whose score counts. Null otherwise.
     public AutomationScoreScope? TriggerScoreScope { get; set; }
 
-    // ScoreThreshold only: limit to one team's players (AnyPlayer) or pick the team (Team). Null
-    // means any team.
+    // ScoreThreshold: limit to one team's players (AnyPlayer) or pick the team (Team). GameEnded:
+    // the team that has to win. Null means any team.
     public Team? TriggerTeam { get; set; }
 
     public bool IsActive { get; set; }

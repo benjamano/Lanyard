@@ -237,5 +237,27 @@ public class SignalRControlHubGameCaptureTests
         Assert.IsTrue(engine.GameDataReader.TryRead(out GameDataEvent? ev));
         Assert.AreEqual(clientId, ev!.ClientId);
     }
+
+    [TestMethod]
+    public async Task UpdateLaserGameStatus_GivesTheEngineTheFinalScores_WhenAGameEnds()
+    {
+        Guid clientId = Guid.NewGuid();
+        Mock<IGameResultService> gameResultServiceMock = new();
+        gameResultServiceMock
+            .Setup(x => x.RecordCompletedGameAsync(It.IsAny<Guid>(), It.IsAny<LaserGameStatusDTO>()))
+            .ReturnsAsync(Result<bool>.Ok(true));
+        SignalRControlHub hub = BuildHub(clientId, gameResultServiceMock, out _, out AutomationEngineService engine);
+
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.InGame));
+        await hub.UpdateLaserGameStatus(BuildStatus(GameStatus.NotStarted));
+
+        Assert.IsTrue(engine.Reader.TryRead(out GameStatusTransitionEvent? started));
+        Assert.IsNull(started!.FinalSnapshot, "Only the edge that ends a game carries scores.");
+
+        Assert.IsTrue(engine.Reader.TryRead(out GameStatusTransitionEvent? ended));
+        Assert.IsNotNull(ended!.FinalSnapshot);
+        Assert.AreEqual(500, ended.FinalSnapshot.Players.Single().Score);
+        Assert.AreEqual(Team.Red, ended.FinalSnapshot.Players.Single().Team);
+    }
 }
 

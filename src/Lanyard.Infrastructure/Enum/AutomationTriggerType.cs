@@ -42,5 +42,12 @@ public enum AutomationTriggerType
     /// or a team's total, per <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerScoreScope"/>,
     /// optionally limited to <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerTeam"/>.
     /// </summary>
-    ScoreThreshold = 4
+    ScoreThreshold = 4,
+
+    /// <summary>
+    /// Fires when a game on the trigger client ends with one team ahead on total score, for any
+    /// team or only <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerTeam"/>. A draw,
+    /// a solo game or a game with only one team doesn't fire it.
+    /// </summary>
+    GameEnded = 5
 }

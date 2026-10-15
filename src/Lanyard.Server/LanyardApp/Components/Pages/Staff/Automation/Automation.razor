@@ -219,6 +219,9 @@
                 };
                 return $"{who} reaches {rule.TriggerThreshold}";
 
+            case AutomationTriggerType.GameEnded:
+                return rule.TriggerTeam is Team winningTeam ? $"Game ends, {winningTeam} wins" : "Game ends with a winner";
+
             default:
                 return $"Game status: {rule.TriggerEvent}";
         }

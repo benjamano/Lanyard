@@ -59,6 +59,7 @@
                     <FluentOption Value="@AutomationTriggerType.Scheduled.ToString()">Scheduled</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.TimeRemainingBelow.ToString()">Time remaining drops below</FluentOption>
                     <FluentOption Value="@AutomationTriggerType.ScoreThreshold.ToString()">Score reaches</FluentOption>
+                    <FluentOption Value="@AutomationTriggerType.GameEnded.ToString()">Game ends with a winner</FluentOption>
                 </FluentSelect>
 
                 @if (_triggerTypeString == AutomationTriggerType.ClientIdle.ToString())
@@ -131,6 +132,21 @@
                     </div>
                     <div class="condition-hint">
                         Runs once per game, the first time the score is reached on the trigger client.
+                    </div>
+                }
+                else if (_triggerTypeString == AutomationTriggerType.GameEnded.ToString())
+                {
+                    <FluentSelect TOption="string"
+                                  TValue="string"
+                                  Label="Winning team"
+                                  Width="100%"
+                                  @bind-Value="_winningTeamString">
+                        <FluentOption Value="@("any")">Any team</FluentOption>
+                        <FluentOption Value="@Team.Red.ToString()">Red</FluentOption>
+                        <FluentOption Value="@Team.Green.ToString()">Green</FluentOption>
+                    </FluentSelect>
+                    <div class="condition-hint">
+                        Runs when a team game on the trigger client ends with one team ahead on total score. A draw, or a game without teams, doesn't run it. Make one rule per team to give each its own scene.
                     </div>
                 }
                 else
@@ -695,6 +711,7 @@
     private int? _scoreThreshold = 1000;
     private string _scoreScopeString = AutomationScoreScope.AnyPlayer.ToString();
     private string _scoreTeamString = "any";
+    private string _winningTeamString = "any";
 
     private int? _idleThresholdMinutes = 30;
     private static readonly List<DayOfWeek> _allDaysOfWeek = [DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday];
@@ -719,8 +736,44 @@
     private IEnumerable<Playlist> _playlists { get; set; } = [];
     private IEnumerable<ProjectionProgram> _programs { get; set; } = [];
 
+    // Runs before OnInitializedAsync's first await, so the first render already shows the saved
+    // rule. The static-option selects (trigger type, trigger event) don't pick up a value that
+    // changes after they've rendered, so setting these after loading the kiosk list left an
+    // edited rule's Trigger Type showing "Game Status Change" whatever it really was.
+    private void ApplySavedRule(AutomationRule saved)
+    {
+        _ruleName = saved.Name;
+        _triggerClientIdString = saved.TriggerClientId.ToString();
+        _triggerEventString = saved.TriggerEvent.ToString();
+        _triggerTypeString = saved.TriggerType.ToString();
+        _idleThresholdMinutes = saved.IdleThresholdMinutes ?? 30;
+        _scheduledTimeOfDay = saved.ScheduledTimeOfDay ?? new TimeOnly(9, 0);
+        if (saved.TriggerType == AutomationTriggerType.TimeRemainingBelow)
+        {
+            _timeRemainingSeconds = saved.TriggerThreshold ?? 60;
+        }
+        else if (saved.TriggerType == AutomationTriggerType.ScoreThreshold)
+        {
+            _scoreThreshold = saved.TriggerThreshold ?? 1000;
+        }
+        _scoreScopeString = (saved.TriggerScoreScope ?? AutomationScoreScope.AnyPlayer).ToString();
+        _scoreTeamString = saved.TriggerTeam?.ToString() ?? "any";
+        _winningTeamString = saved.TriggerTeam?.ToString() ?? "any";
+        AutomationScheduleDays.TryParse(saved.ScheduledDaysOfWeek, out List<DayOfWeek> parsedDays);
+        _scheduledDays = saved.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(saved.ScheduledDaysOfWeek)
+            ? [.. parsedDays]
+            : [];
+
+        _conditionRows = [.. saved.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        if (Content != null)
+        {
+            ApplySavedRule(Content);
+        }
+
         Result<IEnumerable<ClientConnectedDTO>> clientResult = await _clientService.GetClientsAsync();
         _clients = clientResult.Data ?? [];
 
@@ -731,29 +784,6 @@
 
         if (Content != null)
         {
-            _ruleName = Content.Name;
-            _triggerClientIdString = Content.TriggerClientId.ToString();
-            _triggerEventString = Content.TriggerEvent.ToString();
-            _triggerTypeString = Content.TriggerType.ToString();
-            _idleThresholdMinutes = Content.IdleThresholdMinutes ?? 30;
-            _scheduledTimeOfDay = Content.ScheduledTimeOfDay ?? new TimeOnly(9, 0);
-            if (Content.TriggerType == AutomationTriggerType.TimeRemainingBelow)
-            {
-                _timeRemainingSeconds = Content.TriggerThreshold ?? 60;
-            }
-            else if (Content.TriggerType == AutomationTriggerType.ScoreThreshold)
-            {
-                _scoreThreshold = Content.TriggerThreshold ?? 1000;
-            }
-            _scoreScopeString = (Content.TriggerScoreScope ?? AutomationScoreScope.AnyPlayer).ToString();
-            _scoreTeamString = Content.TriggerTeam?.ToString() ?? "any";
-            AutomationScheduleDays.TryParse(Content.ScheduledDaysOfWeek, out List<DayOfWeek> parsedDays);
-            _scheduledDays = Content.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(Content.ScheduledDaysOfWeek)
-                ? [.. parsedDays]
-                : [];
-
-            _conditionRows = [.. Content.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
-
             foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
             {
                 JsonDocument doc = JsonDocument.Parse(action.ParametersJson);
@@ -1032,7 +1062,12 @@
             _ => null
         };
         AutomationScoreScope? triggerScoreScope = triggerType == AutomationTriggerType.ScoreThreshold ? Enum.Parse<AutomationScoreScope>(_scoreScopeString) : null;
-        Team? triggerTeam = triggerType == AutomationTriggerType.ScoreThreshold && Enum.TryParse(_scoreTeamString, out Team team) ? team : null;
+        Team? triggerTeam = triggerType switch
+        {
+            AutomationTriggerType.ScoreThreshold when Enum.TryParse(_scoreTeamString, out Team scoreTeam) => scoreTeam,
+            AutomationTriggerType.GameEnded when Enum.TryParse(_winningTeamString, out Team winningTeam) => winningTeam,
+            _ => null
+        };
 
         List<AutomationRuleAction> newActions = [];
         for (int i = 0; i < _actionRows.Count; i++)

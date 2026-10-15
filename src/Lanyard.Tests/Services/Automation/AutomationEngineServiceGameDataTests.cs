@@ -283,4 +283,104 @@ public class AutomationEngineServiceGameDataTests
         Assert.HasCount(2, harness.Executor.ExecutedActionIds);
         Assert.AreEqual(statusRule.Actions[0].Id, harness.Executor.ExecutedActionIds[1]);
     }
+
+    private static AutomationRule GameEndedRule(Team? winningTeam, params AutomationRuleCondition[] conditions)
+    {
+        AutomationRule rule = Rule(AutomationTriggerType.GameEnded, 0, null, winningTeam, conditions);
+        rule.TriggerThreshold = null;
+        rule.Name = winningTeam is Team team ? $"{team} wins" : "Anyone wins";
+        return rule;
+    }
+
+    // A game played and ended through the transition channel, the way the hub reports it.
+    private static async Task PlayToTheEndAsync(Harness harness, params (int Gun, Team? Team, int Score)[] finalScores)
+    {
+        harness.Engine.EnqueueTransition(KioskId, GameStatus.InGame, Status(GameStatus.InGame, 300));
+        harness.Engine.EnqueueTransition(KioskId, GameStatus.NotStarted, Status(GameStatus.NotStarted, 0, finalScores));
+
+        while (harness.Engine.Reader.TryRead(out GameStatusTransitionEvent? ev))
+        {
+            await harness.Engine.ProcessTransitionAsync(ev, CancellationToken.None);
+        }
+    }
+
+    [TestMethod]
+    public async Task GameEnded_FiresForTheWinningTeamsRuleOnly()
+    {
+        AutomationRule red = GameEndedRule(Team.Red);
+        AutomationRule green = GameEndedRule(Team.Green);
+        AutomationRule anyone = GameEndedRule(null);
+        Harness harness = await CreateHarnessAsync(red, green, anyone);
+
+        await PlayToTheEndAsync(harness, (1, Team.Red, 4000), (2, Team.Green, 1500));
+
+        CollectionAssert.AreEquivalent(
+            new[] { red.Actions[0].Id, anyone.Actions[0].Id },
+            harness.Executor.ExecutedActionIds,
+            "Red won, so the Red and any-team rules run and the Green one doesn't.");
+        Assert.IsTrue((await ExecutionsAsync(harness)).All(e => e.TriggerEvent == "GameEnded (Red won)"));
+    }
+
+    [TestMethod]
+    public async Task GameEnded_DoesNotFireOnADraw_OrASoloGame()
+    {
+        Harness harness = await CreateHarnessAsync(GameEndedRule(null));
+
+        await PlayToTheEndAsync(harness, (1, Team.Red, 1000), (2, Team.Green, 1000));
+        await PlayToTheEndAsync(harness, (1, null, 3000), (2, null, 1000));
+
+        Assert.IsEmpty(harness.Executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task GameEnded_FiresOncePerGame_NotOnTheFinishedScoresRepublishedAfterwards()
+    {
+        Harness harness = await CreateHarnessAsync(GameEndedRule(Team.Red));
+
+        await PlayToTheEndAsync(harness, (1, Team.Red, 4000), (2, Team.Green, 1500));
+
+        // The kiosk keeps publishing NotStarted with the final scores until the next game.
+        harness.Engine.EnqueueTransition(KioskId, GameStatus.NotStarted, Status(GameStatus.NotStarted, 0, (1, Team.Red, 4000), (2, Team.Green, 1500)));
+        Assert.IsFalse(harness.Engine.Reader.TryRead(out _), "A repeated status is not a new edge.");
+
+        Assert.HasCount(1, harness.Executor.ExecutedActionIds);
+    }
+
+    [TestMethod]
+    public async Task GameEnded_RespectsConditions()
+    {
+        AutomationRuleCondition never = new()
+        {
+            Id = Guid.NewGuid(),
+            ConditionType = AutomationConditionType.DaysOfWeek,
+            ParametersJson = AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(
+                AutomationScheduleDays.Serialize([DateTime.UtcNow.AddDays(3).DayOfWeek]))),
+            IsActive = true
+        };
+        Harness harness = await CreateHarnessAsync(GameEndedRule(Team.Red, never));
+
+        await PlayToTheEndAsync(harness, (1, Team.Red, 4000), (2, Team.Green, 1500));
+
+        Assert.IsEmpty(harness.Executor.ExecutedActionIds);
+        Assert.AreEqual("GameEnded (Red won)", (await ExecutionsAsync(harness)).Single().TriggerEvent);
+    }
+
+    [TestMethod]
+    public async Task GameEnded_IsIgnoredWhenTheCallerPassesNoScores()
+    {
+        // Older call sites (and tests) pass only the status; the existing status rules still run.
+        Harness harness = await CreateHarnessAsync(GameEndedRule(null));
+
+        harness.Engine.EnqueueTransition(KioskId, GameStatus.InGame);
+        harness.Engine.EnqueueTransition(KioskId, GameStatus.NotStarted);
+
+        while (harness.Engine.Reader.TryRead(out GameStatusTransitionEvent? ev))
+        {
+            Assert.IsNull(ev.FinalSnapshot);
+            await harness.Engine.ProcessTransitionAsync(ev, CancellationToken.None);
+        }
+
+        Assert.IsEmpty(harness.Executor.ExecutedActionIds);
+    }
 }
+
