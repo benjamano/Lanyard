@@ -2,6 +2,8 @@
 
 @implements IDisposable
 
+@using Lanyard.App.Components.Music.Schedule
+
 @inject IPlaylistService PlaylistService
 @inject IMusicPlayerService _player
 
@@ -46,6 +48,8 @@
                     }
                 </FluentStack>
             </div>
+
+            <MusicScheduleStatusChip ClientId="Widget.ClientId" AllowResume="AllowTrigger" />
 
             <FluentButton Appearance="@ButtonAppearance.Primary"
                           Style="width: 100%;"

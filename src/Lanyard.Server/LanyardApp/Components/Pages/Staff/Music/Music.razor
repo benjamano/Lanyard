@@ -4,6 +4,7 @@
 
 @using Lanyard.App.Components.Clients
 @using Lanyard.App.Components.Music
+@using Lanyard.App.Components.Music.Schedule
 @using Lanyard.Application.Services
 @using Lanyard.Application.Services.Authentication
 @using Lanyard.Infrastructure.DTO
@@ -180,6 +181,7 @@
 
                 <div class="music-client-controls">
                     <ClientSelector OnClientSelected="SetSelectedClient" />
+                    <MusicScheduleStatusChip ClientId="selectedClientId" />
                 </div>
             </FluentStack>
         </FluentCard>

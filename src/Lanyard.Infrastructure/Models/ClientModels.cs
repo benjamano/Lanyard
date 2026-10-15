@@ -31,6 +31,12 @@ public class Client : ICompanyOwned
     public int? LocationId { get; set; }
     public Location? Location { get; set; }
 
+    // Set when someone changes the music by hand while the location's schedule is on: the
+    // schedule leaves this kiosk alone until then (the start of its next part of the day). Kept in
+    // the database so a server restart doesn't undo a manager's choice. Only MusicScheduleEngine
+    // writes it.
+    public DateTime? MusicScheduleOverrideUntilUtc { get; set; }
+
     // Offline fallback: when the kiosk can't reach the server for OfflineAfterSeconds, its screens
     // play their last-known program from a local cache of up to ProjectionCacheLimitMb.
     // Defaults match KioskOfflineLimits (Lanyard.Shared); the migration seeds existing rows the same.
