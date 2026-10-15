@@ -128,7 +128,11 @@ public class AutomationEngineService(
         OnRuleEnabledChanged?.Invoke(ruleId, isEnabled);
     }
 
-    public void EnqueueTransition(Guid clientId, GameStatus newStatus)
+    /// <param name="status">
+    /// The full publish, when the caller has it (the hub does). Only used on the edge that ends a
+    /// game, to give GameEnded rules the final scores from that same publish.
+    /// </param>
+    public void EnqueueTransition(Guid clientId, GameStatus newStatus, LaserGameStatusDTO? status = null)
     {
         // Start the idle clock the first time a client is ever seen, before the edge check below.
         // A kiosk that comes up idle and stays idle never produces a transition, so without this
@@ -152,7 +156,13 @@ public class AutomationEngineService(
             _gameNumber.AddOrUpdate(clientId, 1, (_, n) => n + 1);
         }
 
-        GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus);
+        // The kiosk publishes the ended status before clearing anything, and keeps its scores until
+        // the next game starts, so this publish carries the finished game's final scores.
+        GameSnapshot? finalSnapshot = previousStatus == GameStatus.InGame && newStatus == GameStatus.NotStarted && status != null
+            ? GameSnapshot.From(clientId, _gameNumber.GetValueOrDefault(clientId), status)
+            : null;
+
+        GameStatusTransitionEvent ev = new(clientId, previousStatus, newStatus, finalSnapshot);
         _transitionChannel.Writer.TryWrite(ev);
     }
 
@@ -304,11 +314,24 @@ public class AutomationEngineService(
         // Filter rules matching this transition
         // The TriggerType clause matters: an idle rule keeps whatever stale TriggerEvent it was
         // saved with, and without this it would also fire on a matching transition.
-        List<AutomationRule> matchingRules = _ruleCache
+        List<(AutomationRule Rule, string Label)> matchingRules = _ruleCache
             .Where(r => r.TriggerType == AutomationTriggerType.GameStatusTransition
                 && r.TriggerClientId == ev.ClientId
                 && r.TriggerEvent == ev.NewStatus)
+            .Select(r => (r, ev.NewStatus.ToString()))
             .ToList();
+
+        // A game that ended with one team ahead also fires GameEnded rules for that team (or any).
+        if (ev.FinalSnapshot is GameSnapshot final && GameWinner.Determine(final.Players) is Team winner)
+        {
+            string label = $"{nameof(AutomationTriggerType.GameEnded)} ({winner} won)";
+
+            matchingRules.AddRange(_ruleCache
+                .Where(r => r.TriggerType == AutomationTriggerType.GameEnded
+                    && r.TriggerClientId == ev.ClientId
+                    && (r.TriggerTeam == null || r.TriggerTeam == winner))
+                .Select(r => (r, label)));
+        }
 
         if (matchingRules.Count == 0)
         {
@@ -316,18 +339,18 @@ public class AutomationEngineService(
         }
 
         // Process each matching rule
-        foreach (AutomationRule rule in matchingRules)
+        foreach ((AutomationRule rule, string label) in matchingRules)
         {
             // A status edge happens once, so a skip consumes it - the rule waits for the next edge.
             AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
 
             if (!check.Passed)
             {
-                await WriteSkippedExecutionAsync(rule, ev.ClientId, ev.NewStatus.ToString(), check, ct);
+                await WriteSkippedExecutionAsync(rule, ev.ClientId, label, check, ct);
                 continue;
             }
 
-            await ExecuteRuleAsync(rule, ev.ClientId, ev.NewStatus.ToString(), ct);
+            await ExecuteRuleAsync(rule, ev.ClientId, label, ct);
         }
     }
 

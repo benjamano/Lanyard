@@ -46,6 +46,15 @@ These run from a **second channel with its own single consumer** (`GameDataTrigg
 - A crossing is consumed whether the rule runs, is skipped by a condition, or fails. A moment in a game isn't retried.
 - Security Issue 9.1: a rogue kiosk can claim any client ID and fake these. Not addressed.
 
+## GameEnded (a team wins)
+
+GameEnded rules run on the **status-transition channel**, not the game-data one. The InGame -> NotStarted edge is never coalesced, so a game end can't be missed.
+
+- The hub passes the full publish to `EnqueueTransition(clientId, status, dto)`. On the ending edge only, the engine attaches a `GameSnapshot` of the final scores as `GameStatusTransitionEvent.FinalSnapshot`. The kiosk publishes the ended status before clearing anything, and keeps its scores until the next start.
+- `GameWinner.Determine` is pure: it returns the strictly highest team total, and null on a draw, a solo game, a single team or an empty game.
+- Rules match on the winner (`TriggerTeam` null means any team). The log label is `GameEnded (Red won)`.
+- A caller that passes only the status gets no snapshot, and GameEnded rules simply don't run for it.
+
 ## Saving rules: don't `ctx.Update` the detached graph
 
 `UpdateRuleAsync` loads the tracked rule and syncs `Actions` and `Conditions` (add new, update changed, soft-delete missing). `ctx.Update(rule)` on the dialog's detached graph used to mark a newly added child (client-generated Guid) as Modified, which failed the save, and overwrote `IsEnabled`. Keep `IsEnabled` changes in `SetRuleEnabledAsync` only.
