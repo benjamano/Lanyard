@@ -31,4 +31,23 @@ public class KioskHealthReportDTO
     public bool PacketCaptureRunning { get; set; }
 
     public int ProjectionRunningCount { get; set; }
+
+    // Offline fallback. All null when the fallback is off, or the kiosk has nothing cached yet
+    // (older clients send none of them).
+
+    /// <summary>True when every video this kiosk's screens need offline is cached.</summary>
+    public bool? OfflineFallbackReady { get; set; }
+
+    /// <summary>Videos in the offline copy that couldn't be cached, usually because of the size limit.</summary>
+    public int? OfflineVideosNotCached { get; set; }
+
+    public long? OfflineCacheBytes { get; set; }
+
+    /// <summary>When the kiosk last refreshed its offline copy from the server.</summary>
+    public DateTime? OfflineCacheSyncedUtc { get; set; }
+
+    // The most recent time the screens played the offline copy. Heartbeats only arrive while
+    // connected, so the server only ever sees an outage after it's over.
+    public DateTime? LastOfflineStartedUtc { get; set; }
+    public DateTime? LastOfflineEndedUtc { get; set; }
 }

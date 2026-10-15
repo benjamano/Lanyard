@@ -2,6 +2,8 @@ using Lanyard.Client.SignalR;
 using Lanyard.Shared.DTO;
 using Lanyard.Shared.Kiosk;
 using Microsoft.Extensions.Logging;
+using System.IO;
+using System.Text.Json;
 
 namespace Lanyard.Client.ProjectionPrograms.Offline;
 
@@ -36,6 +38,13 @@ public class KioskConnectivityMonitor(
     private DateTime _lastSyncUtc = DateTime.MinValue;
     private bool _started;
 
+    // The latest stretch of playing offline, kept on disk so it's still reported after a reboot.
+    private OfflineHistory _history = new();
+    private string HistoryPath => Path.Combine(_offlineCache.MediaFolder, "offline-history.json");
+
+    public DateTime? LastOfflineStartedUtc => _history.StartedUtc;
+    public DateTime? LastOfflineEndedUtc => _history.EndedUtc;
+
     public KioskConnectivityState State
     {
         get
@@ -59,6 +68,7 @@ public class KioskConnectivityMonitor(
         DateTime now = _timeProvider.GetUtcNow().UtcDateTime;
 
         _offlineCache.LoadFromDisk();
+        LoadHistory();
 
         lock (_lock)
         {
@@ -81,6 +91,13 @@ public class KioskConnectivityMonitor(
 
         if (connected)
         {
+            // An outage that ended with the kiosk restarting never got an end time; the first
+            // connection afterwards is the best one available.
+            if (_history.StartedUtc != null && _history.EndedUtc == null && !_projectionProgramsService.IsOffline)
+            {
+                RecordEnded();
+            }
+
             _offlineCache.RequestSync();
             _lastSyncUtc = _timeProvider.GetUtcNow().UtcDateTime;
         }
@@ -167,6 +184,9 @@ public class KioskConnectivityMonitor(
 
         _logger.LogWarning("Offline: no server for {Seconds} seconds, playing cached content (manifest {ManifestVersion})", manifest.OfflineAfterSeconds, manifest.ManifestVersion);
 
+        _history = new OfflineHistory { StartedUtc = _timeProvider.GetUtcNow().UtcDateTime };
+        SaveHistory();
+
         await _projectionProgramsService.EnterOfflineModeAsync(manifest, _offlineCache.CachedVideoIds, _offlineCache.MediaFolder);
         await _offlineMusicService.EnterOfflineModeAsync();
     }
@@ -175,5 +195,47 @@ public class KioskConnectivityMonitor(
     {
         _offlineMusicService.ExitOfflineMode();
         await _projectionProgramsService.ExitOfflineModeAsync();
+
+        RecordEnded();
+    }
+
+    private void RecordEnded()
+    {
+        _history = _history with { EndedUtc = _timeProvider.GetUtcNow().UtcDateTime };
+        SaveHistory();
+    }
+
+    private void LoadHistory()
+    {
+        try
+        {
+            if (File.Exists(HistoryPath))
+            {
+                _history = JsonSerializer.Deserialize<OfflineHistory>(File.ReadAllText(HistoryPath)) ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Offline: couldn't read the offline history");
+        }
+    }
+
+    private void SaveHistory()
+    {
+        try
+        {
+            Directory.CreateDirectory(_offlineCache.MediaFolder);
+            File.WriteAllText(HistoryPath, JsonSerializer.Serialize(_history));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Offline: couldn't save the offline history");
+        }
+    }
+
+    private sealed record OfflineHistory
+    {
+        public DateTime? StartedUtc { get; init; }
+        public DateTime? EndedUtc { get; init; }
     }
 }
