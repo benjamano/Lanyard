@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Scheduled automation rules now run at UK time, and playing an empty playlist no longer breaks the kiosk's music. Automation rules can have \"only if\" conditions, including your locations' opening hours.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Scheduled automation rules now run at UK time, and playing an empty playlist no longer breaks the kiosk's music. Automation rules can have \"only if\" conditions, including your locations' opening hours, and can run when a game's time or a score reaches a set point.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -675,7 +675,9 @@
       "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
       "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
       "Locations can now have opening hours. On Manage > Companies & Locations, press the clock next to a location to set the hours for each day of the week. Hours that run past midnight, like 18:00 to 02:00, are fine.",
-      "Automation rules have a new condition: a location is open or closed. Use it to only run a rule while you're open, or only after closing. A location with no hours set counts as closed."
+      "Automation rules have a new condition: a location is open or closed. Use it to only run a rule while you're open, or only after closing. A location with no hours set counts as closed.",
+      "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
+      "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000."
     ]
   }
 ]

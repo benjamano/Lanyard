@@ -361,6 +361,9 @@ public class SignalRControlHub(
         _laserGameStatusStore.UpdateStatus(clientId, status);
         _automationEngineService.EnqueueTransition(clientId, status.Status);
 
+        // After EnqueueTransition, so a publish that starts a game is counted as that new game.
+        _automationEngineService.EnqueueGameData(clientId, status);
+
         if (gameJustEnded)
         {
             Result<bool> recordResult = await _gameResultService.RecordCompletedGameAsync(clientId, status);

@@ -218,6 +218,7 @@ builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExe
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
+builder.Services.AddHostedService<GameDataTriggerHostedService>();
 builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.GetSection(AutomationExecutionLogOptions.SectionName));
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();

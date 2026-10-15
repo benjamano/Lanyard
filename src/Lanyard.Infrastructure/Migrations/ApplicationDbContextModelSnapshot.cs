@@ -282,6 +282,15 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("TriggerEvent")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("TriggerScoreScope")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TriggerTeam")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TriggerThreshold")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TriggerType")
                         .HasColumnType("integer");
 

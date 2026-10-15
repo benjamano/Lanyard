@@ -45,6 +45,9 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 12px;
+    /* Also used on the Rule Details step, whose FluentStack aligns children to the start, which
+       would otherwise shrink this div to its content. */
+    width: 100%;
 }
 
 .condition-fields ::deep fluent-field,

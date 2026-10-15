@@ -26,5 +26,21 @@ public enum AutomationTriggerType
     /// this type. TriggerClientId is still required by the schema but has no effect on execution -
     /// it is only an audit-log label.
     /// </summary>
-    Scheduled = 2
+    Scheduled = 2,
+
+    /// <summary>
+    /// Fires once per game when the trigger client's countdown passes
+    /// <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerThreshold"/> seconds. Needs a
+    /// reading above the threshold earlier in the same game, so a game shorter than the threshold,
+    /// or a kiosk that reports 0 before its first countdown packet, never fires it.
+    /// </summary>
+    TimeRemainingBelow = 3,
+
+    /// <summary>
+    /// Fires once per game when a score on the trigger client reaches
+    /// <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerThreshold"/>: any one player's,
+    /// or a team's total, per <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerScoreScope"/>,
+    /// optionally limited to <see cref="Lanyard.Infrastructure.Models.AutomationRule.TriggerTeam"/>.
+    /// </summary>
+    ScoreThreshold = 4
 }
