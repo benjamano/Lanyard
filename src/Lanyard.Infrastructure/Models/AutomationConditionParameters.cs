@@ -15,6 +15,9 @@ public sealed record DaysOfWeekConditionParameters(string? Days);
 /// <summary>Passes when the kiosk's live in-game state equals InGame.</summary>
 public sealed record ClientGameStatusConditionParameters(Guid ClientId, bool InGame);
 
+/// <summary>Open true passes while the location is open; false passes while it's closed.</summary>
+public sealed record OpeningHoursConditionParameters(int LocationId, bool Open);
+
 /// <summary>
 /// Shared parse/serialize/validate logic for condition parameters, so the engine, the rule
 /// service and the edit dialog all agree on the same JSON and the same rules.
@@ -41,8 +44,8 @@ public static class AutomationConditionParameters
     }
 
     /// <summary>
-    /// Returns a user-facing error, or null when the condition is well formed. Whether a kiosk
-    /// actually exists in the caller's company is checked separately by AutomationRuleService,
+    /// Returns a user-facing error, or null when the condition is well formed. Whether a kiosk or
+    /// location actually exists in the caller's company is checked separately by AutomationRuleService,
     /// since that needs the database.
     /// </summary>
     public static string? Validate(AutomationConditionType conditionType, string? parametersJson)
@@ -91,6 +94,19 @@ public static class AutomationConditionParameters
                 if (client.ClientId == Guid.Empty)
                 {
                     return "Pick a kiosk for the game status condition.";
+                }
+
+                return null;
+
+            case AutomationConditionType.DuringOpeningHours:
+                if (!TryParse(parametersJson, out OpeningHoursConditionParameters? hours))
+                {
+                    return "An opening hours condition is not valid.";
+                }
+
+                if (hours.LocationId <= 0)
+                {
+                    return "Pick a location for the opening hours condition.";
                 }
 
                 return null;

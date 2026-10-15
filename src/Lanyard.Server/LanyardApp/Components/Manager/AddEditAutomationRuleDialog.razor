@@ -14,6 +14,7 @@
 @inject IProjectionProgramService _projectionProgramService
 @inject IDmxSceneService _dmxSceneService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
+@inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
 <FluentDialogBody>
     <TitleTemplate>
@@ -129,6 +130,7 @@
                                     <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
                                     <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
+                                    <FluentOption Value="@AutomationConditionType.DuringOpeningHours.ToString()">A location is open or closed</FluentOption>
                                 </FluentSelect>
                             </div>
                             <div class="condition-remove">
@@ -160,6 +162,30 @@
                                                     Label="@(capturedDay.ToString()[..3])" />
                                 }
                             </div>
+                        }
+                        else if (row.ConditionType == AutomationConditionType.DuringOpeningHours)
+                        {
+                            <div class="condition-fields">
+                                <FluentSelect TOption="Location"
+                                              TValue="string"
+                                              Label="Location"
+                                              Placeholder="Select location"
+                                              Width="100%"
+                                              Items="@_locations"
+                                              OptionText="@(l => l?.Name ?? string.Empty)"
+                                              OptionValue="@(l => l?.Id.ToString())"
+                                              @bind-Value="row.LocationIdString" />
+                                <FluentSelect TOption="string"
+                                              TValue="string"
+                                              Label="State"
+                                              Width="100%"
+                                              Value="@(row.Open ? "open" : "closed")"
+                                              ValueChanged="@((string? state) => row.Open = state != "closed")">
+                                    <FluentOption Value="@("open")">is open</FluentOption>
+                                    <FluentOption Value="@("closed")">is closed</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            <div class="condition-hint">Uses the location's opening hours, set under Manage &gt; Companies &amp; Locations. A location with no hours set counts as closed.</div>
                         }
                         else
                         {
@@ -507,7 +533,11 @@
         public HashSet<DayOfWeek> Days { get; set; } = [];
         public string ClientIdString { get; set; } = string.Empty;
         public bool InGame { get; set; }
+        public string LocationIdString { get; set; } = string.Empty;
+        public bool Open { get; set; } = true;
     }
+
+    private IEnumerable<Location> _locations = [];
 
     private List<ConditionRow> _conditionRows = [];
 
@@ -544,6 +574,9 @@
             {
                 AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
                 AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
+                AutomationConditionType.DuringOpeningHours => AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(
+                    int.TryParse(row.LocationIdString, out int locationId) ? locationId : 0,
+                    row.Open)),
                 _ => AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(
                     Guid.TryParse(row.ClientIdString, out Guid clientId) ? clientId : Guid.Empty,
                     row.InGame))
@@ -586,6 +619,11 @@
             case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(condition.ParametersJson, out ClientGameStatusConditionParameters? kiosk):
                 row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
                 row.InGame = kiosk.InGame;
+                break;
+
+            case AutomationConditionType.DuringOpeningHours when AutomationConditionParameters.TryParse(condition.ParametersJson, out OpeningHoursConditionParameters? hours):
+                row.LocationIdString = hours.LocationId > 0 ? hours.LocationId.ToString() : string.Empty;
+                row.Open = hours.Open;
                 break;
         }
 
@@ -633,6 +671,11 @@
     {
         Result<IEnumerable<ClientConnectedDTO>> clientResult = await _clientService.GetClientsAsync();
         _clients = clientResult.Data ?? [];
+
+        // The signed-in company's locations only: a platform admin would otherwise see every
+        // company's, and a rule can only use its own company's (AutomationRuleService checks).
+        Result<List<Location>> locationResult = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
+        _locations = locationResult.Data ?? [];
 
         if (Content != null)
         {

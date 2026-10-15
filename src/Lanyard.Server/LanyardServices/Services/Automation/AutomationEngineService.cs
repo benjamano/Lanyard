@@ -75,6 +75,10 @@ public class AutomationEngineService(
     // Kiosks named by ClientGameStatus conditions, loaded with the rule cache. Includes each one's
     // CompanyId because the engine's context is unfiltered and must enforce that itself.
     private Dictionary<Guid, AutomationClientInfo> _conditionClients = [];
+
+    // Locations named by DuringOpeningHours conditions, with their active opening hours. Reloaded
+    // with the rule cache; LocationOpeningHoursService invalidates it when hours are saved.
+    private Dictionary<int, AutomationLocationInfo> _conditionLocations = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
     // The one-time read of the enabled flag, shared by every caller. Cleared again if the read
     // fails so a transient DB error at startup is retried on the next tick instead of leaving
@@ -178,8 +182,33 @@ public class AutomationEngineService(
                     .TagWithCallSite()
                     .ToDictionaryAsync(c => c.Id, c => new AutomationClientInfo(c.CompanyId, c.Name), ct);
 
-            // Clients first, so a rule is never visible without the kiosks its conditions name.
+            List<int> conditionLocationIds = rules
+                .SelectMany(r => r.Conditions)
+                .Where(c => c.ConditionType == AutomationConditionType.DuringOpeningHours)
+                .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out OpeningHoursConditionParameters? p) ? p.LocationId : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            // A deactivated location is left out, so its conditions fail closed as "no longer exists".
+            Dictionary<int, AutomationLocationInfo> conditionLocations = conditionLocationIds.Count == 0
+                ? []
+                : await ctx.Locations
+                    .Where(l => conditionLocationIds.Contains(l.Id) && l.IsActive)
+                    .Select(l => new
+                    {
+                        l.Id,
+                        l.CompanyId,
+                        l.Name,
+                        Hours = l.OpeningHours.Where(h => h.IsActive).ToList()
+                    })
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .ToDictionaryAsync(l => l.Id, l => new AutomationLocationInfo(l.CompanyId, l.Name, l.Hours), ct);
+
+            // Kiosks and locations first, so a rule is never visible without what its conditions name.
             _conditionClients = conditionClients;
+            _conditionLocations = conditionLocations;
             _ruleCache = rules;
             _ruleCacheDirty = false;
             _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
@@ -516,13 +545,15 @@ public class AutomationEngineService(
         }
 
         Dictionary<Guid, AutomationClientInfo> clients = _conditionClients;
+        Dictionary<int, AutomationLocationInfo> locations = _conditionLocations;
 
         return AutomationConditionEvaluator.Evaluate(
             rule.Conditions,
             rule.CompanyId,
             nowUtc,
             clientId => clients.GetValueOrDefault(clientId),
-            IsClientInGame);
+            IsClientInGame,
+            locationId => locations.GetValueOrDefault(locationId));
     }
 
     // The status store, not _lastKnownStatus: the hub clears the store when a kiosk disconnects,

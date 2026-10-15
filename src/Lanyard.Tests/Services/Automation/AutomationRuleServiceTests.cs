@@ -844,4 +844,70 @@ public class AutomationRuleServiceTests
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual("Rule not found.", result.Error);
     }
+
+    private static AutomationRuleCondition WhileOpen(int locationId)
+    {
+        return BuildCondition(
+            AutomationConditionType.DuringOpeningHours,
+            AutomationConditionParameters.Serialize(new OpeningHoursConditionParameters(locationId, true)));
+    }
+
+    private static async Task<int> SeedLocationAsync(DbContextOptions<ApplicationDbContext> options, int companyId, bool isActive = true)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        Location location = new() { CompanyId = companyId, Name = $"Location {companyId}", IsActive = isActive, CreateDate = DateTime.UtcNow, UpdateDate = DateTime.UtcNow };
+        ctx.Locations.Add(location);
+        await ctx.SaveChangesAsync();
+
+        return location.Id;
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnOpeningHoursConditionForALocationThatDoesNotExist()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int deactivatedId = await SeedLocationAsync(options, companyId: 1, isActive: false);
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule missing = BuildRule(Guid.NewGuid());
+        missing.Conditions = [WhileOpen(999)];
+        AutomationRule deactivated = BuildRule(Guid.NewGuid());
+        deactivated.Conditions = [WhileOpen(deactivatedId)];
+
+        Result<AutomationRule> missingResult = await service.CreateRuleAsync(missing);
+        Result<AutomationRule> deactivatedResult = await service.CreateRuleAsync(deactivated);
+
+        Assert.AreEqual("An opening hours condition refers to a location that doesn't exist.", missingResult.Error);
+        Assert.IsFalse(deactivatedResult.IsSuccess);
+    }
+
+    [TestMethod]
+    public async Task CreateRule_RejectsAnOpeningHoursConditionForAnotherCompanysLocation()
+    {
+        // Locations aren't tenant-filtered, so this is an explicit check rather than the filter.
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        int ownLocationId = await SeedLocationAsync(options, companyId: 1);
+        int otherLocationId = await SeedLocationAsync(options, companyId: 2);
+
+        Mock<IDbContextFactory<ApplicationDbContext>> tenantFactory = new();
+        tenantFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new ApplicationDbContext(options, new FixedTenantProvider(1)));
+
+        AutomationEngineService engine = new(GetFactory(options), [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
+        AutomationRuleService service = new(tenantFactory.Object, engine);
+
+        AutomationRule foreign = BuildRule(Guid.NewGuid());
+        foreign.Conditions = [WhileOpen(otherLocationId)];
+        AutomationRule own = BuildRule(Guid.NewGuid());
+        own.Conditions = [WhileOpen(ownLocationId)];
+
+        Result<AutomationRule> foreignResult = await service.CreateRuleAsync(foreign);
+        Result<AutomationRule> ownResult = await service.CreateRuleAsync(own);
+
+        Assert.IsFalse(foreignResult.IsSuccess);
+        Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
+    }
 }
+
