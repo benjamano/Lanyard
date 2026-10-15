@@ -351,6 +351,35 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("AutomationRuleActionExecutions");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleCondition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AutomationRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ConditionType")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ParametersJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AutomationRuleId");
+
+                    b.ToTable("AutomationRuleConditions");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleExecution", b =>
                 {
                     b.Property<Guid>("Id")
@@ -368,6 +397,9 @@ namespace Lanyard.Infrastructure.Migrations
 
                     b.Property<string>("RuleName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SkipReason")
                         .HasColumnType("text");
 
                     b.Property<Guid>("TriggerClientId")
@@ -3969,6 +4001,17 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("AutomationRuleExecution");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleCondition", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.AutomationRule", "AutomationRule")
+                        .WithMany("Conditions")
+                        .HasForeignKey("AutomationRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AutomationRule");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleExecution", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.AutomationRule", "AutomationRule")
@@ -5232,6 +5275,8 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRule", b =>
                 {
                     b.Navigation("Actions");
+
+                    b.Navigation("Conditions");
 
                     b.Navigation("Executions");
                 });

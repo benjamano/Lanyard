@@ -44,7 +44,7 @@ public class AutomationEngineServiceScheduledTests
         params IActionExecutor[] executors)
     {
         return new AutomationEngineService(
-            GetFactory(options), executors, NullLogger<AutomationEngineService>.Instance);
+            GetFactory(options), executors, new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
     }
 
     // The engine reads its enabled flag from AppSettings on first use and overwrites whatever

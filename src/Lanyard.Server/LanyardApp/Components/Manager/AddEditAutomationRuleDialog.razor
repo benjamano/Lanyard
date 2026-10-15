@@ -4,15 +4,12 @@
 @using Lanyard.Infrastructure.Enum
 @using Lanyard.Infrastructure.DTO
 @using Lanyard.Infrastructure.DTO.Dmx
-@using Lanyard.Infrastructure.DataAccess
 @using Lanyard.Shared.Enum
 @using System.Text.Json
-@using Microsoft.EntityFrameworkCore
 
 @inject INotificationService _toastService
 @inject IAutomationRuleService _ruleService
 @inject IClientService _clientService
-@inject IDbContextFactory<ApplicationDbContext> _dbContextFactory
 @inject IPlaylistService _playlistService
 @inject IProjectionProgramService _projectionProgramService
 @inject IDmxSceneService _dmxSceneService
@@ -104,6 +101,107 @@
             </FluentStack>
         }
         else if (_currentStepIndex == 1)
+        {
+            <div class="conditions-step">
+                <FluentText>
+                    Optional. The rule only runs if every condition is true at the moment it's triggered. Times and days are UK venue time.
+                </FluentText>
+
+                @if (_conditionRows.Count == 0)
+                {
+                    <div class="conditions-empty">No conditions, so the rule runs every time it's triggered.</div>
+                }
+
+                @for (int i = 0; i < _conditionRows.Count; i++)
+                {
+                    int index = i;
+                    ConditionRow row = _conditionRows[index];
+
+                    <div class="condition-row">
+                        <div class="condition-row-header">
+                            <div class="condition-type">
+                                <FluentSelect TOption="string"
+                                              TValue="string"
+                                              Label="Only if"
+                                              Width="100%"
+                                              Value="@row.ConditionType.ToString()"
+                                              ValueChanged="@((string? type) => row.ConditionType = Enum.TryParse(type, out AutomationConditionType parsed) ? parsed : AutomationConditionType.TimeWindow)">
+                                    <FluentOption Value="@AutomationConditionType.TimeWindow.ToString()">Time of day is between</FluentOption>
+                                    <FluentOption Value="@AutomationConditionType.DaysOfWeek.ToString()">Day of week is</FluentOption>
+                                    <FluentOption Value="@AutomationConditionType.ClientGameStatus.ToString()">A kiosk is or isn't in a game</FluentOption>
+                                </FluentSelect>
+                            </div>
+                            <div class="condition-remove">
+                                <FluentButton IconStart="new Icons.Regular.Size20.Dismiss()"
+                                              Title="Remove condition"
+                                              OnClick="@(() => _conditionRows.RemoveAt(index))" />
+                            </div>
+                        </div>
+
+                        @if (row.ConditionType == AutomationConditionType.TimeWindow)
+                        {
+                            <div class="condition-fields">
+                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.Start" Label="From" />
+                                <AnyTimePicker TValue="TimeOnly" @bind-Value="row.End" Label="Until" />
+                            </div>
+                            @if (row.End < row.Start)
+                            {
+                                <div class="condition-hint">Runs past midnight, until @row.End.ToString("HH:mm") the next morning.</div>
+                            }
+                        }
+                        else if (row.ConditionType == AutomationConditionType.DaysOfWeek)
+                        {
+                            <div class="condition-days">
+                                @foreach (DayOfWeek day in _allDaysOfWeek)
+                                {
+                                    DayOfWeek capturedDay = day;
+                                    <FluentCheckbox Value="@row.Days.Contains(capturedDay)"
+                                                    ValueChanged="@((bool ticked) => OnConditionDayToggled(row, capturedDay, ticked))"
+                                                    Label="@(capturedDay.ToString()[..3])" />
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="condition-fields">
+                                <FluentSelect TOption="ClientConnectedDTO"
+                                              TValue="string"
+                                              Label="Kiosk"
+                                              Placeholder="Select kiosk"
+                                              Width="100%"
+                                              Items="@_clients"
+                                              OptionText="@(c => c?.Name ?? string.Empty)"
+                                              OptionValue="@(c => c?.Id.ToString())"
+                                              @bind-Value="row.ClientIdString" />
+                                <FluentSelect TOption="string"
+                                              TValue="string"
+                                              Label="State"
+                                              Width="100%"
+                                              Value="@(row.InGame ? "in" : "out")"
+                                              ValueChanged="@((string? state) => row.InGame = state == "in")">
+                                    <FluentOption Value="@("in")">is in a game</FluentOption>
+                                    <FluentOption Value="@("out")">isn't in a game</FluentOption>
+                                </FluentSelect>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div>
+                    <FluentButton Appearance="ButtonAppearance.Outline"
+                                  IconStart="new Icons.Regular.Size20.Add()"
+                                  OnClick="AddConditionRow">
+                        Add condition
+                    </FluentButton>
+                </div>
+
+                @if (ConditionsError is string conditionsError)
+                {
+                    <FluentText Color="Color.Error">@conditionsError</FluentText>
+                }
+            </div>
+        }
+        else if (_currentStepIndex == 2)
         {
             <FluentStack Orientation="Orientation.Vertical" VerticalGap="8">
                 @for (int i = 0; i < _actionRows.Count; i++)
@@ -323,14 +421,24 @@
         {
             <FluentButton Appearance="ButtonAppearance.Primary"
                           Disabled="@(string.IsNullOrWhiteSpace(_ruleName) || string.IsNullOrEmpty(_triggerClientIdString) || !IsTriggerConfigured)"
-                          OnClick="GoToStep2Async">
+                          OnClick="@(() => _currentStepIndex = 1)">
                 Next
             </FluentButton>
             <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
         }
         else if (_currentStepIndex == 1)
         {
-            <FluentButton OnClick="GoToStep1Async">Previous</FluentButton>
+            <FluentButton OnClick="@(() => _currentStepIndex = 0)">Previous</FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          Disabled="@(ConditionsError is not null)"
+                          OnClick="@(() => _currentStepIndex = 2)">
+                Next
+            </FluentButton>
+            <FluentButton OnClick="CancelDialogAsync">Cancel</FluentButton>
+        }
+        else if (_currentStepIndex == 2)
+        {
+            <FluentButton OnClick="@(() => _currentStepIndex = 1)">Previous</FluentButton>
             <FluentButton Appearance="ButtonAppearance.Primary"
                           Loading="@_isSaving"
                           Disabled="@(_actionRows.Count == 0 || _actionRows.Any(r => !IsRowValid(r)))"
@@ -388,7 +496,101 @@
     }
 
     private int _currentStepIndex = 0;
-    private List<string> _steps = ["Rule Details", "Actions"];
+    private List<string> _steps = ["Rule Details", "Conditions", "Actions"];
+
+    private sealed class ConditionRow
+    {
+        public Guid? ExistingConditionId { get; set; }
+        public AutomationConditionType ConditionType { get; set; } = AutomationConditionType.TimeWindow;
+        public TimeOnly Start { get; set; } = new(18, 0);
+        public TimeOnly End { get; set; } = new(22, 0);
+        public HashSet<DayOfWeek> Days { get; set; } = [];
+        public string ClientIdString { get; set; } = string.Empty;
+        public bool InGame { get; set; }
+    }
+
+    private List<ConditionRow> _conditionRows = [];
+
+    // Same validation CreateRuleAsync/UpdateRuleAsync apply, so a condition the service would
+    // reject can't be carried through to the actions step.
+    private string? ConditionsError => AutomationRuleService.ValidateConditions(BuildConditions());
+
+    private void AddConditionRow()
+    {
+        _conditionRows.Add(new ConditionRow());
+    }
+
+    private static void OnConditionDayToggled(ConditionRow row, DayOfWeek day, bool ticked)
+    {
+        if (ticked)
+        {
+            row.Days.Add(day);
+        }
+        else
+        {
+            row.Days.Remove(day);
+        }
+    }
+
+    private List<AutomationRuleCondition> BuildConditions()
+    {
+        List<AutomationRuleCondition> conditions = [];
+
+        for (int i = 0; i < _conditionRows.Count; i++)
+        {
+            ConditionRow row = _conditionRows[i];
+
+            string parametersJson = row.ConditionType switch
+            {
+                AutomationConditionType.TimeWindow => AutomationConditionParameters.Serialize(new TimeWindowConditionParameters(row.Start, row.End)),
+                AutomationConditionType.DaysOfWeek => AutomationConditionParameters.Serialize(new DaysOfWeekConditionParameters(AutomationScheduleDays.Serialize(row.Days))),
+                _ => AutomationConditionParameters.Serialize(new ClientGameStatusConditionParameters(
+                    Guid.TryParse(row.ClientIdString, out Guid clientId) ? clientId : Guid.Empty,
+                    row.InGame))
+            };
+
+            conditions.Add(new AutomationRuleCondition
+            {
+                Id = row.ExistingConditionId ?? Guid.NewGuid(),
+                ConditionType = row.ConditionType,
+                ParametersJson = parametersJson,
+                SortOrder = i,
+                IsActive = true
+            });
+        }
+
+        return conditions;
+    }
+
+    private static ConditionRow ToConditionRow(AutomationRuleCondition condition)
+    {
+        ConditionRow row = new()
+        {
+            ExistingConditionId = condition.Id,
+            ConditionType = condition.ConditionType
+        };
+
+        switch (condition.ConditionType)
+        {
+            case AutomationConditionType.TimeWindow when AutomationConditionParameters.TryParse(condition.ParametersJson, out TimeWindowConditionParameters? window):
+                row.Start = window.Start;
+                row.End = window.End;
+                break;
+
+            case AutomationConditionType.DaysOfWeek when AutomationConditionParameters.TryParse(condition.ParametersJson, out DaysOfWeekConditionParameters? days)
+                && !string.IsNullOrWhiteSpace(days.Days)
+                && AutomationScheduleDays.TryParse(days.Days, out List<DayOfWeek> parsedDays):
+                row.Days = [.. parsedDays];
+                break;
+
+            case AutomationConditionType.ClientGameStatus when AutomationConditionParameters.TryParse(condition.ParametersJson, out ClientGameStatusConditionParameters? kiosk):
+                row.ClientIdString = kiosk.ClientId == Guid.Empty ? string.Empty : kiosk.ClientId.ToString();
+                row.InGame = kiosk.InGame;
+                break;
+        }
+
+        return row;
+    }
 
     private string _ruleName = string.Empty;
     private string _triggerClientIdString = string.Empty;
@@ -444,6 +646,8 @@
             _scheduledDays = Content.TriggerType == AutomationTriggerType.Scheduled && !string.IsNullOrWhiteSpace(Content.ScheduledDaysOfWeek)
                 ? [.. parsedDays]
                 : [];
+
+            _conditionRows = [.. Content.Conditions.Where(c => c.IsActive).OrderBy(c => c.SortOrder).Select(ToConditionRow)];
 
             foreach (AutomationRuleAction action in Content.Actions.Where(a => a.IsActive).OrderBy(a => a.SortOrder))
             {
@@ -693,18 +897,6 @@
         }
     }
 
-    private async Task GoToStep2Async()
-    {
-        _currentStepIndex = 1;
-        await Task.CompletedTask;
-    }
-
-    private async Task GoToStep1Async()
-    {
-        _currentStepIndex = 0;
-        await Task.CompletedTask;
-    }
-
     private void AddActionRow()
     {
         _actionRows.Add(new ActionRow());
@@ -800,27 +992,11 @@
 
         Result<AutomationRule> saveResult;
 
+        List<AutomationRuleCondition> newConditions = BuildConditions();
+
         if (Content != null)
         {
-            List<Guid> removedActionIds = Content.Actions
-                .Where(a => a.IsActive)
-                .Select(a => a.Id)
-                .Where(id => !_actionRows.Select(r => r.ExistingActionId).Contains(id))
-                .ToList();
-
-            if (removedActionIds.Count > 0)
-            {
-                await using ApplicationDbContext ctx = await _dbContextFactory.CreateDbContextAsync();
-                List<AutomationRuleAction> actionsToRemove = await ctx.AutomationRuleActions
-                    .Where(a => removedActionIds.Contains(a.Id))
-                    .ToListAsync();
-                foreach (AutomationRuleAction action in actionsToRemove)
-                {
-                    action.IsActive = false;
-                }
-                await ctx.SaveChangesAsync();
-            }
-
+            // Actions and conditions missing from the rows are soft-deleted by UpdateRuleAsync.
             AutomationRule updatedRule = new AutomationRule
             {
                 Id = Content.Id,
@@ -833,7 +1009,8 @@
                 ScheduledDaysOfWeek = scheduledDaysOfWeek,
                 IsActive = true,
                 CreateDate = Content.CreateDate,
-                Actions = newActions
+                Actions = newActions,
+                Conditions = newConditions
             };
             foreach (AutomationRuleAction action in newActions)
             {
@@ -853,7 +1030,8 @@
                 IdleThresholdMinutes = idleThresholdMinutes,
                 ScheduledTimeOfDay = scheduledTimeOfDay,
                 ScheduledDaysOfWeek = scheduledDaysOfWeek,
-                Actions = newActions
+                Actions = newActions,
+                Conditions = newConditions
             };
             saveResult = await _ruleService.CreateRuleAsync(newRule);
         }

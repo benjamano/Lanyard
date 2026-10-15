@@ -38,7 +38,29 @@ public class AutomationRule : ICompanyOwned
     public DateTime? LastUpdateDate { get; set; }
 
     public virtual List<AutomationRuleAction> Actions { get; set; } = [];
+
+    // Extra "only if" checks, all of which must pass when the trigger fires (AND). A rule with no
+    // active conditions behaves exactly as rules did before conditions existed.
+    public virtual List<AutomationRuleCondition> Conditions { get; set; } = [];
+
     public virtual List<AutomationRuleExecution> Executions { get; set; } = [];
+}
+
+public class AutomationRuleCondition
+{
+    public Guid Id { get; set; }
+
+    public Guid AutomationRuleId { get; set; }
+    public AutomationRule? AutomationRule { get; set; }
+
+    public AutomationConditionType ConditionType { get; set; }
+
+    // Shape depends on ConditionType - see AutomationConditionParameters for the typed records.
+    public string ParametersJson { get; set; } = "{}";
+
+    public int SortOrder { get; set; }
+
+    public bool IsActive { get; set; }
 }
 
 public class AutomationRuleAction
@@ -70,6 +92,10 @@ public class AutomationRuleExecution
     public Guid TriggerClientId { get; set; }
 
     public bool OverallSuccess { get; set; }
+
+    // Set when the trigger fired but a condition wasn't met, so no actions ran. Such a row has
+    // OverallSuccess false and no action rows, and must not be read as a failure or as "fired".
+    public string? SkipReason { get; set; }
 
     public virtual List<AutomationRuleActionExecution> ActionExecutions { get; set; } = [];
 }

@@ -19,7 +19,11 @@
             <FluentText><strong>Executed At:</strong> @Content.ExecutedAt.ToLocalTime().ToString("g")</FluentText>
             <FluentText>
                 <strong>Overall:</strong>
-                @if (Content.OverallSuccess)
+                @if (Content.SkipReason != null)
+                {
+                    <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative">Skipped</FluentBadge>
+                }
+                else if (Content.OverallSuccess)
                 {
                     <FluentIcon Icon="Icons.Regular.Size20.CheckmarkCircle" Color="Color.Success" />
                     <span> Success</span>
@@ -30,6 +34,11 @@
                     <span> Failed</span>
                 }
             </FluentText>
+
+            @if (Content.SkipReason != null)
+            {
+                <FluentText><strong>Why it was skipped:</strong> @Content.SkipReason</FluentText>
+            }
 
             <FluentDivider />
 
@@ -59,7 +68,11 @@
                 </FluentCard>
             }
 
-            @if (Content.ActionExecutions.Count == 0)
+            @if (Content.SkipReason != null)
+            {
+                <FluentText>No actions ran because a condition wasn't met.</FluentText>
+            }
+            else if (Content.ActionExecutions.Count == 0)
             {
                 <FluentText>No action execution records.</FluentText>
             }

@@ -4,6 +4,7 @@ using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
+using Lanyard.Shared.DTO;
 using Lanyard.Shared.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -15,10 +16,14 @@ namespace Lanyard.Application.Services;
 public class AutomationEngineService(
     ISystemDbContextFactory contextFactory,
     IEnumerable<IActionExecutor> actionExecutors,
+    ILaserGameStatusStore laserGameStatusStore,
+    TimeProvider timeProvider,
     ILogger<AutomationEngineService> logger)
 {
     private readonly ISystemDbContextFactory _contextFactory = contextFactory;
     private readonly IEnumerable<IActionExecutor> _actionExecutors = actionExecutors;
+    private readonly ILaserGameStatusStore _laserGameStatusStore = laserGameStatusStore;
+    private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<AutomationEngineService> _logger = logger;
 
     private readonly Channel<GameStatusTransitionEvent> _transitionChannel =
@@ -51,6 +56,12 @@ public class AutomationEngineService(
     // on every tick.
     private readonly ConcurrentDictionary<Guid, byte> _scheduledSeeded = new();
 
+    // A rule skipped by its conditions is not "fired", so idle and scheduled rules stay eligible
+    // and fire on a later tick once the conditions hold. These only stop the skip itself being
+    // logged on every 60s tick: once per idle stretch, once per local day for a schedule.
+    private readonly ConcurrentDictionary<Guid, DateTime> _idleSkipLoggedForStretch = new();
+    private readonly ConcurrentDictionary<Guid, DateOnly> _scheduledSkipLoggedForLocalDate = new();
+
     // A 60s tick rarely lands on the exact scheduled second, and an unbounded "fire if we're past
     // it" would replay hours-old rules after a restart (a server booting at 22:00 must not turn
     // the venue lights back on for a 09:00 rule). This window bounds both how late a tick can
@@ -60,6 +71,10 @@ public class AutomationEngineService(
     private volatile bool _isEnabled = false;
     private volatile bool _ruleCacheDirty = true;
     private List<AutomationRule> _ruleCache = [];
+
+    // Kiosks named by ClientGameStatus conditions, loaded with the rule cache. Includes each one's
+    // CompanyId because the engine's context is unfiltered and must enforce that itself.
+    private Dictionary<Guid, AutomationClientInfo> _conditionClients = [];
     private readonly SemaphoreSlim _ruleCacheLock = new(1, 1);
     // The one-time read of the enabled flag, shared by every caller. Cleared again if the read
     // fails so a transient DB error at startup is retried on the next tick instead of leaving
@@ -142,8 +157,29 @@ public class AutomationEngineService(
             List<AutomationRule> rules = await ctx.AutomationRules
                 .Where(r => r.IsActive && r.IsEnabled)
                 .Include(r => r.Actions.Where(a => a.IsActive))
+                .Include(r => r.Conditions.Where(c => c.IsActive))
                 .AsNoTracking()
+                .TagWithCallSite()
                 .ToListAsync(ct);
+
+            List<Guid> conditionClientIds = rules
+                .SelectMany(r => r.Conditions)
+                .Where(c => c.ConditionType == AutomationConditionType.ClientGameStatus)
+                .Select(c => AutomationConditionParameters.TryParse(c.ParametersJson, out ClientGameStatusConditionParameters? p) ? p.ClientId : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            Dictionary<Guid, AutomationClientInfo> conditionClients = conditionClientIds.Count == 0
+                ? []
+                : await ctx.Clients
+                    .Where(c => conditionClientIds.Contains(c.Id))
+                    .AsNoTracking()
+                    .TagWithCallSite()
+                    .ToDictionaryAsync(c => c.Id, c => new AutomationClientInfo(c.CompanyId, c.Name), ct);
+
+            // Clients first, so a rule is never visible without the kiosks its conditions name.
+            _conditionClients = conditionClients;
             _ruleCache = rules;
             _ruleCacheDirty = false;
             _logger.LogInformation("AutomationEngine rule cache reloaded - {Count} rules", rules.Count);
@@ -200,6 +236,15 @@ public class AutomationEngineService(
         // Process each matching rule
         foreach (AutomationRule rule in matchingRules)
         {
+            // A status edge happens once, so a skip consumes it - the rule waits for the next edge.
+            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+
+            if (!check.Passed)
+            {
+                await WriteSkippedExecutionAsync(rule, ev.ClientId, ev.NewStatus.ToString(), check, ct);
+                continue;
+            }
+
             await ExecuteRuleAsync(rule, ev.ClientId, ev.NewStatus.ToString(), ct);
         }
     }
@@ -269,6 +314,22 @@ public class AutomationEngineService(
             if (_idleLastAttemptUtc.TryGetValue(rule.Id, out DateTime lastAttemptUtc)
                 && !IsIdleThresholdReached(lastAttemptUtc, nowUtc, rule.IdleThresholdMinutes!.Value))
             {
+                continue;
+            }
+
+            AutomationConditionCheck check = CheckConditions(rule, nowUtc);
+
+            if (!check.Passed)
+            {
+                // Not recorded as an attempt, so the rule fires on the first tick the conditions
+                // hold while the client is still idle (e.g. "idle 30 minutes, only after 22:00").
+                if (!_idleSkipLoggedForStretch.TryGetValue(rule.Id, out DateTime skipLoggedForStretch)
+                    || skipLoggedForStretch != lastTransitionUtc)
+                {
+                    _idleSkipLoggedForStretch[rule.Id] = lastTransitionUtc;
+                    await WriteSkippedExecutionAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.ClientIdle), check, ct);
+                }
+
                 continue;
             }
 
@@ -352,6 +413,20 @@ public class AutomationEngineService(
                 continue;
             }
 
+            AutomationConditionCheck check = CheckConditions(rule, _timeProvider.GetUtcNow().UtcDateTime);
+
+            if (!check.Passed)
+            {
+                // Not marked fired, so a later tick inside the catch-up window can still run it.
+                if (!_scheduledSkipLoggedForLocalDate.TryGetValue(rule.Id, out DateOnly skipLoggedForDate) || skipLoggedForDate != today)
+                {
+                    _scheduledSkipLoggedForLocalDate[rule.Id] = today;
+                    await WriteSkippedExecutionAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.Scheduled), check, ct);
+                }
+
+                continue;
+            }
+
             _logger.LogInformation("Scheduled rule {RuleId} due at {ScheduledTimeOfDay} - firing", rule.Id, rule.ScheduledTimeOfDay);
 
             bool succeeded = await ExecuteRuleAsync(rule, rule.TriggerClientId, nameof(AutomationTriggerType.Scheduled), ct);
@@ -429,6 +504,73 @@ public class AutomationEngineService(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reseed last-fired date for scheduled rule {RuleId}", ruleId);
+        }
+    }
+
+    private AutomationConditionCheck CheckConditions(AutomationRule rule, DateTime nowUtc)
+    {
+        // Every rule saved before conditions existed takes this path, unchanged.
+        if (!rule.Conditions.Any(c => c.IsActive))
+        {
+            return AutomationConditionCheck.Pass;
+        }
+
+        Dictionary<Guid, AutomationClientInfo> clients = _conditionClients;
+
+        return AutomationConditionEvaluator.Evaluate(
+            rule.Conditions,
+            rule.CompanyId,
+            nowUtc,
+            clientId => clients.GetValueOrDefault(clientId),
+            IsClientInGame);
+    }
+
+    // The status store, not _lastKnownStatus: the hub clears the store when a kiosk disconnects,
+    // so a kiosk that drops mid-game doesn't stay "in game" forever.
+    private bool IsClientInGame(Guid clientId)
+    {
+        return _laserGameStatusStore.TryGetStatus(clientId, out LaserGameStatusDTO? status)
+            && status?.Status == GameStatus.InGame;
+    }
+
+    /// <summary>
+    /// Records that the trigger fired but a condition stopped the rule, so "why didn't my rule run"
+    /// can be answered from the execution log. Does not raise OnRuleExecuted - nothing ran.
+    /// </summary>
+    private async Task WriteSkippedExecutionAsync(AutomationRule rule, Guid clientId, string triggerEventLabel, AutomationConditionCheck check, CancellationToken ct)
+    {
+        string reason = check.Reason ?? "A condition wasn't met";
+
+        if (check.IsMisconfigured)
+        {
+            _logger.LogWarning("Rule {RuleId} skipped - a condition is misconfigured: {Reason}", rule.Id, reason);
+        }
+        else
+        {
+            _logger.LogInformation("Rule {RuleId} skipped - condition not met: {Reason}", rule.Id, reason);
+        }
+
+        AutomationRuleExecution execution = new()
+        {
+            Id = Guid.NewGuid(),
+            AutomationRuleId = rule.Id,
+            RuleName = rule.Name,
+            ExecutedAt = DateTime.UtcNow,
+            TriggerEvent = triggerEventLabel,
+            TriggerClientId = clientId,
+            OverallSuccess = false,
+            SkipReason = reason
+        };
+
+        try
+        {
+            await using ApplicationDbContext ctx = await _contextFactory.CreateDbContextAsync(ct);
+            ctx.AutomationRuleExecutions.Add(execution);
+            await ctx.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write skipped execution log for rule {RuleId}", rule.Id);
         }
     }
 
