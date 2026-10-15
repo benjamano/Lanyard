@@ -687,7 +687,10 @@
       "New Music Schedule page for managers (Management > Music Schedule). Plan what plays at your location, and how loud, at each time of day, for example a quieter playlist before opening and music off after closing, without an automation rule for every change.",
       "Each part of the day has a name, the days it runs, a start and end time in UK time, a playlist (or Music off) and, if you like, a volume. One that ends after midnight carries on into the next morning, and parts of the day can't overlap. Times with nothing scheduled leave the music as it is.",
       "The schedule starts switched off. Turn on \"Use this schedule\" when it's ready. Managers can change their own location's schedule; admins can pick any location.",
-      "Kiosks now have a location (Manage > Clients, a kiosk's settings, General tab). A kiosk follows the music schedule of the location it's set to."
+      "Kiosks now have a location (Manage > Clients, a kiosk's settings, General tab). A kiosk follows the music schedule of the location it's set to.",
+      "When a new part of the day starts, the kiosks change over by themselves. The new playlist starts when the song that's playing ends (or after 8 minutes at most, for a long track), and the volume moves in small steps over a few seconds instead of jumping. A kiosk that was off or offline catches up within half a minute of reconnecting.",
+      "You can still change the music by hand at any time, on the Music page, a dashboard widget or with an automation rule. The schedule then leaves that kiosk alone until its next part of the day starts, even if the server restarts.",
+      "The Music page and the music dashboard widgets show where a kiosk is in its schedule, such as \"Schedule: Daytime until 17:00\", or that it was changed by hand and when the schedule takes over again. Press Resume schedule to go back to the schedule straight away."
     ]
   }
 ]

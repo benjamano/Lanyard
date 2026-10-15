@@ -4,6 +4,12 @@ using System.Globalization;
 namespace Lanyard.Application.Services.MusicScheduling;
 
 /// <summary>
+/// The daypart running at a given moment. <see cref="StartDate"/> is the venue date it started on,
+/// so the same daypart on two days, or either side of a repeated clocks-back hour, can be told apart.
+/// </summary>
+public sealed record ActiveDaypart(MusicDaypart Daypart, DateOnly StartDate, DateTime StartLocal, DateTime EndLocal);
+
+/// <summary>
 /// The rules for a location's music schedule, kept free of I/O so the editor, the service and the
 /// tests all agree. Times are UK wall-clock; an end at or before the start runs into the next day.
 /// </summary>
@@ -104,6 +110,86 @@ public static class MusicDaypartRules
                 yield return (0, end - MinutesPerWeek);
             }
         }
+    }
+
+    /// <summary>
+    /// The daypart covering <paramref name="venueLocal"/> (UK wall-clock time), or null in a gap.
+    /// Checks today's dayparts and yesterday's that run past midnight. Working in wall-clock time
+    /// means a start inside the hour skipped in March is simply already running at the next look,
+    /// and the hour repeated in October can't start the same daypart twice.
+    /// </summary>
+    public static ActiveDaypart? Resolve(IEnumerable<MusicDaypart> dayparts, DateTime venueLocal)
+    {
+        DateOnly today = DateOnly.FromDateTime(venueLocal);
+        DateOnly yesterday = today.AddDays(-1);
+
+        foreach (MusicDaypart daypart in dayparts)
+        {
+            if (Validate(daypart) is not null)
+            {
+                continue;
+            }
+
+            foreach (DateOnly startDate in (DateOnly[])[today, yesterday])
+            {
+                if (!AutomationScheduleDays.Matches(daypart.DaysOfWeek, startDate.DayOfWeek))
+                {
+                    continue;
+                }
+
+                (DateTime start, DateTime end) = Occurrence(daypart, startDate);
+
+                if (start <= venueLocal && venueLocal < end)
+                {
+                    return new ActiveDaypart(daypart, startDate, start, end);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The next moment after <paramref name="venueLocal"/> where any daypart starts or ends, in UK
+    /// wall-clock time, or null when the schedule has nothing in it.
+    /// </summary>
+    public static DateTime? NextBoundary(IEnumerable<MusicDaypart> dayparts, DateTime venueLocal)
+    {
+        DateOnly today = DateOnly.FromDateTime(venueLocal);
+        DateTime? next = null;
+
+        foreach (MusicDaypart daypart in dayparts.Where(x => Validate(x) is null))
+        {
+            for (int offset = -1; offset <= 7; offset++)
+            {
+                DateOnly startDate = today.AddDays(offset);
+
+                if (!AutomationScheduleDays.Matches(daypart.DaysOfWeek, startDate.DayOfWeek))
+                {
+                    continue;
+                }
+
+                (DateTime start, DateTime end) = Occurrence(daypart, startDate);
+
+                foreach (DateTime boundary in (DateTime[])[start, end])
+                {
+                    if (boundary > venueLocal && (next is null || boundary < next))
+                    {
+                        next = boundary;
+                    }
+                }
+            }
+        }
+
+        return next;
+    }
+
+    private static (DateTime Start, DateTime End) Occurrence(MusicDaypart daypart, DateOnly startDate)
+    {
+        DateTime start = startDate.ToDateTime(daypart.StartTime);
+        DateTime end = (daypart.EndsNextDay ? startDate.AddDays(1) : startDate).ToDateTime(daypart.EndTime);
+
+        return (start, end);
     }
 
     /// <summary>

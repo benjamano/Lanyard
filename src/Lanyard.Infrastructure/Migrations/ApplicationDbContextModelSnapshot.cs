@@ -807,6 +807,9 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int>("MusicCacheLimitMb")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("MusicScheduleOverrideUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");

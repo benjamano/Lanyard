@@ -13,6 +13,7 @@ public interface IMusicPlayerService
     event Action<Guid, PlaybackState>? OnPlaybackStatusChanged;
     event Action<Guid, Guid?>? OnSongChanged;
     event Action<Guid, bool>? OnShuffleStateChanged;
+    event Action<Guid>? OnManualMusicChange;
 
     PlaybackState GetCurrentPlaybackState(Guid clientId);
     Song? GetCurrentSong(Guid clientId);
@@ -34,14 +35,20 @@ public interface IMusicPlayerService
     Task HandleSongEndedAsync(Guid clientId);
     void ReportVolumeFromClient(Guid clientId, int volume);
 
+    // Queues a playlist to start when the current song ends; null cancels.
+    void SetPendingPlaylist(Guid clientId, Guid? playlistId);
+    (Guid PlaylistId, DateTime SinceUtc)? GetPendingPlaylist(Guid clientId);
+
     // Commands sent to the client.
     Task<Result<bool>> LoadSongsIntoQueue(Guid clientId, Guid playlistId, Song? song = null);
-    Task Play(Guid clientId);
-    Task<Result<bool>> Play(Guid clientId, Guid playlistId);
-    Task Play(Guid clientId, Song song, Playlist? playlist = null);
-    Task Pause(Guid clientId);
-    Task TogglePlay(Guid clientId);
-    Task Stop(Guid clientId);
+    // Commands that change what plays or how loud take a source; Manual (the default) raises
+    // OnManualMusicChange, which the music schedule treats as a change by hand.
+    Task Play(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual);
+    Task<Result<bool>> Play(Guid clientId, Guid playlistId, MusicCommandSource source = MusicCommandSource.Manual);
+    Task Play(Guid clientId, Song song, Playlist? playlist = null, MusicCommandSource source = MusicCommandSource.Manual);
+    Task Pause(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual);
+    Task TogglePlay(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual);
+    Task Stop(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual);
     Task Next(Guid clientId);
     Task Previous(Guid clientId);
     Task Restart(Guid clientId);
@@ -50,5 +57,5 @@ public interface IMusicPlayerService
     Task<RepeatMode> CycleRepeatMode(Guid clientId);
     Task Seek(Guid clientId, double positionSeconds);
     Task GetCachedSongsAsync(Guid clientId);
-    Task SetVolume(Guid clientId, int volume);
+    Task SetVolume(Guid clientId, int volume, MusicCommandSource source = MusicCommandSource.Manual);
 }

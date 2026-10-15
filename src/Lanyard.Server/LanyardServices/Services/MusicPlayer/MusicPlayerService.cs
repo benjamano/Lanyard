@@ -41,6 +41,20 @@ public class MusicPlayerService : IMusicPlayerService
     public event Action<Guid, Guid?>? OnSongChanged;
     public event Action<Guid, bool>? OnShuffleStateChanged;
 
+    /// <summary>
+    /// Raised after a command that changes what plays, or how loud, came from anyone but the music
+    /// schedule. The schedule engine listens so it can hold off until its next part of the day.
+    /// </summary>
+    public event Action<Guid>? OnManualMusicChange;
+
+    private void NoteSource(Guid clientId, MusicCommandSource source)
+    {
+        if (source == MusicCommandSource.Manual)
+        {
+            OnManualMusicChange?.Invoke(clientId);
+        }
+    }
+
     private sealed class ClientMusicState
     {
         public PlaybackState CurrentState { get; set; } = PlaybackState.Stopped;
@@ -55,6 +69,10 @@ public class MusicPlayerService : IMusicPlayerService
         public double LastKnownPositionSeconds { get; set; }
         public DateTime LastPositionUpdateUtc { get; set; } = DateTime.UtcNow;
         public int CurrentVolume { get; set; }
+
+        // A playlist waiting to take over when the current song ends (see SetPendingPlaylist).
+        public Guid? PendingPlaylistId { get; set; }
+        public DateTime PendingSinceUtc { get; set; }
     }
 
     private ClientMusicState GetOrCreateState(Guid clientId)
@@ -525,7 +543,7 @@ public class MusicPlayerService : IMusicPlayerService
         return Result<bool>.Ok(true);
     }
 
-    public async Task Play(Guid clientId)
+    public async Task Play(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual)
     {
         ClientMusicState state = GetOrCreateState(clientId);
         lock (_lock)
@@ -534,10 +552,38 @@ public class MusicPlayerService : IMusicPlayerService
         }
 
         await SendToClientAsync(clientId, "Play");
+        NoteSource(clientId, source);
     }
 
-    public async Task<Result<bool>> Play(Guid clientId, Guid playlistId)
+    /// <summary>
+    /// Queues <paramref name="playlistId"/> to start when the current song ends, rather than
+    /// cutting it off. Null cancels. Anything that picks new music directly cancels it too.
+    /// </summary>
+    public void SetPendingPlaylist(Guid clientId, Guid? playlistId)
     {
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        lock (_lock)
+        {
+            state.PendingPlaylistId = playlistId;
+            state.PendingSinceUtc = DateTime.UtcNow;
+        }
+    }
+
+    public (Guid PlaylistId, DateTime SinceUtc)? GetPendingPlaylist(Guid clientId)
+    {
+        ClientMusicState state = GetOrCreateState(clientId);
+
+        lock (_lock)
+        {
+            return state.PendingPlaylistId is Guid id ? (id, state.PendingSinceUtc) : null;
+        }
+    }
+
+    public async Task<Result<bool>> Play(Guid clientId, Guid playlistId, MusicCommandSource source = MusicCommandSource.Manual)
+    {
+        SetPendingPlaylist(clientId, null);
+
         Result<bool> loadResult = await LoadSongsIntoQueue(clientId, playlistId);
         if (!loadResult.IsSuccess)
         {
@@ -551,18 +597,21 @@ public class MusicPlayerService : IMusicPlayerService
         }
 
         await SendToClientAsync(clientId, "Play");
+        NoteSource(clientId, source);
 
         return Result<bool>.Ok(true);
     }
 
 
-    public async Task Play(Guid clientId, Song song, Playlist? playlist = null)
+    public async Task Play(Guid clientId, Song song, Playlist? playlist = null, MusicCommandSource source = MusicCommandSource.Manual)
     {
+        SetPendingPlaylist(clientId, null);
+
         Song? currentSong = GetCurrentSong(clientId);
 
         if (song.Id == currentSong?.Id)
         {
-            await Play(clientId);
+            await Play(clientId, source);
             return;
         }
 
@@ -578,6 +627,7 @@ public class MusicPlayerService : IMusicPlayerService
             state.LastPositionUpdateUtc = DateTime.UtcNow;
         }
         await SendToClientAsync(clientId, "Play");
+        NoteSource(clientId, source);
     }
 
     /// <summary>
@@ -593,6 +643,20 @@ public class MusicPlayerService : IMusicPlayerService
         {
             state.LastKnownPositionSeconds = 0;
             state.LastPositionUpdateUtc = DateTime.UtcNow;
+        }
+
+        if (GetPendingPlaylist(clientId) is { } pending)
+        {
+            _logger.LogInformation("Client {ClientId} switching to queued playlist {PlaylistId} at the end of the song", clientId, pending.PlaylistId);
+
+            Result<bool> switched = await Play(clientId, pending.PlaylistId, MusicCommandSource.Schedule);
+            if (switched.IsSuccess)
+            {
+                return;
+            }
+
+            // Carry on with the current queue rather than fall silent.
+            _logger.LogWarning("Client {ClientId} couldn't switch to playlist {PlaylistId}: {Error}", clientId, pending.PlaylistId, switched.Error);
         }
 
         if (GetCurrentSong(clientId) is null)
@@ -625,33 +689,36 @@ public class MusicPlayerService : IMusicPlayerService
         await SendToClientAsync(clientId, "Play");
     }
 
-    public async Task Pause(Guid clientId)
+    public async Task Pause(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual)
     {
         await SendToClientAsync(clientId, "Pause");
+        NoteSource(clientId, source);
     }
 
-    public async Task TogglePlay(Guid clientId)
+    public async Task TogglePlay(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual)
     {
         if (GetCurrentPlaybackState(clientId) == PlaybackState.Playing)
         {
-            await Pause(clientId);
+            await Pause(clientId, source);
         }
         else
         {
-            await Play(clientId);
+            await Play(clientId, source);
         }
     }
 
-    public async Task Stop(Guid clientId)
+    public async Task Stop(Guid clientId, MusicCommandSource source = MusicCommandSource.Manual)
     {
         ClientMusicState state = GetOrCreateState(clientId);
         lock (_lock)
         {
+            state.PendingPlaylistId = null;
             state.LastKnownPositionSeconds = 0;
             state.LastPositionUpdateUtc = DateTime.UtcNow;
         }
 
         await SendToClientAsync(clientId, "Stop");
+        NoteSource(clientId, source);
     }
 
     public async Task Next(Guid clientId)
@@ -794,7 +861,7 @@ public class MusicPlayerService : IMusicPlayerService
         await SendToClientAsync(clientId, "GetCachedSongs");
     }
 
-    public async Task SetVolume(Guid clientId, int volume)
+    public async Task SetVolume(Guid clientId, int volume, MusicCommandSource source = MusicCommandSource.Manual)
     {
         ClientMusicState state = GetOrCreateState(clientId);
         int normalizedVolume = Math.Clamp(volume, 0, 100);
@@ -805,6 +872,7 @@ public class MusicPlayerService : IMusicPlayerService
         }
 
         await SendToClientAsync(clientId, "SetVolume", normalizedVolume);
+        NoteSource(clientId, source);
     }
 
     /// <summary>

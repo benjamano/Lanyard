@@ -156,8 +156,10 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
             entry.Property(x => x.OfflineAfterSeconds).IsModified = false;
             entry.Property(x => x.ProjectionCacheLimitMb).IsModified = false;
 
-            // And the location, owned by SetClientLocationAsync.
+            // And the location, owned by SetClientLocationAsync, and the music schedule override,
+            // owned by MusicScheduleEngine.
             entry.Property(x => x.LocationId).IsModified = false;
+            entry.Property(x => x.MusicScheduleOverrideUntilUtc).IsModified = false;
 
             await ctx.SaveChangesAsync();
 
