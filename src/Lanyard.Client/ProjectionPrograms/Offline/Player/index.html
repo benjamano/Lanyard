@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Lanyard offline player</title>
+    <link rel="stylesheet" href="player.css" />
+</head>
+<body class="dark">
+    <!-- The kiosk's offline runner owns the timing and posts one message per step; this page only
+         shows whatever it was last told to. A Delay step sends nothing, so the last frame stays. -->
+    <main id="stage">
+        <div id="text" hidden></div>
+        <video id="video" hidden playsinline></video>
+        <div id="idle" hidden>
+            <div class="idle-title">We'll be back shortly</div>
+        </div>
+    </main>
+    <script src="player.js"></script>
+</body>
+</html>

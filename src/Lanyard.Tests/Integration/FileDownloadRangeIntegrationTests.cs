@@ -139,4 +139,47 @@ public class FileDownloadRangeIntegrationTests
         HttpResponseMessage wrongProgram = await client.GetAsync($"/api/kiosk/programs/{Guid.NewGuid()}/steps/{videoStepId}/video");
         Assert.AreEqual(HttpStatusCode.NotFound, wrongProgram.StatusCode);
     }
+
+    [TestMethod]
+    public async Task KioskStepVideo_RefusesDeletedStepsAndDeletedPrograms()
+    {
+        FileMetadata video = await SeedFileAsync("video/mp4", 32);
+
+        Guid liveProgramId = Guid.NewGuid();
+        Guid deletedStepId = Guid.NewGuid();
+        Guid deletedProgramId = Guid.NewGuid();
+        Guid stepOfDeletedProgramId = Guid.NewGuid();
+
+        using (IServiceScope scope = _factory.Services.CreateScope())
+        {
+            IDbContextFactory<ApplicationDbContext> dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            await using ApplicationDbContext ctx = await dbFactory.CreateDbContextAsync();
+
+            ProjectionProgramStepTemplate template = new() { Id = Guid.NewGuid(), Name = "Play a Video", IsActive = true };
+            ProjectionProgramStepTemplateParameter videoParameter = new() { Id = Guid.NewGuid(), TemplateId = template.Id, Name = Lanyard.API.Controllers.KioskMediaController.VideoParameterName, DataType = "File", IsActive = true };
+            ctx.ProjectionProgramStepTemplates.Add(template);
+            ctx.ProjectionProgramStepTemplateParameters.Add(videoParameter);
+            ctx.ProjectionPrograms.Add(new ProjectionProgram { Id = liveProgramId, Name = "Live program", IsActive = true });
+            ctx.ProjectionPrograms.Add(new ProjectionProgram { Id = deletedProgramId, Name = "Deleted program", IsActive = false });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep
+            {
+                Id = deletedStepId, ProjectionProgramId = liveProgramId, TemplateId = template.Id, SortOrder = 0, IsActive = false,
+                ParameterValues = [new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ParameterId = videoParameter.Id, Value = video.Id.ToString() }]
+            });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep
+            {
+                Id = stepOfDeletedProgramId, ProjectionProgramId = deletedProgramId, TemplateId = template.Id, SortOrder = 0, IsActive = true,
+                ParameterValues = [new ProjectionProgramParameterValue { Id = Guid.NewGuid(), ParameterId = videoParameter.Id, Value = video.Id.ToString() }]
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        HttpClient client = _factory.CreateClient();
+
+        HttpResponseMessage deletedStep = await client.GetAsync($"/api/kiosk/programs/{liveProgramId}/steps/{deletedStepId}/video");
+        Assert.AreEqual(HttpStatusCode.NotFound, deletedStep.StatusCode);
+
+        HttpResponseMessage deletedProgram = await client.GetAsync($"/api/kiosk/programs/{deletedProgramId}/steps/{stepOfDeletedProgramId}/video");
+        Assert.AreEqual(HttpStatusCode.NotFound, deletedProgram.StatusCode);
+    }
 }

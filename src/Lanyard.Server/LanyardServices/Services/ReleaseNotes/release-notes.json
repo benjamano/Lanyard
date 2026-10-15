@@ -633,6 +633,10 @@
       "Passwords, the shared secret and URL tokens are replaced with [REDACTED]. The log is kept for 10 minutes and only Admins can see it.",
       "Copy the log to the clipboard to paste it into a support message. Kiosks need Lanyard Client 1.0.41 or later; older ones say so and can be updated with Restart.",
       "On a phone, the Diagnostics button is next to Settings and Restart on each kiosk in the Clients list.",
+      "Automation rules can now have conditions. A rule only runs if every condition is true when it's triggered: the time of day is between two times (a window like 22:00 to 02:00 runs past midnight), it's one of the days you pick, or another kiosk is or isn't in a game.",
+      "Conditions use UK venue time, so they're right in summer as well as winter.",
+      "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
+      "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
       "Manage Fixtures on the DMX desk now shows the channels each fixture uses, for example \"Ch 1-3\", and a hint as you add one says which channels it will take.",
       "Lanyard no longer lets you add a fixture whose channels would run past channel 512.",
       "If a new fixture would use channels another fixture already uses, Lanyard asks before saving. Choose \"Patch anyway\" if you're double-patching on purpose.",
@@ -652,7 +656,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, assign it automatically, and export approved timesheet hours for payroll.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -670,7 +674,24 @@
       "Managers can export their own location. Admins can export any location.",
       "Manage > Rota > Settings has a new Payroll export section. Set how often you run payroll: monthly from any day of the month (for example the 26th to the 25th), weekly, fortnightly or every four weeks.",
       "Choose whether breaks are taken off paid time in the export: not at all, the rota break of each shift, or a set break on long days (for example 20 minutes on any day over 6 hours, the UK legal minimum). Clocked hours on the timesheet are never changed.",
-      "Until you change these settings the export works as before: calendar months, and paid time equal to clocked time."
+      "Until you change these settings the export works as before: calendar months, and paid time equal to clocked time.",
+      "You can now see your shifts in Google, Apple or Outlook calendar. On My Shifts, choose Add to calendar (or go to Account Management > Shift Calendar) and create your private calendar link.",
+      "Your calendar keeps itself up to date as the rota changes, usually within an hour (Google Calendar can take up to a day). It only shows shifts your manager has published, with the position and location. Changes a manager hasn't published yet don't appear.",
+      "The link is only shown once, and anyone who has it can see your shifts. If you lose it or think someone else has it, get a new one, which stops the old one working. You can also turn it off.",
+      "Your calendar stops showing shifts if you leave the location, your account is locked, or shift management is turned off for the company.",
+      "Kiosks are more reliable when the server or internet goes down. A kiosk that starts up while it can't reach the server no longer closes itself; it keeps trying, waiting a little longer between attempts up to a minute. A kiosk whose shared secret is rejected keeps trying every 5 minutes too, so fixing the secret on the server brings it back without a restart.",
+      "A kiosk screen that fails to load its page now tries again by itself instead of staying on the \"can't reach this page\" error. A screen whose browser crashes reloads or reopens.",
+      "Deleting a step from a projection program, or deleting the program, now stops it showing on kiosks. Before, a deleted step could keep playing.",
+      "Kiosk settings have a new Offline tab (Manage > Clients, then a kiosk's settings). It's where you choose whether a kiosk's screens keep playing when it can't reach the server, how long it waits before switching over (30 seconds to start with), and how much disk space it can use for videos (2 GB to start with). It's on for every kiosk.",
+      "The Offline tab also lists what each screen would play while offline. Text, videos and pauses keep running. Dashboards and live capture need the server, so they're skipped, and a screen with nothing it can play shows a \"back shortly\" screen. It warns you if the videos need more space than the limit.",
+      "When a kiosk can't reach the server for that long, including when it's switched on while the server is down, its screens play the copy: text and videos for the same time as usual, in the same order and with the same repeats. Videos play from the kiosk's own disk. The copy is refreshed whenever you change a program, and at least every 15 minutes.",
+      "If music was playing when the connection dropped, it carries on, shuffling songs the kiosk already has saved. If it wasn't, the kiosk stays quiet.",
+      "When the server comes back and the connection stays up for 10 seconds, the screens go back to the server's programs from the first step, and music goes back to its playlist after the current song.",
+      "Kiosk health now shows each kiosk's offline fallback. The Health tab shows whether it's ready, how much video is cached, when the copy was last updated, and when the kiosk last played offline and for how long. A kiosk whose videos don't all fit the cache shows as Degraded, with how many are missing.",
+      "When a kiosk stops reporting in but its offline copy was ready, the Kiosk Health widget and the Health tab say its screens should still be playing their offline copy.",
+      "Scheduled automation rules now run at the time shown, in UK time. Until now they ran an hour late while the clocks were on British Summer Time. The time box in the rule editor is now labelled \"At time (UK time)\".",
+      "Playing a playlist with no songs, from the playlist widget or an automation rule, now shows a message and leaves the current music playing. Before, it could stop the kiosk's music player responding until it was restarted.",
+      "Kiosk software 1.0.42 also copes with an empty playlist on its own."
     ]
   }
 ]

@@ -1,6 +1,6 @@
 ---
 name: automation-engine
-description: How AutomationEngineService actually works — why adding a new automation action type requires touching 3 separate places with no compile-time enforcement (and fails silently, not loudly, if you miss one), plus the lazy-init caching pattern used for rule evaluation. Use whenever adding a new automation action type, debugging a rule that silently doesn't fire, or touching AutomationEngineService/IActionExecutor/AutomationActionTypes.
+description: How AutomationEngineService actually works — why adding a new automation action type requires touching 3 separate places with no compile-time enforcement (and fails silently, not loudly, if you miss one), plus the lazy-init/rule-cache pattern, how only-if conditions are evaluated (venue time, fail closed, tenancy, skip logging) and how rule saves sync child rows. Use whenever adding a new automation action type or condition type, debugging a rule that silently doesn't fire or shows as Skipped, or touching AutomationEngineService/IActionExecutor/AutomationActionTypes/AutomationRuleService.
 ---
 
 # Automation engine
@@ -15,6 +15,24 @@ description: How AutomationEngineService actually works — why adding a new aut
 
 **`AutomationEngineService.ExecuteRuleAsync` does not throw or log an error if an action type has no matching executor — it silently records "Action type not supported" and moves on.** This is a classic silent-miss failure mode: a rule can be created and saved successfully (the constant/type exists), but if step 2 or step 3 was skipped, the rule appears to work from the UI while doing nothing at runtime. If a rule "isn't firing" and there's no exception anywhere, check first whether every action type it references actually has a registered `IActionExecutor` — don't assume the bug is in the rule's trigger/condition logic.
 
-## Lazy-init cache uses blocking-in-lock — don't refactor this casually
+## Lazy init and the rule cache
 
-`_isEnabled`/`_ruleCache` are lazily initialized on the *first* `ProcessTransitionAsync` call, using a blocking `.GetAwaiter().GetResult()` inside a `lock`. This looks like an anti-pattern in isolation (blocking inside a lock can deadlock in general), but it works here specifically because the call site is a single-consumer `BackgroundService`-driven channel reader — there's never contention from multiple concurrent callers. If you're refactoring this service to be called from more than one place, this assumption breaks and the blocking-in-lock needs to be replaced with a proper async-safe lazy-init (e.g. `SemaphoreSlim` or `Lazy<Task<T>>`) rather than carried over as-is.
+The enabled flag is read once, lazily, through `EnsureEnabledInitializedAsync`: a `LazyInitializer`-cached `Task<bool>` that every caller awaits (the transition consumer and the idle and scheduled hosted services can all arrive together on startup). A failed read clears the cached task so the next tick retries. The rule cache reloads under a `SemaphoreSlim` when `_ruleCacheDirty` is set; `AutomationRuleService` sets it on every save. (An older version of this note described a blocking `.GetAwaiter().GetResult()` inside a `lock`; that code is gone.)
+
+Transitions still go through **one channel with one consumer** (`AutomationEngineHostedService`), so per-rule state touched only by the consumer needs no locking. Keep it that way, or add locking, if you add another reader.
+
+## Conditions ("only if")
+
+`AutomationRuleCondition` rows (type + `ParametersJson`, soft-deleted with `IsActive`) hang off a rule like actions do. All active conditions must pass (AND); a rule with none behaves exactly as before.
+
+- **Logic lives in two pure places:** `AutomationConditionParameters` (Infrastructure: typed records, parse, `Validate`) and `AutomationConditionEvaluator` (Services: `Evaluate`). The dialog, `AutomationRuleService.ValidateConditions` and the engine all use these, so they can't disagree.
+- **Venue time, not server time.** Conditions use `RotaTime.ToVenueLocal`. The production container is UTC, so `DateTime.Now` would be an hour out all summer. (The scheduled *trigger* still uses server-local time; that's a known, separate issue.)
+- **Fail closed.** Unparsable JSON, an unknown type, a deleted kiosk or a kiosk in another company stops the rule (logged as a warning) rather than letting it run.
+- **Tenancy.** The engine's context is unfiltered (`ISystemDbContextFactory`), so it checks a condition's kiosk `CompanyId` against the rule's itself. On save, `AutomationRuleService` looks the kiosk up through the tenant-filtered context, so another company's kiosk is "not found".
+- **"In game" comes from `ILaserGameStatusStore`**, not `_lastKnownStatus`. The hub clears the store on disconnect, so an offline kiosk is "not in game".
+- **Skips are logged** as an `AutomationRuleExecution` with `SkipReason` set, `OverallSuccess = false` and no action rows, and `OnRuleExecuted` isn't raised. Anything reading the log must treat `SkipReason != null` as "not a run": the failures filter, the widget's latest-execution lookup and the scheduled reseed (which only counts `OverallSuccess` rows) all do.
+- **A skip doesn't consume an idle stretch or a scheduled day.** Those rules re-check each tick and fire once the conditions hold; the skip itself is logged once per stretch or day. A status-transition edge is one-shot, so a skip consumes it.
+
+## Saving rules: don't `ctx.Update` the detached graph
+
+`UpdateRuleAsync` loads the tracked rule and syncs `Actions` and `Conditions` (add new, update changed, soft-delete missing). `ctx.Update(rule)` on the dialog's detached graph used to mark a newly added child (client-generated Guid) as Modified, which failed the save, and overwrote `IsEnabled`. Keep `IsEnabled` changes in `SetRuleEnabledAsync` only.

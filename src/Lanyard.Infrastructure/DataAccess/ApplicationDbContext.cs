@@ -74,6 +74,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<Folder> Folders { get; set; }
         public DbSet<AutomationRule> AutomationRules { get; set; }
         public DbSet<AutomationRuleAction> AutomationRuleActions { get; set; }
+        public DbSet<AutomationRuleCondition> AutomationRuleConditions { get; set; }
         public DbSet<AutomationRuleExecution> AutomationRuleExecutions { get; set; }
         public DbSet<AutomationRuleActionExecution> AutomationRuleActionExecutions { get; set; }
         public DbSet<AppSetting> AppSettings { get; set; }
@@ -119,6 +120,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
+        public DbSet<CalendarFeedToken> CalendarFeedTokens { get; set; }
         public DbSet<TimeEntry> TimeEntries { get; set; }
         public DbSet<TimeOffType> TimeOffTypes { get; set; }
         public DbSet<TimeOffAllowance> TimeOffAllowances { get; set; }
@@ -475,6 +477,22 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasIndex(x => x.LocationId);
+
+            // A calendar feed is found by the hash of the token in its URL on every poll.
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasIndex(x => new { x.UserId, x.CompanyId })
+                .IsUnique()
+                .HasFilter("\"IsActive\"");
+
+            modelBuilder.Entity<CalendarFeedToken>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ClockInTerminal>()
                 .HasOne(x => x.Location)
@@ -940,6 +958,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ProjectionProgramParameterValue>().HasQueryFilter(x => TenantFilterDisabled || x.ProjectionProgramStep!.ProjectionProgram!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DashboardWidget>().HasQueryFilter(x => TenantFilterDisabled || x.Dashboard!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleAction>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<AutomationRuleCondition>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<AutomationRuleActionExecution>().HasQueryFilter(x => TenantFilterDisabled || x.AutomationRuleExecution!.AutomationRule!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<DmxSceneStep>().HasQueryFilter(x => TenantFilterDisabled || x.Scene!.CompanyId == TenantCompanyId);

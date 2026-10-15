@@ -80,7 +80,7 @@ public class SignalRControlHubDisconnectTests
             NullLogger<MusicPlayerService>.Instance);
 
         AutomationEngineService automationEngineService = new(
-            factory, [], NullLogger<AutomationEngineService>.Instance);
+            factory, [], new LaserGameStatusStore(), TimeProvider.System, NullLogger<AutomationEngineService>.Instance);
 
         SignalRProjectionControlHubEvents hubEvents = new(Mock.Of<IServiceScopeFactory>());
 

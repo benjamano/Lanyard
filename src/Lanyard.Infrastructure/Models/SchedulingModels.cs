@@ -222,6 +222,14 @@ namespace Lanyard.Infrastructure.Models
         // match on this as well as on StartUtc.
         public DateTime? PublishedStartUtc { get; set; }
 
+        // The rest of the shift as it was last published. Editing a published shift changes the
+        // row in place, so without these anything shown to staff outside the rota builder (the
+        // calendar feed) would leak a manager's unpublished draft before the person is told.
+        // Written alongside PublishedStartUtc by MarkPublished and ShiftClaimService.ReassignAsync.
+        public DateTime? PublishedEndUtc { get; set; }
+        public Guid? PublishedStaffPositionId { get; set; }
+        public int? PublishedBreakMinutes { get; set; }
+
         public bool RemovalPending { get; set; }
 
         // The StartUtc this shift's reminder email was sent for. Compared against StartUtc, so
@@ -259,6 +267,17 @@ namespace Lanyard.Infrastructure.Models
         }
 
         public bool NeedsPublishing => GetState() is ShiftState.Draft or ShiftState.Changed or ShiftState.RemovedPendingNotice;
+
+        // Records the shift as published as it now stands.
+        public void MarkPublished(DateTime nowUtc, string actingUserId)
+        {
+            PublishedDateUtc = nowUtc;
+            PublishedByUserId = actingUserId;
+            PublishedStartUtc = StartUtc;
+            PublishedEndUtc = EndUtc;
+            PublishedStaffPositionId = StaffPositionId;
+            PublishedBreakMinutes = BreakMinutes;
+        }
     }
 
     // A tablet at a venue that staff clock in and out on. The device proves it's this terminal with

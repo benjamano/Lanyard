@@ -64,6 +64,18 @@ else
 
                 <dt>Projection windows open</dt>
                 <dd>@_snapshot.ProjectionRunningCount</dd>
+
+                <dt>Offline fallback</dt>
+                <dd>@KioskHealthDisplay.OfflineFallback(_snapshot)</dd>
+
+                @if (_snapshot.OfflineCacheSyncedUtc is DateTime synced)
+                {
+                    <dt>Offline copy updated</dt>
+                    <dd>@KioskHealthDisplay.Ago(DateTime.UtcNow - synced)</dd>
+                }
+
+                <dt>Last played offline</dt>
+                <dd>@(KioskHealthDisplay.LastOutage(_snapshot, DateTime.UtcNow) ?? "Never")</dd>
             </dl>
         }
     </div>

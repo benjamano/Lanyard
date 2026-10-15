@@ -606,6 +606,126 @@ namespace Lanyard.Tests.Services.Clients
             Assert.AreEqual(1, result.Data?.Count(), "Expected one client projection setting.");
         }
 
+        private static async Task<(Guid ClientId, Guid ActiveStepId, Guid DeletedStepId)> SeedClientWithProgramAsync(DbContextOptions<ApplicationDbContext> options, bool programIsActive)
+        {
+            await using var ctx = new ApplicationDbContext(options);
+
+            Guid clientId = Guid.NewGuid();
+            Guid programId = Guid.NewGuid();
+            Guid activeStepId = Guid.NewGuid();
+            Guid deletedStepId = Guid.NewGuid();
+
+            ctx.Clients.Add(new Client { Id = clientId, Name = "Client 1" });
+            ctx.ProjectionPrograms.Add(new ProjectionProgram { Id = programId, Name = "Program", IsActive = programIsActive });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep { Id = activeStepId, ProjectionProgramId = programId, SortOrder = 0, IsActive = true });
+            ctx.ProjectionProgramSteps.Add(new ProjectionProgramStep { Id = deletedStepId, ProjectionProgramId = programId, SortOrder = 1, IsActive = false });
+            ctx.ClientProjectionSettings.Add(new ClientProjectionSettings
+            {
+                Id = Guid.NewGuid(), ClientId = clientId, ProjectionProgramId = programId, DisplayIndex = 0, Width = 1920, Height = 1080, IsActive = true,
+            });
+            await ctx.SaveChangesAsync();
+
+            return (clientId, activeStepId, deletedStepId);
+        }
+
+        [TestMethod]
+        public async Task GetClientProjectionSettingsAsync_LeavesOutSoftDeletedSteps()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, activeStepId, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.GetClientProjectionSettingsAsync(clientId);
+
+            Assert.IsTrue(result.Success, result.Error);
+            List<ProjectionProgramStep> steps = result.Data!.Single().ProjectionProgram!.ProjectionProgramSteps;
+            Assert.AreEqual(1, steps.Count, "A deleted step must not be sent to the kiosk.");
+            Assert.AreEqual(activeStepId, steps[0].Id);
+        }
+
+        [TestMethod]
+        public async Task ConvertIntoClientProjectionSettingsDTO_SkipsAssignmentsToDeletedPrograms()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: false);
+
+            var settings = await service.GetClientProjectionSettingsAsync(clientId);
+            var dtos = service.ConvertIntoClientProjectionSettingsDTO(settings.Data!);
+
+            Assert.IsTrue(dtos.Success, dtos.Error);
+            Assert.AreEqual(0, dtos.Data!.Count());
+        }
+
+        [TestMethod]
+        public async Task ConvertIntoClientProjectionSettingsDTO_SendsOnlyActiveSteps()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var settings = await service.GetClientProjectionSettingsAsync(clientId);
+            var dtos = service.ConvertIntoClientProjectionSettingsDTO(settings.Data!);
+
+            Assert.IsTrue(dtos.Success, dtos.Error);
+            Assert.AreEqual(1, dtos.Data!.Single().ProjectionProgram.ProjectionProgramSteps.Count());
+        }
+
+        [TestMethod]
+        public async Task UpdateOfflineFallbackSettingsAsync_SavesTheSettings()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 120, cacheLimitMb: 4096);
+
+            Assert.IsTrue(result.Success, result.Error);
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(120, saved.OfflineAfterSeconds);
+            Assert.AreEqual(4096, saved.ProjectionCacheLimitMb);
+        }
+
+        [TestMethod]
+        [DataRow(9, 2048)]
+        [DataRow(601, 2048)]
+        [DataRow(30, 255)]
+        public async Task UpdateOfflineFallbackSettingsAsync_RejectsOutOfRangeValues(int offlineAfterSeconds, int cacheLimitMb)
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            var result = await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: true, offlineAfterSeconds, cacheLimitMb);
+
+            Assert.IsFalse(result.Success);
+        }
+
+        [TestMethod]
+        public async Task UpdateClientAsync_DoesNotOverwriteOfflineSettingsWithAStaleCopy()
+        {
+            var options = GetInMemoryOptions();
+            var service = GetService(options);
+            var (clientId, _, _) = await SeedClientWithProgramAsync(options, programIsActive: true);
+
+            // Another settings tab loaded the client before the offline settings were changed.
+            Client stale = (await service.GetClientFromIdAsync(clientId)).Data!;
+
+            await service.UpdateOfflineFallbackSettingsAsync(clientId, enabled: false, offlineAfterSeconds: 90, cacheLimitMb: 512);
+
+            stale.Notes = "Saved from another tab";
+            await service.UpdateClientAsync(stale);
+
+            await using var ctx = new ApplicationDbContext(options);
+            Client saved = await ctx.Clients.SingleAsync(x => x.Id == clientId);
+            Assert.AreEqual("Saved from another tab", saved.Notes);
+            Assert.IsFalse(saved.OfflineFallbackEnabled);
+            Assert.AreEqual(90, saved.OfflineAfterSeconds);
+            Assert.AreEqual(512, saved.ProjectionCacheLimitMb);
+        }
+
         [TestMethod]
         public async Task SetClientAvailableScreensAsync_ShouldUpdateScreens()
         {

@@ -4,6 +4,7 @@
 @using Lanyard.App.Components.Accounts
 @using Lanyard.App.Components.Layout.Staff
 @using Lanyard.App.Components.Notifications
+@using Lanyard.App.Components.Rota.CalendarFeed
 @using Lanyard.Application.Services.Authentication
 
 @inject INotificationService ToastService
@@ -76,6 +77,13 @@
                     <ClockInPinCard />
                 </div>
             </FluentCard>
+
+            <FluentCard Width="100%">
+                <div class="account-manage-section" id="calendar">
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size600">Shift Calendar</FluentText>
+                    <CalendarFeedPanel />
+                </div>
+            </FluentCard>
         }
 
         <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.End" HorizontalGap="8px">
@@ -91,7 +99,7 @@
 @code{
     private YourDetailsCard? yourDetailsCard;
 
-    // Clock-in PINs only mean anything to a company with shift management.
+    // Clock-in PINs and the shift calendar only mean anything to a company with shift management.
     private bool _showClockInPin;
 
     protected override async Task OnInitializedAsync()

@@ -113,6 +113,7 @@ builder.Services.AddScoped<IClientUpdatePolicyService, ClientUpdatePolicyService
 builder.Services.AddScoped<IClientReleaseAdminService, ClientReleaseAdminService>();
 builder.Services.AddScoped<IClientDiagnosticsService, ClientDiagnosticsService>();
 builder.Services.AddScoped<IKioskHealthService, KioskHealthService>();
+builder.Services.AddScoped<IKioskOfflineManifestService, KioskOfflineManifestService>();
 builder.Services.Configure<KioskHealthOptions>(builder.Configuration.GetSection(KioskHealthOptions.SectionName));
 builder.Services.AddScoped<IProjectionProgramService, ProjectionProgramService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
@@ -152,6 +153,7 @@ builder.Services.AddHostedService<ChatDigestHostedService>();
 builder.Services.AddHostedService<ChatRetentionHostedService>();
 builder.Services.AddScoped<ChatUnreadTracker>();
 builder.Services.AddScoped<IClockInTerminalService, ClockInTerminalService>();
+builder.Services.AddScoped<ICalendarFeedService, CalendarFeedService>();
 builder.Services.AddScoped<ITimeEntryService, TimeEntryService>();
 builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<ITimeOffPolicyService, TimeOffPolicyService>();
@@ -194,6 +196,8 @@ builder.Services.AddSingleton<IVideoStreamTokenService, VideoStreamTokenService>
 builder.Services.AddSingleton<IVideoStreamSignalingService, VideoStreamSignalingService>();
 builder.Services.Configure<VideoStreamingOptions>(builder.Configuration.GetSection("VideoStreaming"));
 builder.Services.AddSingleton<MusicPlayerService>();
+// Same instance either way - playback state lives in the singleton, so the interface must not get its own.
+builder.Services.AddSingleton<IMusicPlayerService>(sp => sp.GetRequiredService<MusicPlayerService>());
 builder.Services.AddScoped<ISongAnalysisService, SongAnalysisService>();
 builder.Services.AddSingleton<ISongAnalysisQueue, SongAnalysisQueue>();
 builder.Services.AddSingleton<IBeatClockService, BeatClockService>();
@@ -464,6 +468,18 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 5,
             Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0
+        });
+    });
+
+    // Per feed, not per address: Google and Apple poll every subscriber's calendar from a shared
+    // pool of addresses. A real calendar app polls at most a few times an hour.
+    options.AddPolicy(Lanyard.API.Controllers.CalendarFeedController.RateLimitPolicy, httpContext =>
+    {
+        return RateLimitPartition.GetFixedWindowLimiter(Lanyard.API.Controllers.CalendarFeedController.PartitionKey(httpContext), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromHours(1),
             QueueLimit = 0
         });
     });
