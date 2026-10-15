@@ -143,6 +143,9 @@ public class AutomationRuleService(
             existing.IdleThresholdMinutes = rule.IdleThresholdMinutes;
             existing.ScheduledTimeOfDay = rule.ScheduledTimeOfDay;
             existing.ScheduledDaysOfWeek = rule.ScheduledDaysOfWeek;
+            existing.TriggerThreshold = rule.TriggerThreshold;
+            existing.TriggerScoreScope = rule.TriggerScoreScope;
+            existing.TriggerTeam = rule.TriggerTeam;
             existing.LastUpdateDate = DateTime.UtcNow;
 
             SyncActions(ctx, existing, rule.Actions);
@@ -280,7 +283,7 @@ public class AutomationRuleService(
     // reject it at the point of saving instead.
     private static async Task<string?> ValidateRuleAsync(ApplicationDbContext ctx, AutomationRule rule, int? ruleCompanyId)
     {
-        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek);
+        string? triggerError = ValidateTrigger(rule.TriggerType, rule.IdleThresholdMinutes, rule.ScheduledTimeOfDay, rule.ScheduledDaysOfWeek, rule.TriggerThreshold, rule.TriggerScoreScope);
 
         if (triggerError != null)
         {
@@ -372,10 +375,33 @@ public class AutomationRuleService(
         AutomationTriggerType triggerType,
         int? idleThresholdMinutes,
         TimeOnly? scheduledTimeOfDay,
-        string? scheduledDaysOfWeek)
+        string? scheduledDaysOfWeek,
+        int? triggerThreshold = null,
+        AutomationScoreScope? triggerScoreScope = null)
     {
         switch (triggerType)
         {
+            case AutomationTriggerType.TimeRemainingBelow:
+                if (!triggerThreshold.HasValue || triggerThreshold.Value <= 0)
+                {
+                    return "A time remaining rule needs a number of seconds greater than zero.";
+                }
+
+                return null;
+
+            case AutomationTriggerType.ScoreThreshold:
+                if (!triggerThreshold.HasValue || triggerThreshold.Value <= 0)
+                {
+                    return "A score rule needs a score greater than zero.";
+                }
+
+                if (!triggerScoreScope.HasValue || !System.Enum.IsDefined(triggerScoreScope.Value))
+                {
+                    return "A score rule needs to say whose score counts.";
+                }
+
+                return null;
+
             case AutomationTriggerType.ClientIdle:
                 if (!idleThresholdMinutes.HasValue)
                 {

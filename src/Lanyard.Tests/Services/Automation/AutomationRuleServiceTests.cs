@@ -909,5 +909,61 @@ public class AutomationRuleServiceTests
         Assert.IsFalse(foreignResult.IsSuccess);
         Assert.IsTrue(ownResult.IsSuccess, ownResult.Error);
     }
+
+    [TestMethod]
+    public async Task CreateRule_ValidatesTheGameDataTriggers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule noSeconds = BuildRule(Guid.NewGuid());
+        noSeconds.TriggerType = AutomationTriggerType.TimeRemainingBelow;
+
+        AutomationRule noScope = BuildRule(Guid.NewGuid());
+        noScope.TriggerType = AutomationTriggerType.ScoreThreshold;
+        noScope.TriggerThreshold = 1000;
+
+        AutomationRule good = BuildRule(Guid.NewGuid());
+        good.TriggerType = AutomationTriggerType.ScoreThreshold;
+        good.TriggerThreshold = 1000;
+        good.TriggerScoreScope = AutomationScoreScope.Team;
+        good.TriggerTeam = Team.Red;
+
+        Assert.AreEqual("A time remaining rule needs a number of seconds greater than zero.", (await service.CreateRuleAsync(noSeconds)).Error);
+        Assert.AreEqual("A score rule needs to say whose score counts.", (await service.CreateRuleAsync(noScope)).Error);
+
+        Result<AutomationRule> goodResult = await service.CreateRuleAsync(good);
+        Assert.IsTrue(goodResult.IsSuccess, goodResult.Error);
+    }
+
+    [TestMethod]
+    public async Task UpdateRule_SavesTheGameDataTriggerFields()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        (AutomationRuleService service, _, _) = GetService(options);
+
+        AutomationRule rule = BuildRule(Guid.NewGuid());
+        await SeedRuleDirectlyAsync(options, rule);
+
+        AutomationRule edited = (await service.GetRuleAsync(rule.Id)).Data!;
+        edited.TriggerType = AutomationTriggerType.TimeRemainingBelow;
+        edited.TriggerThreshold = 45;
+
+        Result<AutomationRule> result = await service.UpdateRuleAsync(edited);
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        AutomationRule saved = (await service.GetRuleAsync(rule.Id)).Data!;
+        Assert.AreEqual(AutomationTriggerType.TimeRemainingBelow, saved.TriggerType);
+        Assert.AreEqual(45, saved.TriggerThreshold);
+    }
+
+    [TestMethod]
+    public void TriggerType_ExistingValuesNeverMove()
+    {
+        // Stored as ints: every rule saved before these triggers must still mean the same thing.
+        Assert.AreEqual(0, (int)AutomationTriggerType.GameStatusTransition);
+        Assert.AreEqual(1, (int)AutomationTriggerType.ClientIdle);
+        Assert.AreEqual(2, (int)AutomationTriggerType.Scheduled);
+    }
 }
 

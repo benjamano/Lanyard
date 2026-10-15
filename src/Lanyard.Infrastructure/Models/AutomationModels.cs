@@ -31,6 +31,16 @@ public class AutomationRule : ICompanyOwned
     // shared parse/serialize/match logic.
     public string? ScheduledDaysOfWeek { get; set; }
 
+    // Seconds for TimeRemainingBelow, points for ScoreThreshold; null for every other trigger type.
+    public int? TriggerThreshold { get; set; }
+
+    // ScoreThreshold only: whose score counts. Null otherwise.
+    public AutomationScoreScope? TriggerScoreScope { get; set; }
+
+    // ScoreThreshold: limit to one team's players (AnyPlayer) or pick the team (Team). GameEnded:
+    // the team that has to win. Null means any team.
+    public Team? TriggerTeam { get; set; }
+
     public bool IsActive { get; set; }
     public bool IsEnabled { get; set; } = true;
 

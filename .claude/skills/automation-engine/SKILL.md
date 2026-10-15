@@ -34,6 +34,27 @@ Transitions still go through **one channel with one consumer** (`AutomationEngin
 - **Skips are logged** as an `AutomationRuleExecution` with `SkipReason` set, `OverallSuccess = false` and no action rows, and `OnRuleExecuted` isn't raised. Anything reading the log must treat `SkipReason != null` as "not a run": the failures filter, the widget's latest-execution lookup and the scheduled reseed (which only counts `OverallSuccess` rows) all do.
 - **A skip doesn't consume an idle stretch or a scheduled day.** Those rules re-check each tick and fire once the conditions hold; the skip itself is logged once per stretch or day. A status-transition edge is one-shot, so a skip consumes it.
 
+## Game-data triggers (TimeRemainingBelow, ScoreThreshold)
+
+These run from a **second channel with its own single consumer** (`GameDataTriggerHostedService` -> `ProcessGameDataAsync`), separate from the status-transition channel.
+
+- **Coalesced.** The kiosk publishes on every score packet and countdown tick. `EnqueueGameData` keeps only the latest `GameSnapshot` per kiosk, and lets at most one `GameDataEvent` per kiosk wait in the channel (`_gameDataPending`). It does nothing at all while `_hasGameDataRules` is false and the cache is current, so venues without these rules pay nothing.
+- **Once per game.** `EnqueueTransition` counts games per kiosk (bumped on each move into InGame), and each snapshot is stamped with that number at enqueue time. That makes the order the two channels drain in irrelevant. Per-rule state (`_gameDataFiredForGame`, `_timeRemainingObserved`) belongs to the single consumer only.
+- **Only while InGame.** After a game the kiosk zeroes the countdown and keeps republishing the final scores; neither is a crossing.
+- **Time remaining** needs a reading above the threshold earlier in the same game, because kiosks report 0 before their first countdown packet.
+- **Score** uses `IsScoreThresholdReached` (pure): any player, or a team's total (players with no team don't count), optionally one team.
+- A crossing is consumed whether the rule runs, is skipped by a condition, or fails. A moment in a game isn't retried.
+- Security Issue 9.1: a rogue kiosk can claim any client ID and fake these. Not addressed.
+
+## GameEnded (a team wins)
+
+GameEnded rules run on the **status-transition channel**, not the game-data one. The InGame -> NotStarted edge is never coalesced, so a game end can't be missed.
+
+- The hub passes the full publish to `EnqueueTransition(clientId, status, dto)`. On the ending edge only, the engine attaches a `GameSnapshot` of the final scores as `GameStatusTransitionEvent.FinalSnapshot`. The kiosk publishes the ended status before clearing anything, and keeps its scores until the next start.
+- `GameWinner.Determine` is pure: it returns the strictly highest team total, and null on a draw, a solo game, a single team or an empty game.
+- Rules match on the winner (`TriggerTeam` null means any team). The log label is `GameEnded (Red won)`.
+- A caller that passes only the status gets no snapshot, and GameEnded rules simply don't run for it.
+
 ## Saving rules: don't `ctx.Update` the detached graph
 
 `UpdateRuleAsync` loads the tracked rule and syncs `Actions` and `Conditions` (add new, update changed, soft-delete missing). `ctx.Update(rule)` on the dialog's detached graph used to mark a newly added child (client-generated Guid) as Modified, which failed the save, and overwrote `IsEnabled`. Keep `IsEnabled` changes in `SetRuleEnabledAsync` only.

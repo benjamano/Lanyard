@@ -685,7 +685,11 @@
       "When a rule is triggered but a condition stops it, the execution log shows it as Skipped and says why. Skipped rules don't count as failures. An idle or scheduled rule that was skipped still runs later if its conditions become true while it's still due.",
       "Fixed adding an action to an existing automation rule, which failed to save. Editing a switched-off rule no longer switches it back on.",
       "Locations can now have opening hours. On Manage > Companies & Locations, press the clock next to a location to set the hours for each day of the week. Hours that run past midnight, like 18:00 to 02:00, are fine.",
-      "Automation rules have a new condition: a location is open or closed. Use it to only run a rule while you're open, or only after closing. A location with no hours set counts as closed."
+      "Automation rules have a new condition: a location is open or closed. Use it to only run a rule while you're open, or only after closing. A location with no hours set counts as closed.",
+      "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
+      "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
+      "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
     ]
   }
 ]
