@@ -250,6 +250,33 @@ public class GdprService : IGdprService
                 announcement.CreatedByUserId = null;
             }
 
+            List<AudioClip> audioClips = await ctx.AudioClips
+                .Where(x => x.CreatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (AudioClip audioClip in audioClips)
+            {
+                audioClip.CreatedByUserId = null;
+            }
+
+            List<AudioClipPlay> audioClipPlays = await ctx.AudioClipPlays
+                .Where(x => x.TriggeredByUserId == userId)
+                .ToListAsync();
+
+            foreach (AudioClipPlay audioClipPlay in audioClipPlays)
+            {
+                audioClipPlay.TriggeredByUserId = null;
+            }
+
+            List<AudioClipSchedule> audioClipSchedules = await ctx.AudioClipSchedules
+                .Where(x => x.CreatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (AudioClipSchedule audioClipSchedule in audioClipSchedules)
+            {
+                audioClipSchedule.CreatedByUserId = null;
+            }
+
             List<CourseAssignment> assignedByRows = await ctx.CourseAssignments
                 .Where(x => x.AssignedByUserId == userId)
                 .ToListAsync();

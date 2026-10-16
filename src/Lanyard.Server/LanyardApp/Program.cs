@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.MusicScheduling;
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
@@ -110,6 +111,11 @@ builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
+builder.Services.AddSingleton<IAudioClipPlaybackService, AudioClipPlaybackService>();
+builder.Services.AddScoped<IAudioClipService, AudioClipService>();
+builder.Services.AddScoped<IAudioClipScheduleService, AudioClipScheduleService>();
+builder.Services.AddSingleton<IAudioClipScheduleEngine, AudioClipScheduleEngine>();
+builder.Services.AddHostedService<AudioClipScheduleHostedService>();
 builder.Services.AddHostedService<MusicScheduleHostedService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
@@ -230,6 +236,7 @@ builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecu
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, AudioClipActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();

@@ -13,6 +13,7 @@
 @inject IPlaylistService _playlistService
 @inject IProjectionProgramService _projectionProgramService
 @inject IDmxSceneService _dmxSceneService
+@inject Lanyard.Application.Services.AudioClips.IAudioClipService _audioClipService
 @inject ILogger<AddEditAutomationRuleDialog> _logger
 @inject Lanyard.Application.Services.Tenancy.ITenantContext _tenant
 
@@ -307,6 +308,7 @@
                                 <FluentOption Value="@AutomationActionTypes.StopProjectionProgram">Stop Projection Program</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.DmxSceneControl">DMX Scene Control</FluentOption>
                                 <FluentOption Value="@AutomationActionTypes.ProjectionProgramControl">Projection Program Control</FluentOption>
+                                <FluentOption Value="@AutomationActionTypes.PlayAudioClip">Play Audio Clip</FluentOption>
                             </FluentSelect>
                         </div>
                         <div>
@@ -456,6 +458,22 @@
                                 </div>
                             }
                         }
+                        else if (_actionRows[index].ActionType == AutomationActionTypes.PlayAudioClip)
+                        {
+                            @* Its own branch: the music editor below is the fallback for any type not
+                               listed, so without this a clip action would show music controls. *@
+                            <div class="automation-audio-clip">
+                                <FluentSelect TOption="AudioClip"
+                                    TValue="string"
+                                    Label="Audio clip"
+                                    Placeholder="Select a clip"
+                                    Items="@_audioClips"
+                                    OptionText="@(c => c?.Name ?? string.Empty)"
+                                    OptionValue="@(c => c?.Id.ToString())"
+                                    Value="@_actionRows[index].AudioClipIdString"
+                                    ValueChanged="@((string? id) => _actionRows[index].AudioClipIdString = id ?? string.Empty)" />
+                            </div>
+                        }
                         else
                         {
                             <div>
@@ -559,6 +577,7 @@
         public int? HoldMilliseconds { get; set; }
         public List<DmxSceneDTO> Scenes { get; set; } = [];
         public string ProjectionControlOperation { get; set; } = ProjectionProgramControlActionExecutor.Start;
+        public string AudioClipIdString { get; set; } = string.Empty;
     }
 
     private static bool IsRowValid(ActionRow row)
@@ -578,6 +597,7 @@
             // Every operation but Start needs only the target client, already validated above.
             AutomationActionTypes.ProjectionProgramControl => row.ProjectionControlOperation != ProjectionProgramControlActionExecutor.Start
                 || !string.IsNullOrEmpty(row.ProjectionProgramIdString),
+            AutomationActionTypes.PlayAudioClip => Guid.TryParse(row.AudioClipIdString, out _),
             _ => true
         };
     }
@@ -735,6 +755,7 @@
 
     private IEnumerable<Playlist> _playlists { get; set; } = [];
     private IEnumerable<ProjectionProgram> _programs { get; set; } = [];
+    private List<AudioClip> _audioClips = [];
 
     // Runs before OnInitializedAsync's first await, so the first render already shows the saved
     // rule. The static-option selects (trigger type, trigger event) don't pick up a value that
@@ -781,6 +802,13 @@
         // company's, and a rule can only use its own company's (AutomationRuleService checks).
         Result<List<Location>> locationResult = await _companyLocationService.GetLocationsAsync(_tenant.CompanyId);
         _locations = locationResult.Data ?? [];
+
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+        if (scopeResult.IsSuccess && scopeResult.Data is not null)
+        {
+            Result<List<AudioClip>> clipResult = await _audioClipService.ListAsync(scopeResult.Data);
+            _audioClips = clipResult.Data ?? [];
+        }
 
         if (Content != null)
         {
@@ -864,6 +892,15 @@
                         controlDisplayElement.ValueKind == JsonValueKind.Number)
                     {
                         row.DisplayIndexString = controlDisplayElement.GetInt32().ToString();
+                    }
+                }
+                else if (action.ActionType == AutomationActionTypes.PlayAudioClip)
+                {
+                    if (doc.RootElement.TryGetProperty("AudioClipId", out JsonElement clipElement) &&
+                        clipElement.ValueKind == JsonValueKind.String &&
+                        clipElement.TryGetGuid(out Guid audioClipId))
+                    {
+                        row.AudioClipIdString = audioClipId.ToString();
                     }
                 }
                 else if (action.ActionType == AutomationActionTypes.MusicControl)
@@ -1116,6 +1153,14 @@
                         ? controlProgramId
                         : (Guid?)null,
                     DisplayIndex = int.TryParse(row.DisplayIndexString, out int controlDisplayIndex) ? controlDisplayIndex : (int?)null
+                });
+            }
+            else if (row.ActionType == AutomationActionTypes.PlayAudioClip)
+            {
+                parametersJson = JsonSerializer.Serialize(new AudioClipActionExecutor.AudioClipActionParameters
+                {
+                    TargetClientId = targetClientId,
+                    AudioClipId = Guid.TryParse(row.AudioClipIdString, out Guid audioClipId) ? audioClipId : Guid.Empty
                 });
             }
             else
