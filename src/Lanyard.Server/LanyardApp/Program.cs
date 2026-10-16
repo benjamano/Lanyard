@@ -145,6 +145,7 @@ builder.Services.AddScoped<IClockInPinService, ClockInPinService>();
 builder.Services.AddScoped<ISchedulingSettingsService, SchedulingSettingsService>();
 builder.Services.AddScoped<IRotaService, RotaService>();
 builder.Services.AddScoped<IShiftSuggestionService, ShiftSuggestionService>();
+builder.Services.AddScoped<IStaffAvailabilityService, StaffAvailabilityService>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ITerminalEphemeralTokenService, TerminalEphemeralTokenService>();
 builder.Services.AddSingleton<ITerminalEventBus, TerminalEventBus>();
