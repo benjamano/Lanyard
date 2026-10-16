@@ -17,5 +17,8 @@ public enum CompanyFeature
     Onboarding = 4,
 
     // The Announcements page and widget.
-    Announcements = 5
+    Announcements = 5,
+
+    // Demand and staffing insights: the Insights page and its dashboard widget.
+    Insights = 6
 }
