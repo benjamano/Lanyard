@@ -1,6 +1,7 @@
 @using Lanyard.Application.Services.Notifications
 @using Lanyard.Application.Services.Scheduling
 @using Lanyard.App.Components.Rota.TimeOff
+@using Lanyard.App.Components.Rota.Availability
 @using Lanyard.Infrastructure.DTO.Scheduling
 @using Lanyard.Infrastructure.Enum
 
@@ -81,6 +82,12 @@
             }
         </section>
 
+        <FluentDivider Style="width: 100%;" />
+
+        <section class="rota-profile-section">
+            <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Availability</FluentText>
+            <AvailabilityEditor UserId="@UserId" ForManager="true" />
+        </section>
         <FluentDivider Style="width: 100%;" />
 
         <section class="rota-profile-section">

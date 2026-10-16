@@ -1,0 +1,20 @@
+.unavailable-note {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    font-size: 0.72rem;
+    color: var(--colorNeutralForeground2);
+    cursor: help;
+}
+
+.unavailable-note span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unavailable-note.is-compact {
+    justify-content: center;
+}

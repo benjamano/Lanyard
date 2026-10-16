@@ -43,6 +43,13 @@
                 </FluentMessageBar>
             }
 
+            @if (SelectedUnavailable is StaffAvailability unavailable)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    @SelectedName has said they can't work @StaffAvailabilityRules.Describe(unavailable)@(string.IsNullOrWhiteSpace(unavailable.Notes) ? "" : $" ({unavailable.Notes})"). You can still put them on it.
+                </FluentMessageBar>
+            }
+
             @if (ExistingTrainingGaps.Count > 0)
             {
                 <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
@@ -156,6 +163,22 @@
 
     [Parameter]
     public Shift? Existing { get; set; }
+
+    // A time the chosen person has said they can't work, for the day and times entered.
+    private StaffAvailability? SelectedUnavailable
+    {
+        get
+        {
+            if (date is not DateTime chosen || View.Rows.FirstOrDefault(r => r.User.Id == userId) is not RotaStaffRow row || row.Availability.Count == 0)
+            {
+                return null;
+            }
+
+            DateOnly day = DateOnly.FromDateTime(chosen);
+
+            return StaffAvailabilityRules.Conflict(row.Availability, RotaTime.ToUtc(day, startTime), RotaTime.ToUtc(EndsNextDay ? day.AddDays(1) : day, endTime));
+        }
+    }
 
     // The rota's missing-training note for this shift - only while it's still the same person in
     // the same position, since a different choice would need checking afresh (the save does that).
