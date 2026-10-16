@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule, and play audio clips such as closing-time calls over the music.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -704,7 +704,20 @@
       "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
       "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
       "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
-      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
+      "New Audio Clips page (Audio Clips in the menu). Upload short recordings, such as a closing-time call, a birthday jingle or a safety message, and play them on your kiosks over the music.",
+      "Press Play on a clip and choose the kiosks. The music dips to 20% of its level while the clip plays and comes back up when it ends. A clip that's already playing is cut off by a new one. Each clip can have its own volume, and you can change how far and how quickly the music dips.",
+      "Clips can be MP3, WAV or M4A files up to 25 MB and 5 minutes long. Upload a new file or pick an audio file already in the file manager. Clips don't appear in the music library or playlists.",
+      "Admins can add clips for every location or for one location. Managers add and change clips for their own location, and play clips on their own location's kiosks.",
+      "Give someone the new \"CanPlayAudioClips\" role on the Roles page to let them play clips without being a manager.",
+      "The page lists recent plays, who played them and whether they played. The Music page shows when a kiosk is playing a clip, with a Stop button.",
+      "Kiosks need software 1.0.42 or later to play clips. Older or offline kiosks are greyed out when you choose where to play.",
+      "Playing a clip doesn't count as changing the music by hand, so the music schedule carries on as normal underneath it.",
+      "Audio clips can now play by themselves on a schedule. On the Audio Clips page, press Add schedule and choose a clip, a location and when it plays: a set time, or a number of minutes before closing or after opening, on the days you pick. It plays on every kiosk at that location.",
+      "Closing and opening times come from the location's opening hours, so a \"15 minutes before closing\" call follows late nights and short days by itself. For a late close after midnight, choose the day the location opens. A location with no opening hours set can't use these, and the page says so.",
+      "Each schedule shows its next few plays, and can be turned off without deleting it. A play that the server missed by more than two minutes, for example during an update, is skipped rather than played late.",
+      "Kiosks download scheduled clips ahead of time when they connect, so a clip starts on time even on a slow connection.",
+      "Automation rules have a new action, Play Audio Clip, which plays a clip on a kiosk over its music. For example, play a winners' jingle when a game ends with a winner, or a reminder when a game's time is nearly up."
     ]
   }
 ]

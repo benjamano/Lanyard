@@ -12,6 +12,9 @@ public interface IAudioClipCacheService
     /// the kiosk plays.
     /// </summary>
     Task<string?> GetAudioSourceAsync(AudioClipPlayCommand command, CancellationToken ct);
+
+    /// <summary>Downloads any of these clips not already on disk, one at a time.</summary>
+    Task PrefetchAsync(IEnumerable<AudioClipPlayCommand> commands, CancellationToken ct);
 }
 
 /// <summary>
@@ -62,6 +65,22 @@ public sealed class AudioClipCacheService : IAudioClipCacheService, IDisposable
         string? downloaded = await DownloadAsync(command.ClipId, cachedPath, ct);
 
         return downloaded ?? BuildApiUrl(command.ClipId);
+    }
+
+    public async Task PrefetchAsync(IEnumerable<AudioClipPlayCommand> commands, CancellationToken ct)
+    {
+        foreach (AudioClipPlayCommand command in commands)
+        {
+            string? fileName = AudioClipFormats.CacheFileName(command.ClipId, command.ContentVersion, command.FileExtension);
+
+            if (fileName is null || File.Exists(Path.Combine(_cacheDir, fileName)))
+            {
+                continue;
+            }
+
+            _logger.LogInformation("ClipCache: Downloading scheduled clip {ClipId} ({Name}) ahead", command.ClipId, command.Name);
+            await DownloadAsync(command.ClipId, Path.Combine(_cacheDir, fileName), ct);
+        }
     }
 
     private async Task<string?> DownloadAsync(Guid clipId, string cachedPath, CancellationToken ct)

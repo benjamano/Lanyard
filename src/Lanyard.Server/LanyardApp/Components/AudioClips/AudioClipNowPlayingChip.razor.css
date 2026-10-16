@@ -1,0 +1,24 @@
+/* Same shape as the music schedule chip it sits beside. */
+.clip-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    background: var(--colorBrandBackground2);
+    color: var(--colorNeutralForeground1);
+}
+
+.clip-status-text {
+    flex: 1 1 12em;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.clip-status-text ::deep .clip-status-icon {
+    vertical-align: -3px;
+    margin-right: 6px;
+}

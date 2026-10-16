@@ -123,7 +123,10 @@ public class FileService : IFileService
         return await UploadFileAsync(file, folderId, getResult.Data, cancellationToken);
     }
 
-    public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken)
+    public Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken) =>
+        UploadFileAsync(file, folderId, uploadedBy, new FileUploadOptions(), cancellationToken);
+
+    public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, FileUploadOptions options, CancellationToken cancellationToken)
     {
         try
         {
@@ -139,7 +142,7 @@ public class FileService : IFileService
             Guid fileId = Guid.NewGuid();
             string filePath;
 
-            bool isAudio = _audioExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
+            bool isAudio = options.AddAudioToMusicLibrary && _audioExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
             (double durationSeconds, string albumName) = isAudio
                 ? TryReadAudioMetadata(file, fileName)
                 : (0, string.Empty);

@@ -171,6 +171,9 @@ public class SignalRControlHub(
 
         _connections.TryAdd(Context.ConnectionId, true);
 
+        // So a scheduled clip is already on the kiosk's disk when it's due. Logs its own failures.
+        await _audioClipPlaybackService.PrefetchScheduledClipsAsync(client.Id, Context.ConnectionId);
+
         await base.OnConnectedAsync();
     }
 

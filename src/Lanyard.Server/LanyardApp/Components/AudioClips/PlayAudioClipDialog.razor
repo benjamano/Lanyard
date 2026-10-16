@@ -1,0 +1,207 @@
+@using Lanyard.Application.Services.AudioClips
+@using Lanyard.Shared.AudioClips
+
+@inject IAudioClipService _audioClipService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Play())" />
+            <FluentText As="@TextTag.H3">Play "@Clip.Name"</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="play-dialog">
+            @if (outcomes is null)
+            {
+                <FluentText Class="play-hint">
+                    @AddEditAudioClipDialog.FormatDuration(Clip.DurationSeconds) long. The music dips while it plays and comes back afterwards.
+                    A clip already playing on a kiosk is cut off.
+                </FluentText>
+
+                @if (Groups.Count == 0)
+                {
+                    <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                        There are no kiosks this clip can play on. A kiosk needs a location (set in Clients) to play clips.
+                    </FluentMessageBar>
+                }
+
+                @foreach (IGrouping<string, AudioClipKiosk> group in Groups)
+                {
+                    List<AudioClipKiosk> playable = group.Where(IsPlayable).ToList();
+
+                    <div class="play-group">
+                        <div class="play-group-heading">
+                            <FluentText Weight="TextWeight.Semibold">@group.Key</FluentText>
+                            @if (playable.Count > 1)
+                            {
+                                <FluentButton Appearance="ButtonAppearance.Subtle" Size="ButtonSize.Small"
+                                              OnClick="@(() => SelectAll(playable))">
+                                    All kiosks at @group.Key
+                                </FluentButton>
+                            }
+                        </div>
+
+                        @foreach (AudioClipKiosk kiosk in group)
+                        {
+                            AudioClipKiosk captured = kiosk;
+                            <div class="play-kiosk">
+                                <FluentCheckbox Value="@selected.Contains(captured.Id)"
+                                                ValueChanged="@((bool ticked) => Toggle(captured.Id, ticked))"
+                                                Disabled="@(!IsPlayable(captured))"
+                                                Label="@captured.Name" />
+                                @if (KioskNote(captured) is string note)
+                                {
+                                    <FluentText Class="play-kiosk-note">@note</FluentText>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="play-results">
+                    @foreach (AudioClipKioskOutcome outcome in outcomes)
+                    {
+                        <div class="play-result">
+                            <FluentIcon Value="@ResultIcon(outcome.Status)" Color="@ResultColor(outcome.Status)" />
+                            <div class="play-result-text">
+                                <FluentText Weight="TextWeight.Semibold">@outcome.ClientName</FluentText>
+                                <FluentText Class="play-hint">@ResultText(outcome)</FluentText>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <div class="play-actions">
+                @if (outcomes is null)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Play())"
+                                  OnClick="@PlayAsync" Disabled="@(isPlaying || selected.Count == 0)">
+                        @(isPlaying ? "Sending..." : selected.Count <= 1 ? "Play now" : $"Play on {selected.Count} kiosks")
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isPlaying">
+                        Cancel
+                    </FluentButton>
+                }
+                else
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@CloseAsync">Done</FluentButton>
+                }
+            </div>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    [Parameter, EditorRequired]
+    public required AudioClip Clip { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AudioClipKiosk> Kiosks { get; set; } = [];
+
+    private readonly HashSet<Guid> selected = [];
+    private List<AudioClipKioskOutcome>? outcomes;
+    private string? errorMessage;
+    private bool isPlaying;
+
+    // A clip limited to one location only lists that location's kiosks.
+    private List<IGrouping<string, AudioClipKiosk>> Groups => Kiosks
+        .Where(x => Clip.LocationId is null || x.LocationId == Clip.LocationId)
+        .GroupBy(x => x.LocationName ?? "No location")
+        .ToList();
+
+    protected override void OnInitialized()
+    {
+        // Starts with every kiosk that can play it at the caller's own location ticked.
+        foreach (AudioClipKiosk kiosk in Kiosks.Where(x => x.LocationId == Scope.LocationId && IsPlayable(x)
+                     && (Clip.LocationId is null || x.LocationId == Clip.LocationId)))
+        {
+            selected.Add(kiosk.Id);
+        }
+    }
+
+    private static bool IsPlayable(AudioClipKiosk kiosk) => kiosk.IsOnline && kiosk.CanPlayClips;
+
+    private static string? KioskNote(AudioClipKiosk kiosk) =>
+        !kiosk.IsOnline ? "Offline"
+        : !kiosk.CanPlayClips ? $"Needs updating to {AudioClipFormats.MinimumClientVersion} or later (on {kiosk.Version ?? "an unknown version"})"
+        : null;
+
+    private void Toggle(Guid kioskId, bool ticked)
+    {
+        if (ticked)
+        {
+            selected.Add(kioskId);
+        }
+        else
+        {
+            selected.Remove(kioskId);
+        }
+    }
+
+    private void SelectAll(IEnumerable<AudioClipKiosk> kiosks)
+    {
+        foreach (AudioClipKiosk kiosk in kiosks)
+        {
+            selected.Add(kiosk.Id);
+        }
+    }
+
+    private async Task PlayAsync()
+    {
+        errorMessage = null;
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+        if (!userResult.IsSuccess || userResult.Data is null)
+        {
+            errorMessage = "Couldn't work out who you are. Refresh the page and sign in again.";
+            return;
+        }
+
+        isPlaying = true;
+        Result<List<AudioClipKioskOutcome>> result = await _audioClipService.PlayAsync(Scope, Clip.Id, selected.ToList(), userResult.Data);
+        isPlaying = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        outcomes = result.Data!.OrderBy(x => x.ClientName).ToList();
+    }
+
+    private static Icon ResultIcon(AudioClipPlayStatus status) => status == AudioClipPlayStatus.Sent
+        ? new Icons.Filled.Size20.CheckmarkCircle()
+        : new Icons.Filled.Size20.ErrorCircle();
+
+    private static Color ResultColor(AudioClipPlayStatus status) =>
+        status == AudioClipPlayStatus.Sent ? Color.Success : Color.Error;
+
+    private static string ResultText(AudioClipKioskOutcome outcome) =>
+        outcome.Status == AudioClipPlayStatus.Sent ? "Sent to the kiosk" : outcome.Error ?? "Couldn't play it here";
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        await Dialog.CloseAsync(true);
+    }
+}

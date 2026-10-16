@@ -77,6 +77,10 @@ public class AudioClipPlay : ICompanyOwned
 
     public AudioClipPlaySource Source { get; set; }
 
+    // Set when a schedule played it.
+    public Guid? AudioClipScheduleId { get; set; }
+    public AudioClipSchedule? AudioClipSchedule { get; set; }
+
     // Set when a person pressed Play; nullable so a GDPR erasure can clear it.
     public string? TriggeredByUserId { get; set; }
     public UserProfile? TriggeredByUser { get; set; }
@@ -88,4 +92,56 @@ public class AudioClipPlay : ICompanyOwned
 
     public DateTime RequestedAtUtc { get; set; }
     public DateTime? FinishedAtUtc { get; set; }
+}
+
+/// <summary>
+/// Plays an audio clip on every kiosk at a location at a set time, or a number of minutes before
+/// closing or after opening (from the location's opening hours), on chosen days. Times are UK
+/// wall-clock time (see RotaTime).
+/// </summary>
+public class AudioClipSchedule : ICompanyOwned
+{
+    public const int NameMaxLength = 100;
+    public const int MaxOffsetMinutes = 240;
+
+    public Guid Id { get; set; }
+    public int CompanyId { get; set; }
+
+    [Required]
+    [StringLength(NameMaxLength)]
+    public string Name { get; set; } = string.Empty;
+
+    public Guid AudioClipId { get; set; }
+    public AudioClip? AudioClip { get; set; }
+
+    public int LocationId { get; set; }
+    public Location? Location { get; set; }
+
+    public AudioClipScheduleAnchor Anchor { get; set; }
+
+    // Only for AtTime.
+    public TimeOnly? TimeOfDay { get; set; }
+
+    // Only for BeforeClosing and AfterOpening.
+    public int OffsetMinutes { get; set; }
+
+    // Same CSV format as AutomationRule.ScheduledDaysOfWeek (see AutomationScheduleDays). For a
+    // closing or opening time, the day the location opens: Friday's late close counts as Friday.
+    [MaxLength(20)]
+    public string DaysOfWeek { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; } = true;
+
+    // The last time it played (see AudioClipScheduleRules.OccurrenceKey), saved before the clip is
+    // sent so a restart can never play the same occurrence twice.
+    [MaxLength(64)]
+    public string? LastFiredOccurrenceKey { get; set; }
+
+    public DateTime CreateDate { get; set; }
+    public DateTime? UpdateDate { get; set; }
+    public DateTime? DeleteDate { get; set; }
+
+    // Nullable so a GDPR erasure can clear it (GdprService.AnonymizeAttributionAsync).
+    public string? CreatedByUserId { get; set; }
+    public UserProfile? CreatedByUser { get; set; }
 }

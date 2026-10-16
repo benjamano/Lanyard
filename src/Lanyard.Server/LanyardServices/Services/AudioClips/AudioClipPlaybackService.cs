@@ -89,6 +89,7 @@ public class AudioClipPlaybackService(
                     ClientId = kiosk.Id,
                     Source = request.Source,
                     TriggeredByUserId = request.TriggeredByUserId,
+                    AudioClipScheduleId = request.ScheduleId,
                     RequestedAtUtc = utcNow
                 };
 
@@ -127,19 +128,7 @@ public class AudioClipPlaybackService(
 
             foreach ((AudioClipPlay play, string connectionId, string clientName) in toSend)
             {
-                AudioClipPlayCommand command = new()
-                {
-                    PlayId = play.Id,
-                    ClipId = clip.Id,
-                    ContentVersion = clip.FileMetadataId!.Value.ToString("N"),
-                    FileExtension = extension,
-                    Name = clip.Name,
-                    DurationSeconds = clip.DurationSeconds,
-                    Volume = Math.Clamp(clip.Volume, 0, 100),
-                    DuckToPercent = Math.Clamp(clip.EffectiveDuckToPercent, 0, 100),
-                    FadeDownMs = Math.Max(0, clip.EffectiveFadeDownMs),
-                    FadeUpMs = Math.Max(0, clip.EffectiveFadeUpMs)
-                };
+                AudioClipPlayCommand command = ToCommand(clip, play.Id, extension);
 
                 // Replaces whatever the kiosk was playing: a new clip cuts the old one off, and the
                 // kiosk reports that play as stopped.
@@ -281,6 +270,96 @@ public class AudioClipPlaybackService(
             return Result<bool>.Fail($"Failed to record the report: {ex.Message}");
         }
     }
+
+    public async Task PrefetchScheduledClipsAsync(Guid clientId, string connectionId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await contextFactory.CreateDbContextAsync();
+
+            var kiosk = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.Id == clientId)
+                .Select(x => new { x.LocationId, x.CompanyId, x.ReportedClientVersion })
+                .FirstOrDefaultAsync();
+
+            if (kiosk?.LocationId is not int locationId || !IsRecentEnough(kiosk.ReportedClientVersion))
+            {
+                return;
+            }
+
+            List<AudioClipPlayCommand> commands = await ScheduledClipCommandsAsync(ctx, locationId, kiosk.CompanyId);
+
+            if (commands.Count == 0)
+            {
+                return;
+            }
+
+            logger.LogInformation("Dispatching {Method} with {Count} clips to client {ClientId}", ClientHubMethods.PrefetchAudioClips, commands.Count, clientId);
+
+            await hubContext.Clients.Client(connectionId).SendAsync(ClientHubMethods.PrefetchAudioClips, commands);
+        }
+        catch (Exception ex)
+        {
+            // Only an optimisation: the kiosk downloads a clip when it's played anyway.
+            logger.LogWarning(ex, "Failed to send scheduled clips to client {ClientId} to download ahead", clientId);
+        }
+    }
+
+    public async Task PrefetchScheduledClipsAsync(int locationId)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await contextFactory.CreateDbContextAsync();
+
+            var kiosks = await ctx.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.LocationId == locationId)
+                .Select(x => new { x.Id, x.MostRecentConnectionId })
+                .ToListAsync();
+
+            foreach (var kiosk in kiosks.Where(x => IsConnected(x.MostRecentConnectionId)))
+            {
+                await PrefetchScheduledClipsAsync(kiosk.Id, kiosk.MostRecentConnectionId!);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send scheduled clips to the kiosks at location {LocationId}", locationId);
+        }
+    }
+
+    private static async Task<List<AudioClipPlayCommand>> ScheduledClipCommandsAsync(ApplicationDbContext ctx, int locationId, int companyId)
+    {
+        List<AudioClip> clips = await ctx.AudioClips
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Include(x => x.FileMetadata)
+            .Where(x => x.CompanyId == companyId && x.DeleteDate == null && x.FileMetadata!.IsActive
+                && ctx.AudioClipSchedules.Any(s => s.AudioClipId == x.Id && s.LocationId == locationId && s.IsEnabled && s.DeleteDate == null))
+            .ToListAsync();
+
+        return clips
+            .Where(x => x.FileMetadataId is not null && AudioClipFormats.ExtensionOf(x.FileMetadata?.FileName) is not null)
+            .Select(x => ToCommand(x, Guid.Empty, AudioClipFormats.ExtensionOf(x.FileMetadata!.FileName)!))
+            .ToList();
+    }
+
+    private static AudioClipPlayCommand ToCommand(AudioClip clip, Guid playId, string extension) => new()
+    {
+        PlayId = playId,
+        ClipId = clip.Id,
+        ContentVersion = clip.FileMetadataId!.Value.ToString("N"),
+        FileExtension = extension,
+        Name = clip.Name,
+        DurationSeconds = clip.DurationSeconds,
+        Volume = Math.Clamp(clip.Volume, 0, 100),
+        DuckToPercent = Math.Clamp(clip.EffectiveDuckToPercent, 0, 100),
+        FadeDownMs = Math.Max(0, clip.EffectiveFadeDownMs),
+        FadeUpMs = Math.Max(0, clip.EffectiveFadeUpMs)
+    };
 
     public AudioClipNowPlaying? GetNowPlaying(Guid clientId) =>
         _nowPlaying.TryGetValue(clientId, out AudioClipNowPlaying? current) ? current : null;

@@ -1,0 +1,49 @@
+.schedule-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.schedule-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Wraps to a second row on a phone rather than squeezing seven checkboxes onto one line. */
+.schedule-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+}
+
+.schedule-slider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.schedule-slider ::deep .schedule-slider-input {
+    flex: 1;
+}
+
+.schedule-slider ::deep .schedule-slider-value {
+    min-width: 4.5em;
+    text-align: right;
+}
+
+.schedule-dialog ::deep .schedule-hint {
+    color: var(--colorNeutralForeground3);
+}
+
+.schedule-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.schedule-actions-spacer {
+    flex: 1;
+}
