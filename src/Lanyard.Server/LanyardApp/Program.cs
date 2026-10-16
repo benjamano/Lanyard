@@ -111,6 +111,7 @@ builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
 builder.Services.AddSingleton<IAudioClipPlaybackService, AudioClipPlaybackService>();
+builder.Services.AddScoped<IAudioClipService, AudioClipService>();
 builder.Services.AddHostedService<MusicScheduleHostedService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();

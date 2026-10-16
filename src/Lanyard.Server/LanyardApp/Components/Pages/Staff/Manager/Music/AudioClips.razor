@@ -1,0 +1,331 @@
+@page "/manage/audio-clips"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = AudioClipRoles.Play)]
+@implements IDisposable
+
+@using Lanyard.App.Components.AudioClips
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.Application.Services.AudioClips
+
+@inject IAudioClipService _audioClipService
+@inject IAudioClipPlaybackService _audioClipPlayback
+
+<PageTitle>Audio Clips</PageTitle>
+
+<div class="audio-clips">
+    <FluentCard Height="auto">
+        <div class="audio-clips-body">
+            <div class="audio-clips-heading">
+                <div>
+                    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">Audio clips</FluentText>
+                    <FluentText Class="audio-clips-muted">
+                        Short recordings to play over the kiosk music, like a closing-time call, a birthday jingle or a safety message.
+                        The music dips while a clip plays and comes back afterwards.
+                    </FluentText>
+                </div>
+                @if (canAdd)
+                {
+                    <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Add())"
+                                  OnClick="@AddClipAsync">
+                        Add clip
+                    </FluentButton>
+                }
+            </div>
+
+            @if (loadError is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@loadError</FluentMessageBar>
+            }
+            else if (clips is null)
+            {
+                <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8">
+                    <FluentSpinner />
+                    <FluentText>Loading...</FluentText>
+                </FluentStack>
+            }
+            else if (clips.Count == 0)
+            {
+                <div class="audio-clips-empty">
+                    <FluentIcon Value="@(new Icons.Regular.Size24.Speaker2())" Color="Color.Disabled" />
+                    <FluentText Weight="TextWeight.Semibold">No audio clips yet</FluentText>
+                    <FluentText Class="audio-clips-muted">
+                        @(canAdd
+                            ? "Add one to play it on your kiosks, now or whenever you need it."
+                            : "Ask a manager to add some.")
+                    </FluentText>
+                </div>
+            }
+            else
+            {
+                <div class="audio-clips-list">
+                    @foreach (AudioClip clip in clips)
+                    {
+                        AudioClip captured = clip;
+                        <div class="audio-clip">
+                            <div class="audio-clip-main">
+                                <FluentText Weight="TextWeight.Semibold" Class="audio-clip-name">@clip.Name</FluentText>
+                                <FluentText Class="audio-clips-muted">@ClipSummary(clip)</FluentText>
+                                <audio class="audio-clip-preview" controls preload="none" src="@($"/api/audioclips/{clip.Id}/audio")"></audio>
+                            </div>
+                            <div class="audio-clip-actions">
+                                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Play())"
+                                              OnClick="@(() => PlayClipAsync(captured))">
+                                    Play
+                                </FluentButton>
+                                @if (scope is not null && _audioClipService.CanManage(scope, clip.LocationId))
+                                {
+                                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Edit())"
+                                                  Title="@($"Edit {clip.Name}")" OnClick="@(() => EditClipAsync(captured))" />
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </FluentCard>
+
+    @if (recentPlays.Count > 0)
+    {
+        <FluentCard Height="auto" Class="mt-3">
+            <div class="audio-clips-body">
+                <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Recently played</FluentText>
+                <div class="audio-clips-plays">
+                    @foreach (AudioClipPlaySummary play in recentPlays)
+                    {
+                        <div class="audio-clip-play">
+                            <div class="audio-clip-play-main">
+                                <FluentText Weight="TextWeight.Semibold">@play.ClipName</FluentText>
+                                <FluentText Class="audio-clips-muted">
+                                    @play.KioskName · @PlayedBy(play) · @RotaTime.ToVenueLocal(play.RequestedAtUtc).ToString("ddd d MMM, HH:mm")
+                                </FluentText>
+                                @if (play.Error is not null && play.Status is not AudioClipPlayStatus.Finished)
+                                {
+                                    <FluentText Class="audio-clips-muted">@play.Error</FluentText>
+                                }
+                            </div>
+                            <FluentBadge Appearance="BadgeAppearance.Tint" Color="@StatusColor(play.Status)">@StatusText(play.Status)</FluentBadge>
+                        </div>
+                    }
+                </div>
+            </div>
+        </FluentCard>
+    }
+</div>
+
+@code {
+    private LocationScope? scope;
+    private bool canAdd;
+    private List<AudioClip>? clips;
+    private List<Location> manageableLocations = [];
+    private List<AudioClipPlaySummary> recentPlays = [];
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            loadError = "Couldn't work out your location. Refresh the page and sign in again.";
+            return;
+        }
+
+        scope = scopeResult.Data;
+
+        // An Admin can put a clip at any location or all of them; a Manager only at their own.
+        if (scope.IsAdmin && scope.CompanyId is int companyId)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync(companyId);
+            manageableLocations = locations.IsSuccess ? (locations.Data ?? []).Where(x => x.IsActive).OrderBy(x => x.Name).ToList() : [];
+        }
+        else if (scope.IsManager && scope.LocationId is int own)
+        {
+            manageableLocations = [new Location { Id = own, CompanyId = scope.CompanyId ?? 0, Name = scope.LocationDisplayName ?? "Your location" }];
+        }
+
+        canAdd = scope.IsAdmin || manageableLocations.Count > 0;
+
+        _audioClipPlayback.OnClipPlaybackChanged += OnClipPlaybackChanged;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<List<AudioClip>> clipResult = await _audioClipService.ListAsync(scope);
+
+        if (!clipResult.IsSuccess)
+        {
+            loadError = $"Couldn't load the clips: {clipResult.Error}";
+            return;
+        }
+
+        clips = clipResult.Data ?? [];
+        await LoadRecentPlaysAsync();
+    }
+
+    private async Task LoadRecentPlaysAsync()
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<List<AudioClipPlaySummary>> playResult = await _audioClipService.ListRecentPlaysAsync(scope);
+        recentPlays = playResult.IsSuccess ? playResult.Data ?? [] : [];
+    }
+
+    // Raised from whichever thread a kiosk's report arrived on.
+    private void OnClipPlaybackChanged(Guid clientId)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await LoadRecentPlaysAsync();
+            StateHasChanged();
+        });
+    }
+
+    private Task AddClipAsync() => OpenClipDialogAsync(null);
+
+    private Task EditClipAsync(AudioClip clip) => OpenClipDialogAsync(clip);
+
+    private async Task OpenClipDialogAsync(AudioClip? clip)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        List<AudioClipFileOption> files = [];
+        if (clip is null)
+        {
+            Result<List<AudioClipFileOption>> fileResult = await _audioClipService.ListAudioFilesAsync(scope);
+            files = fileResult.IsSuccess ? fileResult.Data ?? [] : [];
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAudioClipDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditAudioClipDialog.Scope), scope);
+            options.Parameters.Add(nameof(AddEditAudioClipDialog.Clip), clip);
+            options.Parameters.Add(nameof(AddEditAudioClipDialog.Locations), manageableLocations);
+            options.Parameters.Add(nameof(AddEditAudioClipDialog.CanChooseEveryLocation), scope.IsAdmin);
+            options.Parameters.Add(nameof(AddEditAudioClipDialog.Files), files);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+        else if (clip is not null && result.Value as string == AddEditAudioClipDialog.DeleteRequested)
+        {
+            await DeleteClipAsync(clip);
+        }
+    }
+
+    private async Task DeleteClipAsync(AudioClip clip)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete audio clip";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete \"{clip.Name}\"? Its audio file stays in the file manager.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> result = await _audioClipService.DeleteAsync(scope, clip.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't delete: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Deleted \"{clip.Name}\".");
+        await LoadAsync();
+    }
+
+    private async Task PlayClipAsync(AudioClip clip)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<List<AudioClipKiosk>> kioskResult = await _audioClipService.ListKiosksAsync(scope);
+
+        if (!kioskResult.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't load the kiosks: {kioskResult.Error}");
+            return;
+        }
+
+        await _dialogService.ShowDialogAsync<PlayAudioClipDialog>(options =>
+        {
+            options.Width = "480px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PlayAudioClipDialog.Scope), scope);
+            options.Parameters.Add(nameof(PlayAudioClipDialog.Clip), clip);
+            options.Parameters.Add(nameof(PlayAudioClipDialog.Kiosks), kioskResult.Data ?? []);
+        });
+
+        await LoadRecentPlaysAsync();
+    }
+
+    private static string ClipSummary(AudioClip clip)
+    {
+        string where = clip.Location is null ? "Every location" : $"{clip.Location.Name} only";
+        string dip = clip.EffectiveDuckToPercent == 0 ? "music goes silent" : $"music dips to {clip.EffectiveDuckToPercent}%";
+
+        return $"{AddEditAudioClipDialog.FormatDuration(clip.DurationSeconds)} · {where} · {dip}";
+    }
+
+    private static string PlayedBy(AudioClipPlaySummary play) => play.Source switch
+    {
+        AudioClipPlaySource.Schedule => "on a schedule",
+        AudioClipPlaySource.Automation => "by an automation rule",
+        _ => play.TriggeredBy is null ? "by hand" : $"by {play.TriggeredBy}"
+    };
+
+    private static string StatusText(AudioClipPlayStatus status) => status switch
+    {
+        AudioClipPlayStatus.Sent => "Sent",
+        AudioClipPlayStatus.Preparing => "Getting ready",
+        AudioClipPlayStatus.Playing => "Playing",
+        AudioClipPlayStatus.Finished => "Played",
+        AudioClipPlayStatus.Stopped => "Stopped",
+        AudioClipPlayStatus.Offline => "Offline",
+        AudioClipPlayStatus.OutdatedKiosk => "Needs update",
+        _ => "Failed"
+    };
+
+    private static BadgeColor StatusColor(AudioClipPlayStatus status) => status switch
+    {
+        AudioClipPlayStatus.Finished => BadgeColor.Success,
+        AudioClipPlayStatus.Sent or AudioClipPlayStatus.Preparing or AudioClipPlayStatus.Playing => BadgeColor.Brand,
+        AudioClipPlayStatus.Stopped => BadgeColor.Informative,
+        _ => BadgeColor.Danger
+    };
+
+    public void Dispose()
+    {
+        _audioClipPlayback.OnClipPlaybackChanged -= OnClipPlaybackChanged;
+    }
+}

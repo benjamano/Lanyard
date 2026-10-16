@@ -1,0 +1,86 @@
+.audio-clips {
+    padding: 8px;
+}
+
+.audio-clips-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.audio-clips-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.audio-clips-heading > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 720px;
+}
+
+.audio-clips-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 32px 12px;
+    border: 1px dashed var(--colorNeutralStroke2);
+    border-radius: 6px;
+}
+
+/* Plain flex rows rather than a FluentDataGrid, so long clip names wrap on a phone. */
+.audio-clips-list,
+.audio-clips-plays {
+    display: flex;
+    flex-direction: column;
+}
+
+.audio-clip,
+.audio-clip-play {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.audio-clip:first-child,
+.audio-clip-play:first-child {
+    border-top: none;
+}
+
+.audio-clip-main,
+.audio-clip-play-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.audio-clip-preview {
+    width: 100%;
+    max-width: 360px;
+    height: 36px;
+    margin-top: 4px;
+}
+
+.audio-clip-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Fluent components render their own root, so scoped classes on them need ::deep from a plain div. */
+.audio-clips ::deep .audio-clips-muted {
+    color: var(--colorNeutralForeground3);
+}
