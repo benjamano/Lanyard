@@ -18,7 +18,7 @@ namespace Lanyard.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     CompanyId = table.Column<int>(type: "integer", nullable: false),
                     Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    FileMetadataId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FileMetadataId = table.Column<Guid>(type: "uuid", nullable: true),
                     DurationSeconds = table.Column<double>(type: "double precision", nullable: false),
                     LocationId = table.Column<int>(type: "integer", nullable: true),
                     Volume = table.Column<int>(type: "integer", nullable: false),

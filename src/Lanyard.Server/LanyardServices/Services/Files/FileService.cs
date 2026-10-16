@@ -282,6 +282,19 @@ public class FileService : IFileService
             if (isReferenced)
                 return Result<bool>.Fail("This file is attached to a staff document or an onboarding email and cannot be deleted.");
 
+            if (await db.AudioClips.AnyAsync(x => x.FileMetadataId == file.Id && x.DeleteDate == null, cancellationToken))
+                return Result<bool>.Fail("This file is an audio clip. Delete the clip first.");
+
+            // Deleted clips keep their play history, so they stay; they just let go of the file.
+            List<AudioClip> deletedClips = await db.AudioClips
+                .Where(x => x.FileMetadataId == file.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (AudioClip deletedClip in deletedClips)
+            {
+                deletedClip.FileMetadataId = null;
+            }
+
             // StaffDocument/CompanyOnboardingStandingAttachment are soft-delete models, so an
             // inactive row is never actually removed from the table - it would otherwise sit
             // there permanently holding the FK's Restrict behavior against this file, blocking

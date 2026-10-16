@@ -272,7 +272,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Property<int?>("FadeUpMs")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("FileMetadataId")
+                    b.Property<Guid?>("FileMetadataId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("LocationId")
@@ -4252,8 +4252,7 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasOne("Lanyard.Infrastructure.Models.FileMetadata", "FileMetadata")
                         .WithMany()
                         .HasForeignKey("FileMetadataId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
                         .WithMany()

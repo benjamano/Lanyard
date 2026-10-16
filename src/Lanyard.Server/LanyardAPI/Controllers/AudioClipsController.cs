@@ -34,12 +34,12 @@ public class AudioClipsController(IDbContextFactory<ApplicationDbContext> factor
             .Select(x => new { x.FileMetadataId, FileName = x.FileMetadata!.FileName })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (clip is null)
+        if (clip?.FileMetadataId is not Guid fileMetadataId)
         {
             return NotFound("Audio clip not found.");
         }
 
-        Result<FileContent> download = await fileService.OpenFileContentAsync(clip.FileMetadataId, FileContentStreamingExtensions.ParseRequestedRange(Request), cancellationToken);
+        Result<FileContent> download = await fileService.OpenFileContentAsync(fileMetadataId, FileContentStreamingExtensions.ParseRequestedRange(Request), cancellationToken);
 
         if (!download.IsSuccess || download.Data is null)
         {

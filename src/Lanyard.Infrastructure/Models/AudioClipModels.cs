@@ -29,8 +29,9 @@ public class AudioClip : ICompanyOwned
     [StringLength(NameMaxLength)]
     public string Name { get; set; } = string.Empty;
 
-    // The audio itself, kept in the file store like any other upload.
-    public Guid FileMetadataId { get; set; }
+    // The audio itself, kept in the file store like any other upload. Only ever null on a deleted
+    // clip whose file has since been deleted from the file manager.
+    public Guid? FileMetadataId { get; set; }
     public FileMetadata? FileMetadata { get; set; }
 
     public double DurationSeconds { get; set; }

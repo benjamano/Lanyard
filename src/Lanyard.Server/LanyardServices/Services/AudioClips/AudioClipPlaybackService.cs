@@ -131,7 +131,7 @@ public class AudioClipPlaybackService(
                 {
                     PlayId = play.Id,
                     ClipId = clip.Id,
-                    ContentVersion = clip.FileMetadataId.ToString("N"),
+                    ContentVersion = clip.FileMetadataId!.Value.ToString("N"),
                     FileExtension = extension,
                     Name = clip.Name,
                     DurationSeconds = clip.DurationSeconds,
