@@ -40,6 +40,13 @@ public record InsightsSlot(
 
 // One weekday-hour across the whole range, e.g. "Saturdays 14:00". Samples is how many open
 // occurrences of that hour the range holds, so the averages are per occurrence.
+// Below half a person on average there's too little clocked time to divide by: a few minutes
+// either side of the hour would turn two games into "40 games per staff hour".
+public static class InsightsLimits
+{
+    public const decimal MinAverageStaffForRate = 0.5m;
+}
+
 public record InsightsCell(
     DayOfWeek Day,
     int Hour,
@@ -57,7 +64,7 @@ public record InsightsCell(
     public decimal AverageStaff => Samples == 0 ? 0 : ClockedHours / Samples;
     public decimal AverageRotaStaff => Samples == 0 ? 0 : RotaHours / Samples;
 
-    public decimal? GamesPerStaffHour => ClockedHours > 0 ? Games / ClockedHours : null;
+    public decimal? GamesPerStaffHour => AverageStaff >= InsightsLimits.MinAverageStaffForRate ? Games / ClockedHours : null;
 }
 
 public record InsightsDay(DateOnly Date, int Games, int Players, decimal ClockedHours, decimal RotaHours, int OpenHours);

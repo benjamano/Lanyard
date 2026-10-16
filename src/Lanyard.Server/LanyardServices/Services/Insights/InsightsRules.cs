@@ -129,7 +129,7 @@ public static class InsightsRules
 
     // Counts towards the location's typical games per staff-hour.
     public static bool IsTypicalRateSample(InsightsCell cell) =>
-        cell.Samples >= MinCellSamples && cell.Games >= MinCellGames && cell.ClockedHours > 0;
+        cell.Samples >= MinCellSamples && cell.Games >= MinCellGames && cell.GamesPerStaffHour is not null;
 
     public static StaffingFlag Flag(InsightsCell cell, decimal? median)
     {
@@ -140,7 +140,7 @@ public static class InsightsRules
 
         if (cell.GamesPerStaffHour is not decimal rate)
         {
-            // Games with nobody clocked in at all.
+            // Games with nobody (or barely anybody) clocked in.
             return cell.Games >= MinCellGames ? StaffingFlag.Understaffed : StaffingFlag.None;
         }
 

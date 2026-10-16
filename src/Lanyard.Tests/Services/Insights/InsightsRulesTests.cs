@@ -281,6 +281,17 @@ public class InsightsRulesTests
     }
 
     [TestMethod]
+    public void Flag_TreatsAFewClockedMinutesAsNobodyOn()
+    {
+        // 10 games over 4 weeks with someone clocked in for 6 minutes a time: no rate to speak of.
+        InsightsCell cell = Cell(4, 10, 0.4m);
+
+        Assert.IsNull(cell.GamesPerStaffHour);
+        Assert.AreEqual(StaffingFlag.Understaffed, InsightsRules.Flag(cell, 2m));
+        Assert.IsFalse(InsightsRules.IsTypicalRateSample(cell));
+    }
+
+    [TestMethod]
     public void Flag_DoesNotCallAFewGamesBusy()
     {
         // 4 games over 1 staff-hour is a high rate, but too few games to mean anything.
