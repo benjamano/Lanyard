@@ -133,6 +133,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<MusicSchedule> MusicSchedules { get; set; }
         public DbSet<MusicDaypart> MusicDayparts { get; set; }
         public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
+        public DbSet<AudioClip> AudioClips { get; set; }
+        public DbSet<AudioClipPlay> AudioClipPlays { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -364,6 +366,29 @@ namespace Lanyard.Infrastructure.DataAccess
                 .WithMany()
                 .HasForeignKey(x => x.FileMetadataId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Restrict: clips are only ever soft-deleted, and a file still behind one mustn't vanish.
+            modelBuilder.Entity<AudioClip>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AudioClipPlay>(entity =>
+            {
+                entity.HasOne(x => x.AudioClip)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // A kiosk's play history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+            });
 
             modelBuilder.Entity<CompanyOnboardingStandingAttachment>()
                 .HasOne(x => x.FileMetadata)

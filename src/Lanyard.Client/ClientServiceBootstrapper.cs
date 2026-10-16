@@ -73,7 +73,12 @@ public static class ClientServiceBootstrapper
         services.AddSingleton<ISignalRClient, SignalRClient>();
         services.AddSingleton<DmxSignalRController, DmxSignalRController>();
         services.AddSingleton<ISongCacheService, SongCacheService>();
+        services.AddSingleton<MusicGain>();
+        services.AddSingleton<IMusicDucker>(sp => sp.GetRequiredService<MusicGain>());
         services.AddSingleton<IMusicPlayer, MusicPlayer>();
+        services.AddSingleton<IAudioClipCacheService, AudioClipCacheService>();
+        services.AddSingleton<IAudioClipPlayer, AudioClipPlayer>();
+        services.AddSingleton<AudioClipController>();
         services.AddSingleton<MusicControlHandler>();
         services.AddSingleton<ProjectionProgramController>();
         services.AddSingleton<ZoneScoreboardSignalRController>();
@@ -98,6 +103,7 @@ public static class ClientServiceBootstrapper
         return
         [
             provider.GetRequiredService<MusicControlHandler>().Register,
+            provider.GetRequiredService<AudioClipController>().Register,
             provider.GetRequiredService<ProjectionProgramController>().Register,
             provider.GetRequiredService<DmxSignalRController>().Register,
             provider.GetRequiredService<ZoneScoreboardSignalRController>().Register,
