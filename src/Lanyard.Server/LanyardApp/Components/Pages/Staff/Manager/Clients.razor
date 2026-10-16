@@ -40,7 +40,7 @@
         </div>
     }
     <div class="clients-grid-wrapper">
-        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 140px" Class="clients-grid">
+        <FluentDataGrid ShowHover="true" Items="@_sortedClients" GridTemplateColumns="minmax(0, 0.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(125px, 1.1fr) minmax(0, 1.1fr) 180px" Class="clients-grid">
             <ChildContent>
                 <PropertyColumn Property="x => x.Id" Title="Client ID" Class="clients-col-id"/>
                 <PropertyColumn Sortable="true" Property="x => x.Name" Title="Name" />
@@ -97,6 +97,11 @@
                                       IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
                                       Disabled="@(!context.IsCurrentlyConnected)"
                                       OnClick="() => OpenDiagnosticsDialogAsync(context)" />
+                        <FluentButton Appearance="ButtonAppearance.Transparent"
+                                      Title="@(context.IsCurrentlyConnected ? "Screens" : "Screens (client is offline)")"
+                                      IconStart="@(new Icons.Regular.Size20.Desktop())"
+                                      Disabled="@(!context.IsCurrentlyConnected)"
+                                      OnClick="() => OpenScreensDialogAsync(context)" />
                     </FluentStack>
                 </TemplateColumn>
             </ChildContent>
@@ -153,6 +158,11 @@
                                   IconStart="@(new Icons.Regular.Size20.DocumentSearch())"
                                   Disabled="@(!client.IsCurrentlyConnected)"
                                   OnClick="() => OpenDiagnosticsDialogAsync(client)" />
+                    <FluentButton Appearance="ButtonAppearance.Transparent"
+                                  Title="@(client.IsCurrentlyConnected ? "Screens" : "Screens (client is offline)")"
+                                  IconStart="@(new Icons.Regular.Size20.Desktop())"
+                                  Disabled="@(!client.IsCurrentlyConnected)"
+                                  OnClick="() => OpenScreensDialogAsync(client)" />
                 </div>
             </div>
         }
@@ -340,6 +350,18 @@
             options.Modal = true;
             options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientId), client.Id);
             options.Parameters.Add(nameof(ClientDiagnosticsDialog.ClientName), client.Name);
+        });
+    }
+
+    private async Task OpenScreensDialogAsync(ClientConnectedWithCapabilitiesDTO client)
+    {
+        await _dialogService.ShowDialogAsync<ClientScreensDialog>(options =>
+        {
+            options.Header.Title = $"Screens: {client.Name}";
+            options.Width = "min(1100px, 95vw)";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ClientScreensDialog.ClientId), client.Id);
+            options.Parameters.Add(nameof(ClientScreensDialog.ClientName), client.Name);
         });
     }
 

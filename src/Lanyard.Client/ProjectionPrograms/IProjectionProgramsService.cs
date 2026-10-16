@@ -25,4 +25,13 @@ public interface IProjectionProgramsService
 
     /// <summary>Stops offline playback and reopens the server's pages from the last programs it sent.</summary>
     Task ExitOfflineModeAsync();
+
+    /// <summary>The projection windows open right now, one per screen, for remote screenshots.</summary>
+    Task<List<ClientProjectionWindowDTO>> ListWindowsAsync();
+
+    /// <summary>
+    /// A PNG of what the window on <paramref name="displayKey"/> shows. Null when no window is open
+    /// there or its browser hasn't started.
+    /// </summary>
+    Task<byte[]?> CaptureWindowPngAsync(string displayKey);
 }

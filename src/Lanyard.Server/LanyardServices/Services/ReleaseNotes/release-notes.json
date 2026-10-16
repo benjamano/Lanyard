@@ -704,7 +704,10 @@
       "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
       "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
       "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
-      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
+      "See what a kiosk's projection screens are showing without going on site. On Manage > Clients, press the new Screens button next to Diagnostics, then Capture screens.",
+      "You get a picture of each screen with the program it's running, and a badge when a screen is playing its offline copy. Select a picture to see it larger. A screen that couldn't be captured says why instead.",
+      "Screenshots are kept in server memory for 10 minutes and then deleted. They're never saved, only Admins can see them, and each capture is recorded with the name of the Admin who asked. Kiosks need Lanyard Client 1.0.42 or later."
     ]
   }
 ]
