@@ -33,6 +33,7 @@ public static class CompanyFeatureCatalog
         WidgetType.MyTraining => CompanyFeature.Training,
         WidgetType.MyShifts or WidgetType.WhoIsOnToday or WidgetType.PendingTimeOff => CompanyFeature.StaffScheduling,
         WidgetType.Announcements => CompanyFeature.Announcements,
+        WidgetType.DemandStaffing => CompanyFeature.Insights,
         _ => null
     };
 

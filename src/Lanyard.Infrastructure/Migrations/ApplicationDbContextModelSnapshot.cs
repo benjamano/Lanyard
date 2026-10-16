@@ -3884,6 +3884,21 @@ namespace Lanyard.Infrastructure.Migrations
                     b.HasDiscriminator().HasValue(18);
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.DemandStaffingWidget", b =>
+                {
+                    b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("DemandStaffingWidget_LocationId");
+
+                    b.Property<int>("RangeDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("DemandStaffingWidget_RangeDays");
+
+                    b.HasDiscriminator().HasValue(19);
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.DigitalClockWidget", b =>
                 {
                     b.HasBaseType("Lanyard.Infrastructure.Models.DashboardWidget");
