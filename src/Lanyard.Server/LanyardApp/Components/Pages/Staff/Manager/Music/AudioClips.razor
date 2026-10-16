@@ -8,6 +8,7 @@
 
 @inject IAudioClipService _audioClipService
 @inject IAudioClipPlaybackService _audioClipPlayback
+@inject IAudioClipScheduleService _audioClipScheduleService
 
 <PageTitle>Audio Clips</PageTitle>
 
@@ -84,6 +85,67 @@
         </div>
     </FluentCard>
 
+    @if (canAdd && clips is { Count: > 0 })
+    {
+        <FluentCard Height="auto" Class="mt-3">
+            <div class="audio-clips-body">
+                <div class="audio-clips-heading">
+                    <div>
+                        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size400">Schedules</FluentText>
+                        <FluentText Class="audio-clips-muted">
+                            Play a clip on every kiosk at a location at a set time, or a few minutes before closing or after opening. Times are UK time.
+                        </FluentText>
+                    </div>
+                    <FluentButton Appearance="ButtonAppearance.Default" IconStart="@(new Icons.Regular.Size20.CalendarAdd())"
+                                  OnClick="@AddScheduleAsync">
+                        Add schedule
+                    </FluentButton>
+                </div>
+
+                @if (schedules.Count == 0)
+                {
+                    <FluentText Class="audio-clips-muted">No schedules yet. Add one to play a clip, such as a closing call, by itself every day.</FluentText>
+                }
+                else
+                {
+                    <div class="audio-clips-list">
+                        @foreach (AudioClipScheduleSummary summary in schedules)
+                        {
+                            AudioClipScheduleSummary captured = summary;
+                            AudioClipSchedule schedule = summary.Schedule;
+                            <div class="audio-clip">
+                                <div class="audio-clip-main">
+                                    <FluentText Weight="TextWeight.Semibold" Class="audio-clip-name">@schedule.Name</FluentText>
+                                    <FluentText Class="audio-clips-muted">
+                                        @AudioClipScheduleRules.Describe(schedule) · @schedule.Location?.Name · plays "@schedule.AudioClip?.Name"
+                                    </FluentText>
+                                    @if (!schedule.IsEnabled)
+                                    {
+                                        <FluentText Class="audio-clips-muted">Off</FluentText>
+                                    }
+                                    else if (schedule.Anchor != AudioClipScheduleAnchor.AtTime && !summary.LocationHasHours)
+                                    {
+                                        <FluentText Class="audio-clips-warning">@schedule.Location?.Name has no opening hours yet, so this won't play.</FluentText>
+                                    }
+                                    else if (summary.NextPlaysLocal.Count > 0)
+                                    {
+                                        <FluentText Class="audio-clips-muted">Next: @string.Join(", ", summary.NextPlaysLocal.Select(NextPlayLabel))</FluentText>
+                                    }
+                                </div>
+                                <div class="audio-clip-actions">
+                                    <FluentSwitch Value="@schedule.IsEnabled" ValueChanged="@((bool on) => SetScheduleEnabledAsync(captured, on))"
+                                                  Title="@($"{(schedule.IsEnabled ? "Turn off" : "Turn on")} {schedule.Name}")" />
+                                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Edit())"
+                                                  Title="@($"Edit {schedule.Name}")" OnClick="@(() => EditScheduleAsync(captured))" />
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </FluentCard>
+    }
+
     @if (recentPlays.Count > 0)
     {
         <FluentCard Height="auto" Class="mt-3">
@@ -118,6 +180,7 @@
     private List<AudioClip>? clips;
     private List<Location> manageableLocations = [];
     private List<AudioClipPlaySummary> recentPlays = [];
+    private List<AudioClipScheduleSummary> schedules = [];
     private string? loadError;
 
     protected override async Task OnInitializedAsync()
@@ -166,6 +229,13 @@
         }
 
         clips = clipResult.Data ?? [];
+
+        if (canAdd)
+        {
+            Result<List<AudioClipScheduleSummary>> scheduleResult = await _audioClipScheduleService.ListAsync(scope);
+            schedules = scheduleResult.IsSuccess ? scheduleResult.Data ?? [] : [];
+        }
+
         await LoadRecentPlaysAsync();
     }
 
@@ -287,6 +357,100 @@
         });
 
         await LoadRecentPlaysAsync();
+    }
+
+    private Task AddScheduleAsync() => OpenScheduleDialogAsync(null);
+
+    private Task EditScheduleAsync(AudioClipScheduleSummary summary) => OpenScheduleDialogAsync(summary.Schedule);
+
+    private async Task OpenScheduleDialogAsync(AudioClipSchedule? schedule)
+    {
+        if (scope is null || clips is null)
+        {
+            return;
+        }
+
+        DialogResult result = await _dialogService.ShowDialogAsync<AddEditAudioClipScheduleDialog>(options =>
+        {
+            options.Width = "520px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(AddEditAudioClipScheduleDialog.Scope), scope);
+            options.Parameters.Add(nameof(AddEditAudioClipScheduleDialog.Schedule), schedule);
+            options.Parameters.Add(nameof(AddEditAudioClipScheduleDialog.Clips), clips);
+            options.Parameters.Add(nameof(AddEditAudioClipScheduleDialog.Locations), manageableLocations);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+        }
+        else if (schedule is not null && result.Value as string == AddEditAudioClipScheduleDialog.DeleteRequested)
+        {
+            await DeleteScheduleAsync(schedule);
+        }
+    }
+
+    private async Task DeleteScheduleAsync(AudioClipSchedule schedule)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Delete schedule";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message), $"Delete the schedule \"{schedule.Name}\"? The clip itself stays.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Delete");
+        });
+
+        if (confirm.Value is not true)
+        {
+            return;
+        }
+
+        Result<bool> result = await _audioClipScheduleService.DeleteAsync(scope, schedule.Id);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't delete: {result.Error}");
+            return;
+        }
+
+        _toastService.ShowSuccess($"Deleted \"{schedule.Name}\".");
+        await LoadAsync();
+    }
+
+    private async Task SetScheduleEnabledAsync(AudioClipScheduleSummary summary, bool isEnabled)
+    {
+        if (scope is null)
+        {
+            return;
+        }
+
+        Result<bool> result = await _audioClipScheduleService.SetEnabledAsync(scope, summary.Schedule.Id, isEnabled);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError($"Couldn't save: {result.Error}");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    // "Today 21:45", "Tomorrow 21:45" or "Fri 21:45", UK time.
+    private static string NextPlayLabel(DateTime venueLocal)
+    {
+        DateOnly today = RotaTime.Today(DateTime.UtcNow);
+        DateOnly day = DateOnly.FromDateTime(venueLocal);
+        string time = venueLocal.ToString("HH:mm");
+
+        return day == today ? $"today {time}"
+            : day == today.AddDays(1) ? $"tomorrow {time}"
+            : $"{venueLocal.ToString("ddd", System.Globalization.CultureInfo.GetCultureInfo("en-GB"))} {time}";
     }
 
     private static string ClipSummary(AudioClip clip)

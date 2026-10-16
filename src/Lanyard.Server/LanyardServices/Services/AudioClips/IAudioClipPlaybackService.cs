@@ -6,12 +6,14 @@ namespace Lanyard.Application.Services.AudioClips;
 
 /// <param name="CompanyId">The caller's company: the clip and every kiosk must belong to it.</param>
 /// <param name="TriggeredByUserId">The person who pressed Play, or null for a schedule or rule.</param>
+/// <param name="ScheduleId">The schedule that played it, if one did.</param>
 public sealed record AudioClipPlayRequest(
     Guid ClipId,
     IReadOnlyCollection<Guid> ClientIds,
     int CompanyId,
     AudioClipPlaySource Source,
-    string? TriggeredByUserId);
+    string? TriggeredByUserId,
+    Guid? ScheduleId = null);
 
 /// <summary>What happened on one kiosk when a clip was played. PlayId is null if nothing was recorded.</summary>
 public sealed record AudioClipKioskOutcome(Guid ClientId, string ClientName, AudioClipPlayStatus Status, string? Error, Guid? PlayId);
@@ -41,4 +43,13 @@ public interface IAudioClipPlaybackService
     Task<Result<bool>> ReportFromClientAsync(Guid clientId, AudioClipPlaybackReport report);
 
     AudioClipNowPlaying? GetNowPlaying(Guid clientId);
+
+    /// <summary>
+    /// Sends the kiosk the clips scheduled at its location so it downloads them ahead. Called when
+    /// a kiosk connects, with the connection it connected on.
+    /// </summary>
+    Task PrefetchScheduledClipsAsync(Guid clientId, string connectionId);
+
+    /// <summary>The same, for every connected kiosk at a location, after its schedules change.</summary>
+    Task PrefetchScheduledClipsAsync(int locationId);
 }

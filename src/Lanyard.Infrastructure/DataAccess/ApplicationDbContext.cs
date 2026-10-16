@@ -136,6 +136,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
         public DbSet<AudioClip> AudioClips { get; set; }
         public DbSet<AudioClipPlay> AudioClipPlays { get; set; }
+        public DbSet<AudioClipSchedule> AudioClipSchedules { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -389,7 +390,19 @@ namespace Lanyard.Infrastructure.DataAccess
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // Schedules are only soft-deleted, so the link never needs to cascade.
+                entity.HasOne(x => x.AudioClipSchedule)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipScheduleId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
+
+            modelBuilder.Entity<AudioClipSchedule>()
+                .HasOne(x => x.AudioClip)
+                .WithMany()
+                .HasForeignKey(x => x.AudioClipId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CompanyOnboardingStandingAttachment>()
                 .HasOne(x => x.FileMetadata)

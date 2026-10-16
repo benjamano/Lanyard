@@ -84,3 +84,7 @@
 .audio-clips ::deep .audio-clips-muted {
     color: var(--colorNeutralForeground3);
 }
+
+.audio-clips ::deep .audio-clips-warning {
+    color: var(--colorStatusWarningForeground1);
+}
