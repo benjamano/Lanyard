@@ -9,7 +9,7 @@
     text-align: left;
 }
 
-::deep fluent-select,
+::deep fluent-dropdown,
 ::deep fluent-text-input {
     width: 100%;
 }
