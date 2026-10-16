@@ -710,7 +710,8 @@
       "\"Hours to look at\" lists the hours that are busy for the staff on (more games per person than usual for your location) or quiet for the staff on (fewer games per person, with more than one person on). These flags appear once the range has at least two weeks and 30 games, so one party can't skew them.",
       "Also shown: labour hours per game, games per staff hour, games per day, clocked against rota hours per day, and a breakdown by the parts of the day from your music schedule. All times are UK time.",
       "Pick a location (admins), a date range of up to 13 weeks, or a 4, 8 or 13 week shortcut, and export the hour-by-hour figures as a CSV. It shows hours only: no names and no pay.",
-      "Games count towards the location their kiosk is set to, so set each kiosk's location in its client settings. A platform admin can switch Insights off for a company on Manage > Companies & Locations."
+      "Games count towards the location their kiosk is set to, so set each kiosk's location in its client settings. A platform admin can switch Insights off for a company on Manage > Companies & Locations.",
+      "A new Demand and Staffing dashboard widget shows labour hours per game, games per staff hour and the three hours most out of line with staffing over the last four weeks (or up to 13 weeks), with a link to the Insights page. Only Admins and Managers see the figures; anyone else, including a kiosk screen, sees a short note."
     ]
   }
 ]
