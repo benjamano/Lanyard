@@ -28,6 +28,10 @@
                         <span class="suggestion-rank" aria-hidden="true">@person.Rank</span>
                         <div class="suggestion-who">
                             <span class="suggestion-name">@person.DisplayName</span>
+                            @if (person.PositionName is not null)
+                            {
+                                <span class="suggestion-hours">@person.PositionName</span>
+                            }
                             <span class="suggestion-hours">@HoursText(person)</span>
                         </div>
                         <FluentButton Appearance="@(chosen ? ButtonAppearance.Primary : ButtonAppearance.Outline)" Size="ButtonSize.Small"
@@ -103,8 +107,7 @@
     private static string HoursText(ShiftSuggestion person)
     {
         string max = person.MaxHours is decimal hours ? $" (max {RotaDisplayExtensions.FormatHours(hours)})" : string.Empty;
-        string position = person.PositionName is null ? string.Empty : $"{person.PositionName} · ";
 
-        return $"{position}{RotaDisplayExtensions.FormatHours(person.WeekHoursBefore)} → {RotaDisplayExtensions.FormatHours(person.WeekHoursAfter)} this week{max}";
+        return $"{RotaDisplayExtensions.FormatHours(person.WeekHoursBefore)} → {RotaDisplayExtensions.FormatHours(person.WeekHoursAfter)} this week{max}";
     }
 }
