@@ -123,7 +123,10 @@ public class FileService : IFileService
         return await UploadFileAsync(file, folderId, getResult.Data, cancellationToken);
     }
 
-    public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken)
+    public Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, CancellationToken cancellationToken) =>
+        UploadFileAsync(file, folderId, uploadedBy, new FileUploadOptions(), cancellationToken);
+
+    public async Task<Result<FileMetadata>> UploadFileAsync(IFormFile file, Guid? folderId, string uploadedBy, FileUploadOptions options, CancellationToken cancellationToken)
     {
         try
         {
@@ -139,7 +142,7 @@ public class FileService : IFileService
             Guid fileId = Guid.NewGuid();
             string filePath;
 
-            bool isAudio = _audioExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
+            bool isAudio = options.AddAudioToMusicLibrary && _audioExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
             (double durationSeconds, string albumName) = isAudio
                 ? TryReadAudioMetadata(file, fileName)
                 : (0, string.Empty);
@@ -281,6 +284,19 @@ public class FileService : IFileService
 
             if (isReferenced)
                 return Result<bool>.Fail("This file is attached to a staff document or an onboarding email and cannot be deleted.");
+
+            if (await db.AudioClips.AnyAsync(x => x.FileMetadataId == file.Id && x.DeleteDate == null, cancellationToken))
+                return Result<bool>.Fail("This file is an audio clip. Delete the clip first.");
+
+            // Deleted clips keep their play history, so they stay; they just let go of the file.
+            List<AudioClip> deletedClips = await db.AudioClips
+                .Where(x => x.FileMetadataId == file.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (AudioClip deletedClip in deletedClips)
+            {
+                deletedClip.FileMetadataId = null;
+            }
 
             // StaffDocument/CompanyOnboardingStandingAttachment are soft-delete models, so an
             // inactive row is never actually removed from the table - it would otherwise sit

@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
@@ -103,7 +104,8 @@ public class SignalRControlHubDisconnectTests
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
             Mock.Of<IClientSecretValidator>(),
-            Mock.Of<IKioskHealthService>())
+            Mock.Of<IKioskHealthService>(),
+            Mock.Of<IAudioClipPlaybackService>())
         {
             Context = hubCallerContextMock.Object,
             Groups = Mock.Of<IGroupManager>()

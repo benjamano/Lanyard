@@ -1,0 +1,301 @@
+@using Lanyard.Application.Services.AudioClips
+@using Microsoft.AspNetCore.Http
+
+@inject IAudioClipService _audioClipService
+
+<FluentDialogBody>
+    <TitleTemplate>
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Margin="@Margin.End2" Value="@(new Icons.Regular.Size24.Speaker2())" />
+            <FluentText As="@TextTag.H3">@(Clip is null ? "Add audio clip" : "Edit audio clip")</FluentText>
+        </FluentStack>
+    </TitleTemplate>
+    <ChildContent>
+        <div class="clip-dialog">
+            @if (Clip is null)
+            {
+                <FluentSelect TOption="string" TValue="string" @bind-Value="source" Label="Audio" Width="100%">
+                    <FluentOption Value="@UploadSource">Upload a new file</FluentOption>
+                    @foreach (AudioClipFileOption file in Files)
+                    {
+                        <FluentOption Value="@file.Id.ToString()">@file.FileName</FluentOption>
+                    }
+                </FluentSelect>
+
+                @if (source == UploadSource)
+                {
+                    <div class="clip-upload">
+                        <FluentInputFile Id="audio-clip-upload" Mode="InputFileMode.SaveToTemporaryFolder" Multiple="false"
+                                         MaximumFileCount="1" MaximumFileSize="@AudioClipFileCheck.MaxBytes" Accept=".mp3,.wav,.m4a"
+                                         @bind-ProgressPercent="@uploadProgressPercent" OnCompleted="@OnFileChosen"
+                                         OnFileError="@OnFileError">
+                            <ChildContent>
+                                <label for="audio-clip-upload">
+                                    @if (uploaded is null)
+                                    {
+                                        <span>Choose an MP3, WAV or M4A file, or drag it here. Up to 25 MB and 5 minutes.</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="clip-upload-chosen">@uploaded.Name</span>
+                                        <span>Choose a different file to replace it.</span>
+                                    }
+                                </label>
+                            </ChildContent>
+                        </FluentInputFile>
+                    </div>
+                }
+                else
+                {
+                    <FluentText Class="clip-hint">Already in the file manager. It isn't copied; the clip plays this file.</FluentText>
+                }
+            }
+            else
+            {
+                <FluentText Class="clip-hint">
+                    @FormatDuration(Clip.DurationSeconds) long. To use different audio, add a new clip.
+                </FluentText>
+            }
+
+            <FluentTextInput @bind-Value="name" Label="Name" Required="true" Width="100%" Maxlength="@AudioClip.NameMaxLength"
+                             Placeholder="e.g. Closing in 15 minutes" />
+
+            <FluentSelect TOption="string" TValue="string" @bind-Value="locationValue" Label="Plays at" Width="100%">
+                @if (CanChooseEveryLocation)
+                {
+                    <FluentOption Value="@EveryLocation">Every location</FluentOption>
+                }
+                @foreach (Location location in Locations)
+                {
+                    <FluentOption Value="@location.Id.ToString()">@location.Name only</FluentOption>
+                }
+            </FluentSelect>
+
+            <div class="clip-field">
+                <FluentText Weight="TextWeight.Semibold">Clip volume</FluentText>
+                <div class="clip-slider">
+                    <FluentSlider TValue="int" Min="0" Max="100" Step="5" @bind-Value="volume" Class="clip-slider-input" />
+                    <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@volume%</FluentText>
+                </div>
+            </div>
+
+            <div class="clip-field">
+                <FluentSwitch @bind-Value="customDuck" Label="Change how the music dips" />
+                @if (customDuck)
+                {
+                    <FluentText Class="clip-hint">Music level while the clip plays</FluentText>
+                    <div class="clip-slider">
+                        <FluentSlider TValue="int" Min="0" Max="100" Step="5" @bind-Value="duckToPercent" Class="clip-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@(duckToPercent == 0 ? "Silent" : $"{duckToPercent}%")</FluentText>
+                    </div>
+                    <FluentText Class="clip-hint">Fade down</FluentText>
+                    <div class="clip-slider">
+                        <FluentSlider TValue="int" Min="0" Max="3000" Step="250" @bind-Value="fadeDownMs" Class="clip-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@FormatSeconds(fadeDownMs)</FluentText>
+                    </div>
+                    <FluentText Class="clip-hint">Fade back up</FluentText>
+                    <div class="clip-slider">
+                        <FluentSlider TValue="int" Min="0" Max="5000" Step="250" @bind-Value="fadeUpMs" Class="clip-slider-input" />
+                        <FluentText Weight="TextWeight.Semibold" Class="clip-slider-value">@FormatSeconds(fadeUpMs)</FluentText>
+                    </div>
+                }
+                else
+                {
+                    <FluentText Class="clip-hint">
+                        The music fades to @AudioClipDefaults.DuckToPercent% of its level over @FormatSeconds(AudioClipDefaults.FadeDownMs),
+                        and back up over @FormatSeconds(AudioClipDefaults.FadeUpMs) when the clip ends.
+                    </FluentText>
+                }
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@errorMessage</FluentMessageBar>
+            }
+
+            <div class="clip-actions">
+                <FluentButton Appearance="ButtonAppearance.Primary" OnClick="@SaveAsync" Disabled="@isSaving">
+                    @(isSaving ? "Saving..." : (Clip is null ? "Add" : "Save"))
+                </FluentButton>
+                <FluentButton Appearance="ButtonAppearance.Default" OnClick="@CancelAsync" Disabled="@isSaving">
+                    Cancel
+                </FluentButton>
+                @if (Clip is not null)
+                {
+                    <span class="clip-actions-spacer"></span>
+                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                  OnClick="@RequestDeleteAsync" Disabled="@isSaving">
+                        Delete
+                    </FluentButton>
+                }
+            </div>
+        </div>
+    </ChildContent>
+</FluentDialogBody>
+
+@code {
+    private const string UploadSource = "upload";
+    private const string EveryLocation = "all";
+
+    // What the dialog closes with when Delete is pressed; the page asks to confirm and deletes.
+    public const string DeleteRequested = "delete";
+
+    [CascadingParameter]
+    public required IDialogInstance Dialog { get; set; }
+
+    [Parameter, EditorRequired]
+    public required LocationScope Scope { get; set; }
+
+    // Null = add. When editing, the fields are copied out so cancelling never changes the page's copy.
+    [Parameter]
+    public AudioClip? Clip { get; set; }
+
+    // The locations the caller may put a clip at: all of them for an Admin, their own for a Manager.
+    [Parameter]
+    public IReadOnlyList<Location> Locations { get; set; } = [];
+
+    [Parameter]
+    public bool CanChooseEveryLocation { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<AudioClipFileOption> Files { get; set; } = [];
+
+    private string source = UploadSource;
+    private FluentInputFileEventArgs? uploaded;
+    private int uploadProgressPercent;
+    private string name = string.Empty;
+    private string locationValue = EveryLocation;
+    private int volume = 100;
+    private bool customDuck;
+    private int duckToPercent = AudioClipDefaults.DuckToPercent;
+    private int fadeDownMs = AudioClipDefaults.FadeDownMs;
+    private int fadeUpMs = AudioClipDefaults.FadeUpMs;
+    private string? errorMessage;
+    private bool isSaving;
+
+    protected override void OnInitialized()
+    {
+        if (Clip is null)
+        {
+            locationValue = CanChooseEveryLocation ? EveryLocation : Locations.FirstOrDefault()?.Id.ToString() ?? EveryLocation;
+            return;
+        }
+
+        name = Clip.Name;
+        locationValue = Clip.LocationId?.ToString() ?? EveryLocation;
+        volume = Clip.Volume;
+        customDuck = Clip.DuckToPercent is not null || Clip.FadeDownMs is not null || Clip.FadeUpMs is not null;
+        duckToPercent = Clip.EffectiveDuckToPercent;
+        fadeDownMs = Clip.EffectiveFadeDownMs;
+        fadeUpMs = Clip.EffectiveFadeUpMs;
+    }
+
+    private void OnFileChosen(IEnumerable<FluentInputFileEventArgs> files)
+    {
+        FluentInputFileEventArgs? file = files.FirstOrDefault();
+
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.ErrorMessage is not null)
+        {
+            errorMessage = $"Couldn't upload {file.Name}: {file.ErrorMessage}";
+            return;
+        }
+
+        errorMessage = null;
+        uploaded = file;
+        uploadProgressPercent = 0;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Path.GetFileNameWithoutExtension(file.Name);
+        }
+    }
+
+    private void OnFileError(FluentInputFileErrorEventArgs e)
+    {
+        errorMessage = e.ErrorMessage;
+    }
+
+    private async Task SaveAsync()
+    {
+        errorMessage = null;
+
+        AudioClipDetails details = new(
+            name,
+            int.TryParse(locationValue, out int locationId) ? locationId : null,
+            volume,
+            customDuck ? duckToPercent : null,
+            customDuck ? fadeDownMs : null,
+            customDuck ? fadeUpMs : null);
+
+        Result<string> userResult = await _securityService.GetCurrentUserIdAsync();
+
+        if (!userResult.IsSuccess || userResult.Data is null)
+        {
+            errorMessage = "Couldn't work out who you are. Refresh the page and sign in again.";
+            return;
+        }
+
+        isSaving = true;
+        Result<AudioClip> result;
+
+        if (Clip is not null)
+        {
+            result = await _audioClipService.UpdateAsync(Scope, Clip.Id, details);
+        }
+        else if (source != UploadSource && Guid.TryParse(source, out Guid fileId))
+        {
+            result = await _audioClipService.CreateFromFileAsync(Scope, fileId, details, userResult.Data);
+        }
+        else if (uploaded?.LocalFile is FileInfo localFile)
+        {
+            await using FileStream stream = localFile.OpenRead();
+
+            IFormFile formFile = new FormFile(stream, 0, stream.Length, "file", uploaded.Name)
+            {
+                Headers = new HeaderDictionary(),
+                ContentType = uploaded.ContentType
+            };
+
+            result = await _audioClipService.UploadAsync(Scope, formFile, details, userResult.Data);
+        }
+        else
+        {
+            result = Result<AudioClip>.Fail("Choose a file to upload.");
+        }
+
+        isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            errorMessage = result.Error;
+            return;
+        }
+
+        _toastService.ShowSuccess(Clip is null ? $"Added \"{result.Data!.Name}\"." : "Clip saved.");
+        await Dialog.CloseAsync(true);
+    }
+
+    private async Task RequestDeleteAsync()
+    {
+        await Dialog.CloseAsync(DeleteRequested);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+
+    private static string FormatSeconds(int milliseconds) =>
+        milliseconds == 0 ? "no fade" : $"{milliseconds / 1000.0:0.##}s";
+
+    public static string FormatDuration(double seconds)
+    {
+        TimeSpan length = TimeSpan.FromSeconds(Math.Round(seconds));
+        return length.TotalHours >= 1 ? length.ToString(@"h\:mm\:ss") : length.ToString(@"m\:ss");
+    }
+}

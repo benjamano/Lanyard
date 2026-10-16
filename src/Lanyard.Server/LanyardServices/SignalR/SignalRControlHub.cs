@@ -1,4 +1,5 @@
 ﻿using Lanyard.Application.Services;
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
 using Lanyard.Application.Services.VideoStreaming;
@@ -32,7 +33,8 @@ public class SignalRControlHub(
     IVideoStreamTokenService videoStreamTokenService,
     IGameResultService gameResultService,
     IClientSecretValidator clientSecretValidator,
-    IKioskHealthService kioskHealthService) : Hub, ISignalRProjectionControlHub
+    IKioskHealthService kioskHealthService,
+    IAudioClipPlaybackService audioClipPlaybackService) : Hub, ISignalRProjectionControlHub
 {
     private readonly ILogger<SignalRControlHub> _logger = logger;
     private readonly IClientSecretValidator _clientSecretValidator = clientSecretValidator;
@@ -47,6 +49,7 @@ public class SignalRControlHub(
     private readonly IVideoStreamTokenService _videoStreamTokenService = videoStreamTokenService;
     private readonly IGameResultService _gameResultService = gameResultService;
     private readonly IKioskHealthService _kioskHealthService = kioskHealthService;
+    private readonly IAudioClipPlaybackService _audioClipPlaybackService = audioClipPlaybackService;
 
     private static readonly ConcurrentDictionary<string, bool> _connections = new();
 
@@ -167,6 +170,9 @@ public class SignalRControlHub(
         _logger.LogInformation("Client {ClientName} ({ConnectionId}) connected and added to {MusicGroup}", client.Name, Context.ConnectionId, musicGroup);
 
         _connections.TryAdd(Context.ConnectionId, true);
+
+        // So a scheduled clip is already on the kiosk's disk when it's due. Logs its own failures.
+        await _audioClipPlaybackService.PrefetchScheduledClipsAsync(client.Id, Context.ConnectionId);
 
         await base.OnConnectedAsync();
     }
@@ -583,6 +589,24 @@ public class SignalRControlHub(
         }
 
         _playerService.ReportVolumeFromClient(getClientResult.Data, volume);
+    }
+
+    // Hub methods are called by their C# name, so this must stay equal to
+    // ClientHubMethods.AudioClipPlaybackChanged (a test pins it).
+    public async Task AudioClipPlaybackChanged(AudioClipPlaybackReport report)
+    {
+        Result<Guid> getClientResult = await _clientService.GetClientIdFromConnectionIdAsync(Context.ConnectionId);
+        if (!getClientResult.IsSuccess)
+        {
+            _logger.LogWarning("Failed to resolve client ID from connection {ConnectionId}: {Error}", Context.ConnectionId, getClientResult.Error);
+            return;
+        }
+
+        Result<bool> recorded = await _audioClipPlaybackService.ReportFromClientAsync(getClientResult.Data, report);
+        if (!recorded.IsSuccess)
+        {
+            _logger.LogWarning("Failed to record clip play {PlayId} from client {ClientId}: {Error}", report.PlayId, getClientResult.Data, recorded.Error);
+        }
     }
 
     public async Task PlaylistChanged(Guid playlistId)
