@@ -35,7 +35,7 @@
                         else
                         {
                             <div class="heatmap-cell heat-@Level(cell) @FlagClass(cell)" role="cell" title="@InsightsDisplay.Describe(cell)">
-                                <span class="heatmap-value">@InsightsDisplay.Format(Value(cell))</span>
+                                <span class="heatmap-value">@ValueText(cell)</span>
                                 @if (InsightsDisplay.FlagGlyph(cell.Flag) is string glyph)
                                 {
                                     <span class="heatmap-flag" aria-label="@InsightsDisplay.FlagLabel(cell.Flag)">@glyph</span>
@@ -128,6 +128,10 @@
     private InsightsCell? Find(DayOfWeek day, int hour) => _byKey.GetValueOrDefault((day, hour));
 
     private decimal Value(InsightsCell cell) => InsightsDisplay.Value(cell, Metric);
+
+    // No rate when nobody was really on: a dash, not a misleading 0.
+    private string ValueText(InsightsCell cell) =>
+        Metric == InsightsMetric.GamesPerStaffHour && cell.GamesPerStaffHour is null ? "–" : InsightsDisplay.Format(Value(cell));
 
     private static string MetricLabel(InsightsMetric metric) => InsightsDisplay.MetricLabel(metric).ToLowerInvariant();
 

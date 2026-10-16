@@ -872,18 +872,22 @@ public sealed class DemoSeeder(DbContextOptions<ApplicationDbContext> options, U
 
             for (int hour = 10; hour < closesAt; hour++)
             {
+                // Roughly in step with the rota, which is heaviest from late morning to early evening.
                 int busy = (weekend, hour) switch
                 {
-                    (true, >= 12 and < 17) => date.DayOfWeek == DayOfWeek.Saturday ? 4 : 3,
+                    (true, >= 12 and < 17) => date.DayOfWeek == DayOfWeek.Saturday ? 7 : 5,
+                    (true, < 12) => 3,
                     (true, _) => 2,
-                    (false, >= 16 and < 20) => 2,
+                    (false, < 12) => 2,
+                    (false, < 16) => 3,
+                    (false, < 20) => 4,
                     _ => 1
                 };
                 int games = Math.Max(0, busy + random.Next(-1, 2));
 
                 for (int g = 0; g < games; g++)
                 {
-                    DateTime playedAt = RotaTime.ToUtc(date, new TimeOnly(hour, Math.Min(59, 15 + g * 14)));
+                    DateTime playedAt = RotaTime.ToUtc(date, new TimeOnly(hour, Math.Min(59, 15 + g * 7)));
 
                     if (playedAt > Now)
                     {
