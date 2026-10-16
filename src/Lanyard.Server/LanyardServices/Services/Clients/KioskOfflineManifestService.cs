@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -186,7 +187,11 @@ public class KioskOfflineManifestService(
 
         if (templateName == ProjectionTemplateNames.ShowText)
         {
-            offlineStep.Text = GetParameterValue(step, ProjectionParameterNames.Text);
+            // A data-bound text can't be resolved without the server, so offline it shows its fallback.
+            // Live values are deliberately kept out: they'd change ManifestVersion on every new
+            // score and send the kiosk re-syncing.
+            ProjectionProgramParameterValue? text = step.ParameterValues.FirstOrDefault(x => x.Parameter?.Name == ProjectionParameterNames.Text);
+            offlineStep.Text = ProjectionBindingCatalogue.FallbackFor(text?.BindingKey, text?.Value);
         }
         else if (templateName == ProjectionTemplateNames.PlayVideo)
         {

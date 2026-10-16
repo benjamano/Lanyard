@@ -134,6 +134,41 @@ public class ProjectionProgramsService(ILogger<ProjectionProgramsService> logger
         });
     }
 
+    public async Task<List<ClientProjectionWindowDTO>> ListWindowsAsync()
+    {
+        // Read on the dispatcher: the dictionary is only changed there, so this is a consistent snapshot.
+        return await System.Windows.Application.Current!.Dispatcher.InvokeAsync(() =>
+        {
+            Screen[] screens = Screen.AllScreens;
+
+            return _runningByDisplayKey
+                .Select(x => new ClientProjectionWindowDTO
+                {
+                    DisplayKey = x.Key,
+                    DisplayIndex = Array.FindIndex(screens, s => s.DeviceName == x.Key),
+                    ProgramId = x.Value.ProgramId,
+                    IsOffline = x.Value.Window.IsOffline,
+                    IsLoaded = x.Value.Window.CanCapture
+                })
+                .OrderBy(x => x.DisplayIndex)
+                .ToList();
+        });
+    }
+
+    public async Task<byte[]?> CaptureWindowPngAsync(string displayKey)
+    {
+        // CapturePreviewAsync has to start on the UI thread, and the await resumes there too.
+        return await await System.Windows.Application.Current!.Dispatcher.InvokeAsync(async () =>
+        {
+            if (!_runningByDisplayKey.TryGetValue(displayKey, out (Guid ProgramId, ProjectionWindow Window, TaskCompletionSource ClosedTcs) running))
+            {
+                return null;
+            }
+
+            return await running.Window.CapturePngAsync();
+        });
+    }
+
     public async Task TriggerTemporaryProjectionProgramAsync(Guid projectionProgramId, int? displayIndex, Func<Task> onCompleted)
     {
         if (_isOffline)
