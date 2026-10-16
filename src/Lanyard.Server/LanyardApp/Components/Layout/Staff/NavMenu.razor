@@ -100,6 +100,14 @@
                     </FluentNavItem>
                 }
 
+                @if (Has(CompanyFeature.Insights))
+                {
+                    <FluentNavItem Href="/manage/insights" IconRest="@(new Icons.Regular.Size20.DataArea())"
+                                   IconActive="@(new Icons.Filled.Size20.DataArea())">
+                        Insights
+                    </FluentNavItem>
+                }
+
                 <FluentNavItem Href="/manage/music-schedule" IconRest="@(new Icons.Regular.Size20.CalendarClock())"
                                IconActive="@(new Icons.Filled.Size20.CalendarClock())">
                     Music Schedule

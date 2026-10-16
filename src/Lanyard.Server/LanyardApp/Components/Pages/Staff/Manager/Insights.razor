@@ -1,0 +1,466 @@
+@page "/manage/insights"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Insights)]
+
+@using Lanyard.App.Components.Charts
+@using Lanyard.App.Components.Insights
+@using Lanyard.App.Components.Rota
+@using Lanyard.Application.Services.Insights
+@using Lanyard.Infrastructure.DTO.Insights
+@using Lanyard.Infrastructure.DTO.Scheduling
+@using Lanyard.Infrastructure.Enum
+@using Microsoft.FluentUI.AspNetCore.Components.Charts
+
+@inject IDemandInsightsService _insightsService
+@inject ICompanyFeatureService _companyFeatureService
+@inject IJSRuntime JS
+
+<PageTitle>Insights</PageTitle>
+
+<div class="insights-page">
+    <div class="insights-intro">
+        <h1 class="insights-title">Insights</h1>
+        <p class="insights-subtitle">
+            Busy hours against staffing@(_summary is null ? "." : $" at {_summary.LocationName}, {RotaDisplayExtensions.RangeLabel(_summary.From, _summary.To)}.")
+        </p>
+    </div>
+
+    <div class="insights-toolbar">
+        @if (_locationOptions.Count > 1)
+        {
+            <FluentSelect TOption="TerminalLocationOption" TValue="string" Items="@_locationOptions" OptionText="@(x => x.Name)"
+                          OptionValue="@(x => x.Id.ToString())" Value="@_locationId?.ToString()" ValueChanged="@OnLocationChanged"
+                          Label="Location" Width="240px" />
+        }
+
+        <div class="insights-dates">
+            <FluentDatePicker TValue="DateTime?" Value="@_from.ToDateTime(TimeOnly.MinValue)" ValueChanged="@OnFromChanged"
+                              Label="From" Culture="@RotaFormat.Uk" Width="160px" />
+            <FluentDatePicker TValue="DateTime?" Value="@_to.ToDateTime(TimeOnly.MinValue)" ValueChanged="@OnToChanged"
+                              Label="To" Culture="@RotaFormat.Uk" Width="160px" />
+        </div>
+
+        <div class="insights-presets">
+            @foreach (int weeks in PresetWeeks)
+            {
+                int w = weeks;
+                <FluentButton Appearance="@(IsPreset(w) ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                              OnClick="@(() => Navigate(_locationId, Yesterday.AddDays(1 - w * 7), Yesterday))">
+                    @w weeks
+                </FluentButton>
+            }
+        </div>
+
+        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowDownload())"
+                      Disabled="@(_summary is null || _isExporting)" OnClick="@ExportAsync" Class="insights-export">
+            Export CSV
+        </FluentButton>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_summary is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        InsightsFigures figures = _summary.Figures;
+
+        @if (_exportError is not null)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_exportError</FluentMessageBar>
+        }
+
+        <div class="insights-notices">
+            @if (_summary.KioskCount == 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Warning" AllowDismiss="false">
+                    No kiosks are assigned to @_summary.LocationName, so no games can be counted here.
+                    @if (_summary.UnassignedKioskCount > 0)
+                    {
+                        <span> @KioskText(_summary.UnassignedKioskCount) not assigned to any location yet. An Admin can set each kiosk's location in its client settings.</span>
+                    }
+                </FluentMessageBar>
+            }
+            else if (_summary.UnassignedKioskCount > 0)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @KioskText(_summary.UnassignedKioskCount) not assigned to a location, so games played on @(_summary.UnassignedKioskCount == 1 ? "it" : "them") aren't counted anywhere.
+                </FluentMessageBar>
+            }
+
+            @if (!_summary.HasOpeningHours)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    @_summary.LocationName has no opening hours set, so only hours with games or staff count as open. Set them on Manage &gt; Companies &amp; Locations.
+                </FluentMessageBar>
+            }
+
+            @if (!_staffingEnabled)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                    Shift management is switched off for your company, so there are no rota or clocked hours to compare against.
+                </FluentMessageBar>
+            }
+            else if (!figures.FlagsAvailable && figures.FlagsUnavailableReason is string reason)
+            {
+                <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">@reason</FluentMessageBar>
+            }
+        </div>
+
+        <div class="insights-kpis">
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Games</span>
+                <span class="insights-kpi-value">@figures.Totals.Games.ToString("#,0", RotaFormat.Uk)</span>
+            </div>
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Players</span>
+                <span class="insights-kpi-value">@figures.Totals.Players.ToString("#,0", RotaFormat.Uk)</span>
+            </div>
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Clocked hours</span>
+                <span class="insights-kpi-value">@InsightsDisplay.Hours(figures.Totals.ClockedHours)</span>
+                <span class="insights-kpi-note">Breaks included</span>
+            </div>
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Rota hours</span>
+                <span class="insights-kpi-value">@InsightsDisplay.Hours(figures.Totals.RotaHours)</span>
+                <span class="insights-kpi-note">Published shifts, breaks taken off</span>
+            </div>
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Labour hours per game</span>
+                <span class="insights-kpi-value">@InsightsDisplay.Format(figures.Totals.LabourHoursPerGame)</span>
+                <span class="insights-kpi-note">All clocked time, including setting up</span>
+            </div>
+            <div class="insights-kpi">
+                <span class="insights-kpi-label">Games per staff hour</span>
+                <span class="insights-kpi-value">@InsightsDisplay.Format(figures.Totals.GamesPerStaffHour)</span>
+                @if (figures.MedianGamesPerStaffHour is decimal typical)
+                {
+                    <span class="insights-kpi-note">Typical hour: @InsightsDisplay.Format(typical)</span>
+                }
+            </div>
+        </div>
+
+        <section class="insights-card" aria-labelledby="insights-week">
+            <div class="insights-card-header">
+                <h2 id="insights-week" class="insights-card-title">Typical week</h2>
+                <FluentSelect TOption="InsightsMetric" TValue="string" Items="@Metrics" OptionText="@InsightsDisplay.MetricLabel"
+                              OptionValue="@(x => x.ToString())" Value="@_metric.ToString()" ValueChanged="@OnMetricChanged"
+                              Label="Shade by" Width="210px" />
+            </div>
+            <p class="insights-card-hint">Average per occurrence of each hour, in UK time. Hover a cell for the detail.</p>
+            <DemandHeatmap Cells="@figures.Cells" Metric="@_metric" />
+        </section>
+
+        <div class="insights-columns">
+            <section class="insights-card" aria-labelledby="insights-flags">
+                <h2 id="insights-flags" class="insights-card-title">Hours to look at</h2>
+                @if (!figures.FlagsAvailable)
+                {
+                    <FluentText>Flags appear once there's enough to compare. @figures.FlagsUnavailableReason</FluentText>
+                }
+                else if (figures.FlaggedCells().Take(MaxFlags).ToList() is { Count: > 0 } flagged)
+                {
+                    <ul class="insights-flag-list">
+                        @foreach (InsightsCell cell in flagged)
+                        {
+                            <li class="insights-flag @(cell.Flag == StaffingFlag.Understaffed ? "is-understaffed" : "is-overstaffed")">
+                                <span class="insights-flag-title">@InsightsDisplay.FlagGlyph(cell.Flag) @InsightsDisplay.CellName(cell) · @InsightsDisplay.FlagLabel(cell.Flag)</span>
+                                <span class="insights-flag-detail">
+                                    @InsightsDisplay.Format(cell.AverageGames) games with @(cell.ClockedHours > 0 ? $"{InsightsDisplay.Format(cell.AverageStaff)} staff on" : "nobody clocked in")
+                                    @if (cell.GamesPerStaffHour is decimal rate)
+                                    {
+                                        <span> · @InsightsDisplay.Format(rate) games per staff hour against a typical @InsightsDisplay.Format(figures.MedianGamesPerStaffHour)</span>
+                                    }
+                                    <span> · rota had @InsightsDisplay.Format(cell.AverageRotaStaff) on</span>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <FluentText>Staffing matched demand in every hour with enough data.</FluentText>
+                }
+            </section>
+
+            @if (figures.Dayparts.Count > 0)
+            {
+                <section class="insights-card" aria-labelledby="insights-dayparts">
+                    <h2 id="insights-dayparts" class="insights-card-title">By part of the day</h2>
+                    <p class="insights-card-hint">Using the music schedule's parts of the day.</p>
+                    <table class="insights-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Part of day</th>
+                                <th scope="col" class="is-number">Games</th>
+                                <th scope="col" class="is-number">Clocked</th>
+                                <th scope="col" class="is-number">Games / staff hr</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (InsightsDaypartRow row in figures.Dayparts)
+                            {
+                                <tr>
+                                    <th scope="row">@row.Name</th>
+                                    <td class="is-number">@row.Games</td>
+                                    <td class="is-number">@InsightsDisplay.Hours(row.ClockedHours)</td>
+                                    <td class="is-number">@InsightsDisplay.Format(row.GamesPerStaffHour)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+
+        <div class="insights-columns">
+            <section class="insights-card" aria-labelledby="insights-games-day">
+                <h2 id="insights-games-day" class="insights-card-title">Games per day</h2>
+                @if (figures.Totals.Games == 0)
+                {
+                    <FluentText>No games in this range.</FluentText>
+                }
+                else
+                {
+                    <FluentAreaChart ChartData="@GamesSeries" Mode="AreaChartMode.Tozeroy" Width="100%" Height="240px"
+                                     TickFormat="%d %b" YAxisTitle="Games" HideLegends="true" />
+                }
+            </section>
+
+            <section class="insights-card" aria-labelledby="insights-hours-day">
+                <h2 id="insights-hours-day" class="insights-card-title">Staff hours per day</h2>
+                @if (figures.Totals.ClockedHours == 0 && figures.Totals.RotaHours == 0)
+                {
+                    <FluentText>No clocked or rota hours in this range.</FluentText>
+                }
+                else
+                {
+                    <FluentAreaChart ChartData="@HoursSeries" Mode="AreaChartMode.Tozeroy" Width="100%" Height="240px"
+                                     TickFormat="%d %b" YAxisTitle="Hours" />
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private const int MaxFlags = 8;
+    private static readonly int[] PresetWeeks = [4, 8, 13];
+    private static readonly List<InsightsMetric> Metrics = [.. Enum.GetValues<InsightsMetric>()];
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public int? LocationQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? FromQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "to")]
+    public string? ToQuery { get; set; }
+
+    private LocationScope? _scope;
+    private List<TerminalLocationOption> _locationOptions = [];
+    private int? _locationId;
+    private DateOnly _from;
+    private DateOnly _to;
+    private InsightsSummary? _summary;
+    private string? _error;
+    private string? _exportError;
+    private string? _loadedKey;
+    private bool _staffingEnabled = true;
+    private bool _isExporting;
+    private InsightsMetric _metric = InsightsMetric.Games;
+
+    private static DateOnly Today => RotaTime.Today(DateTime.UtcNow);
+
+    // Ranges end yesterday by default, so every weekday in a four-week range counts four times.
+    private static DateOnly Yesterday => Today.AddDays(-1);
+
+    private bool IsPreset(int weeks) => _to == Yesterday && _from == Yesterday.AddDays(1 - weeks * 7);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Result<LocationScope> scopeResult = await _currentLocationContext.GetScopeAsync();
+
+        if (!scopeResult.IsSuccess || scopeResult.Data is null)
+        {
+            _error = $"Couldn't work out which location you're signed in to: {scopeResult.Error}";
+            return;
+        }
+
+        _scope = scopeResult.Data;
+        _staffingEnabled = await _companyFeatureService.IsEnabledForCurrentUserAsync(CompanyFeature.StaffScheduling);
+
+        if (_scope.IsAdmin)
+        {
+            Result<List<Location>> locations = await _companyLocationService.GetLocationsAsync();
+            _locationOptions = locations.IsSuccess && locations.Data is not null
+                ? [.. locations.Data.Where(l => l.IsActive).OrderBy(l => l.GetDisplayName()).Select(l => new TerminalLocationOption(l.Id, l.GetDisplayName()))]
+                : [];
+        }
+        else if (_scope.LocationId is int own)
+        {
+            _locationOptions = [new TerminalLocationOption(own, _scope.LocationDisplayName ?? "Your location")];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_scope is null)
+        {
+            return;
+        }
+
+        _to = DateOnly.TryParseExact(ToQuery, "yyyy-MM-dd", out DateOnly to) ? to : Yesterday;
+        _from = DateOnly.TryParseExact(FromQuery, "yyyy-MM-dd", out DateOnly from) ? from : _to.AddDays(1 - InsightsQuery.DefaultRangeDays);
+
+        _locationId = LocationQuery is int requested && _locationOptions.Any(l => l.Id == requested)
+            ? requested
+            : _scope.LocationId is int own && _locationOptions.Any(l => l.Id == own) ? own : _locationOptions.FirstOrDefault()?.Id;
+
+        if (_locationId is null)
+        {
+            _error = "There are no active locations yet.";
+            return;
+        }
+
+        if ($"{_locationId}|{_from}|{_to}" != _loadedKey)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_scope is null)
+        {
+            return;
+        }
+
+        _loadedKey = $"{_locationId}|{_from}|{_to}";
+        _exportError = null;
+
+        Result<InsightsSummary> result = await _insightsService.GetSummaryAsync(_scope, new InsightsQuery(_locationId, _from, _to));
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            _error = result.Error ?? "Couldn't load insights.";
+            _summary = null;
+            return;
+        }
+
+        _error = null;
+        _summary = result.Data;
+    }
+
+    private void Navigate(int? location, DateOnly from, DateOnly to) =>
+        _navigationManager.NavigateTo(InsightsDisplay.PageUrl(location, from, to));
+
+    private void OnLocationChanged(string? value)
+    {
+        if (int.TryParse(value, out int id))
+        {
+            Navigate(id, _from, _to);
+        }
+    }
+
+    // Moving one end past the other drags the other end with it, rather than refusing.
+    private void OnFromChanged(DateTime? value)
+    {
+        if (value is DateTime picked)
+        {
+            DateOnly from = DateOnly.FromDateTime(picked);
+            Navigate(_locationId, from, from > _to ? from : _to);
+        }
+    }
+
+    private void OnToChanged(DateTime? value)
+    {
+        if (value is DateTime picked)
+        {
+            DateOnly to = DateOnly.FromDateTime(picked);
+            Navigate(_locationId, to < _from ? to : _from, to);
+        }
+    }
+
+    private void OnMetricChanged(string? value)
+    {
+        if (Enum.TryParse(value, out InsightsMetric metric))
+        {
+            _metric = metric;
+        }
+    }
+
+    private static string KioskText(int count) => count == 1 ? "1 kiosk is" : $"{count} kiosks are";
+
+    private async Task ExportAsync()
+    {
+        if (_scope is null || _summary is null)
+        {
+            return;
+        }
+
+        _isExporting = true;
+        _exportError = null;
+
+        try
+        {
+            Result<InsightsExportFile> result = await _insightsService.ExportCsvAsync(_scope, new InsightsQuery(_summary.LocationId, _summary.From, _summary.To));
+
+            if (!result.IsSuccess || result.Data is null)
+            {
+                _exportError = result.Error ?? "Couldn't export the insights.";
+                return;
+            }
+
+            using MemoryStream stream = new(result.Data.Content);
+            using DotNetStreamReference streamRef = new(stream);
+            await JS.InvokeVoidAsync("lanyardDownload.fromStream", result.Data.FileName, result.Data.ContentType, streamRef);
+        }
+        catch (JSException)
+        {
+            _exportError = "Your browser couldn't save the file. Try again, or use a different browser.";
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    // Dates are plotted at local midnight; the chart only shows the day.
+    private IReadOnlyList<AreaChartSeries> GamesSeries => _summary is null ? [] :
+    [
+        new AreaChartSeries
+        {
+            Legend = "Games",
+            Color = DataVizPalette.Custom,
+            CustomColor = ChartPalette.Accent,
+            ChartData = [.. _summary.Figures.Days.Select(d => new AreaChartDataPoint { X = d.Date.ToDateTime(TimeOnly.MinValue), Y = d.Games })]
+        }
+    ];
+
+    private IReadOnlyList<AreaChartSeries> HoursSeries => _summary is null ? [] :
+    [
+        new AreaChartSeries
+        {
+            Legend = "Clocked",
+            Color = DataVizPalette.Custom,
+            CustomColor = ChartPalette.Clocked,
+            ChartData = [.. _summary.Figures.Days.Select(d => new AreaChartDataPoint { X = d.Date.ToDateTime(TimeOnly.MinValue), Y = (double)d.ClockedHours })]
+        },
+        new AreaChartSeries
+        {
+            Legend = "Rota",
+            Color = DataVizPalette.Custom,
+            CustomColor = ChartPalette.Rota,
+            ChartData = [.. _summary.Figures.Days.Select(d => new AreaChartDataPoint { X = d.Date.ToDateTime(TimeOnly.MinValue), Y = (double)d.RotaHours })]
+        }
+    ];
+}

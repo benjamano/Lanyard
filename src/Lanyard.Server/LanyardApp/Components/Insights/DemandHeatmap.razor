@@ -1,0 +1,154 @@
+@using Lanyard.Infrastructure.DTO.Insights
+
+@* A typical week: one cell per weekday-hour the venue was open, shaded by the chosen measure.
+   Fluent Charts has no heatmap, so this is a plain CSS grid. On a phone a 7x14 grid is unreadable,
+   so the same cells become one day at a time as a list with inline bars. *@
+
+<div class="demand-heatmap">
+    @if (Cells.Count == 0)
+    {
+        <FluentText>No open hours in this range yet.</FluentText>
+    }
+    else
+    {
+        <div class="heatmap-grid" role="table" aria-label="@($"Average {MetricLabel(Metric)} by day and hour")">
+            <div class="heatmap-row" role="row">
+                <div class="heatmap-corner" role="columnheader"></div>
+                @foreach (int hour in Hours)
+                {
+                    <div class="heatmap-hour" role="columnheader">@($"{hour:00}")</div>
+                }
+            </div>
+
+            @foreach (DayOfWeek day in InsightsDisplay.WeekOrder)
+            {
+                <div class="heatmap-row" role="row">
+                    <div class="heatmap-day" role="rowheader">@InsightsDisplay.ShortDay(day)</div>
+                    @foreach (int hour in Hours)
+                    {
+                        InsightsCell? cell = Find(day, hour);
+
+                        if (cell is null)
+                        {
+                            <div class="heatmap-cell is-closed" role="cell" title="@($"{InsightsDisplay.ShortDay(day)} {hour:00}:00 · closed")"></div>
+                        }
+                        else
+                        {
+                            <div class="heatmap-cell heat-@Level(cell) @FlagClass(cell)" role="cell" title="@InsightsDisplay.Describe(cell)">
+                                <span class="heatmap-value">@InsightsDisplay.Format(Value(cell))</span>
+                                @if (InsightsDisplay.FlagGlyph(cell.Flag) is string glyph)
+                                {
+                                    <span class="heatmap-flag" aria-label="@InsightsDisplay.FlagLabel(cell.Flag)">@glyph</span>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="heatmap-list">
+            <div class="heatmap-days" role="tablist" aria-label="Day of the week">
+                @foreach (DayOfWeek day in InsightsDisplay.WeekOrder)
+                {
+                    DayOfWeek current = day;
+                    <FluentButton Appearance="@(current == SelectedDay ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                  Size="ButtonSize.Small" OnClick="@(() => SelectedDay = current)">
+                        @InsightsDisplay.ShortDay(current)
+                    </FluentButton>
+                }
+            </div>
+
+            @if (Cells.Where(x => x.Day == SelectedDay).ToList() is { Count: > 0 } dayCells)
+            {
+                <ul class="heatmap-hours">
+                    @foreach (InsightsCell cell in dayCells.OrderBy(x => x.Hour))
+                    {
+                        <li class="heatmap-hour-row @FlagClass(cell)">
+                            <span class="heatmap-hour-label">@($"{cell.Hour:00}:00")</span>
+                            <span class="heatmap-bar-track"><span class="heatmap-bar bar-@BarStep(cell)"></span></span>
+                            <span class="heatmap-hour-detail">
+                                @InsightsDisplay.Format(cell.AverageGames) games · @InsightsDisplay.Format(cell.AverageStaff) staff
+                                @if (InsightsDisplay.FlagGlyph(cell.Flag) is string glyph)
+                                {
+                                    <span class="heatmap-hour-flag">@glyph @InsightsDisplay.FlagLabel(cell.Flag)</span>
+                                }
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <FluentText>Closed all day on @(SelectedDay)s in this range.</FluentText>
+            }
+        </div>
+
+        <div class="heatmap-legend" aria-hidden="true">
+            <span>Fewer</span>
+            @for (int level = 1; level <= Levels; level++)
+            {
+                <span class="heatmap-swatch heat-@level"></span>
+            }
+            <span>More</span>
+            <span class="heatmap-legend-flag">▲ Busy for the staff on</span>
+            <span class="heatmap-legend-flag">▼ Quiet for the staff on</span>
+        </div>
+    }
+</div>
+
+@code {
+    private const int Levels = 5;
+
+    [Parameter, EditorRequired]
+    public List<InsightsCell> Cells { get; set; } = [];
+
+    [Parameter]
+    public InsightsMetric Metric { get; set; } = InsightsMetric.Games;
+
+    private DayOfWeek SelectedDay { get; set; } = DayOfWeek.Saturday;
+
+    private List<int> Hours = [];
+    private Dictionary<(DayOfWeek, int), InsightsCell> _byKey = [];
+    private decimal _max;
+
+    protected override void OnParametersSet()
+    {
+        _byKey = Cells.ToDictionary(x => (x.Day, x.Hour));
+        Hours = Cells.Count == 0 ? [] : [.. Enumerable.Range(Cells.Min(x => x.Hour), Cells.Max(x => x.Hour) - Cells.Min(x => x.Hour) + 1)];
+        _max = Cells.Count == 0 ? 0 : Cells.Max(Value);
+
+        // Open the phone view on the busiest day rather than an arbitrary one.
+        if (Cells.Count > 0 && !Cells.Any(x => x.Day == SelectedDay))
+        {
+            SelectedDay = Cells.GroupBy(x => x.Day).OrderByDescending(g => g.Sum(x => x.Games)).First().Key;
+        }
+    }
+
+    private InsightsCell? Find(DayOfWeek day, int hour) => _byKey.GetValueOrDefault((day, hour));
+
+    private decimal Value(InsightsCell cell) => InsightsDisplay.Value(cell, Metric);
+
+    private static string MetricLabel(InsightsMetric metric) => InsightsDisplay.MetricLabel(metric).ToLowerInvariant();
+
+    // 0 for nothing at all, then five even steps up to the busiest cell.
+    private int Level(InsightsCell cell)
+    {
+        decimal value = Value(cell);
+        return value <= 0 || _max <= 0 ? 0 : (int)Math.Ceiling(value / _max * Levels);
+    }
+
+    // Bar width in tenths, as a class: inline widths aren't allowed in this repo.
+    private int BarStep(InsightsCell cell)
+    {
+        decimal value = Value(cell);
+        return value <= 0 || _max <= 0 ? 0 : Math.Max(1, (int)Math.Round(value / _max * 10));
+    }
+
+    private static string FlagClass(InsightsCell cell) => cell.Flag switch
+    {
+        StaffingFlag.Understaffed => "is-understaffed",
+        StaffingFlag.Overstaffed => "is-overstaffed",
+        _ => string.Empty
+    };
+}

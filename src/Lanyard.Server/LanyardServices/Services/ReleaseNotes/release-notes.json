@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule. See your busy hours against staffing on the new Insights page.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -704,7 +704,13 @@
       "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
       "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
       "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
-      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
+      "New Insights page for managers (Management > Insights). It puts the games played at your location next to the hours your staff clocked and the hours on the rota, so you can see your busy times and whether you had the right number of people on.",
+      "A typical week shows each hour you're open, Monday to Sunday, shaded by games, players, staff on or games per staff hour. Hover over an hour for the detail. On a phone, pick a day to see its hours as a list.",
+      "\"Hours to look at\" lists the hours that are busy for the staff on (more games per person than usual for your location) or quiet for the staff on (fewer games per person, with more than one person on). These flags appear once the range has at least two weeks and 30 games, so one party can't skew them.",
+      "Also shown: labour hours per game, games per staff hour, games per day, clocked against rota hours per day, and a breakdown by the parts of the day from your music schedule. All times are UK time.",
+      "Pick a location (admins), a date range of up to 13 weeks, or a 4, 8 or 13 week shortcut, and export the hour-by-hour figures as a CSV. It shows hours only: no names and no pay.",
+      "Games count towards the location their kiosk is set to, so set each kiosk's location in its client settings. A platform admin can switch Insights off for a company on Manage > Companies & Locations."
     ]
   }
 ]
