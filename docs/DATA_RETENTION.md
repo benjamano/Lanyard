@@ -136,6 +136,13 @@ minutes**, then dropped (and on any server restart). It is never written to the 
 storage or telemetry, only Admins can view it, and each request is recorded in the server log with
 the Admin's name. The shared secret and tokens in URLs are redacted on the kiosk before it is sent.
 
+An Admin can also capture a screenshot of each of a kiosk's projection screens (Manage > Clients >
+Screens). A screen can show customers' names, scores or staff details, so screenshots follow the
+same rules: **held in server memory only, for 10 minutes**, only the latest capture per kiosk, never
+written to the database, file storage or telemetry, only visible to Admins of the kiosk's own
+company, and each request is recorded in the server log with the Admin's name. Kiosks only capture
+when asked; nothing is captured in the background.
+
 ## Required follow-up work (tracked separately)
 
 These are deliberately **not** implemented as part of the security-hardening change because they

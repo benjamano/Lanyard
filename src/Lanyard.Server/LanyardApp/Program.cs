@@ -24,6 +24,7 @@ using Lanyard.Application.Services.Tenancy;
 using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
 using Lanyard.Application.Services.Dmx;
@@ -218,6 +219,13 @@ builder.Services.AddSingleton<DmxService>();
 builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
+
+// Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
+// one here, or that binding silently shows its fallback forever (a test checks the two match).
+builder.Services.AddSingleton<IProjectionBindingSource, LastGameWinnerBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, TopScoreTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, OpeningHoursTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResolver>();
 
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();

@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -255,5 +256,50 @@ public class KioskOfflineManifestServiceTests
         Assert.IsTrue((await service.IsFileInManifestAsync(seed.ClientId, seed.VideoFileId)).Data);
         Assert.IsFalse((await service.IsFileInManifestAsync(seed.ClientId, Guid.NewGuid())).Data);
         Assert.IsFalse((await service.IsFileInManifestAsync(Guid.NewGuid(), seed.VideoFileId)).IsSuccess);
+    }
+
+    private static async Task BindTextStepAsync(DbContextOptions<ApplicationDbContext> options, Seed seed, string bindingKey, string? fallback)
+    {
+        await using ApplicationDbContext ctx = new(options);
+
+        ProjectionProgramParameterValue text = await ctx.Set<ProjectionProgramParameterValue>()
+            .SingleAsync(x => x.ProjectionProgramStepId == seed.TextStepId && x.ParameterId == seed.TextParameterId);
+
+        text.BindingKey = bindingKey;
+        text.Value = fallback;
+
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task BuildManifestAsync_GivesABoundTextItsFallback_OrTheSourcesDefault()
+    {
+        var options = GetInMemoryOptions();
+        Seed seed = await SeedAsync(options);
+
+        await BindTextStepAsync(options, seed, ProjectionBindingKeys.TopScoreToday, "Beat today's best!");
+        Result<KioskOfflineManifestDTO> withFallback = await GetService(options).BuildManifestAsync(seed.ClientId);
+
+        await BindTextStepAsync(options, seed, ProjectionBindingKeys.TopScoreToday, "");
+        Result<KioskOfflineManifestDTO> withoutFallback = await GetService(options).BuildManifestAsync(seed.ClientId);
+
+        Assert.AreEqual("Beat today's best!", withFallback.Data!.Displays.Single().Steps.First(x => x.StepId == seed.TextStepId).Text);
+        Assert.AreEqual(
+            ProjectionBindingCatalogue.Find(ProjectionBindingKeys.TopScoreToday)!.DefaultFallback,
+            withoutFallback.Data!.Displays.Single().Steps.First(x => x.StepId == seed.TextStepId).Text);
+    }
+
+    [TestMethod]
+    public async Task ManifestVersion_OfABoundStep_DoesNotChangeBetweenSyncs()
+    {
+        var options = GetInMemoryOptions();
+        Seed seed = await SeedAsync(options);
+        await BindTextStepAsync(options, seed, ProjectionBindingKeys.LastGameWinner, "Who's next?");
+
+        // Live data never goes into the manifest, so new scores between syncs can't change it.
+        string first = (await GetService(options).BuildManifestAsync(seed.ClientId)).Data!.ManifestVersion;
+        string second = (await GetService(options).BuildManifestAsync(seed.ClientId)).Data!.ManifestVersion;
+
+        Assert.AreEqual(first, second);
     }
 }

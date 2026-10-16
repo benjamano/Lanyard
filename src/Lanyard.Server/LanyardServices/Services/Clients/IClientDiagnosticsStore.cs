@@ -17,4 +17,15 @@ public interface IClientDiagnosticsStore
 
     /// <summary>The client's latest log tail, or null once it has expired.</summary>
     ClientLogTailCapture? GetLatestLogTail(Guid clientId);
+
+    /// <summary>The same guard as <see cref="TryBeginLogTail"/>, kept separately for screenshots.</summary>
+    bool TryBeginScreenshots(Guid clientId, out string? reason);
+
+    void EndScreenshots(Guid clientId);
+
+    /// <summary>Keeps the screenshots as the client's latest, replacing any earlier ones.</summary>
+    ClientScreenshotCapture SaveScreenshots(Guid clientId, IReadOnlyList<ClientScreenSnapshot> screens, string? clientVersion, string requestedBy);
+
+    /// <summary>The client's latest screenshots, or null once they have expired.</summary>
+    ClientScreenshotCapture? GetLatestScreenshots(Guid clientId);
 }

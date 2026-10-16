@@ -24,4 +24,12 @@ public static class ClientHubMethods
 
     /// <summary>Kiosk to server: an <c>AudioClipPlaybackReport</c> each time a clip's playback moves on.</summary>
     public const string AudioClipPlaybackChanged = "AudioClipPlaybackChanged";
+    /// <summary>Server to kiosk, client result: returns a list of <c>ClientProjectionWindowDTO</c>.</summary>
+    public const string ListProjectionWindows = "ListProjectionWindows";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>ClientScreenshotRequestDTO</c> and returns a
+    /// <c>ClientScreenshotDTO</c>. One call per screen, so each reply stays under the hub's size limit.
+    /// </summary>
+    public const string CaptureProjectionWindow = "CaptureProjectionWindow";
 }

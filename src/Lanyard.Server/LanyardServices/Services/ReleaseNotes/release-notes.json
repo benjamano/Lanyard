@@ -717,7 +717,16 @@
       "Closing and opening times come from the location's opening hours, so a \"15 minutes before closing\" call follows late nights and short days by itself. For a late close after midnight, choose the day the location opens. A location with no opening hours set can't use these, and the page says so.",
       "Each schedule shows its next few plays, and can be turned off without deleting it. A play that the server missed by more than two minutes, for example during an update, is skipped rather than played late.",
       "Kiosks download scheduled clips ahead of time when they connect, so a clip starts on time even on a slow connection.",
-      "Automation rules have a new action, Play Audio Clip, which plays a clip on a kiosk over its music. For example, play a winners' jingle when a game ends with a winner, or a reminder when a game's time is nearly up."
+      "Automation rules have a new action, Play Audio Clip, which plays a clip on a kiosk over its music. For example, play a winners' jingle when a game ends with a winner, or a reminder when a game's time is nearly up.",
+      "See what a kiosk's projection screens are showing without going on site. On Manage > Clients, press the new Screens button next to Diagnostics, then Capture screens.",
+      "You get a picture of each screen with the program it's running, and a badge when a screen is playing its offline copy. Select a picture to see it larger. A screen that couldn't be captured says why instead.",
+      "Screenshots are kept in server memory for 10 minutes and then deleted. They're never saved, only Admins can see them, and each capture is recorded with the name of the Admin who asked. Kiosks need Lanyard Client 1.0.42 or later.",
+      "Projection screens can now show live venue data. In a projection program, open a Show Text step's parameters and change Text source from Fixed text to Last game winner, Today's top score or Opening hours today.",
+      "The screen fills the text in each time the step plays, and keeps it up to date while the step is showing, so a leaderboard screen changes within about half a minute of a game finishing. Nobody has to edit the program.",
+      "Last game winner shows the winning team and its total (or the top gun in a game without teams) of the most recent game today. Today's top score shows the best single score of the day. Opening hours today uses the hours set for the kiosk's location.",
+      "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
+      "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
+      "A kiosk now refuses to play a projection program that belongs to a different company."
     ]
   }
 ]
