@@ -404,4 +404,77 @@ public class ShiftSuggestionServiceTests
         Assert.AreEqual(ShiftState.Draft, saved.Data.Shift.GetState());
         Assert.AreEqual(0, notifications.Jobs.Count);
     }
+
+    // --- Availability ---
+
+    [TestMethod]
+    public async Task SuggestAsync_SaidTheyCantWorkThen_NotSuggested()
+    {
+        World w = await SeedAsync();
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.StaffAvailabilities.Add(new StaffAvailability
+            {
+                Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DayOfWeek = DayOfWeek.Wednesday,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(12, 0), Kind = AvailabilityKind.Unavailable, IsActive = true
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        ShiftSuggestions suggestions = await SuggestAsync(w, OpenShift(w.Ipswich, w.Host.Id));
+
+        Assert.AreEqual(w.Tom.Id, suggestions.Ranked.Single().UserId);
+        StringAssert.Contains(suggestions.NotSuggested.Single().ExcludedReason, "can't work Wednesdays, 09:00–12:00");
+    }
+
+    [TestMethod]
+    public async Task SuggestAsync_AvailabilityAtAnotherCompanyOrRemoved_Ignored()
+    {
+        World w = await SeedAsync();
+        (Company other, _) = await SchedulingTestHelpers.SeedCompanyAsync(w.Options, "Other Co", "Elsewhere");
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.StaffAvailabilities.Add(new StaffAvailability
+            {
+                Id = Guid.NewGuid(), CompanyId = other.Id, UserId = w.Amy.Id, DayOfWeek = DayOfWeek.Wednesday,
+                StartTime = TimeOnly.MinValue, EndTime = TimeOnly.MinValue, Kind = AvailabilityKind.Unavailable, IsActive = true
+            });
+            ctx.StaffAvailabilities.Add(new StaffAvailability
+            {
+                Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = w.Amy.Id, DayOfWeek = DayOfWeek.Wednesday,
+                StartTime = TimeOnly.MinValue, EndTime = TimeOnly.MinValue, Kind = AvailabilityKind.Unavailable, IsActive = false
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        ShiftSuggestions suggestions = await SuggestAsync(w, OpenShift(w.Ipswich, w.Host.Id));
+
+        Assert.AreEqual(2, suggestions.Ranked.Count);
+        Assert.AreEqual(0, suggestions.NotSuggested.Count);
+    }
+
+    [TestMethod]
+    public async Task SuggestAsync_PrefersThatTime_RanksFirst()
+    {
+        World w = await SeedAsync();
+        string first = (await SuggestAsync(w, OpenShift(w.Ipswich, w.Host.Id))).Ranked[0].UserId;
+        UserProfile other = first == w.Amy.Id ? w.Tom : w.Amy;
+
+        await using (ApplicationDbContext ctx = new(w.Options))
+        {
+            ctx.StaffAvailabilities.Add(new StaffAvailability
+            {
+                Id = Guid.NewGuid(), CompanyId = w.Company.Id, UserId = other.Id, DayOfWeek = DayOfWeek.Wednesday,
+                StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Kind = AvailabilityKind.Preferred, IsActive = true
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        ShiftSuggestions suggestions = await SuggestAsync(w, OpenShift(w.Ipswich, w.Host.Id));
+
+        Assert.AreEqual(other.Id, suggestions.Ranked[0].UserId);
+        Assert.IsTrue(suggestions.Ranked[0].Reasons.Any(x => x.Kind == SuggestionReasonKind.PreferredTime));
+    }
 }

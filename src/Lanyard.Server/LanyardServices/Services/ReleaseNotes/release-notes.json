@@ -711,7 +711,8 @@
       "Press Use to put someone on the shift, then Save. It goes on the rota as a draft like any other change, and nobody is told until you publish. Suggestions are only shown to managers.",
       "New Availability tab on My Shifts. Tell your managers when you can't work, or would rather work, each week: a day, a time or the whole day, a note, and if you like the dates it applies between. A time can run past midnight.",
       "Managers can see and change someone's availability under their Rota settings in the user editor.",
-      "The rota shows \"Can't work\" next to the days someone has said they can't work, with the times and their note when you hover over it. Putting them on a shift then is still allowed, but the shift dialog and the save both warn you."
+      "The rota shows \"Can't work\" next to the days someone has said they can't work, with the times and their note when you hover over it. Putting them on a shift then is still allowed, but the shift dialog and the save both warn you.",
+      "Suggest staff now uses availability too. People who have said they can't work at that time are listed under Not suggested with their reason (you can still choose them by hand), and people who have said they'd rather work then move up the list."
     ]
   }
 ]

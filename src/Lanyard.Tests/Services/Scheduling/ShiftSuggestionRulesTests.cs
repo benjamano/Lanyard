@@ -45,9 +45,21 @@ public class ShiftSuggestionRulesTests
         Guid? primary = null,
         string? pendingTimeOff = null,
         bool claimed = false,
-        string? cantWork = null) =>
+        string? cantWork = null,
+        IEnumerable<StaffAvailability>? availability = null) =>
         new(name.ToLowerInvariant(), name, primary, primary == Host ? "Host" : primary == Marshal ? "Marshal" : null,
-            contract ?? ResolvedContract.Empty, (shifts ?? []).ToList(), pendingTimeOff, claimed, cantWork);
+            contract ?? ResolvedContract.Empty, (shifts ?? []).ToList(), pendingTimeOff, claimed, cantWork, availability?.ToList());
+
+    private static StaffAvailability Availability(DayOfWeek day, int startHour, int endHour, AvailabilityKind kind) => new()
+    {
+        Id = Guid.NewGuid(),
+        CompanyId = 1,
+        UserId = "u",
+        DayOfWeek = day,
+        StartTime = new TimeOnly(startHour, 0),
+        EndTime = new TimeOnly(endHour, 0),
+        Kind = kind
+    };
 
     private static List<string> Order(ShiftSuggestions result) => result.Ranked.Select(x => x.DisplayName).ToList();
 
@@ -451,5 +463,77 @@ public class ShiftSuggestionRulesTests
         Assert.AreEqual(30m, ShiftSuggestionRules.WeeklyHoursFor(Contract(minHours: 10, maxHours: 30), 20m));
         Assert.AreEqual(10m, ShiftSuggestionRules.WeeklyHoursFor(Contract(minHours: 10), 20m));
         Assert.AreEqual(20m, ShiftSuggestionRules.WeeklyHoursFor(ResolvedContract.Empty, 20m));
+    }
+
+    // --- Availability ---
+
+    [TestMethod]
+    public void Rank_SaidTheyCantWorkThen_NotSuggestedWithTheirWords()
+    {
+        // The open shift is Wednesday 10:00-16:00.
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", contract: Contract(minShifts: 3), availability: [Availability(DayOfWeek.Wednesday, 8, 13, AvailabilityKind.Unavailable)]),
+            Person("Tom")
+        ]);
+
+        CollectionAssert.AreEqual(new List<string> { "Tom" }, Order(result));
+        Assert.AreEqual("They've said they can't work Wednesdays, 08:00–13:00.", result.NotSuggested.Single().ExcludedReason);
+    }
+
+    [TestMethod]
+    public void Rank_CantWorkAnotherTime_StillSuggested()
+    {
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", availability: [Availability(DayOfWeek.Wednesday, 17, 23, AvailabilityKind.Unavailable), Availability(DayOfWeek.Sunday, 0, 0, AvailabilityKind.Unavailable)])
+        ]);
+
+        Assert.AreEqual(1, result.Ranked.Count);
+        Assert.AreEqual(0, result.NotSuggested.Count);
+    }
+
+    [TestMethod]
+    public void Rank_WhyCantWorkReasonWinsOverAvailability()
+    {
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", cantWork: "They're booked off that day.", availability: [Availability(DayOfWeek.Wednesday, 0, 0, AvailabilityKind.Unavailable)])
+        ]);
+
+        Assert.AreEqual("They're booked off that day.", result.NotSuggested.Single().ExcludedReason);
+    }
+
+    [TestMethod]
+    public void Rank_PrefersThatTime_RanksAboveAskingAndUsualPosition()
+    {
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", claimed: true, primary: Host),
+            Person("Tom", availability: [Availability(DayOfWeek.Wednesday, 9, 17, AvailabilityKind.Preferred)])
+        ]);
+
+        CollectionAssert.AreEqual(new List<string> { "Tom", "Amy" }, Order(result));
+        SuggestionReason reason = result.Ranked[0].Reasons.Single();
+        Assert.AreEqual(SuggestionReasonKind.PreferredTime, reason.Kind);
+        Assert.AreEqual("Would rather work Wednesdays, 09:00–17:00", reason.Text);
+        Assert.IsFalse(reason.IsCaution);
+    }
+
+    [TestMethod]
+    public void Rank_ContractNeedStillBeatsPreference()
+    {
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", availability: [Availability(DayOfWeek.Wednesday, 9, 17, AvailabilityKind.Preferred)]),
+            Person("Tom", contract: Contract(minShifts: 1))
+        ]);
+
+        CollectionAssert.AreEqual(new List<string> { "Tom", "Amy" }, Order(result));
+    }
+
+    [TestMethod]
+    public void Rank_PreferredWindowOnlyCoveringPartOfTheShift_DoesNotCount()
+    {
+        ShiftSuggestions result = ShiftSuggestionRules.Rank(Open(), [
+            Person("Amy", availability: [Availability(DayOfWeek.Wednesday, 8, 12, AvailabilityKind.Preferred)])
+        ]);
+
+        Assert.AreEqual(0, result.Ranked[0].Reasons.Count);
     }
 }

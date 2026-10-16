@@ -167,6 +167,9 @@ public class ShiftSuggestionService(
                 .GroupBy(x => x.UserId)
                 .ToDictionary(g => g.Key, g => g.First().StaffPosition!);
 
+            ILookup<string, StaffAvailability> availabilityByUser =
+                (await StaffAvailabilityService.ForUsers(ctx, userIds, companyId).ToListAsync()).ToLookup(x => x.UserId);
+
             List<SuggestionCandidate> candidates = users.Select(user =>
             {
                 StaffPosition? primary = primaryPositions.GetValueOrDefault(user.Id);
@@ -180,7 +183,8 @@ public class ShiftSuggestionService(
                     shiftsByUser[user.Id].ToList(),
                     pendingTimeOff.GetValueOrDefault(user.Id),
                     claimants.Contains(user.Id),
-                    ShiftClaimRules.WhyCantWork(calendars.GetValueOrDefault(user.Id, ShiftClaimRules.WorkerCalendar.Empty), shift, null, aboutViewer: false));
+                    ShiftClaimRules.WhyCantWork(calendars.GetValueOrDefault(user.Id, ShiftClaimRules.WorkerCalendar.Empty), shift, null, aboutViewer: false),
+                    availabilityByUser[user.Id].ToList());
             }).ToList();
 
             return Result<ShiftSuggestions>.Ok(ShiftSuggestionRules.Rank(shift, candidates));
