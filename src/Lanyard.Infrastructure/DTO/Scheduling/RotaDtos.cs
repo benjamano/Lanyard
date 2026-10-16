@@ -23,6 +23,13 @@ public record RotaStaffRow(
     public List<TimeOffRequest> TimeOff { get; init; } = [];
 
     public TimeOffRequest? TimeOffOn(DateOnly day) => TimeOff.FirstOrDefault(x => x.Covers(day));
+
+    // Their weekly availability (StaffAvailability), shown beside the shifts.
+    public List<StaffAvailability> Availability { get; init; } = [];
+
+    // The times they've said they can't work that start on this day.
+    public List<StaffAvailability> UnavailableOn(DateOnly day) =>
+        Availability.Where(x => x.Kind == AvailabilityKind.Unavailable && StaffAvailabilityRules.AppliesOn(x, day)).OrderBy(x => x.StartTime).ToList();
 }
 
 public record RotaRangeView(
