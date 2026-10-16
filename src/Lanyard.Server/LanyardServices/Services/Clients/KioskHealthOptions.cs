@@ -24,6 +24,14 @@ public class KioskHealthOptions
     public double HighCpuPercent { get; set; } = 90;
     public double HighMemoryPercent { get; set; } = 90;
 
+    /// <summary>Whether managers are notified when a kiosk goes offline or needs attention.</summary>
+    public bool AlertsEnabled { get; set; } = true;
+
+    /// <summary>How long a kiosk has to stay degraded before anyone is told.</summary>
+    public int NeedsAttentionAfterMinutes { get; set; } = 10;
+
+    public TimeSpan NeedsAttentionAfter => TimeSpan.FromMinutes(NeedsAttentionAfterMinutes);
+
     public TimeSpan UnresponsiveAfter => TimeSpan.FromSeconds(HeartbeatIntervalSeconds * MissedBeatsBeforeUnresponsive);
 
     public TimeSpan OfflineAfter => UnresponsiveAfter + TimeSpan.FromMinutes(OfflineAfterMinutes);
