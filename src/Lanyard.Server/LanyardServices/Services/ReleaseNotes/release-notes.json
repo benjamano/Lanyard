@@ -712,7 +712,13 @@
       "New Availability tab on My Shifts. Tell your managers when you can't work, or would rather work, each week: a day, a time or the whole day, a note, and if you like the dates it applies between. A time can run past midnight.",
       "Managers can see and change someone's availability under their Rota settings in the user editor.",
       "The rota shows \"Can't work\" next to the days someone has said they can't work, with the times and their note when you hover over it. Putting them on a shift then is still allowed, but the shift dialog and the save both warn you.",
-      "Suggest staff now uses availability too. People who have said they can't work at that time are listed under Not suggested with their reason (you can still choose them by hand), and people who have said they'd rather work then move up the list."
+      "Suggest staff now uses availability too. People who have said they can't work at that time are listed under Not suggested with their reason (you can still choose them by hand), and people who have said they'd rather work then move up the list.",
+      "Projection screens can now show live venue data. In a projection program, open a Show Text step's parameters and change Text source from Fixed text to Last game winner, Today's top score or Opening hours today.",
+      "The screen fills the text in each time the step plays, and keeps it up to date while the step is showing, so a leaderboard screen changes within about half a minute of a game finishing. Nobody has to edit the program.",
+      "Last game winner shows the winning team and its total (or the top gun in a game without teams) of the most recent game today. Today's top score shows the best single score of the day. Opening hours today uses the hours set for the kiosk's location.",
+      "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
+      "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
+      "A kiosk now refuses to play a projection program that belongs to a different company."
     ]
   }
 ]
