@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule. Projection screens can show live data like today's top score.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -707,7 +707,13 @@
       "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
       "See what a kiosk's projection screens are showing without going on site. On Manage > Clients, press the new Screens button next to Diagnostics, then Capture screens.",
       "You get a picture of each screen with the program it's running, and a badge when a screen is playing its offline copy. Select a picture to see it larger. A screen that couldn't be captured says why instead.",
-      "Screenshots are kept in server memory for 10 minutes and then deleted. They're never saved, only Admins can see them, and each capture is recorded with the name of the Admin who asked. Kiosks need Lanyard Client 1.0.42 or later."
+      "Screenshots are kept in server memory for 10 minutes and then deleted. They're never saved, only Admins can see them, and each capture is recorded with the name of the Admin who asked. Kiosks need Lanyard Client 1.0.42 or later.",
+      "Projection screens can now show live venue data. In a projection program, open a Show Text step's parameters and change Text source from Fixed text to Last game winner, Today's top score or Opening hours today.",
+      "The screen fills the text in each time the step plays, and keeps it up to date while the step is showing, so a leaderboard screen changes within about half a minute of a game finishing. Nobody has to edit the program.",
+      "Last game winner shows the winning team and its total (or the top gun in a game without teams) of the most recent game today. Today's top score shows the best single score of the day. Opening hours today uses the hours set for the kiosk's location.",
+      "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
+      "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
+      "A kiosk now refuses to play a projection program that belongs to a different company."
     ]
   }
 ]
