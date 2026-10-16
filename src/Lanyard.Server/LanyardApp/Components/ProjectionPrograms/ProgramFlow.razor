@@ -3,6 +3,7 @@
 @using Lanyard.Infrastructure.DTO.VideoDevices
 @using Lanyard.Infrastructure.Models
 @using Lanyard.Application.Services
+@using Lanyard.Application.Services.Projection.Bindings
 
 @inject DragStateService DragState
 @inject INotificationService _toastService
@@ -28,10 +29,16 @@
             <ProjectionStepOptionsMenu AnchorId="@($"menu-btn-step-{step.Id}")" ProjectionProgramStep="step" OnDeleteButtonClicked="DeleteProjectionProgramStep"></ProjectionStepOptionsMenu>
 
             <FluentCard Appearance="CardAppearance.Filled" Class="py-4" draggable="false" @ondragover:preventDefault @ondrop="(e) => OnDropAtIndex(e, index)" id="@($"menu-btn-step-{step.Id}")">
-                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center">
+                <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Center" VerticalAlignment="VerticalAlignment.Center" HorizontalGap="8px">
                     <div>
                         @step.Template?.Name
                     </div>
+                    @if (step.ParameterValues.Any(x => x.BindingKey != null))
+                    {
+                        <FluentBadge Appearance="BadgeAppearance.Tint" Color="BadgeColor.Informative" Title="Shows live venue data">
+                            Live data
+                        </FluentBadge>
+                    }
                 </FluentStack>
                 
                 @if (step.Template?.Parameters.Any() == true)
@@ -94,6 +101,10 @@
                                             <FilePicker SelectedFileId="@paramValue.Value"
                                                         AllowedExtensions="@(isVideoParameter ? VideoExtensions : null)"
                                                         OnFileSelected="id => paramValue.Value = id" />
+                                        }
+                                        else if (ProjectionBindingCatalogue.IsBindable(step.Template?.Name, parameter.Name))
+                                        {
+                                            <BoundTextParameterEditor ParameterValue="paramValue" Parameter="parameter" OnChanged="StateHasChanged" />
                                         }
                                         else
                                         {

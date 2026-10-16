@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -10,10 +11,20 @@ namespace Lanyard.Application.Services;
 
 public class ProjectionProgramRunnerService(
     ISystemDbContextFactory factory,
+    IProjectionBindingResolver bindingResolver,
     ILogger<ProjectionProgramRunnerService> logger) : IProjectionProgramRunnerService
 {
     private readonly ISystemDbContextFactory _factory = factory;
+    private readonly IProjectionBindingResolver _bindingResolver = bindingResolver;
     private readonly ILogger<ProjectionProgramRunnerService> _logger = logger;
+
+    private static readonly IReadOnlyDictionary<Guid, string> NoBoundValues = new Dictionary<Guid, string>();
+
+    /// <summary>
+    /// How often a held step with data-bound parameters re-resolves them, in wall-clock time (a
+    /// paused screen keeps its data current too). Settable for tests.
+    /// </summary>
+    public TimeSpan BindingRefreshInterval { get; init; } = TimeSpan.FromSeconds(30);
 
     // Hold, tick and next-step rules live in ProjectionSequence (Lanyard.Shared), so the kiosk's
     // offline player follows the same ones. Paused time doesn't count toward a step's hold, so a
@@ -24,6 +35,7 @@ public class ProjectionProgramRunnerService(
     public event Action<Guid, int, bool>? OnProgramPauseChanged;
     public event Action<Guid, int, Guid>? OnProgramStopped;
     public event Action<Guid, int, Guid>? OnProgramCompletedNaturally;
+    public event Action<Guid, int, int>? OnProgramStepValuesChanged;
 
     private sealed class RunningProgram
     {
@@ -38,7 +50,15 @@ public class ProjectionProgramRunnerService(
         public required CancellationTokenSource Cts { get; init; }
         public required bool IsTemporaryTrigger { get; init; }
 
+        // Who data-bound parameters are resolved for: the program's company and the kiosk's location.
+        public required ProjectionBindingContext BindingContext { get; init; }
+
         public int CurrentStepIndex;
+
+        // The current step's bound values. Kept here, never written onto the step entities: those are
+        // shared with every page rendering this run, and with the next pass of the same step.
+        // Replaced whole under _lock, never changed in place.
+        public IReadOnlyDictionary<Guid, string> BoundValues = NoBoundValues;
         public volatile bool IsPaused;
 
         // Runs only while the program is unpaused (stopped/started in SetPaused under _lock), so
@@ -67,6 +87,22 @@ public class ProjectionProgramRunnerService(
             if (program == null)
             {
                 return Result<Guid>.Fail("Projection program not found.");
+            }
+
+            // The kiosk page is anonymous and takes both ids from its URL, and this context has no
+            // tenant filter, so nothing else stops one company's program playing (and resolving
+            // live data) on another company's kiosk.
+            var client = await context.Clients
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(c => c.Id == clientId)
+                .Select(c => new { c.CompanyId, c.LocationId })
+                .FirstOrDefaultAsync();
+
+            if (client == null || client.CompanyId != program.CompanyId)
+            {
+                _logger.LogWarning("Refused to start projection program {ProgramId} (company {ProgramCompanyId}) on client {ClientId} (company {ClientCompanyId}): the companies don't match", programId, program.CompanyId, clientId, client?.CompanyId);
+                return Result<Guid>.Fail("Projection program does not belong to this kiosk's company.");
             }
 
             // ParameterValues.Parameter is included explicitly rather than left to EF's
@@ -107,7 +143,8 @@ public class ProjectionProgramRunnerService(
                 ProgramName = program.Name,
                 Steps = steps,
                 Cts = cts,
-                IsTemporaryTrigger = isTemporaryTrigger
+                IsTemporaryTrigger = isTemporaryTrigger,
+                BindingContext = new ProjectionBindingContext(program.CompanyId, client.LocationId, clientId, DateTime.UtcNow)
             };
 
             lock (_lock)
@@ -151,11 +188,21 @@ public class ProjectionProgramRunnerService(
 
             while (!token.IsCancellationRequested)
             {
-                run.CurrentStepIndex = index;
+                ProjectionProgramStep step = run.Steps[index];
+
+                // Resolved before the step is announced, so the kiosk's first paint of it already
+                // shows live data rather than flashing the fallback.
+                IReadOnlyDictionary<Guid, string> boundValues = await ResolveBoundValuesAsync(run, step, token);
+
+                lock (_lock)
+                {
+                    run.CurrentStepIndex = index;
+                    run.BoundValues = boundValues;
+                }
 
                 OnProgramStepAdvanced?.Invoke(clientId, displayIndex, index);
 
-                await HoldStepAsync(run, run.Steps[index], token);
+                await HoldStepAsync(clientId, displayIndex, index, run, step, token);
 
                 int? pending = TakePendingStepIndex(run);
 
@@ -208,9 +255,53 @@ public class ProjectionProgramRunnerService(
         }
     }
 
-    private async Task HoldStepAsync(RunningProgram run, ProjectionProgramStep step, CancellationToken token)
+    private static bool HasBindings(ProjectionProgramStep step) => step.ParameterValues.Any(pv => pv.BindingKey != null);
+
+    private async Task<IReadOnlyDictionary<Guid, string>> ResolveBoundValuesAsync(RunningProgram run, ProjectionProgramStep step, CancellationToken token)
+    {
+        if (!HasBindings(step))
+        {
+            return NoBoundValues;
+        }
+
+        ProjectionBindingContext context = run.BindingContext with { NowUtc = DateTime.UtcNow };
+
+        return await _bindingResolver.ResolveStepAsync(context, step, token);
+    }
+
+    /// <summary>
+    /// Re-resolves a held step's bound values, and tells the kiosk only if one actually changed, so
+    /// an unchanged leaderboard doesn't re-render every refresh.
+    /// </summary>
+    private async Task RefreshBoundValuesAsync(Guid clientId, int displayIndex, int stepIndex, RunningProgram run, ProjectionProgramStep step, CancellationToken token)
+    {
+        IReadOnlyDictionary<Guid, string> refreshed = await ResolveBoundValuesAsync(run, step, token);
+
+        lock (_lock)
+        {
+            if (run.CurrentStepIndex != stepIndex || HaveSameValues(run.BoundValues, refreshed))
+            {
+                return;
+            }
+
+            run.BoundValues = refreshed;
+        }
+
+        OnProgramStepValuesChanged?.Invoke(clientId, displayIndex, stepIndex);
+    }
+
+    private static bool HaveSameValues(IReadOnlyDictionary<Guid, string> current, IReadOnlyDictionary<Guid, string> refreshed)
+    {
+        return current.Count == refreshed.Count
+            && refreshed.All(kvp => current.TryGetValue(kvp.Key, out string? value) && value == kvp.Value);
+    }
+
+    private async Task HoldStepAsync(Guid clientId, int displayIndex, int stepIndex, RunningProgram run, ProjectionProgramStep step, CancellationToken token)
     {
         TimeSpan hold = ProjectionSequence.EffectiveHold(step.HoldForMilliseconds);
+
+        bool hasBindings = HasBindings(step);
+        System.Diagnostics.Stopwatch sinceResolved = System.Diagnostics.Stopwatch.StartNew();
 
         // Played time comes from the run's PlayClock, which stops while paused. Paused time
         // therefore never counts toward the hold (resuming continues the step where it left
@@ -232,6 +323,17 @@ public class ProjectionProgramRunnerService(
             if (played >= hold)
             {
                 return;
+            }
+
+            // Wall-clock, not played time: the data on a paused screen should stay current too.
+            // The hold is measured on PlayClock, so time spent resolving never stretches the step.
+            if (hasBindings && sinceResolved.Elapsed >= BindingRefreshInterval)
+            {
+                sinceResolved.Restart();
+
+                await RefreshBoundValuesAsync(clientId, displayIndex, stepIndex, run, step, token);
+
+                continue;
             }
 
             await Task.Delay(ComputeHoldDelayMilliseconds(hold, played, run.IsPaused), token);
@@ -419,6 +521,7 @@ public class ProjectionProgramRunnerService(
         Steps = running.Steps,
         CurrentStepIndex = running.CurrentStepIndex,
         IsPaused = running.IsPaused,
-        IsTemporaryTrigger = running.IsTemporaryTrigger
+        IsTemporaryTrigger = running.IsTemporaryTrigger,
+        BoundValues = running.BoundValues
     };
 }

@@ -1,4 +1,5 @@
 using Lanyard.Application.Services;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DataAccess.Tenancy;
 using Lanyard.Infrastructure.DTO;
@@ -33,7 +34,29 @@ public class ProjectionProgramRunnerServiceTests
     {
         return new ProjectionProgramRunnerService(
             GetFactoryMock(options).Object,
+            new ProjectionBindingResolver([], Mock.Of<ILogger<ProjectionBindingResolver>>()),
             Mock.Of<ILogger<ProjectionProgramRunnerService>>());
+    }
+
+    // The runner refuses a kiosk from another company, so every run needs a real client. Programs
+    // seeded here default to company 0, the same as this.
+    private static async Task<Guid> SeedClientAsync(DbContextOptions<ApplicationDbContext> options, int companyId = 0, int? locationId = null)
+    {
+        Guid clientId = Guid.NewGuid();
+
+        await using ApplicationDbContext context = new(options);
+
+        context.Clients.Add(new Client
+        {
+            Id = clientId,
+            CompanyId = companyId,
+            Name = "Test kiosk",
+            LocationId = locationId
+        });
+
+        await context.SaveChangesAsync();
+
+        return clientId;
     }
 
     private static async Task<Guid> SeedProgramAsync(
@@ -130,10 +153,11 @@ public class ProjectionProgramRunnerServiceTests
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 200, stepsActive: false);
+        Guid clientId = await SeedClientAsync(options);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
 
-        Result<Guid> result = await runner.StartAsync(Guid.NewGuid(), 0, programId, true, 0, false);
+        Result<Guid> result = await runner.StartAsync(clientId, 0, programId, true, 0, false);
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual("Projection program has no playable steps.", result.Error);
@@ -143,7 +167,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task StartAsync_RaisesStartedEvent_AndExposesRunningState()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 3, holdForMilliseconds: 1000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -172,7 +196,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task RunLoop_AdvancesThroughStepsInSortOrder()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 3, holdForMilliseconds: 200);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -191,7 +215,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task StartAsync_ReplacesAnExistingRunOnTheSameDisplay()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid firstProgramId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 2000);
         Guid secondProgramId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 2000);
 
@@ -219,7 +243,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task StartAsync_RunsDisplaysOfTheSameClientIndependently()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid firstProgramId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 2000);
         Guid secondProgramId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 2000);
 
@@ -244,7 +268,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task Pause_HoldsTheCurrentStep_AndResumeContinues()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 3, holdForMilliseconds: 400);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -291,7 +315,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task SkipToStep_JumpsPlaybackToThatStep()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 4, holdForMilliseconds: 5000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -310,7 +334,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task SkipToStep_ReturnsFail_WhenIndexIsOutsideTheProgram()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 5000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -329,7 +353,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task SkipToPreviousStep_WrapsBackwardsFromTheFirstStep()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 3, holdForMilliseconds: 5000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -347,7 +371,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task Stop_WithAnotherRunsId_DoesNotStopTheCurrentRun()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 5000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -368,7 +392,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task NonRepeatingRun_PlaysOnce_ThenStops()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 200);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -387,7 +411,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task RepeatCount_PlaysThatManyExtraPasses()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 200);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -406,7 +430,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task TemporaryTrigger_RaisesCompletedNaturally_WhenItFinishesOnItsOwn()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 1, holdForMilliseconds: 200);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -429,7 +453,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task TemporaryTrigger_DoesNotRaiseCompletedNaturally_WhenStoppedManually()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: 5000);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -453,7 +477,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task AmbientRun_DoesNotRaiseCompletedNaturally_WhenItFinishes()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         Guid programId = await SeedProgramAsync(options, stepCount: 1, holdForMilliseconds: 200);
 
         ProjectionProgramRunnerService runner = CreateRunner(options);
@@ -490,7 +514,7 @@ public class ProjectionProgramRunnerServiceTests
     public async Task Hold_ExcludesPausedTime_AndResumeMidTickDoesNotEndTheStepEarly()
     {
         DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
-        Guid clientId = Guid.NewGuid();
+        Guid clientId = await SeedClientAsync(options);
         const int holdMs = 600;
         const int pauseMs = 700;
         Guid programId = await SeedProgramAsync(options, stepCount: 2, holdForMilliseconds: holdMs);
@@ -515,6 +539,179 @@ public class ProjectionProgramRunnerServiceTests
         // for timer resolution). Counting a straddled tick as played would end it up to a tick early.
         Assert.IsTrue(advancedAfterMs >= holdMs + pauseMs - 60,
             $"Step advanced after {advancedAfterMs} ms; expected at least {holdMs + pauseMs - 60} ms (hold {holdMs} + pause {pauseMs}).");
+
+        runner.Stop(clientId, 0);
+    }
+
+    // ----- Tenant check and data-bound parameters -----
+
+    private sealed class MutableBindingSource(string key) : IProjectionBindingSource
+    {
+        public string Key { get; } = key;
+
+        public string? Value { get; set; }
+
+        public int Calls;
+
+        public Task<Result<string?>> ResolveAsync(ProjectionBindingContext context, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref Calls);
+            return Task.FromResult(Result<string?>.Ok(Value));
+        }
+    }
+
+    private static ProjectionProgramRunnerService CreateBindingRunner(DbContextOptions<ApplicationDbContext> options, IProjectionBindingSource source, TimeSpan refreshInterval)
+    {
+        ProjectionBindingResolver resolver = new([source], Mock.Of<ILogger<ProjectionBindingResolver>>())
+        {
+            CacheDuration = TimeSpan.Zero
+        };
+
+        return new ProjectionProgramRunnerService(GetFactoryMock(options).Object, resolver, Mock.Of<ILogger<ProjectionProgramRunnerService>>())
+        {
+            BindingRefreshInterval = refreshInterval
+        };
+    }
+
+    private static async Task<(Guid ProgramId, Guid ParameterValueId)> SeedBoundProgramAsync(DbContextOptions<ApplicationDbContext> options, string bindingKey, string? fallback, int holdForMilliseconds = 5000, int companyId = 0)
+    {
+        Guid programId = Guid.NewGuid();
+        Guid templateId = Guid.NewGuid();
+        Guid parameterId = Guid.NewGuid();
+        Guid stepId = Guid.NewGuid();
+        Guid parameterValueId = Guid.NewGuid();
+
+        await using ApplicationDbContext context = new(options);
+
+        context.ProjectionProgramStepTemplates.Add(new ProjectionProgramStepTemplate
+        {
+            Id = templateId,
+            Name = "Show Text",
+            IsActive = true,
+            Parameters =
+            [
+                new ProjectionProgramStepTemplateParameter { Id = parameterId, TemplateId = templateId, Name = "Text", DataType = "String", IsActive = true }
+            ]
+        });
+
+        context.ProjectionPrograms.Add(new ProjectionProgram { Id = programId, CompanyId = companyId, Name = "Bound program", IsActive = true });
+
+        context.ProjectionProgramSteps.Add(new ProjectionProgramStep
+        {
+            Id = stepId,
+            ProjectionProgramId = programId,
+            TemplateId = templateId,
+            SortOrder = 0,
+            HoldForMilliseconds = holdForMilliseconds,
+            IsActive = true,
+            ParameterValues =
+            [
+                new ProjectionProgramParameterValue { Id = parameterValueId, ProjectionProgramStepId = stepId, ParameterId = parameterId, Value = fallback, BindingKey = bindingKey }
+            ]
+        });
+
+        await context.SaveChangesAsync();
+
+        return (programId, parameterValueId);
+    }
+
+    [TestMethod]
+    public async Task StartAsync_RefusesAProgramFromAnotherCompany()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid programId = await SeedProgramAsync(options, stepCount: 1, holdForMilliseconds: 200);
+        Guid otherCompanyClientId = await SeedClientAsync(options, companyId: 99);
+
+        ProjectionProgramRunnerService runner = CreateRunner(options);
+
+        Result<Guid> result = await runner.StartAsync(otherCompanyClientId, 0, programId, true, 0, false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("Projection program does not belong to this kiosk's company.", result.Error);
+        Assert.IsNull(runner.GetRunningState(otherCompanyClientId, 0));
+    }
+
+    [TestMethod]
+    public async Task StartAsync_RefusesAnUnknownClient()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid programId = await SeedProgramAsync(options, stepCount: 1, holdForMilliseconds: 200);
+
+        ProjectionProgramRunnerService runner = CreateRunner(options);
+
+        Result<Guid> result = await runner.StartAsync(Guid.NewGuid(), 0, programId, true, 0, false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual("Projection program does not belong to this kiosk's company.", result.Error);
+    }
+
+    [TestMethod]
+    public async Task BoundValues_AreResolvedBeforeTheStepIsAnnounced_AndNeverWrittenOntoTheStep()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options);
+        (Guid programId, Guid parameterValueId) = await SeedBoundProgramAsync(options, ProjectionBindingKeys.TopScoreToday, "Fallback");
+
+        MutableBindingSource source = new(ProjectionBindingKeys.TopScoreToday) { Value = "Today's top score: Gun 3 – 900" };
+        ProjectionProgramRunnerService runner = CreateBindingRunner(options, source, TimeSpan.FromMinutes(5));
+
+        string? seenOnAdvance = null;
+        runner.OnProgramStepAdvanced += (c, d, i) =>
+            seenOnAdvance = runner.GetRunningState(c, d)?.BoundValues.GetValueOrDefault(parameterValueId);
+
+        await runner.StartAsync(clientId, 0, programId, true, 0, false);
+
+        Assert.IsTrue(await WaitUntilAsync(() => seenOnAdvance is not null));
+        Assert.AreEqual("Today's top score: Gun 3 – 900", seenOnAdvance);
+
+        ProjectionRunState state = runner.GetRunningState(clientId, 0)!;
+        Assert.AreEqual("Fallback", state.Steps[0].ParameterValues[0].Value, "The snapshotted step must keep its stored fallback.");
+
+        runner.Stop(clientId, 0);
+    }
+
+    [TestMethod]
+    public async Task BoundValues_ShowTheFallback_WhenTheSourceHasNoData()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options);
+        (Guid programId, Guid parameterValueId) = await SeedBoundProgramAsync(options, ProjectionBindingKeys.LastGameWinner, fallback: "");
+
+        MutableBindingSource source = new(ProjectionBindingKeys.LastGameWinner) { Value = null };
+        ProjectionProgramRunnerService runner = CreateBindingRunner(options, source, TimeSpan.FromMinutes(5));
+
+        await runner.StartAsync(clientId, 0, programId, true, 0, false);
+
+        string expected = ProjectionBindingCatalogue.Find(ProjectionBindingKeys.LastGameWinner)!.DefaultFallback;
+        Assert.IsTrue(await WaitUntilAsync(() => runner.GetRunningState(clientId, 0)?.BoundValues.GetValueOrDefault(parameterValueId) == expected));
+
+        runner.Stop(clientId, 0);
+    }
+
+    [TestMethod]
+    public async Task HeldStep_RaisesValuesChanged_OnlyWhenARefreshedValueDiffers()
+    {
+        DbContextOptions<ApplicationDbContext> options = GetInMemoryOptions();
+        Guid clientId = await SeedClientAsync(options);
+        (Guid programId, Guid parameterValueId) = await SeedBoundProgramAsync(options, ProjectionBindingKeys.TopScoreToday, "Fallback", holdForMilliseconds: 60000);
+
+        MutableBindingSource source = new(ProjectionBindingKeys.TopScoreToday) { Value = "Score 1" };
+        ProjectionProgramRunnerService runner = CreateBindingRunner(options, source, TimeSpan.FromMilliseconds(100));
+
+        int changes = 0;
+        runner.OnProgramStepValuesChanged += (c, d, i) => Interlocked.Increment(ref changes);
+
+        await runner.StartAsync(clientId, 0, programId, true, 0, false);
+
+        // Several refreshes with the same value: no change events.
+        Assert.IsTrue(await WaitUntilAsync(() => source.Calls >= 4));
+        Assert.AreEqual(0, changes);
+
+        source.Value = "Score 2";
+
+        Assert.IsTrue(await WaitUntilAsync(() => changes == 1));
+        Assert.AreEqual("Score 2", runner.GetRunningState(clientId, 0)!.BoundValues[parameterValueId]);
+        Assert.AreEqual(0, runner.GetRunningState(clientId, 0)!.CurrentStepIndex, "Refreshing must not advance the step.");
 
         runner.Stop(clientId, 0);
     }

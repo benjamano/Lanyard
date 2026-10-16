@@ -123,4 +123,74 @@ public class ClientDiagnosticsHubIntegrationTests
         Assert.IsFalse(result.IsSuccess);
         StringAssert.Contains(result.Error, "older Lanyard Client");
     }
+
+    [TestMethod]
+    public async Task RequestScreenshots_RoundTripsAFullSizeImageThroughTheRealHub()
+    {
+        // The largest JPEG a kiosk will send, as base64 in a JSON message, must still fit the
+        // hub's 256 KB limit; a reply over it would drop the kiosk's connection.
+        await using WebApplicationFactory<Program> factory = CreateFactory();
+        Guid clientId = Guid.NewGuid();
+        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+
+        byte[] jpeg = new byte[ClientDiagnosticsService.ScreenshotMaxBytes];
+        Random.Shared.NextBytes(jpeg);
+        jpeg[0] = 0xFF;
+        jpeg[1] = 0xD8;
+        jpeg[2] = 0xFF;
+
+        ClientScreenshotRequestDTO? receivedRequest = null;
+
+        kiosk.On<List<ClientProjectionWindowDTO>>(ClientHubMethods.ListProjectionWindows, () =>
+        [
+            new ClientProjectionWindowDTO { DisplayKey = "DISPLAY1", DisplayIndex = 0, ProgramId = Guid.NewGuid(), IsLoaded = true }
+        ]);
+
+        kiosk.On<ClientScreenshotRequestDTO, ClientScreenshotDTO>(ClientHubMethods.CaptureProjectionWindow, request =>
+        {
+            receivedRequest = request;
+
+            return new ClientScreenshotDTO
+            {
+                DisplayKey = request.DisplayKey,
+                ImageJpeg = jpeg,
+                Width = 1280,
+                Height = 720,
+                ClientVersion = "1.0.43",
+                CapturedAtUtc = DateTime.UtcNow
+            };
+        });
+
+        await kiosk.StartAsync();
+        await WaitUntilConnectedAsync(factory, clientId);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        Result<ClientScreenshotCapture> result = await scope.ServiceProvider.GetRequiredService<IClientDiagnosticsService>()
+            .RequestScreenshotsAsync(clientId, "Integration Test");
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual("DISPLAY1", receivedRequest?.DisplayKey);
+        ClientScreenSnapshot screen = result.Data!.Screens.Single();
+        Assert.IsNull(screen.Error);
+        CollectionAssert.AreEqual(jpeg, screen.ImageJpeg);
+        Assert.AreEqual("1.0.43", result.Data.ClientVersion);
+    }
+
+    [TestMethod]
+    public async Task RequestScreenshots_ExplainsWhenTheKioskHasNoHandler()
+    {
+        await using WebApplicationFactory<Program> factory = CreateFactory();
+        Guid clientId = Guid.NewGuid();
+        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+
+        await kiosk.StartAsync();
+        await WaitUntilConnectedAsync(factory, clientId);
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        Result<ClientScreenshotCapture> result = await scope.ServiceProvider.GetRequiredService<IClientDiagnosticsService>()
+            .RequestScreenshotsAsync(clientId, "Integration Test");
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(result.Error, "older Lanyard Client");
+    }
 }
