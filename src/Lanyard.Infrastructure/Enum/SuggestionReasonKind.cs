@@ -8,6 +8,7 @@ public enum SuggestionReasonKind
     BelowMinHours = 1,
     AskedForShift = 2,
     UsualPosition = 3,
+    PreferredTime = 4,
 
     // Cautions
     OverMaxHours = 10,
