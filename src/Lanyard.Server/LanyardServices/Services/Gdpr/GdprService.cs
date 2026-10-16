@@ -268,6 +268,15 @@ public class GdprService : IGdprService
                 audioClipPlay.TriggeredByUserId = null;
             }
 
+            List<AudioClipSchedule> audioClipSchedules = await ctx.AudioClipSchedules
+                .Where(x => x.CreatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (AudioClipSchedule audioClipSchedule in audioClipSchedules)
+            {
+                audioClipSchedule.CreatedByUserId = null;
+            }
+
             List<CourseAssignment> assignedByRows = await ctx.CourseAssignments
                 .Where(x => x.AssignedByUserId == userId)
                 .ToListAsync();

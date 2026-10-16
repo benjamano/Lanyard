@@ -430,4 +430,46 @@ public class AudioClipPlaybackServiceTests
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(0, s.Sent.Count);
     }
+
+    private static async Task AddScheduleAsync(Setup s, Location location, bool enabled = true)
+    {
+        await using ApplicationDbContext ctx = new(s.Options);
+        ctx.AudioClipSchedules.Add(new AudioClipSchedule
+        {
+            Id = Guid.NewGuid(), CompanyId = s.Company.Id, Name = "Closing call", AudioClipId = s.ClipId, LocationId = location.Id,
+            Anchor = AudioClipScheduleAnchor.BeforeClosing, OffsetMinutes = 15, DaysOfWeek = "0,1,2,3,4,5,6", IsEnabled = enabled, CreateDate = Now
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    [TestMethod]
+    public async Task Prefetch_SendsTheKioskTheClipsScheduledAtItsLocation()
+    {
+        Setup s = await SeedAsync();
+        Guid lobby = await AddKioskAsync(s, "Lobby", s.Ipswich);
+        await AddScheduleAsync(s, s.Ipswich);
+
+        await s.Service.PrefetchScheduledClipsAsync(lobby, "conn-Lobby");
+
+        (string method, object?[] args) = s.Sent["conn-Lobby"].Single();
+        Assert.AreEqual(ClientHubMethods.PrefetchAudioClips, method);
+        AudioClipPlayCommand command = ((List<AudioClipPlayCommand>)args.Single()!).Single();
+        Assert.AreEqual(s.ClipId, command.ClipId);
+        Assert.AreEqual(Guid.Empty, command.PlayId);
+    }
+
+    [TestMethod]
+    public async Task Prefetch_SendsNothing_ForAnOutdatedKioskOrNoSchedules()
+    {
+        Setup s = await SeedAsync();
+        Guid old = await AddKioskAsync(s, "Old", s.Ipswich, version: "1.0.41");
+        Guid norwich = await AddKioskAsync(s, "Bar", s.Norwich);
+        await AddScheduleAsync(s, s.Ipswich);
+        await AddScheduleAsync(s, s.Norwich, enabled: false);
+
+        await s.Service.PrefetchScheduledClipsAsync(old, "conn-Old");
+        await s.Service.PrefetchScheduledClipsAsync(norwich, "conn-Bar");
+
+        Assert.AreEqual(0, s.Sent.Count);
+    }
 }
