@@ -228,6 +228,7 @@ builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecu
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, AudioClipActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();

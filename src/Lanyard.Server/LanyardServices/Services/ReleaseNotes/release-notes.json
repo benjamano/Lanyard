@@ -716,7 +716,8 @@
       "Audio clips can now play by themselves on a schedule. On the Audio Clips page, press Add schedule and choose a clip, a location and when it plays: a set time, or a number of minutes before closing or after opening, on the days you pick. It plays on every kiosk at that location.",
       "Closing and opening times come from the location's opening hours, so a \"15 minutes before closing\" call follows late nights and short days by itself. For a late close after midnight, choose the day the location opens. A location with no opening hours set can't use these, and the page says so.",
       "Each schedule shows its next few plays, and can be turned off without deleting it. A play that the server missed by more than two minutes, for example during an update, is skipped rather than played late.",
-      "Kiosks download scheduled clips ahead of time when they connect, so a clip starts on time even on a slow connection."
+      "Kiosks download scheduled clips ahead of time when they connect, so a clip starts on time even on a slow connection.",
+      "Automation rules have a new action, Play Audio Clip, which plays a clip on a kiosk over its music. For example, play a winners' jingle when a game ends with a winner, or a reminder when a game's time is nearly up."
     ]
   }
 ]
