@@ -8,8 +8,10 @@
     [Parameter, EditorRequired]
     public ProjectionProgramStep Step { get; set; } = default!;
 
-    private string? DisplayText => Step.ParameterValues
-        .Where(x => x.Parameter?.Name == KioskTemplateConstants.ParameterNames.Text)
-        .Select(x => x.Value)
-        .FirstOrDefault();
+    // Live values for data-bound parameters, from the runner. Null renders fixed/fallback text only.
+    [Parameter]
+    public IReadOnlyDictionary<Guid, string>? BoundValues { get; set; }
+
+    // Rendered with @, so Razor encodes it: bound text is never treated as markup.
+    private string? DisplayText => ProjectionStepValues.Get(Step, KioskTemplateConstants.ParameterNames.Text, BoundValues);
 }

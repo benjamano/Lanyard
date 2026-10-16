@@ -1,4 +1,5 @@
-﻿using Lanyard.Application.SignalR;
+﻿using Lanyard.Application.Services.Projection.Bindings;
+using Lanyard.Application.SignalR;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.Models;
@@ -240,6 +241,13 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
 
             Guid programId = stepsList.First().ProjectionProgramId;
 
+            string? bindingError = await ValidateBindingsAsync(ctx, stepsList);
+
+            if (bindingError is not null)
+            {
+                return Result<bool>.Fail(bindingError);
+            }
+
             List<ProjectionProgramStep> existingSteps = await ctx.ProjectionProgramSteps
                 .Include(x => x.ParameterValues)
                 .Where(x => x.ProjectionProgramId == programId && x.IsActive)
@@ -283,6 +291,57 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
         }
     }
 
+    /// <summary>
+    /// A binding must name a data source that exists and sit on a parameter that can show it (only
+    /// Show Text's Text today). Blank keys are cleared to "fixed value" first. Returns the error to
+    /// show, or null when every binding is fine.
+    /// </summary>
+    private static async Task<string?> ValidateBindingsAsync(ApplicationDbContext ctx, List<ProjectionProgramStep> steps)
+    {
+        List<ProjectionProgramParameterValue> bound = [];
+
+        foreach (ProjectionProgramParameterValue value in steps.SelectMany(s => s.ParameterValues))
+        {
+            if (string.IsNullOrWhiteSpace(value.BindingKey))
+            {
+                value.BindingKey = null;
+                continue;
+            }
+
+            if (ProjectionBindingCatalogue.Find(value.BindingKey) is null)
+            {
+                return $"Unknown data source \"{value.BindingKey}\".";
+            }
+
+            bound.Add(value);
+        }
+
+        if (bound.Count == 0)
+        {
+            return null;
+        }
+
+        HashSet<Guid> parameterIds = [.. bound.Select(v => v.ParameterId)];
+
+        Dictionary<Guid, (string ParameterName, string? TemplateName)> parameters = await ctx.ProjectionProgramStepTemplateParameters
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(p => parameterIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, TemplateName = p.Template!.Name })
+            .ToDictionaryAsync(p => p.Id, p => (p.Name, (string?)p.TemplateName));
+
+        foreach (ProjectionProgramParameterValue value in bound)
+        {
+            if (!parameters.TryGetValue(value.ParameterId, out (string ParameterName, string? TemplateName) parameter)
+                || !ProjectionBindingCatalogue.IsBindable(parameter.TemplateName, parameter.ParameterName))
+            {
+                return "Live data can only be used for a Show Text step's text.";
+            }
+        }
+
+        return null;
+    }
+
     private async Task UpdateParameterValues(ProjectionProgramStep existingStep, List<ProjectionProgramParameterValue> newParameterValues)
     {
         await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
@@ -294,6 +353,7 @@ public class ProjectionProgramService(IDbContextFactory<ApplicationDbContext> fa
             if (existingValuesDict.TryGetValue(newValue.ParameterId, out ProjectionProgramParameterValue? existingValue))
             {
                 existingValue.Value = newValue.Value;
+                existingValue.BindingKey = newValue.BindingKey;
             }
             else
             {
