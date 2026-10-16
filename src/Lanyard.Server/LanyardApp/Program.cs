@@ -230,6 +230,7 @@ builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 

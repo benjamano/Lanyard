@@ -704,7 +704,11 @@
       "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
       "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
       "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
-      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
+      "Managers and Admins can now be told when a kiosk stops working. A new Kiosks section in Account Management > Notifications has two settings: Kiosk offline, and Kiosk needs attention.",
+      "Kiosk offline: when a kiosk has stopped responding for about 6 and a half minutes, the Managers of its location and the company's Admins get a notification and an email. They hear again when it's back online, with how long it was down. A kiosk that's shut down or restarted only counts once it has stayed off that long, so updates and restarts don't trigger it.",
+      "Kiosk needs attention: when a kiosk has had a problem for 10 minutes, such as low disk space, high CPU, its lighting (DMX) device not connected or its offline videos not fitting, you get a notification, by push only unless you switch email on. It only tells you again if a different problem appears.",
+      "Alerts only start during the location's opening hours (Manage > Companies & Locations), so a kiosk switched off overnight doesn't wake anyone. If it's still down when the location opens, the alert goes out then. At a location without opening hours, alerts can come at any time. A kiosk with no location set alerts Admins only, at any time."
     ]
   }
 ]
