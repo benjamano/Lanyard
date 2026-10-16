@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule. Get suggestions for who should fill an open shift.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -704,7 +704,11 @@
       "Automation rules have two new triggers: \"Time remaining drops below\" runs when a game's countdown passes a number of seconds, and \"Score reaches\" runs when one player, or a team's total, reaches a score. Each runs once per game.",
       "A score rule can watch any team or just Red or Green, so you can, for example, start a red lighting scene when the red team reaches 20,000.",
       "A new automation trigger, \"Game ends with a winner\", runs when a team game ends with one team ahead on total score, for any team or only Red or Green. Make one rule per team to play each team's own celebration scene. A draw or a game without teams doesn't run it.",
-      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading."
+      "Fixed editing an automation rule always showing \"Game Status Change\" as its trigger type, whatever the rule really used. Saving didn't change the rule, but it was misleading.",
+      "Open shifts on the rota now have a Suggest staff button. It lists who at your location could work the shift, best first: people who need another shift or more hours for their contract, then anyone who asked for it, then people who usually work that position, then whoever has the fewest hours that week.",
+      "Each suggestion shows the person's hours that week before and after the shift, why they're a good fit, and anything to watch out for: going over their weekly maximum, an undecided day-off request, or less than 11 hours' rest before or after another shift.",
+      "People who can't work the shift are listed under Not suggested with the reason, such as already working then, booked off that day, not working that position, or missing its required training.",
+      "Press Use to put someone on the shift, then Save. It goes on the rota as a draft like any other change, and nobody is told until you publish. Suggestions are only shown to managers."
     ]
   }
 ]

@@ -946,7 +946,7 @@ public class RotaService(
     private static string JoinCourseNames(List<TrainingGap> gaps) =>
         gaps.Count == 1 ? gaps[0].CourseName : $"{string.Join(", ", gaps.Take(gaps.Count - 1).Select(x => x.CourseName))} and {gaps[^1].CourseName}";
 
-    private static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
+    internal static string? ValidateTimes(DateTime startUtc, DateTime endUtc, int breakMinutes)
     {
         if (endUtc <= startUtc)
         {
