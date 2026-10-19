@@ -1,3 +1,4 @@
+using Lanyard.Client.Security;
 using Lanyard.Shared.AudioClips;
 using Lanyard.Shared.DTO;
 using Microsoft.Extensions.Logging;
@@ -64,7 +65,8 @@ public sealed class AudioClipCacheService : IAudioClipCacheService, IDisposable
 
         string? downloaded = await DownloadAsync(command.ClipId, cachedPath, ct);
 
-        return downloaded ?? BuildApiUrl(command.ClipId);
+        // Streamed by Media Foundation, which can't send headers: a media token goes in the URL.
+        return downloaded ?? await KioskMediaTokens.AppendToAsync(BuildApiUrl(command.ClipId));
     }
 
     public async Task PrefetchAsync(IEnumerable<AudioClipPlayCommand> commands, CancellationToken ct)
@@ -109,7 +111,10 @@ public sealed class AudioClipCacheService : IAudioClipCacheService, IDisposable
 
             _logger.LogInformation("ClipCache: Downloading clip {ClipId}", clipId);
 
-            using HttpResponseMessage response = await _httpClient.GetAsync(BuildApiUrl(clipId), HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            using HttpRequestMessage request = new(HttpMethod.Get, BuildApiUrl(clipId));
+            KioskCredentials.ApplyTo(request);
+
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             response.EnsureSuccessStatusCode();
 
             await using (FileStream fs = File.Create(tempPath))
@@ -182,14 +187,8 @@ public sealed class AudioClipCacheService : IAudioClipCacheService, IDisposable
     {
         string apiUrl = Environment.GetEnvironmentVariable("LANYARD_SERVER_URL")! + "/api";
 
-        // In the query string, as for songs, because a streamed fallback goes straight to Media
-        // Foundation, which can't send headers.
-        string? sharedSecret = Environment.GetEnvironmentVariable("LANYARD_CLIENT_SHARED_SECRET");
-        string secretQuery = string.IsNullOrWhiteSpace(sharedSecret)
-            ? string.Empty
-            : $"?secret={Uri.EscapeDataString(sharedSecret)}";
-
-        return $"{apiUrl}/audioclips/{clipId}/audio{secretQuery}";
+        // No credential here, as for songs: a header when downloading, a media token when streaming.
+        return $"{apiUrl}/audioclips/{clipId}/audio";
     }
 
     private void TouchQuietly(string path)

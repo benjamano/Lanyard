@@ -43,19 +43,28 @@ else
             <FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween"
                          VerticalAlignment="VerticalAlignment.Center" Wrap="true">
                 <FluentText As="TextTag.H4" Size="TextSize.Size500">@course.Name</FluentText>
-                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
-                              OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/courses/{CourseId}"))">
-                    Back to editor
-                </FluentButton>
+                <FluentStack Orientation="Orientation.Horizontal" Width="auto" HorizontalGap="8px" Wrap="true">
+                    @* Shows managers the same tour new staff get on their first course. *@
+                    <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+                                  OnClick="@(() => runnerRef?.StartWalkthrough())">
+                        How this works
+                    </FluentButton>
+                    <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                                  OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/courses/{CourseId}"))">
+                        Back to editor
+                    </FluentButton>
+                </FluentStack>
             </FluentStack>
         </FluentStack>
 
-        <CourseWizardRunner Course="course" EnableScrollGate="false"
+        <CourseWizardRunner @ref="runnerRef" Course="course" EnableScrollGate="false"
                              GradeQuizAsync="GradeLocallyAsync" OnPassed="HandlePreviewPassedAsync" />
     </FluentCard>
 }
 
 @code {
+    private CourseWizardRunner? runnerRef;
+
     [Parameter]
     public Guid CourseId { get; set; }
 
