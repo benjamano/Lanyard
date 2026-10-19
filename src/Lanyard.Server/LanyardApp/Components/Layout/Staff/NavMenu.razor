@@ -259,6 +259,10 @@
         <FluentNav Margin="Margin.Top2" Density="NavDensity.Medium" Padding="@Padding.All3">
             @if (_isAuthenticated)
             {
+                <FluentNavItem Href="/help" IconRest="@(new Icons.Regular.Size20.QuestionCircle())"
+                               IconActive="@(new Icons.Filled.Size20.QuestionCircle())">
+                    Help
+                </FluentNavItem>
                 <FluentNavItem Href="/account/manage" IconRest="@(new Icons.Regular.Size20.Person())"
                                IconActive="@(new Icons.Filled.Size20.Person())">
                     @_displayName

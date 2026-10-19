@@ -11,10 +11,7 @@
     <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center"
                  Wrap="true">
         <FluentText As="TextTag.H4" Size="TextSize.Size500">Training Dashboard</FluentText>
-        <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
-                      OnClick="@(() => _navigationManager.NavigateTo($"/manage/training/help?topic={HelpTopicForActiveTab}"))">
-            Help
-        </FluentButton>
+        <HelpButton AreaKey="@HelpRegistry.ManageTraining" Topic="@HelpTopicForActiveTab" />
     </FluentStack>
 
     <div class="training-tabs-host">

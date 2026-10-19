@@ -1,0 +1,14 @@
+@* The "Help" button on an area's pages. Topic picks the tab the help page opens on; an unknown or
+   null topic opens the first one. *@
+
+<FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.QuestionCircle())"
+              Title="@($"Help with {HelpRegistry.Get(AreaKey).Title}")"
+              OnClick="@(() => _navigationManager.NavigateTo(HelpRegistry.Get(AreaKey).UrlFor(Topic)))">
+    Help
+</FluentButton>
+
+@code {
+    [Parameter, EditorRequired] public string AreaKey { get; set; } = string.Empty;
+
+    [Parameter] public string? Topic { get; set; }
+}

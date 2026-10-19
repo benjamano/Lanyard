@@ -1,0 +1,12 @@
+@* A titled block inside a help tab. Keeps headings and spacing the same across every help page. *@
+
+<FluentStack Orientation="Orientation.Vertical" VerticalGap="8px">
+    <FluentText As="TextTag.H5" Size="TextSize.Size400" Weight="TextWeight.Semibold">@Title</FluentText>
+    @ChildContent
+</FluentStack>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
