@@ -4,7 +4,9 @@ public enum ComplianceSectionKind
 {
     OverdueTraining = 1,
     ExpiredDocuments = 2,
-    ExpiringDocuments = 3
+    ExpiringDocuments = 3,
+    OverduePolicies = 4,
+    OutstandingPolicies = 5
 }
 
 // What to count. LocationId is only honoured for Admins (null = every location in their company);
@@ -29,7 +31,9 @@ public record ComplianceSummary(
     int ExpiryWindowDays,
     ComplianceSection OverdueTraining,
     ComplianceSection ExpiredDocuments,
-    ComplianceSection ExpiringDocuments)
+    ComplianceSection ExpiringDocuments,
+    ComplianceSection OverduePolicies,
+    ComplianceSection OutstandingPolicies)
 {
-    public IEnumerable<ComplianceSection> Sections => [OverdueTraining, ExpiredDocuments, ExpiringDocuments];
+    public IEnumerable<ComplianceSection> Sections => [OverdueTraining, ExpiredDocuments, ExpiringDocuments, OverduePolicies, OutstandingPolicies];
 }

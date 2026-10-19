@@ -5,7 +5,7 @@
 @inject IComplianceService _complianceService
 @inject ICompanyFeatureService _companyFeatureService
 
-@* Overdue training and expired/expiring staff documents for the viewing Admin or Manager. Nobody
+@* Overdue training, expired/expiring staff documents and unread policies for the viewing Admin or Manager. Nobody
    else - a plain staff member, or a signed-out kiosk screen - gets anything but a short note, and
    the data is never even requested for them. Names and counts only; no file links. *@
 
@@ -38,7 +38,7 @@
                 @if (VisibleSections.Count == 0)
                 {
                     <div class="sw-empty">
-                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Training and onboarding are switched off</FluentBadge>
+                        <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Subtle">Training, onboarding and policies are switched off</FluentBadge>
                     </div>
                 }
                 else if (VisibleSections.All(x => x.ItemCount == 0))

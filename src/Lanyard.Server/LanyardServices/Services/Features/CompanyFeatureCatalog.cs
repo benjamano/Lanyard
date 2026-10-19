@@ -26,7 +26,7 @@ public static class CompanyFeatureCatalog
     ];
 
     // The module a dashboard widget belongs to, or null for widgets every company gets.
-    // ComplianceSummary is deliberately null: it spans Training and Onboarding, so it hides each of
+    // ComplianceSummary is deliberately null: it spans Training, Onboarding and Policies, so it hides each of
     // its sections itself rather than the whole widget disappearing for want of one module.
     public static CompanyFeature? ForWidget(WidgetType type) => type switch
     {

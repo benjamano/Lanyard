@@ -15,6 +15,8 @@ public static class ComplianceDisplay
         ComplianceSectionKind.OverdueTraining => "Overdue training",
         ComplianceSectionKind.ExpiredDocuments => "Expired documents",
         ComplianceSectionKind.ExpiringDocuments => "Documents expiring soon",
+        ComplianceSectionKind.OverduePolicies => "Overdue policies",
+        ComplianceSectionKind.OutstandingPolicies => "Policies to read",
         _ => kind.ToString()
     };
 
@@ -23,6 +25,8 @@ public static class ComplianceDisplay
         ComplianceSectionKind.OverdueTraining => "overdue-training",
         ComplianceSectionKind.ExpiredDocuments => "expired-documents",
         ComplianceSectionKind.ExpiringDocuments => "expiring-documents",
+        ComplianceSectionKind.OverduePolicies => "overdue-policies",
+        ComplianceSectionKind.OutstandingPolicies => "outstanding-policies",
         _ => string.Empty
     };
 
@@ -31,16 +35,22 @@ public static class ComplianceDisplay
         "overdue-training" => ComplianceSectionKind.OverdueTraining,
         "expired-documents" => ComplianceSectionKind.ExpiredDocuments,
         "expiring-documents" => ComplianceSectionKind.ExpiringDocuments,
+        "overdue-policies" => ComplianceSectionKind.OverduePolicies,
+        "outstanding-policies" => ComplianceSectionKind.OutstandingPolicies,
         _ => null
     };
 
     // The module a section belongs to; a section is hidden when the company doesn't have it.
-    public static CompanyFeature Feature(ComplianceSectionKind kind) =>
-        kind == ComplianceSectionKind.OverdueTraining ? CompanyFeature.Training : CompanyFeature.Onboarding;
+    public static CompanyFeature Feature(ComplianceSectionKind kind) => kind switch
+    {
+        ComplianceSectionKind.OverdueTraining => CompanyFeature.Training,
+        ComplianceSectionKind.OverduePolicies or ComplianceSectionKind.OutstandingPolicies => CompanyFeature.Policies,
+        _ => CompanyFeature.Onboarding
+    };
 
     public static BadgeColor Color(ComplianceSectionKind kind, int count) => count == 0
         ? BadgeColor.Success
-        : kind == ComplianceSectionKind.ExpiringDocuments ? BadgeColor.Warning : BadgeColor.Danger;
+        : kind is ComplianceSectionKind.ExpiringDocuments or ComplianceSectionKind.OutstandingPolicies ? BadgeColor.Warning : BadgeColor.Danger;
 
     public static string PageUrl(ComplianceSectionKind kind, int days, int? locationId)
     {
@@ -49,7 +59,10 @@ public static class ComplianceDisplay
         return locationId is int id ? $"{url}&location={id}" : url;
     }
 
-    public static string PersonUrl(ComplianceSectionKind kind, string userId) => kind == ComplianceSectionKind.OverdueTraining
-        ? "/manage/training?tab=by-person"
-        : $"/manage/users/{Uri.EscapeDataString(userId)}?tab=documents";
+    public static string PersonUrl(ComplianceSectionKind kind, string userId) => kind switch
+    {
+        ComplianceSectionKind.OverdueTraining => "/manage/training?tab=by-person",
+        ComplianceSectionKind.OverduePolicies or ComplianceSectionKind.OutstandingPolicies => $"/manage/users/{Uri.EscapeDataString(userId)}?tab=policies",
+        _ => $"/manage/users/{Uri.EscapeDataString(userId)}?tab=documents"
+    };
 }

@@ -17,7 +17,7 @@
     <div class="compliance-intro">
         <h1 class="compliance-title">Compliance</h1>
         <p class="compliance-subtitle">
-            Overdue training, and staff documents that have expired or expire soon@(_summary is null ? "." : $", for {_summary.LocationName}.")
+            Overdue training, staff documents that have expired or expire soon, and policies still to be read@(_summary is null ? "." : $", for {_summary.LocationName}.")
         </p>
     </div>
 
@@ -48,7 +48,7 @@
     else if (OrderedSections.Count == 0)
     {
         <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
-            Training and onboarding are both switched off for your company, so there's nothing to show here.
+            Training, onboarding and policies are all switched off for your company, so there's nothing to show here.
         </FluentMessageBar>
     }
     else

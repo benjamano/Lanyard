@@ -1,9 +1,11 @@
+using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Locations;
 using Lanyard.Application.Services.Tenancy;
 using Lanyard.Infrastructure.DataAccess;
 using Lanyard.Infrastructure.DTO;
 using Lanyard.Infrastructure.DTO.Compliance;
 using Lanyard.Infrastructure.DTO.Scheduling;
+using Lanyard.Infrastructure.Enum;
 using Lanyard.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -126,8 +128,11 @@ public class ComplianceService(
 
             ComplianceSection overdue = await GetOverdueTrainingAsync(ctx, companyId, staffIds, locationIds, includeUnplacedAssignments, namesById, now, query.MaxRowsPerSection, cancellationToken);
             (ComplianceSection expired, ComplianceSection expiring) = await GetDocumentSectionsAsync(ctx, companyId, staffIds, namesById, today, query.ExpiryWindowDays, query.MaxRowsPerSection, cancellationToken);
+            (ComplianceSection overduePolicies, ComplianceSection outstandingPolicies) = await GetPolicySectionsAsync(
+                ctx, companyId, staffIds, requestedLocationId is null ? null : locationIds, namesById, now, query.MaxRowsPerSection, cancellationToken);
 
-            return Result<ComplianceSummary>.Ok(new ComplianceSummary(requestedLocationId, locationName, query.ExpiryWindowDays, overdue, expired, expiring));
+            return Result<ComplianceSummary>.Ok(new ComplianceSummary(requestedLocationId, locationName, query.ExpiryWindowDays,
+                overdue, expired, expiring, overduePolicies, outstandingPolicies));
         }
         catch (Exception ex)
         {
@@ -221,6 +226,59 @@ public class ComplianceService(
                 BuildSection(ComplianceSectionKind.ExpiringDocuments, expiring, maxRows));
     }
 
+    // Policies someone still has to acknowledge. One query against PolicyAssignment, whose
+    // OutstandingFrom/DueDate are kept current by PolicyRequirementCalculator, so there's no
+    // per-person work here. Looking at one location: that location's own policies plus the
+    // company-wide ones, for that location's staff. locationIds null = the whole company.
+    private static async Task<(ComplianceSection Overdue, ComplianceSection Outstanding)> GetPolicySectionsAsync(
+        ApplicationDbContext ctx,
+        int companyId,
+        List<string> staffIds,
+        List<int>? locationIds,
+        Dictionary<string, string> namesById,
+        DateTime now,
+        int? maxRows,
+        CancellationToken cancellationToken)
+    {
+        if (!await CompanyFeatureQueries.IsEnabledForCompanyAsync(ctx, companyId, CompanyFeature.Policies, cancellationToken))
+        {
+            return (BuildSection(ComplianceSectionKind.OverduePolicies, [], maxRows), BuildSection(ComplianceSectionKind.OutstandingPolicies, [], maxRows));
+        }
+
+        bool allLocations = locationIds is null;
+        List<int> scopedLocationIds = locationIds ?? [];
+
+        var outstanding = await ctx.PolicyAssignments
+            .AsNoTracking()
+            .TagWithCallSite()
+            .Where(x => x.IsActive
+                && x.CompanyId == companyId
+                && x.OutstandingFrom != null
+                && x.OutstandingFrom <= now
+                && x.Policy!.IsActive
+                && staffIds.Contains(x.UserId)
+                && (allLocations || x.Policy.LocationId == null || scopedLocationIds.Contains(x.Policy.LocationId.Value)))
+            .Select(x => new { x.UserId, PolicyName = x.Policy!.Name, x.DueDate })
+            .ToListAsync(cancellationToken);
+
+        List<ComplianceRow> overdueRows = [.. outstanding
+            .Where(x => x.DueDate is DateTime due && due < now)
+            .Select(x => new ComplianceRow(x.UserId, namesById.GetValueOrDefault(x.UserId, "Unknown"),
+                $"{x.PolicyName} · {DescribeOverdue(now.Date, x.DueDate!.Value.Date)}", x.DueDate!.Value))
+            .OrderBy(x => x.Date)
+            .ThenBy(x => x.DisplayName)];
+
+        List<ComplianceRow> toReadRows = [.. outstanding
+            .Where(x => x.DueDate is not DateTime due || due >= now)
+            .Select(x => new ComplianceRow(x.UserId, namesById.GetValueOrDefault(x.UserId, "Unknown"),
+                $"{x.PolicyName} · {DescribeDue(now.Date, (x.DueDate ?? now).Date)}", x.DueDate ?? now))
+            .OrderBy(x => x.Date)
+            .ThenBy(x => x.DisplayName)];
+
+        return (BuildSection(ComplianceSectionKind.OverduePolicies, overdueRows, maxRows),
+                BuildSection(ComplianceSectionKind.OutstandingPolicies, toReadRows, maxRows));
+    }
+
     private static ComplianceRow ToRow(DocumentFact document, Dictionary<string, string> namesById, DateTime today) =>
         new(document.UserId,
             namesById.GetValueOrDefault(document.UserId, "Unknown"),
@@ -244,6 +302,18 @@ public class ComplianceService(
             <= 0 => "due today",
             1 => "1 day overdue",
             _ => $"{days} days overdue"
+        };
+    }
+
+    private static string DescribeDue(DateTime today, DateTime dueDate)
+    {
+        int days = (int)(dueDate - today).TotalDays;
+
+        return days switch
+        {
+            <= 0 => "due today",
+            1 => "due tomorrow",
+            _ => $"due in {days} days"
         };
     }
 
