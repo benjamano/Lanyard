@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.Authentication;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,12 +15,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Lanyard.Tests.Integration;
 
-// The offline manifest and media endpoints through the real pipeline, behind the kiosk shared secret.
+// The offline manifest and media endpoints through the real pipeline, behind the kiosk's own credential.
 [TestClass]
 public class KioskOfflineIntegrationTests
 {
-    private const string SharedSecret = "integration-test-kiosk-secret";
-
     private CustomWebApplicationFactory _baseFactory = null!;
     private WebApplicationFactory<Program> _factory = null!;
 
@@ -27,7 +26,7 @@ public class KioskOfflineIntegrationTests
     public void Setup()
     {
         _baseFactory = new CustomWebApplicationFactory();
-        _factory = _baseFactory.WithWebHostBuilder(builder => builder.UseSetting("Clients:SharedSecret", SharedSecret));
+        _factory = _baseFactory.WithWebHostBuilder(_ => { });
         _factory.CreateClient();
     }
 
@@ -71,14 +70,23 @@ public class KioskOfflineIntegrationTests
         return (clientId, video.Id, other.Id);
     }
 
-    private async Task<HttpResponseMessage> GetAsync(string path, string? secret, RangeHeaderValue? range = null)
+    // The seeded kiosk's own credential.
+    private async Task<string> TokenForAsync(Guid clientId)
+    {
+        Result<IssuedKioskCredential> issued = await _factory.Services.GetRequiredService<IKioskCredentialService>()
+            .IssueAsync(clientId, Lanyard.Infrastructure.Enum.ClientCredentialSource.Pairing, null);
+
+        return issued.Data!.RawToken;
+    }
+
+    private async Task<HttpResponseMessage> GetAsync(string path, string? token, RangeHeaderValue? range = null)
     {
         HttpClient http = _factory.CreateClient();
         using HttpRequestMessage request = new(HttpMethod.Get, "/" + path);
 
-        if (secret is not null)
+        if (token is not null)
         {
-            request.Headers.Add(ClientConnectionQuery.SecretHeader, secret);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
         request.Headers.Range = range;
@@ -87,21 +95,21 @@ public class KioskOfflineIntegrationTests
     }
 
     [TestMethod]
-    public async Task Manifest_WithoutTheSecret_IsRejected()
+    public async Task Manifest_WithoutACredential_IsRejected()
     {
         var (clientId, _, _) = await SeedAsync();
 
-        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Manifest(clientId), secret: null);
+        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Manifest(clientId), token: null);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [TestMethod]
-    public async Task Manifest_WithTheSecret_ListsTheKiosksVideo()
+    public async Task Manifest_WithItsCredential_ListsTheKiosksVideo()
     {
         var (clientId, videoFileId, _) = await SeedAsync();
 
-        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Manifest(clientId), SharedSecret);
+        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Manifest(clientId), await TokenForAsync(clientId));
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Result<KioskOfflineManifestDTO>? body = await response.Content.ReadFromJsonAsync<Result<KioskOfflineManifestDTO>>();
@@ -115,7 +123,7 @@ public class KioskOfflineIntegrationTests
     {
         var (clientId, videoFileId, _) = await SeedAsync();
 
-        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, videoFileId), SharedSecret, new RangeHeaderValue(0, 9));
+        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, videoFileId), await TokenForAsync(clientId), new RangeHeaderValue(0, 9));
 
         Assert.AreEqual(HttpStatusCode.PartialContent, response.StatusCode);
         Assert.AreEqual(10, (await response.Content.ReadAsByteArrayAsync()).Length);
@@ -126,17 +134,17 @@ public class KioskOfflineIntegrationTests
     {
         var (clientId, _, otherFileId) = await SeedAsync();
 
-        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, otherFileId), SharedSecret);
+        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, otherFileId), await TokenForAsync(clientId));
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [TestMethod]
-    public async Task Media_WithoutTheSecret_IsRejected()
+    public async Task Media_WithoutACredential_IsRejected()
     {
         var (clientId, videoFileId, _) = await SeedAsync();
 
-        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, videoFileId), secret: null);
+        HttpResponseMessage response = await GetAsync(KioskOfflineRoutes.Media(clientId, videoFileId), token: null);
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }

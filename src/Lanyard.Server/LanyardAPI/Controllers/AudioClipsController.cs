@@ -14,15 +14,16 @@ namespace Lanyard.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class AudioClipsController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService, IClientSecretValidator clientSecretValidator) : ControllerBase
+public class AudioClipsController(IDbContextFactory<ApplicationDbContext> factory, IFileService fileService) : ControllerBase
 {
-    // The kiosk shared secret, or a signed-in user, as for songs (MusicController.GetAudioFile).
+    // A kiosk (its credential, or the media token in the URL it streams from) or a signed-in user,
+    // as for songs (MusicController.GetAudioFile). Either way the tenant filter keeps it to their company.
     [HttpGet("{id:guid}/audio")]
     public async Task<IActionResult> GetAudio(Guid id, CancellationToken cancellationToken)
     {
-        if (!ClientRequestAuthorization.IsAuthorized(HttpContext, clientSecretValidator))
+        if (await KioskRequestAuthorization.AuthorizeAsync(HttpContext) == KioskRequestAccess.Denied)
         {
-            return Unauthorized();
+            return Challenge(KioskAuthenticationDefaults.Scheme);
         }
 
         await using ApplicationDbContext ctx = await factory.CreateDbContextAsync(cancellationToken);
