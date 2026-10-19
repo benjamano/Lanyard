@@ -3775,6 +3775,53 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("UserErasureRecords");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.UserFeedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PagePath")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedUtc");
+
+                    b.HasIndex("UserId", "CreatedUtc");
+
+                    b.ToTable("UserFeedback");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserLocationMembership", b =>
                 {
                     b.Property<int>("Id")
@@ -3856,6 +3903,12 @@ namespace Lanyard.Infrastructure.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FeedbackPromptLastUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FeedbackPromptOptOut")
                         .HasColumnType("boolean");
 
                     b.Property<string>("FirstName")
@@ -5828,6 +5881,17 @@ namespace Lanyard.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.UserClockInPin", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.UserFeedback", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "User")
                         .WithMany()

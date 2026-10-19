@@ -146,6 +146,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ChatBlock> ChatBlocks { get; set; }
         public DbSet<ChatReport> ChatReports { get; set; }
         public DbSet<ChatSuspension> ChatSuspensions { get; set; }
+        public DbSet<UserFeedback> UserFeedback { get; set; }
 
         // Connection string used only when the context is created without configured options -
         // i.e. by design-time tooling (dotnet ef migrations/database update). It reads
@@ -917,6 +918,18 @@ namespace Lanyard.Infrastructure.DataAccess
 
             modelBuilder.Entity<ChatSuspension>()
                 .HasIndex(x => new { x.UserId, x.CompanyId });
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => x.CreatedUtc);
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasIndex(x => new { x.UserId, x.CreatedUtc });
+
+            modelBuilder.Entity<UserFeedback>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<ChatSuspension>()
                 .HasOne(x => x.User)

@@ -28,6 +28,11 @@ namespace Lanyard.Infrastructure.Models
         public DateTime? InvitedDate { get; set; }
         public DateTime? PasswordSetDate { get; set; }
 
+        // The occasional "how would you rate Lanyard?" prompt: when it last appeared (shown,
+        // dismissed or answered), and whether they've asked never to see it again.
+        public DateTime? FeedbackPromptLastUtc { get; set; }
+        public bool FeedbackPromptOptOut { get; set; }
+
         public string GetName()
         {
             return FirstName + " " + LastName;
