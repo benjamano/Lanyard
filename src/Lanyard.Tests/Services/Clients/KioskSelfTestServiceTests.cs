@@ -204,6 +204,25 @@ public class KioskSelfTestServiceTests
     }
 
     [TestMethod]
+    public async Task RunAsync_ServerCancelsASlowKiosk_IsATimeoutNotAnOldKiosk()
+    {
+        // What SignalR really does when the server's token cancels a client result: the call
+        // fails with a HubException, the same type as "the kiosk has no handler".
+        Harness h = Build();
+        h.Service.ReplyTimeout = TimeSpan.FromMilliseconds(50);
+        h.Proxy.Setup(p => p.InvokeCoreAsync<KioskSelfTestResultDTO>(ClientHubMethods.RunSelfTest, It.IsAny<object?[]>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, object?[] _, CancellationToken token) =>
+            {
+                await Task.Delay(Timeout.Infinite, token).ContinueWith(_ => { });
+                throw new HubException("Invocation canceled by the server.");
+            });
+
+        Result<KioskSelfTestRunView> result = await h.Service.RunAsync(h.ClientId, false);
+
+        Assert.AreEqual(ClientSelfTestStatus.TimedOut, result.Data!.Status);
+    }
+
+    [TestMethod]
     public async Task RunAsync_KioskTooOld_SaysHowToUpdate()
     {
         Harness h = Build(kioskThrows: new HubException("Client didn't provide a result."));

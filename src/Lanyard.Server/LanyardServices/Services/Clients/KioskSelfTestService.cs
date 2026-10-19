@@ -38,7 +38,7 @@ public class KioskSelfTestService(
     ILogger<KioskSelfTestService> logger) : IKioskSelfTestService
 {
     // The kiosk gives each group of checks at most 8s and runs them side by side.
-    public static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan DefaultReplyTimeout = TimeSpan.FromSeconds(20);
 
     public const int MaxHistory = 50;
 
@@ -53,6 +53,9 @@ public class KioskSelfTestService(
     private readonly ISecurityService _securityService = securityService;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<KioskSelfTestService> _logger = logger;
+
+    /// <summary>How long to wait for the kiosk's checklist. Settable so tests needn't wait 20 seconds.</summary>
+    public TimeSpan ReplyTimeout { get; set; } = DefaultReplyTimeout;
 
     public async Task<Result<KioskSelfTestRunView>> RunAsync(Guid clientId, bool flashDmx)
     {
@@ -185,7 +188,10 @@ public class KioskSelfTestService(
                 reply = await _hubContext.Clients.Client(connectionId)
                     .InvokeAsync<KioskSelfTestResultDTO>(ClientHubMethods.RunSelfTest, request, timeout.Token);
             }
-            catch (OperationCanceledException)
+            // When our token cancels a client result, SignalR fails the call with a HubException
+            // ("Invocation canceled by the server"), not an OperationCanceledException, so it has
+            // to be told apart from a kiosk with no handler by the token, not the exception type.
+            catch (Exception ex) when (ex is OperationCanceledException || (ex is HubException && timeout.IsCancellationRequested))
             {
                 _logger.LogWarning("Client {ClientId} did not finish self-test {RunId} in time", run.ClientId, run.Id);
                 Finish(run, ClientSelfTestStatus.TimedOut, $"The kiosk didn't reply within {ReplyTimeout.TotalSeconds:0} seconds. It may be frozen; try restarting it.");

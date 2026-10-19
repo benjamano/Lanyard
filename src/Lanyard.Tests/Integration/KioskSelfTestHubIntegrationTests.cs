@@ -67,7 +67,7 @@ public class KioskSelfTestHubIntegrationTests
 
     // The test host has no signed-in user, so its scopes are the system tenant the service refuses.
     // Stand in an Admin of the kiosk's company; everything else is the real container's.
-    private static async Task<Result<KioskSelfTestRunView>> RunAsAdminAsync(WebApplicationFactory<Program> factory, Client client, bool flashDmx)
+    private static async Task<Result<KioskSelfTestRunView>> RunAsAdminAsync(WebApplicationFactory<Program> factory, Client client, bool flashDmx, TimeSpan? replyTimeout = null)
     {
         using IServiceScope scope = factory.Services.CreateScope();
 
@@ -79,6 +79,8 @@ public class KioskSelfTestHubIntegrationTests
             scope.ServiceProvider,
             (ITenantContext)new KioskSelfTestServiceTests.TestTenant(client.CompanyId),
             security.Object);
+
+        service.ReplyTimeout = replyTimeout ?? KioskSelfTestService.DefaultReplyTimeout;
 
         return await service.RunAsync(client.Id, flashDmx);
     }
@@ -148,5 +150,29 @@ public class KioskSelfTestHubIntegrationTests
         Assert.IsTrue(result.IsSuccess, result.Error);
         Assert.AreEqual(ClientSelfTestStatus.KioskTooOld, result.Data!.Status);
         StringAssert.Contains(result.Data.Error, "older Lanyard Client");
+    }
+
+    [TestMethod]
+    public async Task RunSelfTest_AKioskThatNeverAnswers_IsStoredAsTimedOut()
+    {
+        // Found driving the real UI: SignalR fails a cancelled client result with a HubException,
+        // which read as "kiosk too old" until the service checked its own token.
+        await using WebApplicationFactory<Program> factory = CreateFactory();
+        Guid clientId = Guid.NewGuid();
+        await using HubConnection kiosk = CreateKioskConnection(factory, clientId);
+
+        kiosk.On<KioskSelfTestRequestDTO, KioskSelfTestResultDTO>(ClientHubMethods.RunSelfTest, async request =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10));
+            return new KioskSelfTestResultDTO { RunId = request.RunId };
+        });
+
+        await kiosk.StartAsync();
+        Client client = await WaitUntilConnectedAsync(factory, clientId);
+
+        Result<KioskSelfTestRunView> result = await RunAsAdminAsync(factory, client, flashDmx: false, replyTimeout: TimeSpan.FromSeconds(1));
+
+        Assert.IsTrue(result.IsSuccess, result.Error);
+        Assert.AreEqual(ClientSelfTestStatus.TimedOut, result.Data!.Status);
     }
 }
