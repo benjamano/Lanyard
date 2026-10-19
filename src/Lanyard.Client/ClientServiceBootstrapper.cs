@@ -7,6 +7,7 @@ using Lanyard.Client.ProjectionPrograms;
 using Lanyard.Client.ProjectionPrograms.Offline;
 using Lanyard.Client.RemoteRestart;
 using Lanyard.Client.RestartScheduler;
+using Lanyard.Client.SelfTest;
 using Lanyard.Client.SignalR;
 using Lanyard.Client.VideoPublisher;
 using Lanyard.Shared.Diagnostics;
@@ -96,6 +97,12 @@ public static class ClientServiceBootstrapper
         services.AddSingleton(logLineBuffer);
         services.AddSingleton<ClientDiagnosticsController>();
         services.AddSingleton<KioskHealthReporter>();
+        services.AddSingleton<IAudioEndpointProvider, AudioEndpointProvider>();
+        services.AddSingleton<ITonePlayer, TonePlayer>();
+        services.AddSingleton<ICaptureDeviceCatalog, CaptureDeviceCatalog>();
+        services.AddSingleton<IWebView2RuntimeProbe, WebView2RuntimeProbe>();
+        services.AddSingleton<KioskSelfTestRunner>();
+        services.AddSingleton<KioskSelfTestController>();
 
         return services.BuildServiceProvider();
     }
@@ -114,7 +121,8 @@ public static class ClientServiceBootstrapper
             provider.GetRequiredService<RemoteRestartController>().Register,
             provider.GetRequiredService<UpdateController>().Register,
             provider.GetRequiredService<AudioSettingsController>().Register,
-            provider.GetRequiredService<ClientDiagnosticsController>().Register
+            provider.GetRequiredService<ClientDiagnosticsController>().Register,
+            provider.GetRequiredService<KioskSelfTestController>().Register
         ];
     }
 }
