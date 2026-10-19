@@ -116,4 +116,21 @@ public record KioskBackOnlinePayload(int LocationId, Guid ClientId, string Clien
 public record KioskNeedsAttentionPayload(int LocationId, Guid ClientId, string ClientName, string? LocationName, List<string> Reasons, string Url)
     : NotificationPayload(LocationId);
 
+public enum PolicyReminderKind
+{
+    // Newly asked to read it: a first version, or they've just joined the audience.
+    New = 0,
+
+    // They'd acknowledged it before; a new version or the re-read schedule needs them again.
+    ReadAgain = 1,
+
+    // Past the date they were asked to acknowledge it by.
+    Overdue = 2
+}
+
+// Someone has a policy to read and acknowledge. DueDate is already in venue time ("30 Oct").
+// LocationId is the policy's location, or for a company-wide policy one of the person's own.
+public record PolicyReminderPayload(int LocationId, Guid PolicyId, string PolicyName, int VersionNumber, string DueDate, PolicyReminderKind Kind)
+    : NotificationPayload(LocationId);
+
 public record NotificationJob(string UserId, NotificationTopic Topic, NotificationPayload Payload);

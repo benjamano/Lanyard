@@ -9,7 +9,8 @@ public enum NotificationTopicGroup
     TimeOff,
     Chat,
     Announcements,
-    Kiosks
+    Kiosks,
+    Policies
 }
 
 // How one topic is described in Notification settings, and what someone gets before they have
@@ -81,7 +82,12 @@ public static class NotificationTopics
         new(NotificationTopic.KioskOffline, NotificationTopicGroup.Kiosks,
             "Kiosk offline", "A kiosk at your location stops responding, and when it's back.", DefaultPush: true, DefaultEmail: true, ManagerOnly: true),
         new(NotificationTopic.KioskNeedsAttention, NotificationTopicGroup.Kiosks,
-            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true)
+            "Kiosk needs attention", "A kiosk has had a problem for 10 minutes, such as low disk space or its lighting not connected.", DefaultPush: true, DefaultEmail: false, ManagerOnly: true),
+
+        // Sent when a policy is published, when it's overdue, and weekly after that (three at most).
+        // Acknowledging a policy is a requirement, so both channels are on.
+        new(NotificationTopic.PolicyAcknowledgement, NotificationTopicGroup.Policies,
+            "Policies to read", "You've been asked to read and acknowledge a policy, or one is overdue.", DefaultPush: true, DefaultEmail: true, ManagerOnly: false)
     ];
 
     public static NotificationTopicInfo Get(NotificationTopic topic) =>
@@ -103,6 +109,7 @@ public static class NotificationTopics
         NotificationTopicGroup.Chat => "Chat",
         NotificationTopicGroup.Announcements => "Announcements",
         NotificationTopicGroup.Kiosks => "Kiosks",
+        NotificationTopicGroup.Policies => "Policies",
         _ => group.ToString()
     };
 }

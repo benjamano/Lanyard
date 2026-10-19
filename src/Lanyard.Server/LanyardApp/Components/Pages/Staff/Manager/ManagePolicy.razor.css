@@ -58,6 +58,22 @@
     max-width: 560px;
 }
 
+.policy-remind {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground2);
+}
+
+.policy-remind .policy-muted {
+    flex: 1 1 260px;
+}
+
 .policy-filters {
     display: flex;
     flex-wrap: wrap;
