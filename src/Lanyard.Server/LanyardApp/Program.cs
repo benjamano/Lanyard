@@ -326,6 +326,7 @@ builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOpt
 builder.Services.AddSingleton<IDemoDirectory, DemoDirectory>();
 builder.Services.AddScoped<IDemoGuard, DemoGuard>();
 builder.Services.AddScoped<Lanyard.App.Components.Demo.DemoBrandingState>();
+builder.Services.AddScoped<Lanyard.App.Components.Notifications.CornerPromptCoordinator>();
 builder.Services.AddScoped<IWebsiteBrandingService, WebsiteBrandingService>();
 // Fetches websites demo visitors paste in: public internet only (PublicAddressGuard), briefly.
 builder.Services.AddHttpClient(WebsiteBrandingService.HttpClientName, client =>

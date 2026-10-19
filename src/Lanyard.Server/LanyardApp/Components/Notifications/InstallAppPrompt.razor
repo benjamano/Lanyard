@@ -7,6 +7,7 @@
 @inject IPushSender PushSender
 @inject IPushSubscriptionService PushSubscriptionService
 @inject TimeProvider TimeProvider
+@inject CornerPromptCoordinator Corner
 @inject ILogger<InstallAppPrompt> Logger
 
 @* "Add <company> to your Home Screen" for phone users in a browser tab, and "Turn on notifications"
@@ -142,7 +143,7 @@
 
             InstallPromptKind decided = InstallPromptRules.Decide(promptState, TimeProvider.GetUtcNow().UtcDateTime);
 
-            if (decided == InstallPromptKind.None)
+            if (decided == InstallPromptKind.None || !Corner.TryTake(CornerOwner))
             {
                 return;
             }
@@ -170,6 +171,14 @@
         }
     }
 
+    private const string CornerOwner = "install";
+
+    private void Hide()
+    {
+        kind = InstallPromptKind.None;
+        Corner.Release(CornerOwner);
+    }
+
     private async Task InstallAsync()
     {
         try
@@ -185,7 +194,7 @@
         {
         }
 
-        kind = InstallPromptKind.None;
+        Hide();
     }
 
     [JSInvokable]
@@ -197,13 +206,13 @@
         await PushTurnOn.HandleResultAsync(permission, subscription, userId, deviceReport ?? new DeviceReport(null, 0, false), PushSubscriptionService, _toastService);
 
         isSaving = false;
-        kind = InstallPromptKind.None;
+        Hide();
         StateHasChanged();
     }
 
     private void ChooseTopics()
     {
-        kind = InstallPromptKind.None;
+        Hide();
         _navigationManager.NavigateTo("/account/manage#notifications");
     }
 
@@ -220,7 +229,7 @@
     private async Task SetAsideAsync(string function, double? days)
     {
         string key = SnoozeKey;
-        kind = InstallPromptKind.None;
+        Hide();
 
         try
         {
