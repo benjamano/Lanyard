@@ -13,6 +13,7 @@
 | Clock-in / shift / rota records | `6 years` | Employment/payroll record-keeping obligations |
 | Client device records (IP/MAC) | While the device is in service + `6 months` | Operations & troubleshooting |
 | Application/security logs | `90 days` | Security monitoring; data minimisation |
+| Kiosk hardware self-test results | `90 days` | Diagnosing venue hardware; links to the Admin who ran it |
 | Chat messages | `2 years` from sending (pinned posts: until unpinned) | Workplace messaging; data minimisation |
 | Chat reports | `2 years` after they were resolved | Evidence for disputes and repeat behaviour |
 
@@ -151,6 +152,14 @@ same rules: **held in server memory only, for 10 minutes**, only the latest capt
 written to the database, file storage or telemetry, only visible to Admins of the kiosk's own
 company, and each request is recorded in the server log with the Admin's name. Kiosks only capture
 when asked; nothing is captured in the background.
+
+An Admin can also run a hardware self-test on a kiosk (Manage > Clients > Self-test): the kiosk
+checks its speakers, DMX interface, laser tag network card and WebView2 runtime and reports a
+pass/fail checklist. The results describe hardware only (device names, versions and error
+messages), so unlike log tails and screenshots they **are stored**, with a link to the Admin who
+ran the test, and **purged after 90 days** (`Kiosks:SelfTest:RetentionDays`). They are deleted with
+the kiosk, only visible to Admins of the kiosk's own company, and GDPR erasure clears the link to
+the Admin while keeping the result.
 
 ## Required follow-up work (tracked separately)
 

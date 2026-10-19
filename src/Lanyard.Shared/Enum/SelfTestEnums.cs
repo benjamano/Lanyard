@@ -36,3 +36,19 @@ public enum SelfTestFlashResult
     SkippedOutputLive = 3,
     SkippedPortNotOpen = 4
 }
+
+/// <summary>How a self-test request ended, as stored on the server. Never renumber.</summary>
+public enum ClientSelfTestStatus
+{
+    // The kiosk replied with its checklist.
+    Completed = 1,
+
+    // The kiosk didn't reply in time.
+    TimedOut = 2,
+
+    // The kiosk runs a client from before the self-test.
+    KioskTooOld = 3,
+
+    // Anything else: a bad reply, or an error sending the request.
+    Failed = 4
+}

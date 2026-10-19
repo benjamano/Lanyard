@@ -1313,6 +1313,89 @@ namespace Lanyard.Infrastructure.Migrations
                     b.ToTable("ClientReleases");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientSelfTestCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId");
+
+                    b.ToTable("ClientSelfTestChecks");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientSelfTestRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("FlashRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("RequestedAtUtc");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.HasIndex("ClientId", "RequestedAtUtc");
+
+                    b.ToTable("ClientSelfTestRuns");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClockInTerminal", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4780,6 +4863,40 @@ namespace Lanyard.Infrastructure.Migrations
                     b.Navigation("ProjectionProgram");
                 });
 
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientSelfTestCheck", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.ClientSelfTestRun", "Run")
+                        .WithMany("Checks")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientSelfTestRun", b =>
+                {
+                    b.HasOne("Lanyard.Infrastructure.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Lanyard.Infrastructure.Models.UserProfile", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("RequestedByUser");
+                });
+
             modelBuilder.Entity("Lanyard.Infrastructure.Models.ClockInTerminal", b =>
                 {
                     b.HasOne("Lanyard.Infrastructure.Models.Location", "Location")
@@ -5882,6 +5999,11 @@ namespace Lanyard.Infrastructure.Migrations
             modelBuilder.Entity("Lanyard.Infrastructure.Models.AutomationRuleExecution", b =>
                 {
                     b.Navigation("ActionExecutions");
+                });
+
+            modelBuilder.Entity("Lanyard.Infrastructure.Models.ClientSelfTestRun", b =>
+                {
+                    b.Navigation("Checks");
                 });
 
             modelBuilder.Entity("Lanyard.Infrastructure.Models.Company", b =>
