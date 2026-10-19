@@ -652,7 +652,7 @@
   {
     "version": "1.4.16",
     "releaseDate": "2026-10-13",
-    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule, and play audio clips such as closing-time calls over the music.",
+    "summary": "Require training before staff can pick up a position's shifts, see on the rota who is missing it, and assign it automatically. Add your shifts to Google, Apple or Outlook calendar. Kiosks recover by themselves when the server or internet comes back. Plan each venue's music by time of day with the new music schedule, play audio clips such as closing-time calls over the music, and run a hardware self-test on a kiosk.",
     "details": [
       "Positions can now require training. Under Manage > Rota > Positions, open a position's settings and tick the courses someone must pass before they can work it, such as Laser Arena Marshalling for Marshals.",
       "Staff can't pick up an open shift, or take one in a swap, for a position until they've passed its required courses. For a course that has to be renewed, the pass must still be in date on the day of the shift.",
@@ -726,7 +726,10 @@
       "Last game winner shows the winning team and its total (or the top gun in a game without teams) of the most recent game today. Today's top score shows the best single score of the day. Opening hours today uses the hours set for the kiosk's location.",
       "Each live text has fallback text, shown when there's no data yet (for example before the first game of the day) and on a kiosk that's playing offline. Leave it blank to use a sensible default. The editor shows what the screen would say right now.",
       "Game data comes from the kiosk's location. A kiosk with no location set uses all of your company's games, and shows the fallback for opening hours.",
-      "A kiosk now refuses to play a projection program that belongs to a different company."
+      "A kiosk now refuses to play a projection program that belongs to a different company.",
+      "Added a kiosk self-test. On Manage > Clients, the new Self-test button checks a kiosk's speakers, DMX lighting interface, laser tag network card and projection display, and shows a pass/fail checklist with what to do about anything that failed. It's for setting up a new venue PC or working out why one is misbehaving.",
+      "The self-test plays a short beep so someone by the kiosk can hear the speakers work, but skips it while music or an audio clip is playing. It can also flash every light for a second, but only if you ask and no lighting scene is running.",
+      "Self-test results are kept for 90 days, so you can compare a kiosk with how it was last week. The kiosk's Health tab shows when it was last tested."
     ]
   }
 ]
