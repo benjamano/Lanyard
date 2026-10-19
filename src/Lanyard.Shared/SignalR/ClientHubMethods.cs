@@ -39,4 +39,10 @@ public static class ClientHubMethods
     /// Empty for a kiosk still on the old shared secret.
     /// </summary>
     public const string IssueMediaToken = "IssueMediaToken";
+
+    /// <summary>
+    /// Server to kiosk, client result: takes a <c>KioskSelfTestRequestDTO</c>, checks the kiosk's
+    /// audio, DMX, packet capture and WebView2, and returns a <c>KioskSelfTestResultDTO</c>.
+    /// </summary>
+    public const string RunSelfTest = "RunSelfTest";
 }

@@ -183,6 +183,43 @@ public class ClientService(IDbContextFactory<ApplicationDbContext> factory,
         }
     }
 
+    public async Task<Result<bool>> RecordDisconnectAsync(Guid clientId, string connectionId, DateTime disconnectedAtUtc)
+    {
+        try
+        {
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync();
+
+            // One conditional UPDATE, so the check and the write can't be split by a reconnect.
+            if (ctx.Database.IsRelational())
+            {
+                int updated = await ctx.Clients
+                    .Where(x => x.Id == clientId && x.MostRecentConnectionId == connectionId)
+                    .ExecuteUpdateAsync(x => x.SetProperty(c => c.LastDisconnectDate, disconnectedAtUtc));
+
+                return Result<bool>.Ok(updated > 0);
+            }
+
+            // EF InMemory (tests) has no ExecuteUpdate. A tracked change still only writes the
+            // one column.
+            Client? client = await ctx.Clients.FirstOrDefaultAsync(x => x.Id == clientId);
+
+            if (client == null || client.MostRecentConnectionId != connectionId)
+            {
+                return Result<bool>.Ok(false);
+            }
+
+            client.LastDisconnectDate = disconnectedAtUtc;
+            await ctx.SaveChangesAsync();
+
+            return Result<bool>.Ok(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording the disconnect of client {ClientId}", clientId);
+            return Result<bool>.Fail(ex.Message);
+        }
+    }
+
     // Wraps the process-static hub connection set behind an overridable member so tests can
     // substitute it, mirroring IsClientConnected on the automation action executors. The set
     // is private static readonly on the hub with no InternalsVisibleTo, so there is no other

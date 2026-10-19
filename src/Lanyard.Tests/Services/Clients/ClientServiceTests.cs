@@ -1674,5 +1674,72 @@ namespace Lanyard.Tests.Services.Clients
             Assert.AreEqual("Renamed", saved.Name);
             Assert.AreEqual(ownLocationId, saved.LocationId, "A stale copy must not wipe the location.");
         }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_StampsOnlyTheDisconnectTime_WhileTheConnectionIsCurrent()
+        {
+            var options = GetInMemoryOptions();
+            var lastUpdate = new DateTime(2026, 10, 16, 9, 0, 0, DateTimeKind.Utc);
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-1", LastUpdateDate = lastUpdate };
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(client);
+                await ctx.SaveChangesAsync();
+            }
+
+            var disconnectedAt = new DateTime(2026, 10, 16, 9, 5, 0, DateTimeKind.Utc);
+            Result<bool> result = await GetService(options).RecordDisconnectAsync(client.Id, "connection-1", disconnectedAt);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsTrue(result.Data);
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Client saved = await ctx.Clients.SingleAsync(x => x.Id == client.Id);
+                Assert.AreEqual(disconnectedAt, saved.LastDisconnectDate);
+                Assert.AreEqual("connection-1", saved.MostRecentConnectionId);
+                Assert.AreEqual(lastUpdate, saved.LastUpdateDate);
+            }
+        }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_LeavesAReconnectedClientAlone()
+        {
+            // The old socket's disconnect fires after the kiosk has reconnected. Before, the hub
+            // wrote back the whole row it had loaded, putting the dead connection ID back and
+            // clearing the reconnect's LastUpdateDate, so a live kiosk looked disconnected.
+            var options = GetInMemoryOptions();
+            var reconnectedAt = new DateTime(2026, 10, 16, 9, 0, 1, DateTimeKind.Utc);
+            var client = new Client { Id = Guid.NewGuid(), Name = "Kiosk", MostRecentConnectionId = "connection-2", LastUpdateDate = reconnectedAt };
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                ctx.Clients.Add(client);
+                await ctx.SaveChangesAsync();
+            }
+
+            Result<bool> result = await GetService(options).RecordDisconnectAsync(client.Id, "connection-1", reconnectedAt.AddSeconds(1));
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsFalse(result.Data);
+
+            await using (var ctx = new ApplicationDbContext(options))
+            {
+                Client saved = await ctx.Clients.SingleAsync(x => x.Id == client.Id);
+                Assert.AreEqual("connection-2", saved.MostRecentConnectionId);
+                Assert.AreEqual(reconnectedAt, saved.LastUpdateDate);
+                Assert.IsNull(saved.LastDisconnectDate);
+            }
+        }
+
+        [TestMethod]
+        public async Task RecordDisconnectAsync_IsFalseForAnUnknownClient()
+        {
+            Result<bool> result = await GetService(GetInMemoryOptions()).RecordDisconnectAsync(Guid.NewGuid(), "connection-1", DateTime.UtcNow);
+
+            Assert.IsTrue(result.IsSuccess, result.Error);
+            Assert.IsFalse(result.Data);
+        }
     }
 }

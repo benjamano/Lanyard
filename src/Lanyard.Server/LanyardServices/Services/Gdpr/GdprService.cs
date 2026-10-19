@@ -268,6 +268,15 @@ public class GdprService : IGdprService
                 audioClipPlay.TriggeredByUserId = null;
             }
 
+            List<ClientSelfTestRun> selfTestRuns = await ctx.ClientSelfTestRuns
+                .Where(x => x.RequestedByUserId == userId)
+                .ToListAsync();
+
+            foreach (ClientSelfTestRun selfTestRun in selfTestRuns)
+            {
+                selfTestRun.RequestedByUserId = null;
+            }
+
             List<AudioClipSchedule> audioClipSchedules = await ctx.AudioClipSchedules
                 .Where(x => x.CreatedByUserId == userId)
                 .ToListAsync();
@@ -320,6 +329,15 @@ public class GdprService : IGdprService
             foreach (UserClockInPin pin in pinsSetByUser)
             {
                 pin.SetByUserId = null;
+            }
+
+            List<StaffAvailability> availabilitySetByUser = await ctx.StaffAvailabilities
+                .Where(x => x.UpdatedByUserId == userId)
+                .ToListAsync();
+
+            foreach (StaffAvailability availability in availabilitySetByUser)
+            {
+                availability.UpdatedByUserId = null;
             }
 
             // Decisions and records this person made on other people's time off keep their
@@ -425,6 +443,10 @@ public class GdprService : IGdprService
                 .ToListAsync();
 
             ctx.TimeOffAllowances.RemoveRange(personalAllowances);
+
+            // When they said they can and can't work is theirs too. Every company's - the whole
+            // account is going.
+            ctx.StaffAvailabilities.RemoveRange(await ctx.StaffAvailabilities.IgnoreQueryFilters().Where(x => x.UserId == userId).ToListAsync());
 
             // Their devices and notification choices exist only for them.
             ctx.PushSubscriptions.RemoveRange(await ctx.PushSubscriptions.Where(x => x.UserId == userId).ToListAsync());

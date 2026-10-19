@@ -65,6 +65,8 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<ClientProjectionSettings> ClientProjectionSettings { get; set; }
         public DbSet<ClientHealthSnapshot> ClientHealthSnapshots { get; set; }
         public DbSet<ClientCredential> ClientCredentials { get; set; }
+        public DbSet<ClientSelfTestRun> ClientSelfTestRuns { get; set; }
+        public DbSet<ClientSelfTestCheck> ClientSelfTestChecks { get; set; }
         public DbSet<ProjectionProgram> ProjectionPrograms { get; set; }
         public DbSet<ProjectionProgramStep> ProjectionProgramSteps { get; set; }
         public DbSet<ClientAvailableScreen> ClientAvailableScreens { get; set; }
@@ -119,6 +121,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<StaffPositionRequiredCourse> StaffPositionRequiredCourses { get; set; }
         public DbSet<ContractRequirement> ContractRequirements { get; set; }
         public DbSet<UserClockInPin> UserClockInPins { get; set; }
+        public DbSet<StaffAvailability> StaffAvailabilities { get; set; }
         public DbSet<CompanySchedulingSettings> CompanySchedulingSettings { get; set; }
         public DbSet<Shift> Shifts { get; set; }
         public DbSet<ClockInTerminal> ClockInTerminals { get; set; }
@@ -210,6 +213,30 @@ namespace Lanyard.Infrastructure.DataAccess
                 entity.HasIndex(x => new { x.ClientId, x.IsActive });
             });
 
+            modelBuilder.Entity<ClientSelfTestRun>(entity =>
+            {
+                // A kiosk's self-test history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Cleared by GDPR erasure (GdprService), like AudioClipPlay.TriggeredByUserId.
+                entity.HasOne(x => x.RequestedByUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.RequestedByUserId);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // The retention sweep deletes by age across every kiosk.
+                entity.HasIndex(x => x.RequestedAtUtc);
+
+                entity.HasMany(x => x.Checks)
+                    .WithOne(x => x.Run)
+                    .HasForeignKey(x => x.RunId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             modelBuilder.Entity<DashboardWidget>()
                 .HasDiscriminator(x => x.Type)
                 .HasValue<DashboardWidget>(WidgetType.Unknown)
@@ -230,7 +257,8 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasValue<MyShiftsWidget>(WidgetType.MyShifts)
                 .HasValue<WhoIsOnTodayWidget>(WidgetType.WhoIsOnToday)
                 .HasValue<PendingTimeOffWidget>(WidgetType.PendingTimeOff)
-                .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary);
+                .HasValue<ComplianceSummaryWidget>(WidgetType.ComplianceSummary)
+                .HasValue<DemandStaffingWidget>(WidgetType.DemandStaffing);
 
             // Sibling widget types share a ClientId property in the TPH table; pin the
             // column names so EF's automatic uniquification cannot rename existing columns.
@@ -295,6 +323,15 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ComplianceSummaryWidget>()
                 .Property(x => x.ExpiryWindowDays)
                 .HasColumnName("ComplianceSummaryWidget_ExpiryWindowDays");
+
+            // LocationId is shared with the widgets above, so pinned the same way.
+            modelBuilder.Entity<DemandStaffingWidget>()
+                .Property(x => x.LocationId)
+                .HasColumnName("DemandStaffingWidget_LocationId");
+
+            modelBuilder.Entity<DemandStaffingWidget>()
+                .Property(x => x.RangeDays)
+                .HasColumnName("DemandStaffingWidget_RangeDays");
 
             // A song may be backed by an uploaded file. When that file row is hard-deleted,
             // null the link rather than cascade-deleting the song (it is soft-deleted instead).
@@ -487,6 +524,16 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<UserClockInPin>()
                 .HasIndex(x => x.UserId)
                 .IsUnique();
+
+            // The person's own record (like their leave requests), so it goes with the account.
+            modelBuilder.Entity<StaffAvailability>()
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<StaffAvailability>()
+                .HasIndex(x => new { x.UserId, x.DayOfWeek });
 
             modelBuilder.Entity<CompanySchedulingSettings>()
                 .HasIndex(x => x.CompanyId)
@@ -1030,6 +1077,7 @@ namespace Lanyard.Infrastructure.DataAccess
             modelBuilder.Entity<ClientProjectionSettings>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientHealthSnapshot>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientCredential>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
+            modelBuilder.Entity<ClientSelfTestCheck>().HasQueryFilter(x => TenantFilterDisabled || x.Run!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableScreen>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableVideoDevice>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);
             modelBuilder.Entity<ClientAvailableNetworkInterface>().HasQueryFilter(x => TenantFilterDisabled || x.Client!.CompanyId == TenantCompanyId);

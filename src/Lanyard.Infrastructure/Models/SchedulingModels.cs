@@ -108,6 +108,49 @@ namespace Lanyard.Infrastructure.Models
             || MinHoursPerWeek is not null || MaxHoursPerWeek is not null;
     }
 
+    // When someone can't work, or would rather work, as a weekly pattern: "can't do Tuesdays after
+    // 17:00", "prefer Saturday mornings". Rota suggestions rule out an Unavailable time and favour a
+    // Preferred one; putting someone on an Unavailable time by hand only warns. No rows means they
+    // haven't said - never "unavailable".
+    //
+    // Times are venue-local wall-clock (RotaTime). An EndTime at or before StartTime runs past
+    // midnight into the next day, the same convention as LocationOpeningHours; equal times mean the
+    // whole day. EffectiveFrom/EffectiveTo bound it to some dates ("from January I can't do
+    // Mondays"), judged on the day the window starts. Company-owned because staff move between a
+    // company's locations but their availability doesn't change with the site; it's the person's
+    // own record, so GDPR erasure deletes it.
+    public class StaffAvailability : ICompanyOwned
+    {
+        public Guid Id { get; set; }
+
+        public required int CompanyId { get; set; }
+        public Company? Company { get; set; }
+
+        public required string UserId { get; set; }
+        public UserProfile? User { get; set; }
+
+        public DayOfWeek DayOfWeek { get; set; }
+        public TimeOnly StartTime { get; set; }
+        public TimeOnly EndTime { get; set; }
+
+        public AvailabilityKind Kind { get; set; }
+
+        public string? Notes { get; set; }
+
+        public DateOnly? EffectiveFrom { get; set; }
+        public DateOnly? EffectiveTo { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        public DateTime UpdateDate { get; set; }
+
+        // Null when the person set it themselves (or whoever did has since been erased); otherwise
+        // the manager who did.
+        public string? UpdatedByUserId { get; set; }
+
+        public bool IsAllDay => StartTime == EndTime;
+    }
+
     // The PIN a staff member types on the clock-in terminal. The terminal identifies the person
     // by name first (they tap themselves on today's roster), so the PIN only has to verify that
     // one user - it never has to be unique or looked up, which is why a salted Identity
