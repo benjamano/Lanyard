@@ -34,6 +34,9 @@ internal sealed class PolicyWorld
 
     public Mock<IFileService> Files { get; } = new();
 
+    // Every notification the policy services would have sent.
+    public RecordingNotificationDispatcher Notifications { get; } = new();
+
     // What PolicyService asked the file service to upload, in order.
     public List<FileUploadOptions> UploadOptions { get; } = [];
 
@@ -113,8 +116,11 @@ internal sealed class PolicyWorld
     public PolicyAudienceService Audience() =>
         new(SchedulingTestHelpers.GetFactory(Options), Clock, NullLogger<PolicyAudienceService>.Instance);
 
+    public PolicyReminderService Reminders(ITenantContext? tenant = null) =>
+        new(SchedulingTestHelpers.GetFactory(Options), tenant ?? Tenant(), Notifications, Clock, NullLogger<PolicyReminderService>.Instance);
+
     public PolicyService Policies(ITenantContext? tenant = null) =>
-        new(SchedulingTestHelpers.GetFactory(Options), tenant ?? Tenant(), Files.Object, Audience(), Clock, NullLogger<PolicyService>.Instance);
+        new(SchedulingTestHelpers.GetFactory(Options), tenant ?? Tenant(), Files.Object, Audience(), Reminders(tenant), Clock, NullLogger<PolicyService>.Instance);
 
     public PolicyAcknowledgementService Acknowledgements(ITenantContext? tenant = null) =>
         new(SchedulingTestHelpers.GetFactory(Options), tenant ?? Tenant(), Clock, NullLogger<PolicyAcknowledgementService>.Instance);

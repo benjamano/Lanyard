@@ -147,6 +147,8 @@ builder.Services.AddScoped<IComplianceService, ComplianceService>();
 builder.Services.AddScoped<IPolicyAudienceService, PolicyAudienceService>();
 builder.Services.AddScoped<IPolicyService, PolicyService>();
 builder.Services.AddScoped<IPolicyAcknowledgementService, PolicyAcknowledgementService>();
+builder.Services.AddScoped<IPolicyReminderService, PolicyReminderService>();
+builder.Services.AddHostedService<PolicyReminderHostedService>();
 builder.Services.AddScoped<IOnboardingService, OnboardingService>();
 builder.Services.AddScoped<IStaffPositionService, StaffPositionService>();
 builder.Services.AddScoped<IRequiredTrainingService, RequiredTrainingService>();

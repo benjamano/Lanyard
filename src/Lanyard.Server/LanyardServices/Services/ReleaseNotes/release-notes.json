@@ -742,7 +742,10 @@
       "Open a policy to read it, tick \"I have read and understood\" and press Acknowledge. On a phone, the PDF opens full screen in your phone's own viewer.",
       "Each acknowledgement records the version, the time, and the device and internet address it came from, so there's a clear record of who agreed to what.",
       "A user's page (Manage > Users) has a new Policies tab showing where they stand on each policy and everything they've acknowledged. Only Admins see the device and internet address.",
-      "The Compliance page and the Compliance at a Glance dashboard widget now show Overdue policies and Policies to read: who still has to acknowledge which policy, and how many days late or how long they have left. Select a name to open that person's Policies tab."
+      "The Compliance page and the Compliance at a Glance dashboard widget now show Overdue policies and Policies to read: who still has to acknowledge which policy, and how many days late or how long they have left. Select a name to open that person's Policies tab.",
+      "Staff are notified by push and email when they're asked to read a policy, when it becomes overdue, and once a week after that, three times at most. Reminders are only sent between 8am and 8pm. Turn them on or off under Account Management > Notifications > Policies.",
+      "On a policy's page, Remind them now nudges everyone who still has to read it. Anyone reminded in the last day isn't sent another.",
+      "New starters and people who move location or change position are added to the right policies within the hour."
     ]
   }
 ]

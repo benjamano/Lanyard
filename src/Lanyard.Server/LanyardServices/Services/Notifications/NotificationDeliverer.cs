@@ -132,6 +132,8 @@ public class NotificationDeliverer(
 
                 _ when KioskNotices.Handles(job.Payload) => await SendNoticeAsync(user, KioskNotices.For(job.Payload), logoUrl, accent),
 
+                PolicyReminderPayload policy => await SendNoticeAsync(user, PolicyNotices.For(policy), logoUrl, accent),
+
                 _ => Result<bool>.Fail($"No delivery for {job.Payload.GetType().Name}.")
             };
 

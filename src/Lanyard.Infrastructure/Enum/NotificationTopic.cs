@@ -22,5 +22,6 @@ public enum NotificationTopic
     PinnedPost = 14,
     Announcement = 15,
     KioskOffline = 16,
-    KioskNeedsAttention = 17
+    KioskNeedsAttention = 17,
+    PolicyAcknowledgement = 18
 }

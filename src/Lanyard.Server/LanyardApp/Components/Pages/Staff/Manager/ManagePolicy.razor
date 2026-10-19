@@ -8,6 +8,7 @@
 @using Lanyard.Infrastructure.DTO.Policies
 
 @inject IPolicyService _policyService
+@inject IPolicyReminderService _reminderService
 @inject TimeProvider _timeProvider
 
 <PageTitle>@(_policy?.Name ?? "Policy")</PageTitle>
@@ -72,6 +73,19 @@
                     }
                     else
                     {
+                        @if (Count(PolicyStatus.Overdue) + Count(PolicyStatus.Outstanding) > 0)
+                        {
+                            <div class="policy-remind">
+                                <span class="policy-muted">
+                                    @(Count(PolicyStatus.Overdue) + Count(PolicyStatus.Outstanding)) still to read. Reminders go out automatically when it's published, when it's overdue, and weekly after that.
+                                </span>
+                                <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Alert())"
+                                              Disabled="@_isReminding" OnClick="RemindAsync">
+                                    @(_isReminding ? "Sending..." : "Remind them now")
+                                </FluentButton>
+                            </div>
+                        }
+
                         <div class="policy-filters" role="group" aria-label="Show">
                             @foreach ((PolicyStatus? status, string label) in Filters)
                             {
@@ -194,6 +208,7 @@
     private PolicyStatus? _filter;
     private bool _isSaving;
     private bool _publishOffered;
+    private bool _isReminding;
 
     private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -279,6 +294,32 @@
             _activeTab = "status";
             StateHasChanged();
         }
+    }
+
+    private async Task RemindAsync()
+    {
+        if (_scope is null)
+        {
+            return;
+        }
+
+        _isReminding = true;
+        Result<int> result = await _reminderService.RemindOutstandingAsync(PolicyId, _scope);
+        _isReminding = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The reminders couldn't be sent.");
+            return;
+        }
+
+        // Anyone reminded in the last day is left alone, so a second press doesn't nag.
+        _toastService.ShowInfo(result.Data switch
+        {
+            0 => "Everyone still to read it was reminded in the last day, so nobody was sent another.",
+            1 => "Reminder sent to 1 person.",
+            int sent => $"Reminder sent to {sent} people."
+        });
     }
 
     private async Task SaveAsync()

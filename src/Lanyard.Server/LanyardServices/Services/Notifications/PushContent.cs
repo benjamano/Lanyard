@@ -40,6 +40,7 @@ public static class PushContentBuilder
         _ when ChatNotices.Handles(payload) => FromChatNotice(payload),
         AnnouncementPayload announcement => Announcement(announcement),
         _ when KioskNotices.Handles(payload) => FromKioskNotice(payload),
+        PolicyReminderPayload policy => FromPolicyNotice(policy),
         _ => throw new ArgumentOutOfRangeException(nameof(payload), payload.GetType().Name, "No push wording for this payload.")
     };
 
@@ -130,6 +131,15 @@ public static class PushContentBuilder
 
         return new PushContent(title, body, $"/chat/{chat.ConversationId}", $"chat-{chat.ConversationId:N}", PushMessageUrgency.High, TimeSpan.FromDays(1),
             new ChatPushLine(chat.AuthorName, chat.Preview.Trim(), chat.IsGroup ? chat.ConversationName : null));
+    }
+
+    // One per policy, so a later reminder replaces the earlier one on the phone. Kept for a week:
+    // it's still worth seeing when the phone comes back online.
+    private static PushContent FromPolicyNotice(PolicyReminderPayload payload)
+    {
+        Notice notice = PolicyNotices.For(payload);
+
+        return new PushContent(notice.Title, string.Join(" ", notice.Lines), notice.Url, notice.Tag, PushMessageUrgency.Normal, TimeSpan.FromDays(7));
     }
 
     private static PushContent FromChatNotice(NotificationPayload payload)

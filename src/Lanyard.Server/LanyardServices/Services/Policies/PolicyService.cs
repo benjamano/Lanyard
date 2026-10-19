@@ -17,6 +17,7 @@ public class PolicyService(
     ITenantContext tenant,
     IFileService fileService,
     IPolicyAudienceService audience,
+    IPolicyReminderService reminders,
     TimeProvider timeProvider,
     ILogger<PolicyService> logger) : IPolicyService
 {
@@ -30,6 +31,7 @@ public class PolicyService(
     private readonly ITenantContext _tenant = tenant;
     private readonly IFileService _fileService = fileService;
     private readonly IPolicyAudienceService _audience = audience;
+    private readonly IPolicyReminderService _reminders = reminders;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<PolicyService> _logger = logger;
 
@@ -439,6 +441,14 @@ public class PolicyService(
                 policy.Id, versionNumber, userId, requiresReading);
 
             await SyncAudienceAsync(companyId, policy.Id, cancellationToken);
+
+            // Tell everyone who now has it to read straight away, rather than at the next sweep.
+            Result<int> reminded = await _reminders.SendDueRemindersAsync(policy.Id, cancellationToken);
+
+            if (!reminded.IsSuccess)
+            {
+                _logger.LogWarning("Policy {PolicyId} published but its notifications couldn't be sent yet: {Error}", policy.Id, reminded.Error);
+            }
 
             return Result<PolicyVersionInfo>.Ok(ToInfo(version, null));
         }
