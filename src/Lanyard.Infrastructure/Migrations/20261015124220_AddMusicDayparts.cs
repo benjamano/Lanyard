@@ -11,11 +11,10 @@ namespace Lanyard.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "LocationId",
-                table: "Clients",
-                type: "integer",
-                nullable: true);
+            // Clients.LocationId is also added by the kitchen-ordering branch (#113), and the
+            // staging database already has it from testing that branch. IF NOT EXISTS keeps
+            // this migration from crashing startup there; the result is the same either way.
+            migrationBuilder.Sql(@"ALTER TABLE ""Clients"" ADD COLUMN IF NOT EXISTS ""LocationId"" integer;");
 
             migrationBuilder.CreateTable(
                 name: "MusicSchedules",
@@ -73,10 +72,7 @@ namespace Lanyard.Infrastructure.Migrations
                         onDelete: ReferentialAction.Restrict);
                 });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Clients_LocationId",
-                table: "Clients",
-                column: "LocationId");
+            migrationBuilder.Sql(@"CREATE INDEX IF NOT EXISTS ""IX_Clients_LocationId"" ON ""Clients"" (""LocationId"");");
 
             migrationBuilder.CreateIndex(
                 name: "IX_MusicDayparts_MusicScheduleId",
@@ -94,13 +90,8 @@ namespace Lanyard.Infrastructure.Migrations
                 column: "LocationId",
                 unique: true);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Clients_Locations_LocationId",
-                table: "Clients",
-                column: "LocationId",
-                principalTable: "Locations",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+            migrationBuilder.Sql(@"ALTER TABLE ""Clients"" DROP CONSTRAINT IF EXISTS ""FK_Clients_Locations_LocationId"";");
+            migrationBuilder.Sql(@"ALTER TABLE ""Clients"" ADD CONSTRAINT ""FK_Clients_Locations_LocationId"" FOREIGN KEY (""LocationId"") REFERENCES ""Locations"" (""Id"") ON DELETE SET NULL;");
         }
 
         /// <inheritdoc />
