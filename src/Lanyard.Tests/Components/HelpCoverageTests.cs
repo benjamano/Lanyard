@@ -20,7 +20,7 @@ public class HelpCoverageTests
     private static readonly Dictionary<string, string> Exempt = new(StringComparer.OrdinalIgnoreCase)
     {
         ["/"] = "Home page - links out to everything else",
-        ["/help"] = "The help hub itself",
+        ["/help"] = "The hub and the help pages themselves (EveryHelpPage_IsRegistered checks those)",
         ["/login"] = "Sign-in flow",
         ["/login/verify-2fa"] = "Sign-in flow",
         ["/logout"] = "Sign-in flow",
@@ -95,6 +95,21 @@ public class HelpCoverageTests
             + string.Join('\n', offenders));
     }
 
+    // The "/help" exemption above would otherwise hide a help page nobody registered - one the hub
+    // and Help buttons can never reach.
+    [TestMethod]
+    public void EveryHelpPage_IsRegistered()
+    {
+        HashSet<string> registered = HelpRegistry.Areas.Select(a => a.Route).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        List<string> orphans = AllRoutes()
+            .Select(x => x.Route)
+            .Where(route => route.StartsWith("/help/", StringComparison.OrdinalIgnoreCase) && !registered.Contains(route))
+            .ToList();
+
+        Assert.IsTrue(orphans.Count == 0, "Help pages missing from HelpRegistry:\n" + string.Join('\n', orphans));
+    }
+
     [TestMethod]
     public void EveryHelpArea_PointsAtAPageWithMatchingAccessRules()
     {
@@ -155,9 +170,9 @@ public class HelpCoverageTests
     {
         HelpArea area = HelpRegistry.Get(HelpRegistry.ManageTraining);
 
-        Assert.AreEqual("/manage/training/help?topic=courses", area.UrlFor("courses"));
-        Assert.AreEqual("/manage/training/help", area.UrlFor("nonsense"));
-        Assert.AreEqual("/manage/training/help", area.UrlFor(null));
+        Assert.AreEqual("/help/training?topic=courses", area.UrlFor("courses"));
+        Assert.AreEqual("/help/training", area.UrlFor("nonsense"));
+        Assert.AreEqual("/help/training", area.UrlFor(null));
     }
 
     [TestMethod]

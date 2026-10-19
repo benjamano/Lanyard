@@ -18,14 +18,13 @@ public sealed record HelpTopic(string Key, string Title)
     public string TabId => $"help-{Key}";
 }
 
-// One help page. Route and the auth fields must match the page's own @page/[Authorize]/
+// One help page, always at /help/{Key}. The auth fields must match the page's own [Authorize]/
 // [RequiresFeature] - HelpCoverageTests checks they do, so the hub never offers a card that
 // leads to an access-denied page.
 public sealed record HelpArea(
     string Key,
     string Title,
     string Summary,
-    string Route,
     HelpAudience Audience,
     Func<Icon> Icon,
     IReadOnlyList<HelpTopic> Topics,
@@ -36,6 +35,8 @@ public sealed record HelpArea(
     string? Roles = null,
     CompanyFeature? Feature = null)
 {
+    public string Route => $"/help/{Key}";
+
     public bool IsVisibleTo(ClaimsPrincipal user, IReadOnlySet<CompanyFeature> hiddenFeatures)
     {
         if (user.Identity?.IsAuthenticated != true)
@@ -59,7 +60,7 @@ public sealed record HelpArea(
 // a page means adding its entry - see the help-pages skill.
 public static class HelpRegistry
 {
-    public const string ManageTraining = "manage-training";
+    public const string ManageTraining = "training";
     public const string MyTraining = "my-training";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
@@ -67,7 +68,6 @@ public static class HelpRegistry
         new(MyTraining,
             "My Training",
             "Taking the courses assigned to you, quizzes, retakes and certificates.",
-            "/training/help",
             HelpAudience.Everyone,
             () => new Icons.Regular.Size20.BookOpen(),
             [
@@ -81,7 +81,6 @@ public static class HelpRegistry
         new(ManageTraining,
             "Training",
             "Building courses, assigning them to staff and tracking who has completed what.",
-            "/manage/training/help",
             HelpAudience.Managers,
             () => new Icons.Regular.Size20.HatGraduation(),
             [

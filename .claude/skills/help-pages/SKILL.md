@@ -19,20 +19,20 @@ description: How LanyardApp's in-app help works. Covers the /help hub, HelpRegis
 | `HelpTab` / `HelpSection` / `HelpNote` | `Components/Help/` | Layout helpers for tab bodies: a 16px-gap stack, a titled H5 block, and a `FluentMessageBar` tip (Info by default, `Intent=` for Warning). |
 | `HelpButton` | `Components/Help/HelpButton.razor` | The Outline "Help" button for an area's pages. `<HelpButton AreaKey="@HelpRegistry.X" Topic="..." />`. An unknown topic opens the first tab. |
 | Nav | `Layout/Staff/NavMenu.razor` | The "Help" item next to the account link. Phones reach it through the hamburger menu. |
-| Tests | `src/Lanyard.Tests/Components/HelpCoverageTests.cs` | Coverage, matching access rules, unique keys and topics, and visibility filtering. |
+| Tests | `src/Lanyard.Tests/Components/HelpCoverageTests.cs` | Coverage, matching access rules (help pages live under `/help`, so this replaces the area-prefix `RequiresFeature` check), every `/help/*` page registered, unique keys and topics, and visibility filtering. |
 
 ## Adding help for an area
 
 1. **Register it.** Add a key constant and a `HelpArea` to `HelpRegistry.Areas`:
-   - `Route`: `<area-prefix>/help`, e.g. `/manage/rota/help` or `/rota/help`. Keeping it under the area's prefix means `RouteAuthorizationCoverageTests.PaidModulePages_CarryRequiresFeature` also checks it.
+   - The route is always `/help/{Key}` (`HelpArea.Route` derives it), e.g. `/help/rota` or `/help/my-shifts`. Pick a short, readable key, since it's in the URL.
    - `Roles` and `Feature`: **exactly** what the page will carry in `[Authorize(Roles=...)]` and `[RequiresFeature(...)]`. The test compares them as sets.
    - `Covers`: the route prefixes this help explains. Every routed page must match some area's `Covers` or the `Exempt` list in the test.
    - `Topics`: one `HelpTopic(key, title)` per tab. The first topic is the default tab.
    - `Audience` picks the hub group: Everyone, Managers or Admins.
 2. **Write the tabs** as components in `Components/Help/<Area>/<Topic>HelpTab.razor`, each wrapped in `<HelpTab>`. Training's manager help predates this layout and lives in `Components/Manager/Training/Help/`.
-3. **Add the page** next to the area's other pages:
+3. **Add the page** in `Components/Pages/Help/`:
    ```razor
-   @page "/manage/rota/help"
+   @page "/help/rota"
    @attribute [Authorize(Roles = "Admin,Manager")]
    @attribute [RequiresFeature(CompanyFeature.StaffScheduling)]
    @using Microsoft.AspNetCore.Authorization
