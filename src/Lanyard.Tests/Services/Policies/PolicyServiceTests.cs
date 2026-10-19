@@ -107,6 +107,23 @@ public class PolicyServiceTests
         Assert.IsFalse(result.IsSuccess);
     }
 
+    [TestMethod]
+    public async Task EditorOptions_AdminGetsEveryLocationAndCompanyWide_ManagerOnlyTheirOwn()
+    {
+        PolicyWorld w = await PolicyWorld.CreateAsync();
+
+        Result<PolicyEditorOptions> admin = await w.Policies().GetEditorOptionsAsync(w.AdminScope);
+        Result<PolicyEditorOptions> manager = await w.Policies().GetEditorOptionsAsync(w.ManagerAt(w.Wisbech));
+
+        Assert.IsTrue(admin.Data!.CanChooseCompanyWide);
+        CollectionAssert.AreEquivalent(new[] { w.Ipswich.Id, w.Wisbech.Id }, admin.Data.Locations.Select(x => x.Id).ToArray());
+        Assert.AreEqual(w.Kitchen.Id, admin.Data.Positions.Single().Id);
+
+        Assert.IsFalse(manager.Data!.CanChooseCompanyWide);
+        Assert.AreEqual(w.Wisbech.Id, manager.Data.Locations.Single().Id);
+        Assert.AreEqual(w.Wisbech.Id, manager.Data.DefaultLocationId);
+    }
+
     // ---- Publishing ----
 
     [TestMethod]

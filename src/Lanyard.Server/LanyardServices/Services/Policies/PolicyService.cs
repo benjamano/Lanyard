@@ -118,6 +118,46 @@ public class PolicyService(
         }
     }
 
+    public async Task<Result<PolicyEditorOptions>> GetEditorOptionsAsync(LocationScope scope, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (RefuseCaller<PolicyEditorOptions>(scope, out int companyId) is { } refused)
+            {
+                return refused;
+            }
+
+            await using ApplicationDbContext ctx = await _factory.CreateDbContextAsync(cancellationToken);
+
+            List<PolicyLocationOption> locations = await ctx.Locations
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.CompanyId == companyId && x.IsActive && (scope.IsAdmin || x.Id == scope.LocationId))
+                .OrderBy(x => x.Name)
+                .Select(x => new PolicyLocationOption(x.Id, x.Name))
+                .ToListAsync(cancellationToken);
+
+            List<PolicyPositionOption> positions = await ctx.StaffPositions
+                .AsNoTracking()
+                .TagWithCallSite()
+                .Where(x => x.CompanyId == companyId && x.IsActive)
+                .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+                .Select(x => new PolicyPositionOption(x.Id, x.Name))
+                .ToListAsync(cancellationToken);
+
+            int? defaultLocationId = scope.LocationId is int signedIn && locations.Any(x => x.Id == signedIn)
+                ? signedIn
+                : locations.FirstOrDefault()?.Id;
+
+            return Result<PolicyEditorOptions>.Ok(new PolicyEditorOptions(locations, positions, scope.IsAdmin, defaultLocationId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load policy form options");
+            return Result<PolicyEditorOptions>.Fail($"Failed to load locations and positions: {ex.Message}");
+        }
+    }
+
     public async Task<Result<PolicyDetail>> GetPolicyAsync(Guid policyId, LocationScope scope, CancellationToken cancellationToken = default)
     {
         try

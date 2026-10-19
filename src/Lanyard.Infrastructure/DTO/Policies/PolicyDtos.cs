@@ -100,3 +100,15 @@ public record PolicyAcknowledgementRecord(
     string StatementText,
     string? IpAddress,
     string? DeviceLabel);
+
+public record PolicyLocationOption(int Id, string Name);
+
+public record PolicyPositionOption(Guid Id, string Name);
+
+// What the create/settings form may offer this person: an Admin can pick any of the company's
+// locations or the whole company; a Manager only their own location.
+public record PolicyEditorOptions(
+    IReadOnlyList<PolicyLocationOption> Locations,
+    IReadOnlyList<PolicyPositionOption> Positions,
+    bool CanChooseCompanyWide,
+    int? DefaultLocationId);

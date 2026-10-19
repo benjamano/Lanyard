@@ -1,0 +1,341 @@
+@page "/manage/policies/{PolicyId:guid}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Manager")]
+@attribute [RequiresFeature(CompanyFeature.Policies)]
+
+@using Lanyard.App.Components.Dialogs
+@using Lanyard.App.Components.Policies
+@using Lanyard.Application.Services.Policies
+@using Lanyard.Infrastructure.DTO.Policies
+
+@inject IPolicyService _policyService
+@inject TimeProvider _timeProvider
+
+<PageTitle>@(_policy?.Name ?? "Policy")</PageTitle>
+
+<div class="policy-page">
+    <div class="policy-back">
+        <FluentButton Appearance="ButtonAppearance.Subtle" IconStart="@(new Icons.Regular.Size20.ArrowLeft())"
+                      OnClick="@(() => _navigationManager.NavigateTo("/manage/policies"))">
+            All policies
+        </FluentButton>
+    </div>
+
+    @if (_error is not null)
+    {
+        <FluentMessageBar Intent="MessageBarIntent.Error" AllowDismiss="false">@_error</FluentMessageBar>
+    }
+    else if (_policy is null)
+    {
+        <FluentStack HorizontalAlignment="HorizontalAlignment.Center" HorizontalGap="8px">
+            <FluentSpinner />
+            <FluentText>Loading...</FluentText>
+        </FluentStack>
+    }
+    else
+    {
+        <div class="policy-head">
+            <div class="policy-intro">
+                <h1 class="policy-title">@_policy.Name</h1>
+                <p class="policy-subtitle">
+                    @PolicyDisplay.AudienceText(_policy.ScopeName, _policy.PositionNames)
+                    · @(_policy.CurrentVersionNumber == 0 ? "not published yet" : $"version {_policy.CurrentVersionNumber}")
+                    · @_policy.AcknowledgeWithinDays days to acknowledge
+                    @(_policy.ReacknowledgeEveryMonths is int months ? $"· re-read every {months} months" : null)
+                </p>
+            </div>
+
+            @if (_policy.CanManage)
+            {
+                <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.ArrowUpload())" OnClick="PublishAsync">
+                    @(_policy.CurrentVersionNumber == 0 ? "Upload the PDF" : "Publish new version")
+                </FluentButton>
+            }
+        </div>
+
+        @if (!_policy.CanManage)
+        {
+            <FluentMessageBar Intent="MessageBarIntent.Info" AllowDismiss="false">
+                This is a company-wide policy, so only an Admin can change it. You can see how your own location's staff are getting on.
+            </FluentMessageBar>
+        }
+
+        <FluentTabs @bind-ActiveTabId="_activeTab">
+            <FluentTab Id="status" Header="@($"Who's read it ({_people?.Count ?? 0})")" IconStart="@(new Icons.Regular.Size20.PeopleCheckmark())">
+                <div class="policy-tab">
+                    @if (_policy.CurrentVersionNumber == 0)
+                    {
+                        <p class="policy-muted">Nobody is asked to read it until the first PDF is published.</p>
+                    }
+                    else if (_people is null || _people.Count == 0)
+                    {
+                        <p class="policy-muted">Nobody is in this policy's audience right now. Check who it's for in Settings.</p>
+                    }
+                    else
+                    {
+                        <div class="policy-filters" role="group" aria-label="Show">
+                            @foreach ((PolicyStatus? status, string label) in Filters)
+                            {
+                                <FluentButton Appearance="@(_filter == status ? ButtonAppearance.Primary : ButtonAppearance.Outline)"
+                                              OnClick="@(() => _filter = status)" aria-pressed="@((_filter == status).ToString().ToLowerInvariant())">
+                                    @label (@Count(status))
+                                </FluentButton>
+                            }
+                        </div>
+
+                        <ul class="policy-people">
+                            @foreach (PolicyPersonStatus person in FilteredPeople)
+                            {
+                                <li>
+                                    <a class="policy-person" href="@($"/manage/users/{person.UserId}")">
+                                        <span class="policy-person-text">
+                                            <span class="policy-person-name">@person.DisplayName</span>
+                                            <span class="policy-person-detail">@PolicyDisplay.Detail(person.Status, person.AcknowledgedVersionNumber, person.AcknowledgedAtUtc, person.DueDate, Now)</span>
+                                        </span>
+                                        <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@PolicyDisplay.StatusColor(person.Status)">
+                                            @PolicyDisplay.StatusLabel(person.Status)
+                                        </FluentBadge>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </FluentTab>
+
+            <FluentTab Id="versions" Header="@($"Versions ({_policy.Versions.Count})")" IconStart="@(new Icons.Regular.Size20.History())">
+                <div class="policy-tab">
+                    @if (_policy.Versions.Count == 0)
+                    {
+                        <p class="policy-muted">No versions yet.</p>
+                    }
+                    else
+                    {
+                        <ol class="policy-versions">
+                            @foreach (PolicyVersionInfo version in _policy.Versions)
+                            {
+                                <li class="policy-version">
+                                    <div class="policy-version-head">
+                                        <span class="policy-version-name">Version @version.VersionNumber</span>
+                                        @if (version.VersionNumber == _policy.CurrentVersionNumber)
+                                        {
+                                            <FluentBadge Appearance="@BadgeAppearance.Filled" Color="@BadgeColor.Brand">Current</FluentBadge>
+                                        }
+                                        <FluentBadge Appearance="@BadgeAppearance.Tint" Color="@(version.RequiresReacknowledgement ? BadgeColor.Warning : BadgeColor.Subtle)">
+                                            @(version.RequiresReacknowledgement ? "Needs acknowledging" : "Minor change")
+                                        </FluentBadge>
+                                    </div>
+                                    <span class="policy-muted">
+                                        Published @PolicyDisplay.DateAndTime(version.PublishedDate)@(version.PublishedByName is null ? null : $" by {version.PublishedByName}")
+                                    </span>
+                                    @if (!string.IsNullOrWhiteSpace(version.ChangeSummary))
+                                    {
+                                        <p class="policy-version-summary">@version.ChangeSummary</p>
+                                    }
+                                    <a class="policy-version-file" href="@PolicyDisplay.VersionFileUrl(version.Id)" target="_blank" rel="noopener">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.DocumentPdf())" Color="Color.Neutral" />
+                                        @version.FileName
+                                    </a>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </div>
+            </FluentTab>
+
+            @if (_policy.CanManage && _options is not null && _settings is not null)
+            {
+                <FluentTab Id="settings" Header="Settings" IconStart="@(new Icons.Regular.Size20.Settings())">
+                    <div class="policy-tab policy-settings-tab">
+                        <PolicySettingsForm Model="@_settings" Options="@_options" Disabled="@_isSaving" OnChange="@(() => { })" />
+
+                        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="6" VerticalGap="8" Wrap="true">
+                            <FluentButton Appearance="ButtonAppearance.Primary" IconStart="@(new Icons.Regular.Size20.Save())"
+                                          Disabled="@(_isSaving || string.IsNullOrWhiteSpace(_settings.Name))" OnClick="SaveAsync">
+                                @(_isSaving ? "Saving..." : "Save")
+                            </FluentButton>
+                            <FluentButton Appearance="ButtonAppearance.Outline" IconStart="@(new Icons.Regular.Size20.Delete())"
+                                          Disabled="@_isSaving" OnClick="RemoveAsync">
+                                Remove policy
+                            </FluentButton>
+                        </FluentStack>
+                    </div>
+                </FluentTab>
+            }
+        </FluentTabs>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid PolicyId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
+    // Set when arriving straight from New Policy, to open the upload dialog.
+    [SupplyParameterFromQuery(Name = "publish")]
+    public string? OpenPublish { get; set; }
+
+    private static readonly (PolicyStatus? Status, string Label)[] Filters =
+    [
+        (null, "Everyone"),
+        (PolicyStatus.Overdue, "Overdue"),
+        (PolicyStatus.Outstanding, "To read"),
+        (PolicyStatus.UpToDate, "Up to date")
+    ];
+
+    private LocationScope? _scope;
+    private PolicyDetail? _policy;
+    private List<PolicyPersonStatus>? _people;
+    private PolicyEditorOptions? _options;
+    private PolicySettingsModel? _settings;
+    private string? _error;
+    private string? _activeTab = "status";
+    private PolicyStatus? _filter;
+    private bool _isSaving;
+    private bool _publishOffered;
+
+    private DateTime Now => _timeProvider.GetUtcNow().UtcDateTime;
+
+    private IEnumerable<PolicyPersonStatus> FilteredPeople => (_people ?? []).Where(x => _filter is null || x.Status == _filter);
+
+    private int Count(PolicyStatus? status) => (_people ?? []).Count(x => status is null || x.Status == status);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Tab is "versions" or "settings")
+        {
+            _activeTab = Tab;
+        }
+
+        Result<LocationScope> scope = await _currentLocationContext.GetScopeAsync();
+
+        if (!scope.IsSuccess || scope.Data is null)
+        {
+            _error = scope.Error ?? "We couldn't work out which location you're working in. Please sign in again.";
+            return;
+        }
+
+        _scope = scope.Data;
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_publishOffered && OpenPublish == "1" && _policy is { CanManage: true, CurrentVersionNumber: 0 })
+        {
+            _publishOffered = true;
+            await PublishAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        Result<PolicyDetail> policy = await _policyService.GetPolicyAsync(PolicyId, _scope!);
+
+        if (!policy.IsSuccess || policy.Data is null)
+        {
+            _error = policy.Error ?? "That policy couldn't be found.";
+            return;
+        }
+
+        _policy = policy.Data;
+
+        Result<List<PolicyPersonStatus>> people = await _policyService.GetPolicyStatusAsync(PolicyId, _scope!);
+        _people = people.Data ?? [];
+
+        if (_policy.CanManage)
+        {
+            _options ??= (await _policyService.GetEditorOptionsAsync(_scope!)).Data;
+            _settings = PolicySettingsModel.From(_policy);
+        }
+    }
+
+    private async Task PublishAsync()
+    {
+        if (_policy is null || _scope is null)
+        {
+            return;
+        }
+
+        string audience = _people is { Count: > 0 }
+            ? (_people.Count == 1 ? "1 person" : $"{_people.Count} people")
+            : PolicyDisplay.EveryoneText(_policy.LocationId is null, _policy.ScopeName, _policy.PositionNames);
+
+        DialogResult result = await _dialogService.ShowDialogAsync<PublishPolicyVersionDialog>(options =>
+        {
+            options.Width = "560px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(PublishPolicyVersionDialog.PolicyId), _policy.Id);
+            options.Parameters.Add(nameof(PublishPolicyVersionDialog.PolicyName), _policy.Name);
+            options.Parameters.Add(nameof(PublishPolicyVersionDialog.NextVersion), _policy.CurrentVersionNumber + 1);
+            options.Parameters.Add(nameof(PublishPolicyVersionDialog.AudienceText), audience);
+            options.Parameters.Add(nameof(PublishPolicyVersionDialog.Scope), _scope);
+        });
+
+        if (result.Value is true)
+        {
+            await LoadAsync();
+            _activeTab = "status";
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_settings is null || _scope is null)
+        {
+            return;
+        }
+
+        _isSaving = true;
+
+        Result<string> userId = await _securityService.GetCurrentUserIdAsync();
+        Result<Guid> result = await _policyService.SavePolicyAsync(_settings.ToRequest(PolicyId), _scope, userId.Data ?? string.Empty);
+
+        _isSaving = false;
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The policy couldn't be saved.");
+            return;
+        }
+
+        _toastService.ShowSuccess("Policy saved.");
+        await LoadAsync();
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_policy is null || _scope is null)
+        {
+            return;
+        }
+
+        DialogResult confirm = await _dialogService.ShowDialogAsync<ConfirmationDialog>(options =>
+        {
+            options.Header.Title = "Remove policy";
+            options.Width = "450px";
+            options.Modal = true;
+            options.Parameters.Add(nameof(ConfirmationDialog.Message),
+                $"Stop asking anyone to read '{_policy.Name}'? Everyone's acknowledgements so far are kept as a record.");
+            options.Parameters.Add(nameof(ConfirmationDialog.ConfirmText), "Remove");
+        });
+
+        if (confirm.Cancelled)
+        {
+            return;
+        }
+
+        Result<bool> result = await _policyService.DeactivatePolicyAsync(_policy.Id, _scope);
+
+        if (!result.IsSuccess)
+        {
+            _toastService.ShowError(result.Error ?? "The policy couldn't be removed.");
+            return;
+        }
+
+        _toastService.ShowSuccess("Policy removed.");
+        _navigationManager.NavigateTo("/manage/policies");
+    }
+}

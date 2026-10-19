@@ -1,0 +1,156 @@
+.policy-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 8px;
+    min-width: 0;
+}
+
+.policy-back {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.policy-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.policy-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1 1 320px;
+}
+
+.policy-title {
+    margin: 0;
+    font-size: var(--fontSizeBase600);
+    line-height: var(--lineHeightBase600);
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.policy-subtitle,
+.policy-muted {
+    margin: 0;
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.policy-muted {
+    font-size: var(--fontSizeBase200);
+}
+
+.policy-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 0;
+    min-width: 0;
+}
+
+.policy-settings-tab {
+    max-width: 560px;
+}
+
+.policy-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.policy-people,
+.policy-versions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: 8px;
+    background: var(--colorNeutralBackground1);
+}
+
+.policy-people li + li,
+.policy-versions li + li {
+    border-top: 1px solid var(--colorNeutralStroke2);
+}
+
+.policy-person {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    color: inherit;
+    text-decoration: none;
+    min-width: 0;
+}
+
+.policy-person:hover {
+    background: var(--colorNeutralBackground1Hover);
+}
+
+.policy-person:focus-visible {
+    outline: 2px solid var(--colorStrokeFocus2);
+    outline-offset: -2px;
+}
+
+.policy-person-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.policy-person-name {
+    font-weight: var(--fontWeightSemibold);
+    overflow-wrap: anywhere;
+}
+
+.policy-person-detail {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    overflow-wrap: anywhere;
+}
+
+.policy-version {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    min-width: 0;
+}
+
+.policy-version-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.policy-version-name {
+    font-weight: var(--fontWeightSemibold);
+    margin-right: 4px;
+}
+
+.policy-version-summary {
+    margin: 2px 0;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.policy-version-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: 100%;
+    color: var(--colorBrandForegroundLink);
+    overflow-wrap: anywhere;
+}
