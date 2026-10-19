@@ -20,9 +20,12 @@
 <PageTitle>Clients</PageTitle>
 
 <FluentCard Height="auto">
-    <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
-        Clients
-    </FluentText>
+    <FluentStack HorizontalAlignment="HorizontalAlignment.SpaceBetween" VerticalAlignment="VerticalAlignment.Center" Wrap="true">
+        <FluentText Weight="TextWeight.Semibold" Size="TextSize.Size500">
+            Clients
+        </FluentText>
+        <HelpButton AreaKey="@HelpRegistry.Kiosks" />
+    </FluentStack>
     @if (_versionCounts.Count > 0)
     {
         <div class="clients-version-summary">

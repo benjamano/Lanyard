@@ -31,12 +31,7 @@ public class HelpCoverageTests
         ["/not-found"] = "Error page",
         ["/whats-new"] = "Release notes",
         ["/kiosk"] = "Rendered on kiosk screens, not by people",
-        ["/video-publisher"] = "Rendered on kiosk screens, not by people",
-
-        // Not written yet - each stacked help PR removes its own lines. Don't add to these.
-        ["/manage/clients"] = "Pending help PR 6/6 (Kiosks & insights)",
-        ["/manage/client-releases"] = "Pending help PR 6/6 (Kiosks & insights)",
-        ["/manage/insights"] = "Pending help PR 6/6 (Kiosks & insights)"
+        ["/video-publisher"] = "Rendered on kiosk screens, not by people"
     };
 
     private static List<(Type Page, string Route)> AllRoutes() =>

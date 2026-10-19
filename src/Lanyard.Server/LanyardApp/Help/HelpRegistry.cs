@@ -77,6 +77,8 @@ public static class HelpRegistry
     public const string Projection = "projection";
     public const string Automation = "automation";
     public const string Dmx = "dmx";
+    public const string Kiosks = "kiosks";
+    public const string Insights = "insights";
 
     public static IReadOnlyList<HelpArea> Areas { get; } =
     [
@@ -249,6 +251,32 @@ public static class HelpRegistry
             ],
             ["/dmx"],
             Roles: "Admin,CanManageDmxSystems"),
+
+        new(Kiosks,
+            "Kiosks",
+            "Kiosk health and alerts, restarting, diagnostics, each kiosk's settings, and software updates.",
+            HelpAudience.Admins,
+            () => new Icons.Regular.Size20.Laptop(),
+            [
+                new("overview", "Kiosks & Health"),
+                new("settings", "Kiosk Settings"),
+                new("updates", "Updates & Releases")
+            ],
+            ["/manage/clients", "/manage/client-releases"],
+            Roles: "Admin"),
+
+        new(Insights,
+            "Insights",
+            "Comparing games played with staff hours, and the hours where staffing didn't match demand.",
+            HelpAudience.Managers,
+            () => new Icons.Regular.Size20.DataArea(),
+            [
+                new("overview", "Figures"),
+                new("week", "Typical Week & Flags")
+            ],
+            ["/manage/insights"],
+            Roles: "Admin,Manager",
+            Feature: CompanyFeature.Insights),
 
         new(Users,
             "Users & Roles",
