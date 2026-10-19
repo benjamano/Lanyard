@@ -21,7 +21,7 @@ namespace Lanyard.Tests.DataAccess
     {
         // Kept as a named constant rather than a literal so that adding a capability role to
         // DatabaseSeeder.StandardRoles is a one-line update here, not a hunt through assertions.
-        private const int DatabaseSeederStandardRoleCount = 8;
+        private const int DatabaseSeederStandardRoleCount = 9;
 
         private static DbContextOptions<ApplicationDbContext> GetInMemoryOptions()
         {

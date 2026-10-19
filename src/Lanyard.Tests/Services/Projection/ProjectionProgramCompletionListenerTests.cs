@@ -19,6 +19,7 @@ public class ProjectionProgramCompletionListenerTests
         public event Action<Guid, int, bool>? OnProgramPauseChanged;
         public event Action<Guid, int, Guid>? OnProgramStopped;
         public event Action<Guid, int, Guid>? OnProgramCompletedNaturally;
+        public event Action<Guid, int, int>? OnProgramStepValuesChanged;
 
         public bool HasCompletionSubscriber => OnProgramCompletedNaturally is not null;
 
@@ -32,6 +33,7 @@ public class ProjectionProgramCompletionListenerTests
             _ = OnProgramStepAdvanced;
             _ = OnProgramPauseChanged;
             _ = OnProgramStopped;
+            _ = OnProgramStepValuesChanged;
         }
 
         public Task<Result<Guid>> StartAsync(Guid clientId, int displayIndex, Guid programId, bool repeatInfinitely, int repeatCount, bool isTemporaryTrigger)

@@ -34,6 +34,26 @@ public partial class ProjectionWindow : Window
     /// </summary>
     public bool ClosedBecauseBrowserProcessFailed { get; private set; }
 
+    /// <summary>False until the browser has started, or once the window is closing. Dispatcher thread only.</summary>
+    public bool CanCapture => !_isClosed && WebView.CoreWebView2 != null;
+
+    /// <summary>
+    /// A PNG of what the browser is showing, for remote screenshots. Null when the browser never
+    /// started or the window is closing. Must be called on the dispatcher thread.
+    /// </summary>
+    public async Task<byte[]?> CapturePngAsync()
+    {
+        if (!CanCapture)
+        {
+            return null;
+        }
+
+        using MemoryStream stream = new();
+        await WebView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+
+        return stream.Length > 0 ? stream.ToArray() : null;
+    }
+
     public ProjectionWindow()
     {
         InitializeComponent();

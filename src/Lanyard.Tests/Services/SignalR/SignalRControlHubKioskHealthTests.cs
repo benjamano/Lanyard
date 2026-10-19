@@ -1,3 +1,4 @@
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Authentication;
 using Lanyard.Application.Services.Clients;
@@ -60,7 +61,8 @@ public class SignalRControlHubKioskHealthTests
             Mock.Of<IVideoStreamTokenService>(),
             Mock.Of<IGameResultService>(),
             Mock.Of<IClientSecretValidator>(),
-            kioskHealthService.Object)
+            kioskHealthService.Object,
+            Mock.Of<IAudioClipPlaybackService>())
         {
             Context = hubCallerContextMock.Object
         };

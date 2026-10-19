@@ -5,6 +5,7 @@ using Lanyard.App;
 using Lanyard.App.Components;
 using Lanyard.Application.Services;
 using Lanyard.Application.Services.Announcements;
+using Lanyard.Application.Services.AudioClips;
 using Lanyard.Application.Services.MusicScheduling;
 using Lanyard.Application.Services.Chat;
 using Lanyard.Application.Services.ApplicationRoles;
@@ -24,6 +25,7 @@ using Lanyard.Application.Services.Tenancy;
 using Lanyard.Application.Services.Demo;
 using Lanyard.Application.Services.Time;
 using Lanyard.Application.Services.Locations;
+using Lanyard.Application.Services.Projection.Bindings;
 using Lanyard.Application.Services.Features;
 using Lanyard.Application.Services.Branding;
 using Lanyard.Application.Services.Dmx;
@@ -110,6 +112,11 @@ builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IMusicScheduleService, MusicScheduleService>();
 // Singleton: it remembers what it last applied to each kiosk between ticks.
 builder.Services.AddSingleton<IMusicScheduleEngine, MusicScheduleEngine>();
+builder.Services.AddSingleton<IAudioClipPlaybackService, AudioClipPlaybackService>();
+builder.Services.AddScoped<IAudioClipService, AudioClipService>();
+builder.Services.AddScoped<IAudioClipScheduleService, AudioClipScheduleService>();
+builder.Services.AddSingleton<IAudioClipScheduleEngine, AudioClipScheduleEngine>();
+builder.Services.AddHostedService<AudioClipScheduleHostedService>();
 builder.Services.AddHostedService<MusicScheduleHostedService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IClientService, ClientService>();
@@ -215,6 +222,13 @@ builder.Services.AddSingleton<IDmxService>(sp => sp.GetRequiredService<DmxServic
 builder.Services.AddSingleton<IDmxClientService>(sp => sp.GetRequiredService<DmxService>());
 builder.Services.AddSingleton<IDmxSceneRunnerService, DmxSceneRunnerService>();
 
+// Data sources a projection parameter can be bound to. Every key in ProjectionBindingCatalogue needs
+// one here, or that binding silently shows its fallback forever (a test checks the two match).
+builder.Services.AddSingleton<IProjectionBindingSource, LastGameWinnerBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, TopScoreTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingSource, OpeningHoursTodayBindingSource>();
+builder.Services.AddSingleton<IProjectionBindingResolver, ProjectionBindingResolver>();
+
 builder.Services.AddSingleton<IProjectionProgramRunnerService, ProjectionProgramRunnerService>();
 builder.Services.AddHostedService<ProjectionProgramCompletionListener>();
 
@@ -224,6 +238,7 @@ builder.Services.AddSingleton<IActionExecutor, StartProjectionProgramActionExecu
 builder.Services.AddSingleton<IActionExecutor, StopProjectionProgramActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, DmxSceneControlActionExecutor>();
 builder.Services.AddSingleton<IActionExecutor, ProjectionProgramControlActionExecutor>();
+builder.Services.AddSingleton<IActionExecutor, AudioClipActionExecutor>();
 builder.Services.AddScoped<IAutomationRuleService, AutomationRuleService>();
 builder.Services.AddScoped<IAutomationLogService, AutomationLogService>();
 builder.Services.AddHostedService<AutomationEngineHostedService>();
@@ -232,6 +247,7 @@ builder.Services.Configure<AutomationExecutionLogOptions>(builder.Configuration.
 builder.Services.AddHostedService<AutomationExecutionRetentionHostedService>();
 builder.Services.AddHostedService<IdleTriggerHostedService>();
 builder.Services.AddHostedService<ScheduledTriggerHostedService>();
+builder.Services.AddHostedService<KioskAlertMonitorHostedService>();
 
 builder.Services.AddScoped<IClientZoneScoreboardService, ClientZoneScoreboardService>();
 

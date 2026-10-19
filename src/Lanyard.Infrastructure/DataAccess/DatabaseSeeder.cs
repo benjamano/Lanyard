@@ -21,6 +21,7 @@ public static class DatabaseSeeder
         (ApplicationDbContext.SeedCanManageDmxSystemsRoleId, "CanManageDmxSystems", "SEED-ROLE-CAN-MANAGE-DMX-SYSTEMS-CS"),
         (ApplicationDbContext.SeedCanManageFilesRoleId, "CanManageFiles", "SEED-ROLE-CAN-MANAGE-FILES-CS"),
         (ApplicationDbContext.SeedCanPostAnnouncementsRoleId, "CanPostAnnouncements", "SEED-ROLE-CAN-POST-ANNOUNCEMENTS-CS"),
+        (ApplicationDbContext.SeedCanPlayAudioClipsRoleId, "CanPlayAudioClips", "SEED-ROLE-CAN-PLAY-AUDIO-CLIPS-CS"),
         (ApplicationDbContext.SeedPlatformAdminRoleId, LanyardRoles.PlatformAdmin, "SEED-ROLE-PLATFORM-ADMIN-CS"),
     ];
 

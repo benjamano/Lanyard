@@ -7,4 +7,5 @@ public static class AutomationActionTypes
     public const string StopProjectionProgram = "StopProjectionProgram";
     public const string DmxSceneControl = "DmxSceneControl";
     public const string ProjectionProgramControl = "ProjectionProgramControl";
+    public const string PlayAudioClip = "PlayAudioClip";
 }

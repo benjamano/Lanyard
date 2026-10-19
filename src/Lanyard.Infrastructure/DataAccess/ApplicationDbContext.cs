@@ -23,6 +23,7 @@ namespace Lanyard.Infrastructure.DataAccess
         public const string SeedCanManageDmxSystemsRoleId = "dev-role-can-manage-dmx-systems";
         public const string SeedCanManageFilesRoleId = "dev-role-can-manage-files";
         public const string SeedCanPostAnnouncementsRoleId = "dev-role-can-post-announcements";
+        public const string SeedCanPlayAudioClipsRoleId = "dev-role-can-play-audio-clips";
         public const string SeedPlatformAdminRoleId = "dev-role-platform-admin";
         public const string SystemDeletedUserPlaceholderId = "system-deleted-user-placeholder";
         public const int SeedPlay2DayCompanyId = 1;
@@ -133,6 +134,9 @@ namespace Lanyard.Infrastructure.DataAccess
         public DbSet<MusicSchedule> MusicSchedules { get; set; }
         public DbSet<MusicDaypart> MusicDayparts { get; set; }
         public DbSet<LocationOpeningHours> LocationOpeningHours { get; set; }
+        public DbSet<AudioClip> AudioClips { get; set; }
+        public DbSet<AudioClipPlay> AudioClipPlays { get; set; }
+        public DbSet<AudioClipSchedule> AudioClipSchedules { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMember> ChatMembers { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -373,6 +377,41 @@ namespace Lanyard.Infrastructure.DataAccess
                 .HasOne(x => x.FileMetadata)
                 .WithMany()
                 .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Restrict: clips are only ever soft-deleted, and a file still behind one mustn't vanish.
+            modelBuilder.Entity<AudioClip>()
+                .HasOne(x => x.FileMetadata)
+                .WithMany()
+                .HasForeignKey(x => x.FileMetadataId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AudioClipPlay>(entity =>
+            {
+                entity.HasOne(x => x.AudioClip)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // A kiosk's play history goes with the kiosk.
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new { x.ClientId, x.RequestedAtUtc });
+
+                // Schedules are only soft-deleted, so the link never needs to cascade.
+                entity.HasOne(x => x.AudioClipSchedule)
+                    .WithMany()
+                    .HasForeignKey(x => x.AudioClipScheduleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AudioClipSchedule>()
+                .HasOne(x => x.AudioClip)
+                .WithMany()
+                .HasForeignKey(x => x.AudioClipId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<CompanyOnboardingStandingAttachment>()

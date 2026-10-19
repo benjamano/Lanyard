@@ -12,6 +12,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
 @using NAudio.Wave;
+@using Lanyard.App.Components.AudioClips
 
 @inject MusicPlayerService _player
 @inject IClientService _clientService
@@ -182,6 +183,7 @@
                 <div class="music-client-controls">
                     <ClientSelector OnClientSelected="SetSelectedClient" />
                     <MusicScheduleStatusChip ClientId="selectedClientId" />
+                    <AudioClipNowPlayingChip ClientId="selectedClientId" />
                 </div>
             </FluentStack>
         </FluentCard>
